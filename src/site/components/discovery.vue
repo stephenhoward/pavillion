@@ -51,9 +51,15 @@ const instanceDescription = computed<string>(() => {
 /**
  * Build the calendar detail path for a tile, locale-prefixed when the visitor
  * is on a non-default-locale URL so links remain inside the visitor's locale.
+ *
+ * Calendars live at the domain root, and this path feeds a <RouterLink :to>, so
+ * it must match a route in the site router's table (src/site/app.ts) exactly. A
+ * RouterLink navigates inside the SPA and never reaches the server, so an
+ * unroutable path here renders the page chrome with no content rather than
+ * following the server's redirect the way a plain href would.
  */
 function calendarPath(urlName: string): string {
-  return localizedPath(`/view/${urlName}`);
+  return localizedPath(`/${urlName}`);
 }
 
 const instanceHost = computed<string>(() => {

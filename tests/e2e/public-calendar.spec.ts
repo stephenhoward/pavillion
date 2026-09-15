@@ -1,11 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, APIRequestContext } from '@playwright/test';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Public Calendar Browsing & Event Detail Viewing
  *
- * Tests anonymous access to the public calendar at /@test_calendar,
- * event display, category filtering, text search, and event detail navigation.
+ * Tests anonymous access to the public calendar at /test_calendar (DEC-018:
+ * public calendars are served from the domain root), event display, category
+ * filtering, text search, and event detail navigation.
+ *
+ * The second describe block pins the routing contract itself: the discovery
+ * page at /discover, a calendar at its root URL, and the permanent redirects
+ * away from every legacy /view shape.
  *
  * No login required — all tests use anonymous/public access.
  *
@@ -22,22 +27,23 @@ let env: TestEnvironment;
 // This ensures they share the same test server instance
 test.describe.configure({ mode: 'serial' });
 
+// File-level hooks: both describe blocks below share the one test server.
+test.beforeAll(async () => {
+  // Start isolated test server for this test file
+  env = await startTestServer();
+});
+
+test.afterAll(async () => {
+  // Clean up test server
+  if (env?.cleanup) {
+    await env.cleanup();
+  }
+});
+
 test.describe('Public Calendar', () => {
-  test.beforeAll(async () => {
-    // Start isolated test server for this test file
-    env = await startTestServer();
-  });
-
-  test.afterAll(async () => {
-    // Clean up test server
-    if (env?.cleanup) {
-      await env.cleanup();
-    }
-  });
-
   test.beforeEach(async ({ page }) => {
     // Navigate to the public calendar for test_calendar
-    await page.goto(env.baseURL + '/view/test_calendar');
+    await page.goto(env.baseURL + '/test_calendar');
 
     // Conditional skip if public site isn't rendering
     const appContent = await page.locator('#app').textContent({ timeout: 10000 }).catch(() => '');
@@ -182,8 +188,11 @@ test.describe('Public Calendar', () => {
     const escapedBase = env.baseURL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Verify the URL ends with a yyyymmdd-hhmm slug — proves the new
     // stable-slug routing is active (legacy UUID hrefs would not match).
+    //
+    // The assertion is on the settled destination, so it holds whether the card
+    // links straight at the root URL or reaches it through the legacy /view 301.
     await page.waitForURL(
-      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/[^/]+\\/\\d{8}-\\d{4}$`),
+      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/test_calendar\\/events\\/[^/]+\\/\\d{8}-\\d{4}$`),
       { timeout: 10000, waitUntil: 'commit' },
     );
 
@@ -199,5 +208,117 @@ test.describe('Public Calendar', () => {
     // Verify breadcrumb navigation back to calendar exists
     const breadcrumb = page.locator('.breadcrumb a, p.breadcrumb a');
     await expect(breadcrumb).toBeVisible();
+  });
+});
+
+/**
+ * The root-URL routing contract (DEC-018), proved through the real server
+ * rather than a mounted router: the discovery page answers at /discover, a
+ * calendar answers at its own root URL, and every legacy /view shape answers
+ * 301 with a same-origin Location.
+ *
+ * The unit tier (src/server/common/test/app_routes.test.ts) already covers the
+ * route table exhaustively. What only this tier can show is that a redirect
+ * target actually resolves: the 301 lands on a URL the site SPA has a route
+ * for, in a real browser, after the full middleware stack has run.
+ */
+test.describe('Root URLs and legacy /view redirects', () => {
+  /**
+   * Issue a request without following redirects and return the status and
+   * Location header, so a redirect is asserted by the response itself rather
+   * than by whatever page happens to render at the end of the chain.
+   */
+  async function redirectFor(
+    request: APIRequestContext,
+    path: string,
+  ): Promise<{ status: number; location: string | undefined }> {
+    const response = await request.get(env.baseURL + path, { maxRedirects: 0 });
+    return { status: response.status(), location: response.headers()['location'] };
+  }
+
+  test('serves the discovery page at /discover', async ({ page }) => {
+    const response = await page.goto(env.baseURL + '/discover');
+    expect(response?.status()).toBe(200);
+
+    // The discovery heading and its subheading render regardless of how many
+    // calendars the seeded instance lists, so this holds for the empty state too.
+    await expect(page.locator('h1.discovery-title')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h2.discovery-subheading')).toBeVisible();
+  });
+
+  test('serves a calendar at its root URL', async ({ page }) => {
+    const response = await page.goto(env.baseURL + '/test_calendar');
+    expect(response?.status()).toBe(200);
+
+    // The calendar page renders its own h1 and is not the discovery page.
+    await expect(page.locator('h1')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h1.discovery-title')).toHaveCount(0);
+    await expect(page.locator('#public-event-search')).toBeVisible({ timeout: 10000 });
+  });
+
+  // Each legacy shape redirects exactly once, to its final destination. A
+  // default-locale prefix is dropped in the same hop as the /view segment, so
+  // /en/view/test_calendar must not stop at /test_calendar via /en/test_calendar.
+  const redirectCases: { from: string; to: string; why: string }[] = [
+    { from: '/view', to: '/discover', why: 'bare /view carries no calendar' },
+    { from: '/view/', to: '/discover', why: 'trailing slash, still no calendar' },
+    { from: '/view/test_calendar', to: '/test_calendar', why: 'calendar moves to the root' },
+    {
+      from: '/view/test_calendar/events/abc/20260101-1200',
+      to: '/test_calendar/events/abc/20260101-1200',
+      why: 'the whole tail is preserved',
+    },
+    { from: '/es/view/test_calendar', to: '/es/test_calendar', why: 'a non-default locale prefix survives' },
+    { from: '/en/view/test_calendar', to: '/test_calendar', why: 'the default locale prefix is dropped in the same hop' },
+    { from: '/en/view', to: '/discover', why: 'default locale + bare /view, one hop' },
+    { from: '/es/view', to: '/es/discover', why: 'non-default locale + bare /view' },
+    { from: '/en', to: '/discover', why: 'a bare default-locale root has no page of its own' },
+    { from: '/es', to: '/es/discover', why: 'a bare locale root lands on that locale discovery page' },
+  ];
+
+  for (const { from, to, why } of redirectCases) {
+    test(`301s ${from} to ${to} (${why})`, async ({ request }) => {
+      const { status, location } = await redirectFor(request, from);
+
+      expect(status).toBe(301);
+      expect(location).toBe(to);
+    });
+  }
+
+  test('re-attaches a query string verbatim, repeated parameters included', async ({ request }) => {
+    const { status, location } = await redirectFor(
+      request,
+      '/view/test_calendar?categories=one&categories=two&search=fair',
+    );
+
+    expect(status).toBe(301);
+    // Verbatim means lossless: a repeated parameter survives as two entries,
+    // which a parse-and-rebuild of req.query would have collapsed to one.
+    expect(location).toBe('/test_calendar?categories=one&categories=two&search=fair');
+  });
+
+  test('cannot be steered off-origin by a doubled slash', async ({ request, page }) => {
+    // Express does not collapse repeated slashes, so without the same-origin
+    // normalisation this would answer Location: //evil.com — a protocol-relative
+    // URL the browser resolves against evil.com.
+    const { status, location } = await redirectFor(request, '/view//evil.com');
+
+    expect(status).toBe(301);
+    expect(location).toBe('/evil.com');
+    expect(location?.startsWith('//')).toBe(false);
+
+    // And prove it in the browser: following the redirect stays on this origin.
+    await page.goto(env.baseURL + '/view//evil.com');
+    expect(new URL(page.url()).origin).toBe(new URL(env.baseURL).origin);
+  });
+
+  test('lands a legacy calendar URL on the rendered root page', async ({ page }) => {
+    // End-to-end proof that the redirect target is a URL the site SPA can
+    // actually route: the calendar page renders after the hop, not a blank shell.
+    await page.goto(env.baseURL + '/view/test_calendar');
+
+    expect(page.url()).toBe(env.baseURL + '/test_calendar');
+    await expect(page.locator('h1')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#public-event-search')).toBeVisible({ timeout: 10000 });
   });
 });

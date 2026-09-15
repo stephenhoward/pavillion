@@ -14,7 +14,7 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
  * generate locale-prefixed paths.
  *
  * The currentLocale ref is initialised from the URL path: if the page was
- * loaded with a locale prefix (e.g. /es/@calendar) the router guard in
+ * loaded with a locale prefix (e.g. /es/my-calendar) the router guard in
  * app.ts will have already called i18next.changeLanguage(), so reading
  * i18next.language gives the correct starting value.
  */
@@ -32,7 +32,7 @@ export function useLocale() {
    * configured, i18next loads only the base "en" bundle and sets resolvedLanguage
    * to "en", whereas i18next.language retains the raw "en-US" tag. Feeding an
    * unsupported regional code into addLocalePrefix would generate broken URLs
-   * like /en-US/view/... that the server does not handle. resolvedLanguage is
+   * like /en-US/my-calendar that the server does not handle. resolvedLanguage is
    * always a code from AVAILABLE_LANGUAGES (or undefined before init completes).
    * When resolvedLanguage is not yet set, we fall back to i18next.language and
    * then to DEFAULT_LANGUAGE_CODE.
@@ -55,9 +55,9 @@ export function useLocale() {
    * Uses the as-needed strategy: the default locale gets no prefix,
    * all other locales get a /{locale} prefix.
    *
-   * @param path - The canonical route path (e.g. '/@calendar')
+   * @param path - The canonical route path (e.g. '/my-calendar')
    * @param locale - The locale to prefix with; defaults to currentLocale
-   * @returns The locale-prefixed path (e.g. '/es/@calendar')
+   * @returns The locale-prefixed path (e.g. '/es/my-calendar')
    */
   function localizedPath(path: string, locale?: string): string {
     const targetLocale = locale ?? currentLocale.value;

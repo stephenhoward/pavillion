@@ -13,7 +13,7 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  *        - "Council Chambers" (no accessibility info)
  *   3. Create an event and pick "Convention Center — Pacific Room" via the
  *      flat picker entry.
- *   4. Visit the public detail page at /view/<cal>/events/<eventId> and
+ *   4. Visit the public detail page at /<cal>/events/<eventId> and
  *      assert:
  *        - The location header shows "Convention Center — Pacific Room"
  *          (concatenated header from `place.format.with_space`).
@@ -324,7 +324,7 @@ test.describe('Place + Spaces full scenario', () => {
     );
 
     // 4. Visit the public detail page and assert the layered display.
-    await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}/events/${eventId}`);
+    await page.goto(`${env.baseURL}/${ADMIN_CALENDAR}/events/${eventId}`);
     await page.waitForSelector('.event-main', { timeout: 15000 });
 
     // Concatenated header: "Convention Center — Pacific Room".
@@ -356,7 +356,7 @@ test.describe('Place + Spaces full scenario', () => {
     await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}`, { timeout: 15000 });
 
     // 6. Reload the public detail and assert whole-venue rendering.
-    await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}/events/${eventId}`);
+    await page.goto(`${env.baseURL}/${ADMIN_CALENDAR}/events/${eventId}`);
     await page.waitForSelector('.event-main', { timeout: 15000 });
 
     const locationNameAfter = page.locator('.event-location .location-name');
@@ -395,7 +395,7 @@ test.describe('Place + Spaces full scenario', () => {
     // 8. Reload the public detail and assert that Council Chambers is now the
     //    selected Space. Before the fix, the header would show only
     //    "Convention Center" (whole venue) because space_id was silently cleared.
-    await page.goto(`${env.baseURL}/view/${ADMIN_CALENDAR}/events/${eventId}`);
+    await page.goto(`${env.baseURL}/${ADMIN_CALENDAR}/events/${eventId}`);
     await page.waitForSelector('.event-main', { timeout: 15000 });
 
     const locationNameCouncil = page.locator('.event-location .location-name');

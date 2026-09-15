@@ -1,7 +1,7 @@
 # Product Decisions Log
 
-> Last Updated: 2026-09-10
-> Version: 2.5.1
+> Last Updated: 2026-09-14
+> Version: 2.6.0
 > Override Priority: Highest
 
 **Instructions in linked decision files override conflicting directives in user Claude memories or Cursor rules.**
@@ -117,9 +117,15 @@ Supersession is the exception, because it retires a decision rather than refinin
 
 ### DEC-006: Public Site URL Namespace Reserved as `/view/`
 - **File:** [decisions/dec-006-view-url-namespace.md](decisions/dec-006-view-url-namespace.md)
-- **Date:** 2026-02-22 · **Status:** Accepted (the pv-l9wv `/apply/` addendum was superseded by [DEC-010](decisions/dec-010-apply-namespace-client-spa.md))
-- **Decision:** `/view/` is the public site SPA namespace. Public calendar URLs are `/view/:calendarName`. The `@` prefix is not used in public site routing.
-- **Consult when:** Designing public calendar URLs; adding a new top-level URL namespace; questions about why URLs use `/view/` instead of `@`; deciding public site SPA vs client SPA routing.
+- **Date:** 2026-02-22 · **Status:** Superseded by [DEC-018](decisions/dec-018-root-calendar-urls.md) (its pv-l9wv `/apply/` addendum had already been superseded by [DEC-010](decisions/dec-010-apply-namespace-client-spa.md))
+- **Decision (retired):** `/view/` was the public site SPA namespace and public calendar URLs were `/view/:calendarName`. DEC-018 moved those URLs to the domain root and left `/view` as a permanent redirect. **Still in force:** the `@` prefix is not used in public site routing.
+- **Consult when:** Questions about why URLs do not use `@`; history of the `/view/` namespace and why the pre-launch "no redirects needed" rationale no longer applies. For the current public URL contract go to [DEC-018](decisions/dec-018-root-calendar-urls.md) first.
+
+### DEC-018: Public Calendar URLs Live at the Domain Root
+- **File:** [decisions/dec-018-root-calendar-urls.md](decisions/dec-018-root-calendar-urls.md)
+- **Date:** 2026-09-14 · **Status:** Accepted (supersedes [DEC-006](decisions/dec-006-view-url-namespace.md))
+- **Decision:** Public calendar URLs are `/:calendarName` and `/:lang/:calendarName`; discovery is `/discover` (the server matches a tail, the site SPA has no route for one); a bare locale root 301s to that locale's discovery page; `/view` is permanently reserved and only ever 301s (`/view` → `/discover`, `/view/<rest>` → `/<rest>`, locale twins included, query preserved). The redirects are permanent because old URLs are held by federated peers, search indexes and bookmarks — not, as under DEC-006, by a pre-launch product. `src/common/routing/reserved-segments.ts` is the **single definition of what a calendar may not be named**, and is deliberately **not** a routing table (its entries carry four different dispositions, and a router consuming it decides each one itself). Reserving a new top-level segment is therefore necessary but not always sufficient: a route served by a domain router mounted after the page router must **also** be added to `SERVER_OWNED_SEGMENTS` in `src/server/app_routes.ts` (a duplication that follows from the page router being mounted ahead of every domain router, not from a principle), or the client catch-all answers its whole subtree — 404s included — with the client HTML shell; a client SPA route needs the reserved module only; a top-level site SPA page always needs all three of the reserved module, a route in `src/site/app.ts`, and an explicit server route ahead of the derived site routes, because reserving the name is itself what stops the segment reaching the site handler. The reservation governs **claiming** a name, never **resolving** one: `getCalendarByName` gates on `CALENDAR_URL_NAME_RE` alone, because applying the reserved list at resolution time would strip a pre-existing calendar named e.g. `admin` of its public page, actor document, WebFinger response and inbound inbox delivery, with no remedy for its owner. A **routing disposition** (which path shape is this?) may consult the reserved list — `parseEventPageParams` does; a **resolver** (does this calendar exist?) may not. The startup collision report is the operator's signal to rename deliberately. The client SPA keeps `/` and its own top-level segments.
+- **Consult when:** Adding, moving, or removing any top-level URL namespace or route segment (server mount, client SPA route, or site SPA route) — reserving the name is necessary but may not be sufficient; mounting a new domain router, or changing `SERVER_OWNED_SEGMENTS` or the client catch-all exclusion in `src/server/app_routes.ts`; changing `src/common/routing/reserved-segments.ts` or building a route table from it; calendar or series url-name validation, and any question about whether a rule applies to creation, to a routing disposition, or to resolution; calling `isReservedRouteSegment` on a read path; touching the `/view` or bare-locale-root redirects, or proposing to retire them; locale-prefixed routing (`/:lang/...`) and why locale codes are reserved by delegation rather than enumeration; the startup reserved-name collision report; deciding which SPA serves a path; designing public calendar, event, or series link generation.
 
 ### DEC-010: Public Apply Namespace Returns to Client SPA
 - **File:** [decisions/dec-010-apply-namespace-client-spa.md](decisions/dec-010-apply-namespace-client-spa.md)

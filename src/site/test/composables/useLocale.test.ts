@@ -15,7 +15,7 @@ import i18next from 'i18next';
 
 const mockPush = vi.fn();
 const mockRoute = {
-  path: '/@mycalendar',
+  path: '/mycalendar',
   query: {},
   hash: '',
 };
@@ -66,7 +66,7 @@ describe('useLocale', () => {
     mockWriteLocaleCookie.mockClear();
 
     // Reset route to a canonical path (no locale prefix)
-    mockRoute.path = '/@mycalendar';
+    mockRoute.path = '/mycalendar';
     mockRoute.query = {};
     mockRoute.hash = '';
 
@@ -86,7 +86,7 @@ describe('useLocale', () => {
 
   describe('currentLocale initialisation', () => {
     it('should return the default language when route has no locale prefix', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       setI18nextLanguage('en');
 
       const { currentLocale } = useLocale();
@@ -95,7 +95,7 @@ describe('useLocale', () => {
     });
 
     it('should return the i18next language when the route has no locale prefix', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       setI18nextLanguage('es');
 
       const { currentLocale } = useLocale();
@@ -105,7 +105,7 @@ describe('useLocale', () => {
     });
 
     it('should use resolvedLanguage over language when both are set', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       // Simulate browser reporting "en-US" while i18next resolves to "en"
       // (load: 'languageOnly' strips the region tag when resolving)
       setI18nextLanguage('en-US');
@@ -114,7 +114,7 @@ describe('useLocale', () => {
       const { currentLocale } = useLocale();
 
       // resolvedLanguage ('en') must win over language ('en-US') so that
-      // localizedPath() generates clean /view/... URLs instead of /en-US/view/...
+      // localizedPath() generates clean /mycalendar URLs instead of /en-US/mycalendar
       expect(currentLocale.value).toBe('en');
     });
 
@@ -136,13 +136,13 @@ describe('useLocale', () => {
       setI18nextLanguage('en');
       const { localizedPath } = useLocale();
 
-      expect(localizedPath('/@mycalendar', 'en')).toBe('/@mycalendar');
+      expect(localizedPath('/mycalendar', 'en')).toBe('/mycalendar');
     });
 
     it('should prefix the path with the locale for non-default locales', () => {
       const { localizedPath } = useLocale();
 
-      expect(localizedPath('/@mycalendar', 'es')).toBe('/es/@mycalendar');
+      expect(localizedPath('/mycalendar', 'es')).toBe('/es/mycalendar');
     });
 
     it('should use currentLocale when no explicit locale is supplied', () => {
@@ -151,13 +151,13 @@ describe('useLocale', () => {
 
       currentLocale.value = 'es';
 
-      expect(localizedPath('/@mycalendar')).toBe('/es/@mycalendar');
+      expect(localizedPath('/mycalendar')).toBe('/es/mycalendar');
     });
 
     it('should not double-prefix an already-prefixed path', () => {
       const { localizedPath } = useLocale();
 
-      expect(localizedPath('/es/@mycalendar', 'es')).toBe('/es/@mycalendar');
+      expect(localizedPath('/es/mycalendar', 'es')).toBe('/es/mycalendar');
     });
 
     it('should handle the root path correctly', () => {
@@ -169,8 +169,8 @@ describe('useLocale', () => {
     it('should handle event paths', () => {
       const { localizedPath } = useLocale();
 
-      expect(localizedPath('/@mycalendar/events/event-123', 'es')).toBe(
-        '/es/@mycalendar/events/event-123',
+      expect(localizedPath('/mycalendar/events/event-123', 'es')).toBe(
+        '/es/mycalendar/events/event-123',
       );
     });
   });
@@ -181,7 +181,7 @@ describe('useLocale', () => {
 
   describe('switchLocale', () => {
     it('should update currentLocale to the new locale', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       const { currentLocale, switchLocale } = useLocale();
 
       switchLocale('es');
@@ -190,18 +190,18 @@ describe('useLocale', () => {
     });
 
     it('should call router.push with the locale-prefixed path', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       const { switchLocale } = useLocale();
 
       switchLocale('es');
 
       expect(mockPush).toHaveBeenCalledOnce();
       const pushArg = mockPush.mock.calls[0][0];
-      expect(pushArg.path).toBe('/es/@mycalendar');
+      expect(pushArg.path).toBe('/es/mycalendar');
     });
 
     it('should preserve query parameters when switching locale', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       mockRoute.query = { filter: 'music', page: '2' };
       const { switchLocale } = useLocale();
 
@@ -212,7 +212,7 @@ describe('useLocale', () => {
     });
 
     it('should preserve the hash when switching locale', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       mockRoute.hash = '#section';
       const { switchLocale } = useLocale();
 
@@ -223,7 +223,7 @@ describe('useLocale', () => {
     });
 
     it('should write the cookie with the new locale', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       const { switchLocale } = useLocale();
 
       switchLocale('es');
@@ -233,31 +233,31 @@ describe('useLocale', () => {
     });
 
     it('should navigate to unprefixed path when switching to the default locale', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       const { switchLocale } = useLocale();
 
       switchLocale('en');
 
       const pushArg = mockPush.mock.calls[0][0];
       // Default locale → no prefix
-      expect(pushArg.path).toBe('/@mycalendar');
+      expect(pushArg.path).toBe('/mycalendar');
     });
 
     it('should strip an existing locale prefix when switching locale', () => {
       // Simulate being on the Spanish version of the page; the router now keeps
       // the locale prefix in the URL natively, so route.path carries the prefix.
-      mockRoute.path = '/es/@mycalendar';
+      mockRoute.path = '/es/mycalendar';
       const { switchLocale } = useLocale();
 
       switchLocale('en');
 
       const pushArg = mockPush.mock.calls[0][0];
       // Should strip the /es prefix before adding the new one (en has no prefix)
-      expect(pushArg.path).toBe('/@mycalendar');
+      expect(pushArg.path).toBe('/mycalendar');
     });
 
     it('should not trigger a full page reload (router.push, not location.href)', () => {
-      mockRoute.path = '/@mycalendar';
+      mockRoute.path = '/mycalendar';
       const { switchLocale } = useLocale();
 
       const hrefSpy = vi.spyOn(window, 'location', 'get').mockReturnValue({

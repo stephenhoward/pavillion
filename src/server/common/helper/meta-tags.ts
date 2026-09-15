@@ -12,8 +12,11 @@
 
 import PublicCalendarInterface from '@/server/public/interface/index';
 import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import { stripLocalePrefix } from '@/common/i18n/locale-url';
+import { isReservedRouteSegment } from '@/common/routing/reserved-segments';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
 import { createLogger } from '@/server/common/helper/logger';
+import { looksLikeUuid } from '@/server/common/helper/uuid';
 
 const logger = createLogger('meta-tags');
 
@@ -49,37 +52,100 @@ export interface EventPageParams {
 }
 
 /**
- * Regex for public event page paths, with optional locale prefix.
+ * Regex for public event page paths, applied after any locale prefix is removed.
+ *
+ * Per DEC-018 a calendar occupies a root segment, so the pattern anchors on the
+ * calendar name itself rather than on a namespace prefix. It is deliberately
+ * locale-free: `/:calendar/events/:id` and `/:lang/:calendar/events/:id` are the
+ * same shape with an optional leading segment, and no regex can tell a locale
+ * from a two-letter calendar name. parseEventPageParams resolves that with
+ * stripLocalePrefix, which validates the code against the supported languages.
  *
  * Segment length caps defend against pathological URLs reaching the lookup
  * layer: calendarUrlName capped at 64 chars (matches calendar.url_name column
- * limit), eventId capped at 36 chars (UUID length). The instance segment,
- * when present, must match the `yyyymmdd-hhmm` slug shape exactly.
+ * limit), eventId capped at 36 chars (UUID length, with the shape itself checked
+ * in parseEventPageParams). The instance segment, when present, must match the
+ * `yyyymmdd-hhmm` slug shape exactly.
+ *
+ * A single trailing slash is accepted. The site SPA's router is not in strict
+ * mode, so `/cal/events/:id/` renders the event page; rejecting it here would
+ * serve that page with no meta tags at all -- silent degradation on a link shape
+ * that copy-paste and link builders produce routinely. The canonical URL built
+ * downstream is always the slash-free form, so the two spellings converge.
  */
-const EVENT_PAGE_RE = /^(?:\/[a-z]{2,8})?\/view\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?$/i;
+const EVENT_PAGE_RE = /^\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?\/?$/i;
 
 /**
  * Parses a public event page URL path into its component parts.
  *
  * Supports paths with or without a locale prefix and with or without
  * a timestamp-slug instance segment:
- *   /view/:calendar/events/:eventId
- *   /view/:calendar/events/:eventId/:yyyymmdd-hhmm
- *   /fr/view/:calendar/events/:eventId
- *   /fr/view/:calendar/events/:eventId/:yyyymmdd-hhmm
+ *   /:calendar/events/:eventId
+ *   /:calendar/events/:eventId/:yyyymmdd-hhmm
+ *   /fr/:calendar/events/:eventId
+ *   /fr/:calendar/events/:eventId/:yyyymmdd-hhmm
  *
- * @param path - The URL path to parse (e.g. from req.path)
+ * The retired /view/ shape (DEC-018) does not match; the server redirects those
+ * paths before a page is ever rendered for them.
+ *
+ * Two ordering rules matter here:
+ *
+ * 1. The locale prefix is stripped *before* the reservation check, because
+ *    isReservedRouteSegment answers true for locale codes as well as for the
+ *    literal reserved segments -- checking first would reject every /fr/... path.
+ * 2. The reservation check is a routing disposition, not name validation. It
+ *    keeps /api/events/x and /admin/events/x from resolving as event pages, and
+ *    mirrors the server route table's exclusions so SSR meta tags agree with
+ *    whatever the router would have served. It is not the DEC-018 rule-4
+ *    lookup gate: calendar resolution still happens in getCalendarByName on the
+ *    shape rule alone.
+ *
+ * At most one locale prefix is removed, so the caller must pass a path that has
+ * not already been stripped -- `req.path`, not a pre-stripped remainder. Two
+ * strips over `/fr/es/cal/events/:id` would yield `cal`'s event page, and a
+ * once-stripped path is indistinguishable here from a legitimate `/es/cal/...`,
+ * so the contract cannot be enforced from inside this function.
+ *
+ * Percent-encoding is deliberately not decoded, matching Express, which matches
+ * routes on the raw pathname. `/%61dmin/events/:id` therefore parses -- the
+ * reservation check does not fire on the encoded spelling and this function
+ * returns `calendarUrlName: '%61dmin'` verbatim. What makes that harmless is one
+ * layer up, not here: buildEventMetaTags hands the name to getCalendarByName,
+ * which gates on CALENDAR_URL_NAME_RE and returns null before issuing a query,
+ * so the request emits no meta tags and reaches no row. That regex in
+ * src/server/calendar/service/calendar.ts is load-bearing for this argument;
+ * both halves are pinned by tests.
+ *
+ * @param path - The URL path to parse; pass req.path, not a locale-stripped path
  * @returns Parsed parameters or null if the path does not match
  */
 export function parseEventPageParams(path: string): EventPageParams | null {
-  const match = path.match(EVENT_PAGE_RE);
+  const { path: unprefixedPath } = stripLocalePrefix(path);
+
+  const match = unprefixedPath.match(EVENT_PAGE_RE);
   if (!match) {
     return null;
   }
 
+  const calendarUrlName = match[1];
+  if (isReservedRouteSegment(calendarUrlName)) {
+    return null;
+  }
+
+  // The event id addresses a uuid column. Without a shape check a junk id
+  // reaches Postgres as `where: { id: 'zzzz' }`, which raises and unwinds to the
+  // warn-and-degrade handler in buildEventMetaTags -- one DB error and one log
+  // line per request, on a route with no rate limiter. looksLikeUuid rather than
+  // isValidUuidV4: this guards a column, and an id minted by a federated peer
+  // need not carry v4 bits.
+  const eventId = match[2];
+  if (!looksLikeUuid(eventId)) {
+    return null;
+  }
+
   const result: EventPageParams = {
-    calendarUrlName: match[1],
-    eventId: match[2],
+    calendarUrlName,
+    eventId,
   };
 
   if (match[3]) {
@@ -293,10 +359,11 @@ async function buildMetaTagsInternal(
     image = `${baseUrl}/api/v1/media/${calendar.defaultEventImage.id}`;
   }
 
-  // Build canonical URL. DEC-006 reserves /view/ as the public site namespace.
+  // Build canonical URL. DEC-018 addresses a calendar at the domain root, and
+  // the canonical form carries no locale prefix regardless of the requested one.
   const canonicalPath = params.instanceStartTime
-    ? `/view/${params.calendarUrlName}/events/${params.eventId}/${params.instanceStartTime}`
-    : `/view/${params.calendarUrlName}/events/${params.eventId}`;
+    ? `/${params.calendarUrlName}/events/${params.eventId}/${params.instanceStartTime}`
+    : `/${params.calendarUrlName}/events/${params.eventId}`;
   const url = `${baseUrl}${canonicalPath}`;
 
   return {

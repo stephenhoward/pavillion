@@ -7,10 +7,138 @@ import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCo
 import ConfigurationInterface from '@/server/configuration/interface';
 import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
+import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 
 const environment = process.env.NODE_ENV;
 
 const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv", "otf", "ttf", "woff", "woff2"];
+
+/**
+ * Top-level segments this router must not answer for at all.
+ *
+ * The page router is mounted before every domain router (see
+ * src/server/server.ts), so a catch-all that matched these would shadow the
+ * domain APIs under /api, the static /assets mount, and the federation routes
+ * at /.well-known/webfinger, /calendars/... and /users/... — turning their
+ * responses, and their 404s, into an HTML shell. `widget` is the one entry this
+ * router owns itself: the widget routes registered below answer it before the
+ * catch-all is reached.
+ *
+ * Every entry is also in RESERVED_ROUTE_SEGMENTS, and a test asserts that; this
+ * is the subset the server itself serves. The shared module cannot supply the
+ * list, because it records which names a calendar may not claim, not which
+ * router owns a segment.
+ */
+export const SERVER_OWNED_SEGMENTS: readonly string[] = Object.freeze([
+  '.well-known',
+  'api',
+  'assets',
+  'calendars',
+  'users',
+  'widget',
+]);
+
+/**
+ * Escapes regular-expression metacharacters in a literal path segment.
+ *
+ * @param value - A literal URL path segment
+ * @returns The segment, safe to interpolate into a RegExp alternation
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Alternation of the enabled locale codes, for the /:locale/... route shapes.
+ */
+const LOCALE_SEGMENT_PATTERN = getDefaultEnabledLanguageCodes().map(escapeRegExp).join('|');
+
+/**
+ * Alternation of every first segment that is not a calendar name.
+ *
+ * Three things about how this is built:
+ *
+ * 1. Each entry is escaped before joining. '.well-known' carries a regex
+ *    metacharacter, and a naive join would also match 'awell-known'.
+ * 2. The enabled locale codes are composed in. RESERVED_ROUTE_SEGMENTS omits
+ *    them on purpose — `isReservedRouteSegment` ORs the array against
+ *    `isValidLanguageCode` — so an alternation built from the array alone would
+ *    reserve strictly less than the validator does and would serve /fr as a
+ *    calendar named "fr".
+ * 3. Matching happens on the raw, undecoded pathname, which is where Express
+ *    puts the decode seam: `decode_param` runs after route matching, and
+ *    `isReservedRouteSegment` does no decoding of its own. A percent-encoded
+ *    spelling ('/%61dmin') therefore misses this alternation and is treated as
+ *    a calendar name — which is safe, because the lookup that follows decodes
+ *    first and no calendar can hold a reserved name, so it 404s inside the
+ *    public site rather than reaching a privileged route. A reverse proxy that
+ *    decodes before forwarding (per DEC-017 the bundled Caddy is an opt-in
+ *    profile, so the topology is not fixed) simply hands Express the literal
+ *    path, which matches here normally. Both hops end at the same disposition,
+ *    so no normalization is done before the check.
+ */
+const RESERVED_FIRST_SEGMENT_PATTERN = [
+  ...RESERVED_ROUTE_SEGMENTS,
+  ...getDefaultEnabledLanguageCodes(),
+].map(escapeRegExp).join('|');
+
+/**
+ * Normalizes a redirect target so it can only ever address this origin.
+ *
+ * Express does not collapse repeated leading separators, and a Location has to
+ * survive two of them: '//evil.com' is protocol-relative, and per the WHATWG
+ * URL parser a backslash is handled exactly like a slash in relative-slash
+ * state for special schemes, so '/\evil.com' resolves to the authority
+ * evil.com as well. `encodeurl` treats 0x5C as safe and emits it verbatim, so
+ * the backslash reaches the client untouched. Both are stripped here.
+ *
+ * The backslash form is reachable: a percent-decoding reverse proxy turns an
+ * ordinary-looking '/view/%5Cevil.com' into a literal backslash before Express
+ * sees it (per DEC-017 the bundled Caddy is an opt-in profile, so the topology
+ * is not fixed), and clients that resolve a Location per WHATWG rather than
+ * normalizing it first — in-app webviews, unfurlers, scanners — follow it.
+ *
+ * This is the single chokepoint for redirect targets in this router; callers
+ * pass their remainder straight in rather than pre-stripping separators.
+ *
+ * @param path - A path derived from req.path
+ * @returns The same path with its leading slashes and backslashes collapsed
+ *   to a single leading slash
+ */
+function toSameOriginPath(path: string): string {
+  return `/${path.replace(/^[/\\]+/, '')}`;
+}
+
+/**
+ * Re-attaches the request's query string to a redirect target.
+ *
+ * The target path is always derived from req.path, and whatever is appended
+ * here begins with '?', so nothing in the request URL can reach the authority
+ * of the Location. The query is copied verbatim rather than rebuilt through
+ * URLSearchParams, which collapses a repeated key into one comma-joined value.
+ *
+ * `req.originalUrl` keeps the fragment that parseurl strips from `req.path`, so
+ * the split has to respect the fragment boundary: everything after a '#' is
+ * fragment text and is dropped, including a '?' that appears inside it.
+ * Browsers never send a fragment, so only a crafted client reaches that branch.
+ *
+ * @param targetPath - Same-origin path to redirect to
+ * @param req - Express request object
+ * @returns The target path with the original query string appended, if any
+ */
+function withQueryString(targetPath: string, req: Request): string {
+  const url = req.originalUrl;
+  const queryStart = url.indexOf('?');
+  const fragmentStart = url.indexOf('#');
+
+  if (queryStart === -1 || (fragmentStart !== -1 && fragmentStart < queryStart)) {
+    return targetPath;
+  }
+
+  const queryEnd = fragmentStart > queryStart ? fragmentStart : url.length;
+
+  return `${targetPath}${url.slice(queryStart, queryEnd)}`;
+}
 
 /**
  * @returns {RegExp} A regular expression matching URLs ending with supported asset extensions
@@ -144,7 +272,7 @@ export function getEnabledLanguageCodes(): string[] {
  * The x-default entry points to the unprefixed (default-language) URL.
  *
  * @param req - Express request object
- * @param canonicalPath - The path without any locale prefix (e.g. "/view/calendar")
+ * @param canonicalPath - The path without any locale prefix (e.g. "/mycalendar")
  * @param defaultLocale - The instance default locale code
  * @returns Array of { hreflang, href } objects
  */
@@ -171,19 +299,24 @@ export function buildHreflangLinks(
 /**
  * Resolves meta tag data for event pages, returning null for non-event pages.
  *
+ * Takes the request path as received, not a locale-stripped remainder:
+ * parseEventPageParams strips at most one locale prefix itself and documents
+ * that contract, because a path stripped twice would read `/fr/es/cal/events/x`
+ * as `cal`'s event page.
+ *
  * @param publicInterfaceHolder - Holder for the public calendar interface
- * @param canonicalPath - The canonical path without locale prefix
+ * @param requestPath - The request path (req.path), locale prefix included
  * @param locale - The resolved locale for content
  * @param baseUrl - The site base URL
  * @returns MetaTagData or null
  */
 async function resolveMetaTags(
   publicInterfaceHolder: PublicInterfaceHolder,
-  canonicalPath: string,
+  requestPath: string,
   locale: string,
   baseUrl: string,
 ): Promise<MetaTagData | null> {
-  const params = parseEventPageParams(canonicalPath);
+  const params = parseEventPageParams(requestPath);
   if (!params) {
     return null;
   }
@@ -202,6 +335,26 @@ export function createRouter(
   publicInterfaceHolder: PublicInterfaceHolder = { current: null },
 ) {
   const router = Router();
+
+  /**
+   * Builds a 301 target for a canonical (unprefixed) path under a URL locale.
+   *
+   * The prefix is dropped when the locale is the instance default, so a legacy
+   * URL that needs both the /view removal and the default-locale removal lands
+   * on its final destination in a single hop.
+   *
+   * @param canonicalPath - Same-origin path without a locale prefix
+   * @param locale - Locale found in the request path, or null when unprefixed
+   * @returns {Promise<string>} The redirect target path
+   */
+  const localizeRedirectTarget = async (canonicalPath: string, locale: string | null): Promise<string> => {
+    if (!locale) {
+      return canonicalPath;
+    }
+
+    const instanceDefault = await resolveInstanceDefaultLanguage(configInterface);
+    return addLocalePrefix(canonicalPath, locale, instanceDefault);
+  };
 
   const handlers = {
     /**
@@ -236,7 +389,7 @@ export function createRouter(
       const { path: canonicalPath } = stripLocalePrefix(req.path);
       const baseUrl = getSiteBaseUrl(req);
 
-      const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
+      const meta = await resolveMetaTags(publicInterfaceHolder, req.path, req.locale, baseUrl);
       const manifest = await parseManifest();
 
       const data = {
@@ -252,7 +405,7 @@ export function createRouter(
     },
 
     /**
-     * Handles locale-prefixed site routes (e.g. /es/view/calendar).
+     * Handles locale-prefixed site routes (e.g. /es/mycalendar, /es/discover).
      *
      * If the locale in the URL matches the instance default language, redirects
      * to the unprefixed canonical URL (301). Otherwise, serves the site SPA with
@@ -265,25 +418,11 @@ export function createRouter(
     locale_prefixed_site: async (req: Request, res: Response) => {
       const { locale, path: strippedPath } = stripLocalePrefix(req.path);
 
-      // If the path segment is not a valid locale, serve the site SPA normally
+      // Every route wired to this handler matches a validated locale
+      // alternation, so `locale` is never null here. Delegating rather than
+      // throwing keeps a future wiring mistake serving a page.
       if (!locale) {
-        const instanceDefault = await resolveInstanceDefaultLanguage(configInterface);
-        const { path: canonicalPath } = stripLocalePrefix(req.path);
-        const baseUrl = getSiteBaseUrl(req);
-
-        const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
-        const manifest = await parseManifest();
-
-        const data = {
-          environment,
-          manifest,
-          cssFiles: collectEntryCSS(manifest, 'src/site/app.ts'),
-          locale: req.locale,
-          siteBaseUrl: baseUrl,
-          hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
-          meta,
-        };
-        res.render("site.index.html.ejs", data);
+        await handlers.site_index(req, res);
         return;
       }
 
@@ -291,17 +430,14 @@ export function createRouter(
 
       // Redirect to canonical (unprefixed) URL when locale matches instance default
       if (locale === instanceDefault) {
-        const redirectUrl = req.query && Object.keys(req.query).length > 0
-          ? `${strippedPath}?${new URLSearchParams(req.query as Record<string, string>).toString()}`
-          : strippedPath;
-        res.redirect(301, redirectUrl);
+        res.redirect(301, withQueryString(toSameOriginPath(strippedPath), req));
         return;
       }
 
       // Serve site SPA with the locale from the URL prefix
       const baseUrl = getSiteBaseUrl(req);
 
-      const meta = await resolveMetaTags(publicInterfaceHolder, strippedPath, locale, baseUrl);
+      const meta = await resolveMetaTags(publicInterfaceHolder, req.path, locale, baseUrl);
       const manifest = await parseManifest();
 
       const data = {
@@ -314,6 +450,42 @@ export function createRouter(
         meta,
       };
       res.render("site.index.html.ejs", data);
+    },
+
+    /**
+     * Permanently redirects a legacy /view URL onto the root URL shape.
+     *
+     * /view and /view/ carry no calendar, so they land on the discovery page;
+     * /view/<rest> drops the segment and keeps <rest> at the root. A locale
+     * prefix is preserved unless it is the instance default, in which case it
+     * is dropped in the same hop.
+     *
+     * @param {Request} req - Express request object
+     * @param {Response} res - Express response object
+     * @returns {Promise<void>}
+     */
+    legacy_view_redirect: async (req: Request, res: Response) => {
+      const { locale, path: unprefixedPath } = stripLocalePrefix(req.path);
+      // toSameOriginPath does the separator stripping, so '/view', '/view/' and
+      // '/view//' all arrive here as '/' — the no-calendar case.
+      const rest = toSameOriginPath(unprefixedPath.slice('/view'.length));
+      const canonicalPath = rest === '/' ? '/discover' : rest;
+
+      res.redirect(301, withQueryString(await localizeRedirectTarget(canonicalPath, locale), req));
+    },
+
+    /**
+     * Permanently redirects a bare locale root (/es, /es/) to that locale's
+     * discovery page. The locale prefix has no page of its own.
+     *
+     * @param {Request} req - Express request object
+     * @param {Response} res - Express response object
+     * @returns {Promise<void>}
+     */
+    locale_root_redirect: async (req: Request, res: Response) => {
+      const { locale } = stripLocalePrefix(req.path);
+
+      res.redirect(301, withQueryString(await localizeRedirectTarget('/discover', locale), req));
     },
 
     /**
@@ -428,25 +600,49 @@ export function createRouter(
 
   router.get(/^\/widget\/.*/i, handlers.widget_index);
 
-  // Locale-prefixed public site routes: /[locale]/view, /[locale]/view/...
-  // Handles both non-default locale serving and default-locale redirects.
-  // Must come before the unprefixed site route so prefixed URLs are handled first.
-  // The `(\/.*)?` tail matches both bare `/[locale]/view` and `/[locale]/view/<rest>`.
-  router.get(/^\/[a-z]{2,8}\/view(\/.*)?$/i, handlers.locale_prefixed_site);
+  // Page routes. Per DEC-018 public calendars live at the domain root, so the
+  // site SPA is the default and the client SPA keeps `/` plus the reserved
+  // segments; discovery is /discover and /view is redirect-only, forever.
+  //
+  // RESERVED_ROUTE_SEGMENTS answers one question — may a calendar claim this
+  // name? — and membership means four different things to a router: `discover`
+  // is a site SPA page, `view` only redirects, the SERVER_OWNED_SEGMENTS must
+  // fall through to the domain routers mounted after this one, and the rest
+  // belong to the client shell. The routes that need a disposition of their own
+  // are therefore registered BEFORE the derived site routes and win on
+  // Express's first-match-wins ordering; nothing is subtracted from the array.
 
-  // Public site routes (unprefixed — default language, as-needed strategy).
-  // The `(\/.*)?` tail matches both bare `/view` (the discovery landing page)
-  // and `/view/<rest>` (calendar pages); previously bare `/view` fell through
-  // to the client SPA catch-all.
-  router.get(/^\/view(\/.*)?$/i, handlers.site_index);
+  // Legacy /view URLs — 301 onto the root URL shape.
+  router.get(/^\/view(?:\/.*)?$/i, handlers.legacy_view_redirect);
+  router.get(new RegExp(`^/(?:${LOCALE_SEGMENT_PATTERN})/view(?:/.*)?$`, 'i'), handlers.legacy_view_redirect);
 
-  // Client app catch-all (goes last).
-  // The `view(?:\/|$)` exclusion stops the catch-all from absorbing bare `/view`
-  // alongside `/view/<rest>`; the other reserved segments still require a
-  // trailing `/` to exclude (api/, assets/, etc.). Without the `$` anchor the
-  // prior exclusion only matched `view\/` and bare `/view` reached the client
-  // SPA — the discovery landing page must resolve to the site SPA shell.
-  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|widget)\/|view(?:\/|$)).*/i, handlers.client_index);
+  // Public discovery page.
+  router.get(/^\/discover(?:\/.*)?$/i, handlers.site_index);
+  router.get(new RegExp(`^/(?:${LOCALE_SEGMENT_PATTERN})/discover(?:/.*)?$`, 'i'), handlers.locale_prefixed_site);
+
+  // A bare locale root (/es, /es/) has no page of its own.
+  router.get(new RegExp(`^/(?:${LOCALE_SEGMENT_PATTERN})/?$`, 'i'), handlers.locale_root_redirect);
+
+  // Root calendar pages — /:calendarName and /:locale/:calendarName, each with
+  // their event and series subpaths. The first non-locale segment must not be
+  // reserved; the exclusion is derived from the shared module, so a segment
+  // added there stops reaching the site SPA without editing this file.
+  router.get(
+    new RegExp(`^/(?:${LOCALE_SEGMENT_PATTERN})/(?!(?:${RESERVED_FIRST_SEGMENT_PATTERN})(?:/|$))[^/]+(?:/.*)?$`, 'i'),
+    handlers.locale_prefixed_site,
+  );
+  router.get(
+    new RegExp(`^/(?!(?:${RESERVED_FIRST_SEGMENT_PATTERN})(?:/|$))[^/]+(?:/.*)?$`, 'i'),
+    handlers.site_index,
+  );
+
+  // Client app catch-all (goes last). The exclusion is the server-owned subset
+  // only: those paths belong to routers mounted after this one, and matching
+  // them here would answer an API or federation request with an HTML shell.
+  router.get(
+    new RegExp(`^/(?!(?:${SERVER_OWNED_SEGMENTS.map(escapeRegExp).join('|')})/).*`, 'i'),
+    handlers.client_index,
+  );
 
   return { router, handlers };
 }

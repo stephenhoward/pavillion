@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
 import { parseEventPageParams, buildEventMetaTags, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
+import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -63,62 +64,111 @@ describe('MetaTags Helper', () => {
   });
 
   describe('parseEventPageParams', () => {
-    it('should extract params from /view/calendar/events/eventId', () => {
-      const result = parseEventPageParams('/view/my-calendar/events/event-123');
+    // Event ids address a uuid column, so the parser requires the 8-4-4-4-12
+    // shape. EVENT_ID is v4 (what this instance mints); PEER_EVENT_ID carries a
+    // version-1 nibble, standing in for an id minted by a federated peer.
+    const EVENT_ID = '3f1c0a2e-6b4d-4e8a-9c17-2d5f8b0a1e33';
+    const PEER_EVENT_ID = '3f1c0a2e-6b4d-1e8a-8c17-2d5f8b0a1e33';
+
+    it('should extract params from /calendar/events/eventId', () => {
+      const result = parseEventPageParams(`/my-calendar/events/${EVENT_ID}`);
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
-        eventId: 'event-123',
+        eventId: EVENT_ID,
       });
     });
 
     it('parses a path with a timestamp slug as instanceStartTime', () => {
-      const result = parseEventPageParams('/view/my-calendar/events/event-123/20260508-1800');
+      const result = parseEventPageParams(`/my-calendar/events/${EVENT_ID}/20260508-1800`);
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
-        eventId: 'event-123',
+        eventId: EVENT_ID,
         instanceStartTime: '20260508-1800',
       });
     });
 
-    it('should extract params from /en/view/calendar/events/eventId (locale-prefixed)', () => {
-      const result = parseEventPageParams('/en/view/my-calendar/events/event-123');
+    it('should extract params from /en/calendar/events/eventId (locale-prefixed)', () => {
+      const result = parseEventPageParams(`/en/my-calendar/events/${EVENT_ID}`);
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
-        eventId: 'event-123',
+        eventId: EVENT_ID,
       });
     });
 
     it('parses a locale-prefixed path with a timestamp slug', () => {
-      const result = parseEventPageParams('/fr/view/my-calendar/events/event-123/20260508-1800');
+      const result = parseEventPageParams(`/fr/my-calendar/events/${EVENT_ID}/20260508-1800`);
       expect(result).toEqual({
         calendarUrlName: 'my-calendar',
-        eventId: 'event-123',
+        eventId: EVENT_ID,
         instanceStartTime: '20260508-1800',
       });
     });
 
+    it('treats a two-letter non-locale first segment as a calendar name', () => {
+      // 'nz' is not a supported language code, so it must be read as a calendar
+      // name rather than stripped as a locale prefix -- which is why the locale
+      // strip validates the code instead of matching a bare two-letter shape.
+      const result = parseEventPageParams(`/nz/events/${EVENT_ID}`);
+      expect(result).toEqual({
+        calendarUrlName: 'nz',
+        eventId: EVENT_ID,
+      });
+    });
+
+    it('accepts a single trailing slash', () => {
+      // The router matches `/cal/events/:id/` and the site SPA renders the event
+      // page for it, so the parser must resolve meta tags for it too.
+      expect(parseEventPageParams(`/my-calendar/events/${EVENT_ID}/`)).toEqual({
+        calendarUrlName: 'my-calendar',
+        eventId: EVENT_ID,
+      });
+      expect(parseEventPageParams(`/my-calendar/events/${EVENT_ID}/20260508-1800/`)).toEqual({
+        calendarUrlName: 'my-calendar',
+        eventId: EVENT_ID,
+        instanceStartTime: '20260508-1800',
+      });
+    });
+
+    it('accepts a uuid that is not version 4', () => {
+      // looksLikeUuid, not isValidUuidV4: the check guards a uuid column, and an
+      // event id minted by a federated peer need not carry v4 bits.
+      expect(parseEventPageParams(`/my-calendar/events/${PEER_EVENT_ID}`)).toEqual({
+        calendarUrlName: 'my-calendar',
+        eventId: PEER_EVENT_ID,
+      });
+    });
+
+    it('returns null when the event id is not uuid-shaped', () => {
+      // Without this the id reaches Postgres as `where: { id: ... }` against a
+      // uuid column, raising once per request on an unrate-limited route.
+      expect(parseEventPageParams('/my-calendar/events/zzzz')).toBeNull();
+      expect(parseEventPageParams('/my-calendar/events/event-123')).toBeNull();
+      expect(parseEventPageParams(`/my-calendar/events/${EVENT_ID}x`)).toBeNull();
+      expect(parseEventPageParams('/my-calendar/events/3f1c0a2e6b4d4e8a9c172d5f8b0a1e33')).toBeNull();
+    });
+
     it('returns null for paths whose instance segment is not a valid slug', () => {
-      expect(parseEventPageParams('/view/my-calendar/events/event-123/not-a-slug')).toBeNull();
+      expect(parseEventPageParams(`/my-calendar/events/${EVENT_ID}/not-a-slug`)).toBeNull();
       // Per DEC-006, UUID instance slugs are no longer valid.
-      expect(parseEventPageParams('/view/my-calendar/events/event-123/00000000-0000-0000-0000-000000000000')).toBeNull();
+      expect(parseEventPageParams(`/my-calendar/events/${EVENT_ID}/00000000-0000-0000-0000-000000000000`)).toBeNull();
     });
 
     it('rejects over-long calendarUrlName segments', () => {
       const huge = 'a'.repeat(200);
-      expect(parseEventPageParams(`/view/${huge}/events/event-123`)).toBeNull();
+      expect(parseEventPageParams(`/${huge}/events/${EVENT_ID}`)).toBeNull();
     });
 
     it('rejects over-long eventId segments', () => {
       const huge = 'a'.repeat(100);
-      expect(parseEventPageParams(`/view/my-calendar/events/${huge}`)).toBeNull();
+      expect(parseEventPageParams(`/my-calendar/events/${huge}`)).toBeNull();
     });
 
-    it('should return null for /view/calendar (calendar page)', () => {
-      expect(parseEventPageParams('/view/my-calendar')).toBeNull();
+    it('should return null for /calendar (calendar page)', () => {
+      expect(parseEventPageParams('/my-calendar')).toBeNull();
     });
 
-    it('should return null for /view/calendar/series/seriesName (series page)', () => {
-      expect(parseEventPageParams('/view/my-calendar/series/weekly-meetup')).toBeNull();
+    it('should return null for /calendar/series/seriesName (series page)', () => {
+      expect(parseEventPageParams('/my-calendar/series/weekly-meetup')).toBeNull();
     });
 
     it('should return null for / (root)', () => {
@@ -126,7 +176,58 @@ describe('MetaTags Helper', () => {
     });
 
     it('should return null for /api/public/v1/events/id (API path)', () => {
-      expect(parseEventPageParams('/api/public/v1/events/event-123')).toBeNull();
+      expect(parseEventPageParams(`/api/public/v1/events/${EVENT_ID}`)).toBeNull();
+    });
+
+    it('returns null when the first segment is a reserved route segment', () => {
+      // These are structurally identical to a root event page; only the
+      // reservation check keeps them from resolving as one.
+      expect(parseEventPageParams(`/api/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/admin/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/discover/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/view/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/auth/events/${EVENT_ID}/20260508-1800`)).toBeNull();
+    });
+
+    it('folds case when testing the first segment for reservation', () => {
+      // Asserts the parser delegates case handling to isReservedRouteSegment
+      // rather than relying on the regex's own /i flag.
+      expect(parseEventPageParams(`/API/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/Admin/events/${EVENT_ID}`)).toBeNull();
+    });
+
+    it('rejects a reserved first segment behind a locale prefix', () => {
+      // The locale is stripped before the reservation check, so the segment
+      // tested is the calendar slot -- not the locale, which is itself reserved.
+      expect(parseEventPageParams(`/fr/admin/events/${EVENT_ID}`)).toBeNull();
+    });
+
+    it('strips at most one locale prefix', () => {
+      // Only one prefix is removed, so a doubled prefix leaves `es` in the
+      // calendar slot and the path stops matching. This is what makes the
+      // caller's obligation to pass a raw req.path (never a pre-stripped path)
+      // load-bearing: a second strip elsewhere would resolve this as
+      // my-calendar's event page.
+      expect(parseEventPageParams(`/fr/es/my-calendar/events/${EVENT_ID}`)).toBeNull();
+    });
+
+    it('does not decode percent-encoding before the reservation check', () => {
+      // Express matches routes on the raw pathname, so the check sees the
+      // encoded spelling and does not fire. The parse succeeds with the literal
+      // segment; what makes that safe lives one layer up, in the
+      // getCalendarByName test below.
+      expect(parseEventPageParams(`/%61dmin/events/${EVENT_ID}`)).toEqual({
+        calendarUrlName: '%61dmin',
+        eventId: EVENT_ID,
+      });
+    });
+
+    it('returns null for the retired /view/ shape', () => {
+      // DEC-018 retires /view/ as an address; the server 301s it, so meta-tag
+      // resolution must never treat it as a live event page.
+      expect(parseEventPageParams(`/view/my-calendar/events/${EVENT_ID}`)).toBeNull();
+      expect(parseEventPageParams(`/view/my-calendar/events/${EVENT_ID}/20260508-1800`)).toBeNull();
+      expect(parseEventPageParams(`/fr/view/my-calendar/events/${EVENT_ID}`)).toBeNull();
     });
   });
 
@@ -159,7 +260,7 @@ describe('MetaTags Helper', () => {
       expect(result!.title).toBe('Test Event');
       expect(result!.description).toBe('A great event');
       expect(result!.image).toBe('https://example.com/api/v1/media/media-uuid-1');
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1');
       expect(result!.type).toBe('article');
       expect(result!.siteName).toBe('My Calendar');
     });
@@ -187,7 +288,7 @@ describe('MetaTags Helper', () => {
 
       expect(result).not.toBeNull();
       expect(result!.title).toBe('Test Event');
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1/20260508-1800');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1/20260508-1800');
 
       // Verify the interface lookup was performed via findOrMaterializeInstanceWithDetails
       // with a DateTime derived from the slug.
@@ -209,7 +310,7 @@ describe('MetaTags Helper', () => {
       const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
 
       expect(result).not.toBeNull();
-      expect(result!.url).toBe('https://example.com/view/my-calendar/events/event-uuid-1');
+      expect(result!.url).toBe('https://example.com/my-calendar/events/event-uuid-1');
     });
 
     it('returns null when instanceStartTime slug fails to parse', async () => {
@@ -385,6 +486,27 @@ describe('MetaTags Helper', () => {
       const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
 
       expect(result).toBeNull();
+    });
+
+    it('yields no meta tags for a percent-encoded calendar name', async () => {
+      // The other half of the pin on parseEventPageParams' undecoded segment:
+      // the parser hands '%61dmin' through verbatim, and this is where it stops.
+      // The stub reproduces the real resolver's gate -- getCalendarByName tests
+      // CALENDAR_URL_NAME_RE and returns null before querying -- so loosening
+      // that shared regex fails here rather than silently reaching a row.
+      const iface = createMockInterface();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).callsFake(
+        async (name: string) => (CALENDAR_URL_NAME_RE.test(name) ? createMockCalendar() : null),
+      );
+      (iface.current!.getEventById as sinon.SinonStub).resolves(createMockEvent());
+
+      const params = { calendarUrlName: '%61dmin', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
+
+      expect(result).toBeNull();
+      expect(CALENDAR_URL_NAME_RE.test('%61dmin')).toBe(false);
+      expect((iface.current!.getEventById as sinon.SinonStub).called).toBe(false);
     });
   });
 });
