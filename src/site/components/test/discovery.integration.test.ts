@@ -20,6 +20,7 @@ import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 
 import Discovery from '../discovery.vue';
+import { buildSiteRoutes } from '@/site/routes';
 import ModelService from '@/client/service/models';
 import ListResult from '@/client/service/list-result';
 
@@ -48,29 +49,30 @@ function makeSiteConfig(opts?: { instanceDescription?: Record<string, string>; s
 }
 
 /**
- * Mirrors the shipped site route table (src/site/app.ts) for the two routes
- * this page touches: the discovery page itself and the calendar detail page a
- * tile links to.
+ * Builds a router from the shipped site route table (@/site/routes), with the
+ * real discovery page bound and stubs standing in for the pages a tile links
+ * to.
  *
  * This fixture is load-bearing, not decoration. discovery.vue builds its tile
  * targets as strings, so no route table can change what the component emits —
  * but a <RouterLink> whose target matches nothing here resolves to an empty
  * `matched`, which is exactly the production failure (SPA-internal navigation
- * renders chrome with no content). Deliberately carries no catch-all, so an
- * unroutable tile target cannot be absorbed by a 404 route that app.ts does
- * not ship either.
+ * renders chrome with no content). Importing the table rather than copying it
+ * is what keeps that check honest as the locale alternation grows. Deliberately
+ * carries no catch-all, so an unroutable tile target cannot be absorbed by a
+ * 404 route that app.ts does not ship either.
  */
 function buildRouter() {
   const CalendarStub = { template: '<div class="calendar-stub" />' };
   return createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/discover', name: 'discovery', component: Discovery },
-      { path: '/:calendar', name: 'calendar', component: CalendarStub },
-      // Locale-prefixed twins — unnamed, as in app.ts.
-      { path: '/:locale(es|fr)/discover', component: Discovery },
-      { path: '/:locale(es|fr)/:calendar', component: CalendarStub },
-    ],
+    routes: buildSiteRoutes({
+      discovery: Discovery,
+      calendar: CalendarStub,
+      event: CalendarStub,
+      instance: CalendarStub,
+      series: CalendarStub,
+    }),
   });
 }
 

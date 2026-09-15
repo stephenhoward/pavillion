@@ -14,6 +14,8 @@ import { createRouter, createMemoryHistory, RouteRecordRaw } from 'vue-router';
 import i18next from 'i18next';
 import sinon from 'sinon';
 
+import { buildSiteRoutes } from '@/site/routes';
+
 // ---------------------------------------------------------------------------
 // Helpers — mirror the guard logic from src/site/app.ts
 // ---------------------------------------------------------------------------
@@ -34,30 +36,47 @@ function installLocaleGuard(router: ReturnType<typeof createRouter>) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared route definitions (mirror src/site/app.ts routes)
+// Shared route definitions (the shipped table, bound to stubs)
 // ---------------------------------------------------------------------------
 
 const StubComponent = { template: '<div />' };
 
 /**
- * Exact mirror of the shipped route table in src/site/app.ts — nothing more.
- * Keep this list and app.ts in lockstep; a test-only route must go in
- * `routes` below, never here.
+ * The shipped site route table, imported rather than mirrored.
+ *
+ * A copy of it here could not stay honest: the locale-prefixed shapes derive
+ * their alternation from AVAILABLE_LANGUAGES, so a literal `es|fr` would go on
+ * passing while quietly ceasing to describe what ships. The factory binds the
+ * views, so this file supplies stubs and keeps to the routing question.
+ *
+ * A test-only route must go in `routes` below, never here.
  */
-const siteRoutes: RouteRecordRaw[] = [
-  { path: '/discover', component: StubComponent, name: 'discovery' },
-  { path: '/:calendar', component: StubComponent, name: 'calendar' },
-  { path: '/:calendar/events/:event', component: StubComponent, name: 'event' },
-  { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: StubComponent, name: 'instance' },
-  { path: '/:calendar/series/:series', component: StubComponent, name: 'series' },
-  // Locale-prefixed variants — unnamed intentionally (mirrors app.ts).
-  // Use dynamic :locale param so the guard can read to.params.locale.
-  { path: '/:locale(es|fr)/discover', component: StubComponent },
-  { path: '/:locale(es|fr)/:calendar', component: StubComponent },
-  { path: '/:locale(es|fr)/:calendar/events/:event', component: StubComponent },
-  { path: '/:locale(es|fr)/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: StubComponent },
-  { path: '/:locale(es|fr)/:calendar/series/:series', component: StubComponent },
-];
+const siteRoutes: RouteRecordRaw[] = buildSiteRoutes({
+  discovery: StubComponent,
+  calendar: StubComponent,
+  event: StubComponent,
+  instance: StubComponent,
+  series: StubComponent,
+});
+
+/**
+ * The path template of the shipped locale-prefixed route ending in `suffix`.
+ *
+ * The locale-prefixed records are unnamed, so a matched-record assertion has
+ * only the template to identify them by — and naming the template literally
+ * would reintroduce the `es|fr` hardcoding this fixture just removed.
+ *
+ * @param suffix - The tail of the route template, after the locale segment
+ * @returns The matching route's path template
+ */
+function localePrefixedTemplate(suffix: string): string {
+  const record = siteRoutes.find(route => route.path.includes(':locale') && route.path.endsWith(suffix));
+
+  if (!record) {
+    throw new Error(`No locale-prefixed site route ends with '${suffix}'`);
+  }
+  return record.path;
+}
 
 /**
  * The production table plus a test-only catch-all, so the fall-through cases
@@ -191,7 +210,7 @@ describe('Vue Router locale-aware navigation guard', () => {
 
     it('should match /:locale/discover as the locale-prefixed discovery route', async () => {
       await router.push('/es/discover');
-      expect(matchedPath()).toBe('/:locale(es|fr)/discover');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/discover'));
       expect(router.currentRoute.value.params.locale).toBe('es');
       expect(router.currentRoute.value.params.calendar).toBeUndefined();
     });
@@ -235,7 +254,7 @@ describe('Vue Router locale-aware navigation guard', () => {
 
     it('should match /fr/:calendar/events/:event natively', async () => {
       await router.push('/fr/mycalendar/events/event-123');
-      expect(matchedPath()).toBe('/:locale(es|fr)/:calendar/events/:event');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/:calendar/events/:event'));
       expect(router.currentRoute.value.params.locale).toBe('fr');
     });
 
@@ -248,7 +267,7 @@ describe('Vue Router locale-aware navigation guard', () => {
 
     it('should match /fr/:calendar/series/:series natively', async () => {
       await router.push('/fr/mycalendar/series/series-123');
-      expect(matchedPath()).toBe('/:locale(es|fr)/:calendar/series/:series');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/:calendar/series/:series'));
       expect(router.currentRoute.value.params.series).toBe('series-123');
     });
 
