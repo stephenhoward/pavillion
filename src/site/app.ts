@@ -1,5 +1,5 @@
 import { createApp, App } from 'vue';
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 import { createPinia } from 'pinia';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -14,7 +14,7 @@ import SeriesView from '@/site/components/series-view.vue';
 import Discovery from '@/site/components/discovery.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
-import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { buildSiteRoutes } from '@/site/routes';
 
 Config.init().then( async (config) => {
 
@@ -25,39 +25,17 @@ Config.init().then( async (config) => {
   const app: App = createApp(AppVue);
   const authentication = new Authentication(localStorage);
 
-  // Calendars live at the domain root. '/discover' is a static segment, which
-  // vue-router ranks above the '/:calendar' param regardless of declaration
-  // order, so the discovery page is never swallowed by the calendar route —
-  // and 'discover' is a reserved url name (src/common/routing/reserved-segments.ts)
-  // so no calendar can claim it in the other direction either.
-  const routes: RouteRecordRaw[] = [
-    { path: '/discover', component: Discovery, name: 'discovery' },
-    { path: '/:calendar', component: CalendarView, name: 'calendar' },
-    { path: '/:calendar/events/:event', component: EventView, name: 'event' },
-    { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: EventInstanceView, name: 'instance' },
-    { path: '/:calendar/series/:series', component: SeriesView, name: 'series' },
-  ];
-
-  const nonDefaultLocales = AVAILABLE_LANGUAGES
-    .filter(lang => lang.code !== DEFAULT_LANGUAGE_CODE)
-    .map(lang => lang.code);
-
-  if (nonDefaultLocales.length > 0) {
-    const pattern = nonDefaultLocales.join('|');
-    // Locale-prefixed variants — unnamed intentionally.
-    // Navigation uses the default-locale named routes; useLocale.localizedPath() adds the prefix.
-    routes.push(
-      { path: `/:locale(${pattern})/discover`, component: Discovery },
-      { path: `/:locale(${pattern})/:calendar`, component: CalendarView },
-      { path: `/:locale(${pattern})/:calendar/events/:event`, component: EventView },
-      { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: EventInstanceView },
-      { path: `/:locale(${pattern})/:calendar/series/:series`, component: SeriesView },
-    );
-  }
-
+  // The path table lives in @/site/routes so a test can import the shipped
+  // shapes rather than mirror them; this module only binds the views to it.
   const router = createRouter({
     history: createWebHistory(),
-    routes,
+    routes: buildSiteRoutes({
+      discovery: Discovery,
+      calendar: CalendarView,
+      event: EventView,
+      instance: EventInstanceView,
+      series: SeriesView,
+    }),
   });
 
   router.beforeEach((to) => {
