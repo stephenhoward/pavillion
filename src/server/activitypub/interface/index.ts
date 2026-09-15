@@ -8,7 +8,7 @@ import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
-import ActivityPubServerService, { InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
+import ActivityPubServerService, { EventSourceActor, InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ProcessInboxService from '../service/inbox';
@@ -22,7 +22,7 @@ import { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
-export type { InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
+export type { EventSourceActor, InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
 import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -357,6 +357,7 @@ export default class ActivityPubInterface {
     description?: string;
     domain: string;
     actorUrl: string;
+    pageUrl?: string | null;
     calendarId?: string;
   }> {
     return this.memberService.lookupRemoteCalendar(identifier);
@@ -542,13 +543,17 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Batch-resolves the source actor URIs for a set of event IDs.
-   * Returns a map from event ID to the attributed_to actor URI.
+   * Batch-resolves the source actor for a set of event IDs — the
+   * `attributed_to` actor URI plus the peer's cached public page URL.
+   *
+   * This is the only door the calendar domain has onto a remote peer's page
+   * URL (DEC-003). It reads the local cache and never fetches; see
+   * {@link EventSourceActor}.
    *
    * @param eventIds - Array of event UUIDs to look up
-   * @returns Map from event ID to attributed_to actor URI
+   * @returns Map from event ID to its source actor URI and cached page URL
    */
-  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, string>> {
+  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, EventSourceActor>> {
     return this.serverService.getEventSourceActorUris(eventIds);
   }
 }

@@ -21,6 +21,7 @@ import db from "@/server/common/entity/db";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
+import { sanitizePeerPageUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { looksLikeUuid } from "@/server/common/helper/uuid";
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
@@ -216,6 +217,7 @@ class ActivityPubService {
       // Update cached metadata from the profile we just fetched
       await this.remoteCalendarService.updateMetadata(remoteActorUrl, {
         displayName: remoteProfile.name,
+        pageUrl: remoteProfile.pageUrl ?? null,
       });
     }
 
@@ -709,13 +711,17 @@ class ActivityPubService {
   /**
    * Lookup a remote calendar by identifier using WebFinger protocol
    * @param identifier The remote calendar identifier (username@domain)
-   * @returns Preview information for the remote calendar
+   * @returns Preview information for the remote calendar. `pageUrl` is the
+   *   public page the peer declares in its actor document, already sanitized
+   *   and host-pinned; null when the peer declared nothing usable, and absent
+   *   for a local calendar (whose page URL we build ourselves).
    */
   async lookupRemoteCalendar(identifier: string): Promise<{
     name: string;
     description?: string;
     domain: string;
     actorUrl: string;
+    pageUrl?: string | null;
     calendarId?: string;
   }> {
     const normalizedIdentifier = ActivityPubService.normalizeIdentifier(identifier);
@@ -799,6 +805,10 @@ class ActivityPubService {
       description: profile.summary || undefined,
       domain,
       actorUrl,
+      // The peer's own answer to "where does a human see this calendar?".
+      // Reading it here is the only network fetch involved: the display path
+      // reads the cached value and never fetches.
+      pageUrl: sanitizePeerPageUrl(profile.url, actorUrl),
     };
   }
 

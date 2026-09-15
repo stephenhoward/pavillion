@@ -1,5 +1,6 @@
 import config from 'config';
 import { CalendarEvent } from '@/common/model/events';
+import type { EventSourceActor } from '@/server/activitypub/interface';
 
 /**
  * Contextual information needed to detect whether an event is a repost
@@ -26,26 +27,26 @@ export interface RepostContext {
  *
  * For local reposts, source calendar info is resolved from the eager-loaded
  * CalendarEntity. For remote reposts, the caller provides a pre-resolved map
- * of eventId -> attributed_to actor URI (fetched via ActivityPubInterface).
+ * of eventId -> source actor (fetched via ActivityPubInterface).
  *
  * @param contexts - Array of repost contexts to enrich
- * @param remoteActorUriMap - Pre-resolved map of eventId to attributed_to actor URI
+ * @param remoteSourceActorMap - Pre-resolved map of eventId to source actor
  */
 export async function resolveSourceCalendars(
   contexts: RepostContext[],
-  remoteActorUriMap: Map<string, string>,
+  remoteSourceActorMap: Map<string, EventSourceActor>,
 ): Promise<void> {
   for (const ctx of contexts) {
     if (ctx.eventCalendarId === null) {
-      // Remote repost — resolve via pre-resolved actor URI map.
+      // Remote repost — resolve via the pre-resolved source actor map.
       // Without SharedEventEntity context here we default to 'manual';
       // callers that know the actual auto/manual distinction should set it.
       if (ctx.event.repostStatus === 'none') {
         ctx.event.repostStatus = 'manual';
       }
-      const attributedTo = remoteActorUriMap.get(ctx.event.id);
-      if (attributedTo) {
-        const parsed = parseAttributedToUri(attributedTo);
+      const sourceActor = remoteSourceActorMap.get(ctx.event.id);
+      if (sourceActor) {
+        const parsed = parseAttributedToUri(sourceActor.actorUri, sourceActor.pageUrl);
         if (parsed) {
           ctx.event.sourceCalendar = parsed;
         }
@@ -74,10 +75,19 @@ export async function resolveSourceCalendars(
  * Parses an ActivityPub attributed_to URI to extract source calendar information.
  * Expected format: https://{host}/calendars/{urlName}
  *
+ * `urlName` and `host` always come from the URI path — the site renders them as
+ * the `urlName@host` label — so a peer that declares no page URL still gets its
+ * repost attribution shown, just with a guessed link.
+ *
  * @param uri - The attributed_to URI to parse
+ * @param declaredPageUrl - The page URL the peer declared in its actor
+ *   document, cached by the ActivityPub domain; null when we have none
  * @returns Source calendar info or null if parsing fails
  */
-export function parseAttributedToUri(uri: string): { urlName: string; host: string; url: string } | null {
+export function parseAttributedToUri(
+  uri: string,
+  declaredPageUrl?: string | null,
+): { urlName: string; host: string; url: string } | null {
   try {
     const url = new URL(uri);
 
@@ -97,14 +107,57 @@ export function parseAttributedToUri(uri: string): { urlName: string; host: stri
     }
 
     const urlName = segments[calendarIndex + 1];
+
+    // The peer's own declared `url` is the source of truth for its public page;
+    // see DEC-018 rule 2. We fall back to guessing only when the peer declared
+    // no usable one.
+    //
+    // The guess is `/view/{urlName}` — deliberately NOT the root shape DEC-018
+    // gave our own pages — and this call site is exempt from the pv-l04s.3
+    // sweep. The two spellings are not equivalent across peer versions:
+    //   /view/{urlName}  resolves on a pre-DEC-018 peer directly, and on an
+    //                    upgraded peer via that peer's permanent 301.
+    //   /{urlName}       resolves ONLY on an upgraded peer; on a pre-DEC-018
+    //                    peer the root namespace is still the client SPA, which
+    //                    answers with its own app shell rather than the calendar.
+    // So the retired spelling is the strictly safer guess when we have to guess.
+    const declared = pinnedPageUrl(declaredPageUrl, url.host);
+
     return {
       urlName,
       host: url.host,
-      url: `${url.protocol}//${url.host}/view/${urlName}`,
+      url: declared ?? `${url.protocol}//${url.host}/view/${urlName}`,
     };
   }
   catch {
     // Malformed URI — return null gracefully
+    return null;
+  }
+}
+
+/**
+ * Accepts a peer-declared page URL only if it is http(s) and sits on the same
+ * host as the actor URI it was declared by.
+ *
+ * The ActivityPub domain already applies exactly this rule before the value is
+ * cached (`sanitizePeerPageUrl`, which is the rule of record). That module
+ * cannot be imported here — domain boundaries forbid it (DEC-003) — so the
+ * check is restated at the render boundary, where the value becomes an anchor
+ * href on an anonymous public page. Keep the two consistent.
+ *
+ * @param declared - The cached page URL, or null/undefined when we have none
+ * @param actorHost - The host of the actor URI that declared it
+ * @returns The URL if it passes, otherwise null so the caller falls back
+ */
+function pinnedPageUrl(declared: string | null | undefined, actorHost: string): string | null {
+  if (!declared) return null;
+  try {
+    const parsed = new URL(declared);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    if (parsed.host !== actorHost) return null;
+    return declared;
+  }
+  catch {
     return null;
   }
 }

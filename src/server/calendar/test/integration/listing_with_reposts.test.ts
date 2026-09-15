@@ -48,6 +48,10 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import ActivityPubServerService from '@/server/activitypub/service/server';
+import AccountsInterface from '@/server/accounts/interface';
 
 describe('Listing union for reposted events (pv-hr72.4)', () => {
   let env: TestEnvironment;
@@ -68,11 +72,20 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
 
     // Minimal AP interface stub. listEventInstancesForCalendar fans into:
     //   - EventService.listEventIdsForCalendar -> getSharedEventStatusMap
-    //   - EventInstanceService.fetchRemoteActorUriMap -> getEventSourceActorUris
+    //   - EventInstanceService.fetchRemoteSourceActorMap -> getEventSourceActorUris
     // The first must return the live SharedEventEntity rows so the federated
-    // share scenario actually exercises the AP-shared link path; the second
-    // can return an empty map because all events here have a non-null
-    // calendar_id (no remote-origin events under test).
+    // share scenario actually exercises the AP-shared link path.
+    //
+    // The second delegates to the REAL ActivityPubServerService so the
+    // remote-origin scenarios exercise the actual two-query resolution across
+    // `ap_event_object` and `calendar_actor` — including whether a peer's
+    // declared page URL is cached. Neither query needs the injected
+    // interfaces, so a locally-constructed service is enough.
+    const apServerService = new ActivityPubServerService(
+      eventBus,
+      calendarInterface,
+      new AccountsInterface(eventBus),
+    );
     calendarInterface.setActivityPubInterface({
       getSharedEventStatusMap: async (calendarId: string) => {
         const rows = await SharedEventEntity.findAll({
@@ -85,7 +98,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
         }
         return map;
       },
-      getEventSourceActorUris: async () => new Map<string, string>(),
+      getEventSourceActorUris: (eventIds: string[]) => apServerService.getEventSourceActorUris(eventIds),
       findCalendarActorByCalendarId: async () => null,
     } as never);
 
@@ -391,5 +404,117 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
       // into tests that may be added below this scenario.
       eventBus.removeAllListeners('eventCreated');
     }
+  });
+
+  /**
+   * A remote peer's public page URL is not ours to construct: since DEC-018 the
+   * public URL shape is version-dependent, so the peer's own actor document is
+   * the source of truth and `calendar_actor.page_url` is where we cache it.
+   *
+   * These two scenarios lock the cached-vs-fallback split end to end — through
+   * the real `ap_event_object` -> `calendar_actor` resolution — rather than only
+   * at the helper. The cache is an ActivityPub-peer boundary whose two states
+   * (peer declared a URL / peer did not) are exactly what the unit tests stub
+   * out, so exercising the real rows is not redundant coverage.
+   */
+  describe('remote peer page URL on a federated event', () => {
+    /**
+     * Ingests a remote-origin event (calendar_id null, so the listing resolves
+     * its source through the AP actor map), shares it to Calendar B, and
+     * registers the AP identity row attributing it to the given peer actor.
+     */
+    async function shareRemoteOriginEventToB(name: string, attributedTo: string): Promise<string> {
+      const eventId = uuidv4();
+
+      // Same one-shot listener pattern as the scenario above: the locally
+      // constructed CalendarInterface does not register the production
+      // eventCreated handler that materializes instances.
+      const materialized = new Promise<void>((resolve, reject) => {
+        eventBus.once('eventCreated', async (e: { calendar: Calendar | null; event: any }) => {
+          try {
+            await calendarInterface.buildEventInstances(e.event);
+            resolve();
+          }
+          catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
+        });
+      });
+
+      const start = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000);
+      await calendarInterface.addRemoteEvent(calendarA, {
+        id: eventId,
+        content: { en: { name, description: name } },
+        schedules: [{
+          start: start.toISOString(),
+          end: new Date(start.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+        }],
+      });
+
+      await SharedEventEntity.create({
+        id: uuidv4(),
+        event_id: eventId,
+        calendar_id: calendarB.id,
+        auto_posted: true,
+      });
+      await EventObjectEntity.create({
+        id: uuidv4(),
+        event_id: eventId,
+        ap_id: `${attributedTo}/events/${eventId}`,
+        attributed_to: attributedTo,
+      });
+
+      try {
+        await materialized;
+      }
+      finally {
+        eventBus.removeAllListeners('eventCreated');
+      }
+      return eventId;
+    }
+
+    it('surfaces the page URL cached from the peer actor document', async () => {
+      const actorUri = 'https://declared.example.org/calendars/declared-cal';
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: actorUri,
+        remote_domain: 'declared.example.org',
+        page_url: 'https://declared.example.org/declared-cal',
+        private_key: null,
+      });
+
+      const eventId = await shareRemoteOriginEventToB('Declared Page URL Event', actorUri);
+
+      const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
+      const listed = instances.filter(i => i.event.id === eventId);
+      expect(listed).toHaveLength(1);
+      expect(listed[0].event.sourceCalendar).not.toBeNull();
+      expect(listed[0].event.sourceCalendar!.urlName).toBe('declared-cal');
+      expect(listed[0].event.sourceCalendar!.host).toBe('declared.example.org');
+      expect(listed[0].event.sourceCalendar!.url).toBe('https://declared.example.org/declared-cal');
+    });
+
+    it('falls back to the /view/ spelling when the peer row has no cached page URL', async () => {
+      // A row in this state is the ordinary case for a peer first seen through
+      // an inbound activity, which never fetches the actor document.
+      const actorUri = 'https://silent.example.org/calendars/silent-cal';
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: actorUri,
+        remote_domain: 'silent.example.org',
+        private_key: null,
+      });
+
+      const eventId = await shareRemoteOriginEventToB('Fallback Page URL Event', actorUri);
+
+      const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
+      const listed = instances.filter(i => i.event.id === eventId);
+      expect(listed).toHaveLength(1);
+      expect(listed[0].event.sourceCalendar!.url).toBe('https://silent.example.org/view/silent-cal');
+    });
   });
 });
