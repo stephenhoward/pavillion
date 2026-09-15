@@ -283,6 +283,13 @@ describe('AddCalendarModal — mapping step', () => {
       ['mycal', true, 'bare urlName'],
       ['MyCAL', true, 'mixed-case bare urlName (server lowercases)'],
       ['my_cal_', true, 'bare urlName with trailing underscore'],
+      // Deliberately shape-only: following looks up a calendar that already
+      // exists, and one issued before route segments were reserved may
+      // legitimately be named `admin`. Mirrors the server's
+      // ActivityPubService.normalizeIdentifier; fails if either end is
+      // tightened to the composite isValidCalendarUrlName.
+      ['admin', true, 'bare urlName that is a reserved route segment'],
+      ['discover', true, 'another reserved route segment'],
       ['', false, 'empty string'],
       ['ab', false, 'bare urlName too short'],
       ['_leadunderscore', false, 'bare urlName with leading underscore'],

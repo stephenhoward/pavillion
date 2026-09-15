@@ -42,6 +42,13 @@ class SeriesService {
    * canonical rule with CalendarService.isValidUrlName via the common
    * validator so series and calendar urlNames cannot drift.
    *
+   * That includes the reserved-route-segment check, which a series does not
+   * strictly need — series live under /:calendar/series/:series and so can
+   * never shadow a top-level route. It is kept deliberately: one rule for both
+   * is easier to explain than two, it only ever narrows what a *new* series may
+   * be called (urlName is immutable, and no other path revalidates it), so no
+   * existing series is affected.
+   *
    * @param urlName - The URL name to validate
    * @returns true if valid, false otherwise
    */

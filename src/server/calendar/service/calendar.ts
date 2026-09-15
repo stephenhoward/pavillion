@@ -16,7 +16,8 @@ import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
-import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { isReservedRouteSegment, RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import { ValidationError } from '@/common/exceptions/base';
 import { MediaNotFoundError } from '@/common/exceptions/media';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -232,8 +233,20 @@ class CalendarService {
     return false;
   }
 
+  /**
+   * Resolve a calendar by its url name.
+   *
+   * Gated on the shape rule only, deliberately not the composite
+   * `isValidUrlName`. This is the single name->calendar resolver behind the
+   * public API, the widget, series and category reads, SSR meta tags and the
+   * whole ActivityPub surface (actor document, WebFinger, inbound inbox
+   * delivery), so it resolves calendars that already exist rather than
+   * policing names being claimed. An instance that issued a calendar named
+   * e.g. `admin` before route segments were reserved keeps serving it; the
+   * startup collision report tells the operator to rename it deliberately.
+   */
   async getCalendarByName(name: string): Promise<Calendar|null> {
-    if (!name || ! this.isValidUrlName(name)) {
+    if (!name || ! CALENDAR_URL_NAME_RE.test(name)) {
       return null;
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] });
@@ -379,6 +392,51 @@ class CalendarService {
       urlNamesById.set(calendar.id, calendar.url_name);
     }
     return urlNamesById;
+  }
+
+  /**
+   * Finds calendars whose stored url name is reserved for application routing.
+   *
+   * Public calendar URLs will move to the site root, where a calendar named
+   * after a routed segment or a supported locale code will be unreachable.
+   * Until then it resolves normally — lookups apply the shape rule only, so
+   * nothing about such a calendar is broken today. This is a read-only
+   * diagnostic for the startup log: a collision is reported so an operator can
+   * rename the calendar through its settings before that change ships. Nothing
+   * here renames or removes a calendar — an automatic rename would silently
+   * break every existing link to it.
+   *
+   * Stored url names are already percent-decoded and charset-constrained, which
+   * satisfies the precondition of {@link isReservedRouteSegment}; it folds case,
+   * so a row stored as 'Admin' is reported too.
+   *
+   * Each collision carries why it is reserved, so the caller logs the reason
+   * rather than re-deriving it. The preceding filter guarantees every url name
+   * reaching the classifier satisfies at least one disjunct, so the two-way
+   * split is exhaustive by construction and either branch order would do. It
+   * lives here rather than in the startup caller for locality: this module
+   * already imports both `isReservedRouteSegment` and `RESERVED_ROUTE_SEGMENTS`
+   * from the file that owns them, so whoever adds a third disjunct is likely to
+   * see this method. That leaves the split with two implementations — here and
+   * inside `isReservedRouteSegment` — tracked as pv-8f9u.
+   *
+   * @returns The collisions in ascending url-name order; empty when none collide
+   */
+  async findReservedUrlNameCollisions(): Promise<ReservedUrlNameCollision[]> {
+    const calendars = await CalendarEntity.findAll({
+      attributes: ['url_name'],
+      order: [['url_name', 'ASC']],
+    });
+
+    return calendars
+      .map(calendar => calendar.url_name)
+      .filter(urlName => isReservedRouteSegment(urlName))
+      .map(urlName => ({
+        urlName,
+        reason: RESERVED_ROUTE_SEGMENTS.includes(urlName.toLowerCase())
+          ? 'reserved_segment' as const
+          : 'locale_code' as const,
+      }));
   }
 
   /**
@@ -2154,6 +2212,18 @@ export interface AdminCalendarRow {
   lastActivityAt: Date | null;
   fundingStatus: 'subscribed' | 'grant' | 'none';
   openReportCount: number;
+}
+
+/**
+ * One calendar whose stored url name is reserved, as returned by
+ * CalendarService.findReservedUrlNameCollisions.
+ *
+ * `reason` says which half of the reservation rule the url name matched: a
+ * named top-level route segment, or a supported locale code.
+ */
+export interface ReservedUrlNameCollision {
+  urlName: string;
+  reason: 'reserved_segment' | 'locale_code';
 }
 
 export interface AdminCalendarListResult {

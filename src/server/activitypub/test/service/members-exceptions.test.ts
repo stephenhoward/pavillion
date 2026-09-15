@@ -384,6 +384,18 @@ describe('ActivityPubService.normalizeIdentifier', () => {
     expect(ActivityPubService.normalizeIdentifier('my_cal_')).toBe('my_cal_@pavillion.dev');
   });
 
+  it.each(['admin', 'feed', 'discover', 'inbox'])(
+    'accepts the reserved route segment %s as a bare urlName',
+    (urlName) => {
+      // Deliberate: this is a lookup of a calendar that already exists, not a
+      // claim on a new name. A calendar issued before route segments were
+      // reserved must stay followable, so the bare-urlName path tests
+      // CALENDAR_URL_NAME_RE and never the composite isValidCalendarUrlName.
+      // If someone tightens it back up, this row fails.
+      expect(ActivityPubService.normalizeIdentifier(urlName)).toBe(`${urlName}@pavillion.dev`);
+    },
+  );
+
   it('returns null for a qualified identifier with an invalid domain', () => {
     expect(ActivityPubService.normalizeIdentifier('user@not a domain')).toBeNull();
   });

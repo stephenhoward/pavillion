@@ -364,6 +364,46 @@ describe('getCalendarByName', () => {
     expect(result).toBeNull();
   });
 
+  // getCalendarByName is the single name->calendar resolver behind the public
+  // API, the widget, series and category reads, SSR meta tags and the whole
+  // ActivityPub surface. It is gated on the shape rule only, so a calendar an
+  // instance issued before route segments were reserved keeps resolving --
+  // while the same name can no longer be claimed by a new calendar.
+  it.each(['admin', 'feed', 'discover', 'inbox'])(
+    'should resolve a calendar stored under the reserved name %s',
+    async (urlName) => {
+      const cal = new Calendar('reservedCalendarId', urlName);
+      const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+      calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
+
+      const result = await service.getCalendarByName(urlName);
+
+      expect(result).not.toBeNull();
+      expect(result?.urlName).toBe(urlName);
+      expect(calendarFindOneStub.firstCall.args[0]).toHaveProperty('where', { url_name: urlName });
+    },
+  );
+
+  it.each(['admin', 'feed', 'discover', 'inbox'])(
+    'should still refuse to create a new calendar named %s',
+    async (urlName) => {
+      // The other half of the pair above: lookup is loosened, claiming is not.
+      const account = new Account('account-id');
+
+      await expect(
+        service.createCalendar(account, urlName, 'Test Calendar'),
+      ).rejects.toThrow(InvalidUrlNameError);
+    },
+  );
+
+  it('should return null without querying when the name is malformed', async () => {
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+
+    expect(await service.getCalendarByName('no spaces allowed')).toBeNull();
+    expect(await service.getCalendarByName('-noleadhyphen')).toBeNull();
+    expect(calendarFindOneStub.called).toBe(false);
+  });
+
   it('should include CalendarContentEntity in the query to populate content', async () => {
     const cal = new Calendar('testCalendarId', 'testme');
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
