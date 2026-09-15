@@ -18,6 +18,15 @@ import ConfigurationInterface from '@/server/configuration/interface';
 
 const RESERVED_MODULE = '@/common/routing/reserved-segments';
 
+/*
+ * This suite drives the page router over real HTTP via supertest, which proves
+ * what a request actually gets back. It does not establish that a path served
+ * to the site shell is a path the site SPA's router can match — that join lives
+ * in src/common/test/routing/public-url-contract.test.ts, which reads handler
+ * dispositions straight off the router's layer stack. Changing which paths this
+ * router hands to the site shell means updating that file too.
+ */
+
 /**
  * Creates a minimal mock ConfigurationInterface with controllable default language.
  */

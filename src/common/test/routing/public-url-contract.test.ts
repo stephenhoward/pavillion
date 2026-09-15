@@ -47,6 +47,15 @@ import ConfigurationInterface from '@/server/configuration/interface';
  * The internals of an Express 4 router layer. @types/express exposes neither
  * `Router.stack` nor `Layer`, so the shape is declared here rather than cast to
  * `any` at each use.
+ *
+ * This shape is specific to Express 4.x. Express 5 reworked route and layer
+ * internals along with its path-to-regexp version, so bumping express past 4.x
+ * means revisiting this interface and `buildServerProbe` together. The failure
+ * is loud rather than silent — `buildServerProbe` runs at module load, so a
+ * changed shape throws during collection instead of passing vacuously — and
+ * `src/server/common/test/app_routes.test.ts` covers the same router through
+ * supertest without touching internals, so routing stays verified while this
+ * file is being repaired.
  */
 interface ExpressRouterLayer {
   /** Note: mutates `layer.params` as a side effect. Harmless for a probe. */
