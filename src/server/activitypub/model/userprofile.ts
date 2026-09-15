@@ -9,6 +9,17 @@ class UserProfileResponse {
    * their actor documents. It is deliberately the canonical root URL rather
    * than the `/view/` spelling that only 301s to it, because on our own domain
    * we know our own version.
+   *
+   * Built unconditionally from the url name, and the reserved list is
+   * deliberately NOT consulted: DEC-018 rule 4 says reservation governs
+   * *claiming* a name, never *resolving* one, and `getCalendarByName` gates on
+   * `CALENDAR_URL_NAME_RE` alone. So a calendar that predates a reservation —
+   * one named `admin`, say — keeps its actor document, WebFinger response and
+   * inbox, but the `url` advertised here is shadowed by the server-owned
+   * segment and resolves to our admin app instead of its page. Same origin, so
+   * the cost is misdirection rather than a security boundary, and the fix is
+   * operational: the startup reserved-name collision report is the operator's
+   * signal to rename the calendar deliberately.
    */
   url: string;
   inbox: string;

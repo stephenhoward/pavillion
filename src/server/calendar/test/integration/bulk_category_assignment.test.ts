@@ -35,7 +35,7 @@ describe('CalendarInterface.bulkAssignCategories', () => {
     calendarInterface.setActivityPubInterface({
       getSharedEventStatusMap: async () => new Map<string, 'auto' | 'manual'>(),
       getCalendarIdsForSharedEvent: async () => [],
-      getEventSourceActorUris: async () => new Map<string, string>(),
+      getEventSourceActors: async () => new Map<string, string>(),
       findCalendarActorByCalendarId: async () => null,
     } as never);
     const configurationInterface = new ConfigurationInterface();

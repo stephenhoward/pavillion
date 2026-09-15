@@ -324,6 +324,107 @@ describe('RemoteCalendarService', () => {
     });
   });
 
+  /**
+   * `page_url` is the peer's own declared public page, cached at follow time
+   * (DEC-018 rule 2). Both update methods gained a write for it and the guard
+   * around that write is the whole point: the editor-invite path
+   * (`user_actor.ts`) calls `updateMetadata` with only `inboxUrl`, so a write
+   * that did not test for `undefined` would blank a cached page URL every time
+   * a remote editor was granted access.
+   */
+  describe('page_url persistence', () => {
+    function buildMockEntity(overrides: { page_url?: string | null } = {}): any {
+      return {
+        id: 'remote-id',
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: 'https://remote.example/calendars/events',
+        remote_display_name: 'Remote Events',
+        remote_domain: 'remote.example',
+        inbox_url: null,
+        shared_inbox_url: null,
+        page_url: overrides.page_url ?? null,
+        public_key: null,
+        private_key: null,
+        last_fetched: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        save: sinon.stub().resolves(),
+        toModel: function() {
+          return {
+            id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
+            actorUri: this.actor_uri,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
+            inboxUrl: this.inbox_url,
+            sharedInboxUrl: this.shared_inbox_url,
+            pageUrl: this.page_url,
+            publicKey: this.public_key,
+            privateKey: this.private_key,
+            lastFetched: this.last_fetched,
+            createdAt: this.createdAt,
+            updatedAt: this.updatedAt,
+          };
+        },
+      };
+    }
+
+    it('persists a declared page URL onto the entity', async () => {
+      const mockEntity = buildMockEntity();
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity);
+
+      const result = await service.updateMetadata(mockEntity.actor_uri, {
+        displayName: 'Remote Events',
+        pageUrl: 'https://remote.example/events',
+      });
+
+      expect(mockEntity.page_url).toBe('https://remote.example/events');
+      expect(mockEntity.save.called).toBe(true);
+      expect(result?.pageUrl).toBe('https://remote.example/events');
+    });
+
+    it('leaves an existing page URL untouched when the payload omits it', async () => {
+      const mockEntity = buildMockEntity({ page_url: 'https://remote.example/events' });
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity);
+
+      await service.updateMetadata(mockEntity.actor_uri, {
+        inboxUrl: 'https://remote.example/calendars/events/inbox',
+      });
+
+      expect(mockEntity.page_url).toBe('https://remote.example/events');
+    });
+
+    it('clears the page URL when explicitly given null', async () => {
+      const mockEntity = buildMockEntity({ page_url: 'https://remote.example/events' });
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity);
+
+      await service.updateMetadata(mockEntity.actor_uri, { pageUrl: null });
+
+      expect(mockEntity.page_url).toBeNull();
+    });
+
+    it('persists, preserves and clears the page URL through updateMetadataById too', async () => {
+      const persisting = buildMockEntity();
+      const findOne = sandbox.stub(CalendarActorEntity, 'findOne');
+      findOne.onCall(0).resolves(persisting);
+
+      await service.updateMetadataById(persisting.id, { pageUrl: 'https://remote.example/events' });
+      expect(persisting.page_url).toBe('https://remote.example/events');
+
+      const preserving = buildMockEntity({ page_url: 'https://remote.example/events' });
+      findOne.onCall(1).resolves(preserving);
+      await service.updateMetadataById(preserving.id, { displayName: 'Renamed' });
+      expect(preserving.page_url).toBe('https://remote.example/events');
+
+      const clearing = buildMockEntity({ page_url: 'https://remote.example/events' });
+      findOne.onCall(2).resolves(clearing);
+      await service.updateMetadataById(clearing.id, { pageUrl: null });
+      expect(clearing.page_url).toBeNull();
+    });
+  });
+
   describe('isMetadataStale', () => {
     it('should return true if lastFetched is null', () => {
       const calendarActor = {

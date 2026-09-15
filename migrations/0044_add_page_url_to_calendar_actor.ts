@@ -14,12 +14,15 @@ import {
  * one that has not upgraded. Caching what the peer itself declares removes the
  * guess.
  *
- * Nullable with no backfill. A row keeps `page_url = NULL` until the peer's
- * actor document is next fetched (the follow path, governed by the existing
- * one-hour `isMetadataStale` contract); the display path falls back to the
- * legacy `/view/{urlName}` spelling meanwhile, which resolves on peers of
- * either version. Backfilling would need one outbound fetch per peer to
- * replace a link that already works.
+ * Nullable with no backfill. The value is written **once, at follow time** —
+ * `followCalendar` is the only path that fetches a peer's actor document — and
+ * there is no refresher: `isMetadataStale` has no caller outside
+ * `remote_calendar.ts` itself, so nothing re-reads a peer's `url` on a
+ * schedule. A row created by an inbound activity (which never fetches the
+ * document) therefore keeps `page_url = NULL` indefinitely, and the display
+ * path falls back to the legacy `/view/{urlName}` spelling, which resolves on
+ * peers of either version. Backfilling would need one outbound fetch per peer
+ * to replace a link that already works.
  *
  * This is a **display snapshot** in the DEC-015 sense: staleness is tolerable,
  * not a defect, and nothing may gate authorization, trust, or routing on it.

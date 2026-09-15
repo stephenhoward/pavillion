@@ -449,7 +449,7 @@ export default class ActivityPubService {
    * @param eventIds - Array of event UUIDs to look up
    * @returns Map from event ID to its source actor URI and cached page URL
    */
-  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, EventSourceActor>> {
+  async getEventSourceActors(eventIds: string[]): Promise<Map<string, EventSourceActor>> {
     if (eventIds.length === 0) {
       return new Map();
     }

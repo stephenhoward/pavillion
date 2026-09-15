@@ -21,10 +21,9 @@ import CategoryService from "./categories";
 import EventService from "./events";
 import { Op, literal, where, fn, col } from 'sequelize';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
-import type ActivityPubInterface from '@/server/activitypub/interface';
-import type { EventSourceActor } from '@/server/activitypub/interface';
-// ^ The AP interface module is the only door onto ActivityPub state from this
-//   domain (DEC-003); `EventSourceActor` is re-exported there for that reason.
+// The AP interface module is the only door onto ActivityPub state from this
+// domain (DEC-003); `EventSourceActor` is re-exported there for that reason.
+import type { default as ActivityPubInterface, EventSourceActor } from '@/server/activitypub/interface';
 import {
   EventNotFoundError,
   InsufficientCalendarPermissionsError,
@@ -156,7 +155,7 @@ export default class EventInstanceService {
     if (remoteEventIds.length === 0 || !this.activityPubInterface) {
       return new Map<string, EventSourceActor>();
     }
-    return this.activityPubInterface.getEventSourceActorUris(remoteEventIds);
+    return this.activityPubInterface.getEventSourceActors(remoteEventIds);
   }
 
   async listEventInstances(event: CalendarEvent): Promise<CalendarEventInstance[]> {

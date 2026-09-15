@@ -118,9 +118,14 @@ class CalendarActorEntity extends Model {
    * an inbound activity that never fetched the actor document; the display path
    * then falls back to guessing the peer's route shape.
    *
-   * Populated only through `sanitizePeerPageUrl`, which allowlists the scheme
-   * and pins the host to the actor URI's — this value becomes an anchor href on
-   * anonymous public pages.
+   * Written **once, at follow time**, and never refreshed: `followCalendar` is
+   * the only path that fetches a peer's actor document, and no job re-reads it
+   * (`isMetadataStale` has no caller outside `remote_calendar.ts`). A row that
+   * starts NULL stays NULL until that peer is followed.
+   *
+   * Populated only through `sanitizePeerPageUrl`, which allowlists the scheme,
+   * rejects userinfo and pins the host to the actor URI's — this value becomes
+   * an anchor href on anonymous public pages.
    *
    * A **display snapshot** in the DEC-015 sense, never a policy surface: its
    * staleness is tolerable and nothing may gate authorization, trust, or

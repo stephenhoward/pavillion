@@ -211,6 +211,11 @@ describe('parseAttributedToUri', () => {
    * peer's own host must never reach the page. The rule of record is
    * `sanitizePeerPageUrl` in the ActivityPub domain, which applies it before
    * the value is cached; this restates it at the render boundary.
+   *
+   * The two must agree on every axis, not only host and scheme.
+   * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
+   * table-driven equivalence test that fails when either side drifts — add a
+   * hostile value there, not only here.
    */
   describe('rejects a page URL the peer may not declare', () => {
     it.each([
@@ -221,10 +226,48 @@ describe('parseAttributedToUri', () => {
       ['a javascript: URL', 'javascript:alert(document.domain)'],
       ['a data: URL', 'data:text/html;base64,PHNjcmlwdD4='],
       ['an unparseable value', 'not-a-url'],
+      ['userinfo credentials on the actor host', 'https://admin:[email protected]/secret'],
+      ['a bare userinfo username on the actor host', 'https://[email protected]/x'],
     ])('falls back rather than emitting %s', (_label, hostile) => {
       const result = parseAttributedToUri(REMOTE_ACTOR_URI, hostile);
 
       expect(result!.url).toBe('https://remote.example.com/view/remote-cal');
+    });
+  });
+
+  /**
+   * Normalization is the axis the render check silently dropped: it returned
+   * the stored bytes rather than the parse, so whitespace, quotes and control
+   * characters reached the href verbatim even though the population side had
+   * percent-encoded them. Harmless while the only writer is the follow path and
+   * the only reader is a Vue attribute binding; not harmless the first time the
+   * value reaches a server-rendered context or a second ingest path writes the
+   * column.
+   */
+  describe('normalizes the declared page URL rather than echoing it', () => {
+    it.each([
+      ['surrounding whitespace', '  https://remote.example.com/x  ', 'https://remote.example.com/x'],
+      [
+        'an embedded quote',
+        'https://remote.example.com/x"onmouseover=alert(1)',
+        'https://remote.example.com/x%22onmouseover=alert(1)',
+      ],
+      [
+        'an embedded control character',
+        'https://remote.example.com/xy',
+        'https://remote.example.com/x%01y',
+      ],
+      ['a newline inside the scheme', 'ht\ntps://remote.example.com/x', 'https://remote.example.com/x'],
+    ])('normalizes %s', (_label, declared, expected) => {
+      expect(parseAttributedToUri(REMOTE_ACTOR_URI, declared)!.url).toBe(expected);
+    });
+
+    it('falls back when the declared URL normalizes past the length cap', () => {
+      const declared = 'https://remote.example.com/x' + '<'.repeat(700);
+
+      expect(declared.length).toBeLessThan(2048);
+      expect(parseAttributedToUri(REMOTE_ACTOR_URI, declared)!.url)
+        .toBe('https://remote.example.com/view/remote-cal');
     });
   });
 

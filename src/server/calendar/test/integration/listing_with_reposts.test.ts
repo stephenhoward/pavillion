@@ -37,6 +37,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -72,7 +74,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
 
     // Minimal AP interface stub. listEventInstancesForCalendar fans into:
     //   - EventService.listEventIdsForCalendar -> getSharedEventStatusMap
-    //   - EventInstanceService.fetchRemoteSourceActorMap -> getEventSourceActorUris
+    //   - EventInstanceService.fetchRemoteSourceActorMap -> getEventSourceActors
     // The first must return the live SharedEventEntity rows so the federated
     // share scenario actually exercises the AP-shared link path.
     //
@@ -98,7 +100,7 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
         }
         return map;
       },
-      getEventSourceActorUris: (eventIds: string[]) => apServerService.getEventSourceActorUris(eventIds),
+      getEventSourceActors: (eventIds: string[]) => apServerService.getEventSourceActors(eventIds),
       findCalendarActorByCalendarId: async () => null,
     } as never);
 
@@ -494,6 +496,47 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
       expect(listed[0].event.sourceCalendar!.urlName).toBe('declared-cal');
       expect(listed[0].event.sourceCalendar!.host).toBe('declared.example.org');
       expect(listed[0].event.sourceCalendar!.url).toBe('https://declared.example.org/declared-cal');
+    });
+
+    /**
+     * The display path reads the cached page URL and never fetches. That claim
+     * is load-bearing — an outbound fetch here would put an anonymous page's
+     * latency under a peer's control and turn one page view into one request
+     * per remote calendar — and until now it was enforced only by review. This
+     * drives the listing with every outbound axios verb armed to fail, so a
+     * fetch introduced anywhere under `listEventInstancesForCalendar` shows up
+     * as a failing assertion rather than as a slow page in production.
+     */
+    it('resolves the peer page URL without any outbound HTTP request', async () => {
+      const actorUri = 'https://nofetch.example.org/calendars/nofetch-cal';
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: actorUri,
+        remote_domain: 'nofetch.example.org',
+        page_url: 'https://nofetch.example.org/nofetch-cal',
+        private_key: null,
+      });
+
+      const eventId = await shareRemoteOriginEventToB('No Fetch Event', actorUri);
+
+      const sandbox = sinon.createSandbox();
+      const get = sandbox.stub(axios, 'get').rejects(new Error('display path must not fetch'));
+      const post = sandbox.stub(axios, 'post').rejects(new Error('display path must not fetch'));
+
+      try {
+        const instances = await calendarInterface.listEventInstancesForCalendar(calendarB);
+        const listed = instances.filter(i => i.event.id === eventId);
+
+        expect(listed).toHaveLength(1);
+        expect(listed[0].event.sourceCalendar!.url).toBe('https://nofetch.example.org/nofetch-cal');
+        expect(get.called).toBe(false);
+        expect(post.called).toBe(false);
+      }
+      finally {
+        sandbox.restore();
+      }
     });
 
     it('falls back to the /view/ spelling when the peer row has no cached page URL', async () => {

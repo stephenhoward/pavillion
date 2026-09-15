@@ -136,26 +136,53 @@ export function parseAttributedToUri(
 }
 
 /**
- * Accepts a peer-declared page URL only if it is http(s) and sits on the same
- * host as the actor URI it was declared by.
+ * Longest page URL this module will render. Deliberately the same number as
+ * `MAX_EXTERNAL_URL_LENGTH` in the ActivityPub domain's `url-sanitizer.ts`,
+ * duplicated rather than imported because DEC-003 forbids the import — the
+ * same reason the whole check below is a restatement rather than a call.
+ */
+const MAX_PAGE_URL_LENGTH = 2048;
+
+/**
+ * Accepts a peer-declared page URL only if it survives every check the
+ * ActivityPub domain applied before caching it, and returns the **normalized**
+ * parse rather than the stored bytes.
  *
- * The ActivityPub domain already applies exactly this rule before the value is
- * cached (`sanitizePeerPageUrl`, which is the rule of record). That module
- * cannot be imported here — domain boundaries forbid it (DEC-003) — so the
- * check is restated at the render boundary, where the value becomes an anchor
- * href on an anonymous public page. Keep the two consistent.
+ * The ActivityPub domain applies exactly this rule before the value is cached
+ * (`sanitizePeerPageUrl`, which is the rule of record). That module cannot be
+ * imported here — domain boundaries forbid it (DEC-003) — so the check is
+ * restated at the render boundary, where the value becomes an anchor href on an
+ * anonymous public page. The two must agree on **every** axis, not only the two
+ * that are easy to restate:
+ *
+ *   - scheme allowlist (http/https)
+ *   - exact host match, port included
+ *   - no userinfo — `URL.host` ignores credentials, so they pass the host pin
+ *   - WHATWG normalization: returning the raw stored string instead of
+ *     `parsed.toString()` would emit whitespace, quotes, newlines and control
+ *     characters verbatim, which the population side percent-encodes away
+ *   - length, after normalization (percent-encoding can triple a string)
+ *
+ * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
+ * table-driven equivalence test that fails if either side drifts.
  *
  * @param declared - The cached page URL, or null/undefined when we have none
  * @param actorHost - The host of the actor URI that declared it
- * @returns The URL if it passes, otherwise null so the caller falls back
+ * @returns The normalized URL if it passes, otherwise null so the caller falls
+ *   back
  */
 function pinnedPageUrl(declared: string | null | undefined, actorHost: string): string | null {
-  if (!declared) return null;
+  if (typeof declared !== 'string') return null;
+  const trimmed = declared.trim();
+  if (trimmed === '' || trimmed.length > MAX_PAGE_URL_LENGTH) return null;
   try {
-    const parsed = new URL(declared);
+    const parsed = new URL(trimmed);
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
     if (parsed.host !== actorHost) return null;
-    return declared;
+    if (parsed.username || parsed.password) return null;
+    const normalized = parsed.toString();
+    if (normalized.length > MAX_PAGE_URL_LENGTH) return null;
+    return normalized;
   }
   catch {
     return null;

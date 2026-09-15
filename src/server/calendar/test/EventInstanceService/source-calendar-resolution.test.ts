@@ -79,9 +79,9 @@ function actorMap(entries: Array<[string, string, string | null]>): Map<string, 
  * EventInstanceService.listEventInstancesForCalendar and the helper it now
  * delegates the visible-id union to (EventService.listEventIdsForCalendar).
  */
-function buildMockApInterface(sandbox: sinon.SinonSandbox, uriMap: Map<string, EventSourceActor>): any {
+function buildMockApInterface(sandbox: sinon.SinonSandbox, sourceActorMap: Map<string, EventSourceActor>): any {
   return {
-    getEventSourceActorUris: sandbox.stub().resolves(uriMap),
+    getEventSourceActors: sandbox.stub().resolves(sourceActorMap),
     // EventService.listEventIdsForCalendar uses this to enumerate AP-shared ids.
     getSharedEventStatusMap: sandbox.stub().resolves(new Map<string, 'auto' | 'manual'>()),
   };
