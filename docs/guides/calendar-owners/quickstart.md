@@ -81,7 +81,7 @@ When the form is filled in, click <Btn>Save Changes</Btn> in the page header. Th
 
 Your event is live. Now look at your public page.
 
-Open a new browser tab and go to `https://your-instance.example/view/your-handle`, replacing `your-handle` with the URL handle you chose in Step 2. (You can also find this URL on the calendar page — there's a link under the calendar's title.)
+Open a new browser tab and go to `https://your-instance.example/your-handle`, replacing `your-handle` with the URL handle you chose in Step 2. (You can also find this URL on the calendar page — there's a link under the calendar's title.)
 
 What you're looking at is what anyone on the internet sees. No login required. Your event should be there, with the place, the date, the description, and the category you chose. Click into the event to see its detail page — that's the URL you'd share for a single event.
 

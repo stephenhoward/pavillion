@@ -18,7 +18,9 @@ Your identity settings serve all three views at once.
 
 ## The URL handle
 
-Your calendar's URL handle is the short, lowercase, URL-safe name that identifies it across the network. It shows up in two places: the public address `your-instance.example/view/<handle>` that visitors paste into a chat, and the social handle `<handle>@your-instance.example` that other Pavillion calendars use to follow you.
+Your calendar's URL handle is the short, lowercase, URL-safe name that identifies it across the network. It shows up in two places: the public address `your-instance.example/<handle>` that visitors paste into a chat, and the social handle `<handle>@your-instance.example` that other Pavillion calendars use to follow you.
+
+Because that public address puts your handle at the root of the domain, it can't be a name the instance already routes there — `admin` or `login`, say — or a language code like `es`. The form you name a calendar in won't accept one, so you find out while you're choosing.
 
 You picked a handle when you created the calendar. **Right now, the handle is fixed when you create your calendar.** There's no rename button in the settings panel. If you've outgrown the handle — your "westside-2026" calendar is still going strong in 2027 — the practical move today is to create a new calendar with the new handle and migrate. That's expensive: every link, every bookmark, every reposting calendar's rule, every email signature pointing at the old handle becomes stale. So it's worth picking a handle that ages well *now*.
 
@@ -81,7 +83,7 @@ The Settings tab lets you upload one image. Uploading replaces it; removing it l
 
 ## Things that trip people up
 
-**Changing the calendar name doesn't change the URL handle.** Renaming the calendar from *Westside Garden* to *Maplewood Community Garden* in the name field changes the visible label everywhere, but the URL still says `/view/westside-garden` because the handle isn't tied to the name. Visitors with the old link still land in the right place — but the URL now disagrees with the name, and that mismatch confuses people. If a rename feels structural enough to want a new URL too, that's the case where creating a new calendar may make sense.
+**Changing the calendar name doesn't change the URL handle.** Renaming the calendar from *Westside Garden* to *Maplewood Community Garden* in the name field changes the visible label everywhere, but the URL still says `/westside-garden` because the handle isn't tied to the name. Visitors with the old link still land in the right place — but the URL now disagrees with the name, and that mismatch confuses people. If a rename feels structural enough to want a new URL too, that's the case where creating a new calendar may make sense.
 
 **Removing a language drops its translations.** If you added a French tab, wrote French versions of the name and description, then removed French from the calendar's language list, those French translations are gone. Pavillion will warn you before removing, but the warning is easy to click through. Take the warning seriously.
 

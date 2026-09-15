@@ -82,7 +82,7 @@ From the dashboard:
 
 1. Create a calendar. Pick a short, durable handle — see [Customize your calendar's identity](/guides/calendar-owners/identity) for the longer version of why. A throwaway calendar named `test` is fine for the smoke test; you can delete it later.
 2. Publish one event. Any title, any future date. Save it.
-3. Open the calendar's public URL: `https://your-domain/view/<handle>`. Confirm the event renders, the page loads cleanly, and the link in the address bar is the `https://` version with a valid certificate.
+3. Open the calendar's public URL: `https://your-domain/<handle>`. Confirm the event renders, the page loads cleanly, and the link in the address bar is the `https://` version with a valid certificate.
 
 If the public page renders, the app, database, reverse proxy, and TLS are all working. If the page is blank, blocked, or the cert is invalid, stop here — fix the basics before going further. The [Troubleshooting](./troubleshooting) guide has the diagnostic loop.
 

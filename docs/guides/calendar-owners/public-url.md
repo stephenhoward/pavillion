@@ -14,7 +14,11 @@ Why there are two, what each one is for, and which one to paste into a chat or a
 
 ## Your public URL
 
-The shape: `/view/your-calendar-name`. Where to find it. What anonymous visitors see when they open it.
+The shape: `/your-calendar-name` — your handle sits at the root of the instance's domain, with nothing in front of it. Where to find it. What anonymous visitors see when they open it.
+
+::: tip <Lightbulb /> A note on names the instance keeps for itself.
+Because your handle sits at the root, it can't be a word Pavillion already routes there — `admin` and `login`, among others — or a language code like `es`. There's no list to memorize: the form you name a calendar in won't accept a reserved name, so you find out while you're choosing rather than afterwards.
+:::
 
 ## Your federation handle
 

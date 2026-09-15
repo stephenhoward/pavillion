@@ -68,7 +68,7 @@ Newly-created series don't have any events yet, and the series doesn't show up o
 
 When a series has events, visitors can find it in two places.
 
-**The series' own public page** — `/view/your-calendar/series/your-series-url-name`. The page shows the banner image at the top (if you uploaded one), the series name, the description, and the full list of events in the series. Long series split into pages with next- and previous-page buttons at the bottom. Each event in the list links to that event's detail page. There's a back-link in the breadcrumb that returns the visitor to your main calendar.
+**The series' own public page** — `/your-calendar/series/your-series-url-name`. The page shows the banner image at the top (if you uploaded one), the series name, the description, and the full list of events in the series. Long series split into pages with next- and previous-page buttons at the bottom. Each event in the list links to that event's detail page. There's a back-link in the breadcrumb that returns the visitor to your main calendar.
 
 **The footer of every event in the series.** On any event's detail page, the footer carries a small *Series:* label followed by a link to the series page. A visitor reading about *Concert: Maya García* on Tuesday can click that link and land on the *Summer Music Series* page with every concert in the program listed. That's the path most visitors will actually find a series through — the discovery flow is event → series → other events in the series, not the other way around.
 
