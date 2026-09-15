@@ -302,6 +302,12 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
     // Pinned as a table rather than filtered, so reserving a new top-level
     // segment and routing it to the site shell without a site route fails here.
     // Mirrors how reserved-segments.test.ts pins expectedRouterSegments.
+    //
+    // The table lives here and is derived from the real router. It must not be
+    // moved onto reserved-segments.ts: that module is the definition of what a
+    // calendar may not be named, and DEC-018 rule 3 says it is deliberately not
+    // a routing table. A segment→disposition map sitting next to the array is
+    // exactly what rule 3 forbids, however convenient it looks.
     it('pins the server disposition of every reserved first segment', () => {
       const observed = Object.fromEntries(
         RESERVED_ROUTE_SEGMENTS.map(segment => [segment, disposition(`/${segment}`)]),
@@ -310,6 +316,16 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       expect(observed).toEqual({
         // Server-owned and client-shell segments: the site router is not
         // supposed to have a route for any of these.
+        //
+        // Every one is probed in its BARE form, which is the single shape where
+        // SERVER_OWNED_SEGMENTS does nothing: the client catch-all excludes
+        // '^/(?:api|…)/' with a trailing slash, so bare '/api' reaches the
+        // client shell while '/api/probe' falls through to the domain router
+        // mounted after the page router. Read as 'client_index' here and
+        // 'falls through' in app_routes.test.ts's server-owned-segment block,
+        // those two are the same rule at two different path depths, not a
+        // contradiction. This file never observes the fall-through disposition;
+        // app_routes.test.ts owns it.
         '.well-known': 'client_index',
         admin: 'client_index',
         api: 'client_index',
