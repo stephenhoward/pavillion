@@ -299,8 +299,15 @@ class EventObject extends ActivityPubObject {
 
       // Alt text is read from whichever model supplied the media — the event
       // for its own image, the calendar for its default — so the description
-      // always belongs to the image actually on the wire. Same one-vs-many
-      // shape as the event's own name/nameMap.
+      // always belongs to the image actually on the wire.
+      //
+      // The shape mirrors the event's own name/nameMap exactly: `name` is set
+      // whenever ANY language has alt text, and `nameMap` is ADDED when two or
+      // more do. The two keys are not alternatives. Emitting only `nameMap`
+      // for a multilingual image would hand no alt text at all to a peer that
+      // reads just `name` (Mastodon-class) — the wrong failure mode for an
+      // accessibility feature, and inconsistent with how the event's own title
+      // reaches those same peers.
       //
       // Both keys are omitted when no language has alt text. That is the
       // decorative contract carried onto the wire: an Image with no name says
@@ -326,11 +333,16 @@ class EventObject extends ActivityPubObject {
         }
       }
       const altLanguages = Object.keys(altMap);
-      if (altLanguages.length === 1) {
-        image.name = altMap[altLanguages[0]];
-      }
-      else if (altLanguages.length >= 2) {
-        image.nameMap = altMap;
+      if (altLanguages.length > 0) {
+        // Singular `name` uses the same primary-language-then-first-non-empty
+        // pick as the event's own name, so the flat surface a name-only peer
+        // reads stays internally consistent with the rest of the object. The
+        // map holds only non-empty values, so a hit on primaryLanguage is
+        // already a usable string.
+        image.name = altMap[primaryLanguage] ?? altMap[altLanguages[0]];
+        if (altLanguages.length >= 2) {
+          image.nameMap = altMap;
+        }
       }
 
       result.image = image;

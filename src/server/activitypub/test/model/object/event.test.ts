@@ -681,7 +681,7 @@ describe('EventObject', () => {
         expect(result.image).not.toHaveProperty('nameMap');
       });
 
-      it('should emit image.nameMap when two or more languages have alt text', () => {
+      it('should emit BOTH image.name and image.nameMap when two or more languages have alt text', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
         event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', 'A cat asleep on a piano'));
@@ -694,7 +694,29 @@ describe('EventObject', () => {
           en: 'A cat asleep on a piano',
           es: 'Un gato dormido en un piano',
         });
-        expect(result.image).not.toHaveProperty('name');
+        // name is ADDED to, not replaced by, nameMap — exactly as the event's
+        // own name/nameMap behave. A peer that reads only `name` (Mastodon-
+        // class) must still get alt text for a multilingual image.
+        expect(result.image.name).toBe('A cat asleep on a piano');
+      });
+
+      it('should pick the primary language for image.name when several languages have alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        // Spanish is added first, so a "first non-empty" pick would choose it.
+        // The primary-language pick prefers 'en', matching the event's own name.
+        event.addContent(new CalendarEventContent('es', 'Evento Con Imagen', '', '', 'Un gato dormido en un piano'));
+        event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', 'A cat asleep on a piano'));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.name).toBe('Event With Image');
+        expect(result.image.name).toBe('A cat asleep on a piano');
+        expect(result.image.nameMap).toEqual({
+          es: 'Un gato dormido en un piano',
+          en: 'A cat asleep on a piano',
+        });
       });
 
       it('should omit both name and nameMap when the image is decorative', () => {
