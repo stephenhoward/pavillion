@@ -5,6 +5,7 @@ import i18next from 'i18next';
 import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-vue-next';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { seriesPath } from '@/common/routing/public-paths';
 import SeriesService from '@/client/service/series';
 import SeriesEditor from './series-editor.vue';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
@@ -12,7 +13,6 @@ import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { useToast } from '@/client/composables/useToast';
-import { seriesPath } from '@/common/routing/public-paths';
 
 const props = defineProps({
   calendarId: {

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
@@ -58,12 +58,15 @@ const createWrapper = async () => {
 describe('Calendar list public links', () => {
   let sandbox: sinon.SinonSandbox;
 
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
   afterEach(() => {
-    sandbox?.restore();
+    sandbox.restore();
   });
 
   it('points each card link at the server-supplied publicUrl', async () => {
-    sandbox = sinon.createSandbox();
     sandbox.stub(CalendarService.prototype, 'loadCalendarsWithRelationship').resolves(calendarInfos);
 
     const wrapper = await createWrapper();
