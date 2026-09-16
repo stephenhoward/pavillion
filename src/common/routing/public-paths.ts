@@ -8,9 +8,10 @@
  * used to template the shape inline, which is how `/view/…` survived in a
  * `<RouterLink>` long after the routes moved (8f47ac27). These builders are
  * the single declaration of that shape, and all three consumers are now on
- * them — the client SPA only indirectly for a calendar's address, which it
- * renders from the server-stamped `Calendar.publicUrl` so the link an
- * organizer copies and the text they read cannot disagree. Two server
+ * them — the client SPA imports them directly for a series page's link, and
+ * indirectly for a calendar's address, which it renders from the
+ * server-stamped `Calendar.publicUrl` so the link an organizer copies and
+ * the text they read cannot disagree. Two server
  * generators stay outside this module rather than being folded in:
  *
  * - `src/server/activitypub/model/userprofile.ts` builds the actor

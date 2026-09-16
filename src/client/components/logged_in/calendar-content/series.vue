@@ -251,6 +251,14 @@ onMounted(async () => {
               does, so the shape comes from the shared builder. A plain href,
               not a RouterLink: the public series page is the site SPA's, and
               an in-SPA navigation would never reach the server that serves it.
+
+              Unlike the calendar link elsewhere in this app, this is root-
+              relative and carries no locale prefix: the builder deliberately
+              knows neither (locale is the site SPA's concern via
+              localizedPath, which this app has no equivalent of; origin
+              requires configuration only a server caller has). So this link
+              opens the default-locale page and isn't copy-pasteable as-is,
+              where the calendar link is both locale-correct and absolute.
             -->
             <a
               :href="seriesPath(props.calendarUrlName, series.urlName)"
