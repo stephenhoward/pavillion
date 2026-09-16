@@ -903,7 +903,12 @@ form {
                    The alt editor belongs to the attached image, so it shares the
                    workspace's condition rather than carrying its own; it writes
                    straight onto the working event and follows the language tabs
-                   above, so the save path needs no knowledge of it. -->
+                   above, so the save path needs no knowledge of it.
+
+                   Sharing that condition is also what starts a replacement
+                   image off Decorative: replacing detaches the image first, so
+                   the editor unmounts with it and the one that comes back is
+                   seeded afresh from the cleared model. -->
               <template v-if="eventImage">
                 <ImageWorkspace
                   :image="eventImage"
@@ -1399,11 +1404,29 @@ const handleImageAdjust = ({ mediaFocalPointX, mediaFocalPointY, mediaZoom }) =>
 };
 
 /**
+ * Drop the description of the image being detached, in every language.
+ *
+ * Alt text describes one particular photograph, so it cannot outlive it. On a
+ * removal it would be saved with nothing left to describe; on a replacement it
+ * would be saved as a description of the new photograph, and a screen reader
+ * would then confidently report something the image does not show. Nothing
+ * else clears it: the working event keeps its identity across the swap, so the
+ * alt editor never re-seeds itself from the changed media.
+ */
+const clearImageAlt = () => {
+  if (!editorState.event) return;
+  for (const language of editorState.event.getLanguages()) {
+    editorState.event.content(language).imageAlt = '';
+  }
+};
+
+/**
  * Handle image replacement — clears the current image so the uploader re-appears.
  */
 const handleImageReplace = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
+  clearImageAlt();
 };
 
 /**
@@ -1412,6 +1435,7 @@ const handleImageReplace = () => {
 const handleImageRemove = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
+  clearImageAlt();
   if (editorState.event) {
     editorState.event.mediaFocalPointX = 0.5;
     editorState.event.mediaFocalPointY = 0.5;

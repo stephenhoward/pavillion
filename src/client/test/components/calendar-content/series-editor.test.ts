@@ -227,5 +227,48 @@ describe('SeriesEditor — image section', () => {
       await textarea.setValue('A brass band playing to a seated crowd');
       expect(series.content('en').imageAlt).toBe('A brass band playing to a seated crowd');
     });
+
+    it('clears the alt text in every language when an upload replaces the image', async () => {
+      const series = createSeries('media-abc-123');
+      series.addContent(EventSeriesContent.fromObject({ language: 'fr', name: 'Série d\'été', description: '' }));
+      series.content('en').imageAlt = 'A band on an outdoor stage';
+      series.content('fr').imageAlt = 'Un orchestre sur une scène en plein air';
+
+      wrapper = createWrapper(series);
+      await nextTick();
+
+      // The upload zone is offered whether or not the series already has an
+      // image, so this is the replace path: the description belonged to the
+      // photograph being replaced, and saved against the new one it would tell
+      // a screen-reader user about something the image does not show.
+      wrapper.vm.handleImageUpload([{ success: true, media: { id: 'new-media-id' } }]);
+      await nextTick();
+
+      expect(series.mediaId).toBe('new-media-id');
+      expect(series.content('en').imageAlt).toBe('');
+      expect(series.content('fr').imageAlt).toBe('');
+
+      // And the editor follows the model: Decorative for the new image, not
+      // Describe with an empty box.
+      const editor = wrapper.find('.image-alt-editor');
+      expect(editor.exists()).toBe(true);
+      expect(editor.find('textarea').exists()).toBe(false);
+      expect((editor.findAll('input[type="radio"]')[0].element as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('leaves the alt text alone when the same image is uploaded again', async () => {
+      const series = createSeries('media-abc-123');
+      series.content('en').imageAlt = 'A band on an outdoor stage';
+
+      wrapper = createWrapper(series);
+      await nextTick();
+
+      wrapper.vm.handleImageUpload([{ success: true, media: { id: 'media-abc-123' } }]);
+      await nextTick();
+
+      // Nothing changed about the image, so nothing changes about its
+      // description.
+      expect(series.content('en').imageAlt).toBe('A band on an outdoor stage');
+    });
   });
 });

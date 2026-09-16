@@ -144,6 +144,11 @@
             moving between them is still interaction — hence the wrapper, whose
             element is a stable `currentTarget` for the bubbled `focusout`
             regardless of what the child renders as its root.
+
+            That save holds `isSavingAlt` rather than the screen-wide
+            `isSaving`, and this editor is its only reader: a save fired by
+            focus leaving a control must not disable the control focus is
+            arriving at, or the browser drops focus to <body>.
           -->
           <div
             v-if="state.defaultEventImage && localCalendar"
@@ -153,7 +158,7 @@
             <ImageAltEditor
               :model="localCalendar"
               :language="currentLanguage"
-              :disabled="state.isSaving"
+              :disabled="state.isSavingAlt"
             />
           </div>
         </div>
@@ -299,6 +304,7 @@ const contentLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(nul
 const state = reactive<{
   isLoading: boolean;
   isSaving: boolean;
+  isSavingAlt: boolean;
   error: string;
   success: string;
   defaultDateRange: DefaultDateRange;
@@ -308,6 +314,7 @@ const state = reactive<{
 }>({
   isLoading: false,
   isSaving: false,
+  isSavingAlt: false,
   error: '',
   success: '',
   defaultDateRange: '2weeks',
@@ -484,11 +491,13 @@ const buildContentPayload = ({ dropImageAlt = false } = {}) => {
 };
 
 /**
- * Save calendar settings
+ * Send the calendar's settings and report the outcome on the screen.
+ *
+ * Which busy flag is held for the duration is the caller's business, not this
+ * function's — see `saveSettings` and `saveAltText`.
  */
-const saveSettings = async () => {
+const persistSettings = async () => {
   try {
-    state.isSaving = true;
     state.error = '';
     state.success = '';
 
@@ -505,8 +514,40 @@ const saveSettings = async () => {
     state.error = t('error_saving');
     clearMessages();
   }
+};
+
+/**
+ * Save calendar settings, as triggered by one of this screen's own fields.
+ */
+const saveSettings = async () => {
+  state.isSaving = true;
+  try {
+    await persistSettings();
+  }
   finally {
     state.isSaving = false;
+  }
+};
+
+/**
+ * Save the same settings, but on behalf of the alt editor.
+ *
+ * The request is identical; only the flag differs, and the flag is the point.
+ * This save is triggered by focus *leaving* a control, so whatever it disables
+ * is disabled at the moment focus is in flight. A control disabled while focus
+ * is moving to it ends up disabled and unfocused, and the browser falls back to
+ * `document.body` — a keyboard author Shift+Tabbing out of the editor onto
+ * "Remove default image" would lose their place and have to tab from the top.
+ * `state.isSavingAlt` is therefore read by the alt editor alone, which is the
+ * one control this save must not leave focusable-but-stale.
+ */
+const saveAltText = async () => {
+  state.isSavingAlt = true;
+  try {
+    await persistSettings();
+  }
+  finally {
+    state.isSavingAlt = false;
   }
 };
 
@@ -515,9 +556,10 @@ const saveSettings = async () => {
  *
  * `focusout` rather than `blur` because only the former bubbles, and the event
  * is worth intercepting only when focus lands outside the editor: it holds two
- * radios and a textarea, and a save between them would flip `state.isSaving`,
- * which is bound to the editor's `disabled` prop — disabling the control the
- * author was moving to and taking their focus with it.
+ * radios and a textarea, and a save between them would flip
+ * `state.isSavingAlt`, which is bound to the editor's `disabled` prop —
+ * disabling the control the author was moving to and taking their focus with
+ * it.
  *
  * `relatedTarget` is null when focus leaves the document altogether (tabbing to
  * browser chrome, clicking dead space), which is the author finishing with the
@@ -529,7 +571,7 @@ const handleAltFocusOut = (event: FocusEvent) => {
   const next = event.relatedTarget;
   const editor = event.currentTarget;
   if (next instanceof Node && editor instanceof Node && editor.contains(next)) return;
-  saveSettings();
+  saveAltText();
 };
 
 /**

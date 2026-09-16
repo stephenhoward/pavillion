@@ -352,6 +352,43 @@ describe('CalendarSettings — saving the default image alt text', () => {
     wrapper.unmount();
   });
 
+  it('leaves the control focus is moving to enabled while the save runs', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair' }));
+
+    // Held open so the assertions land mid-save, which is the only moment the
+    // defect exists: the flag is set and cleared inside one focusout.
+    let finishSave: (calendar: Calendar) => void = () => {};
+    vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockImplementation(() => new Promise((resolve) => {
+        finishSave = resolve as (calendar: Calendar) => void;
+      }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    // "Remove default image" is what a Shift+Tab out of the editor reaches.
+    const removeButton = wrapper.find('.remove-image-btn');
+    const textarea = wrapper.find('.image-alt-editor textarea');
+
+    focusOut(textarea.element, removeButton.element);
+    await flushPromises();
+
+    // The editor itself is disabled, so the save is genuinely in flight...
+    expect((textarea.element as HTMLTextAreaElement).disabled).toBe(true);
+
+    // ...and the button focus is moving to is not. Disabling it here would
+    // leave it both disabled and unfocused, and the browser falls back to
+    // <body>: the author loses their place and tabs from the top again.
+    expect((removeButton.element as HTMLButtonElement).disabled).toBe(false);
+
+    finishSave(createCalendar({ altEn: 'A crowded street fair' }));
+    await flushPromises();
+
+    expect((textarea.element as HTMLTextAreaElement).disabled).toBe(false);
+
+    wrapper.unmount();
+  });
+
   it('saves the Decorative choice once focus leaves the editor', async () => {
     stubScreenLoads(createCalendar({ altEn: 'A crowded street fair', altEs: 'Una feria concurrida' }));
     const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')

@@ -158,10 +158,25 @@ async function saveSeries() {
 
 /**
  * Handle image upload completion
+ *
+ * The upload zone here is always offered, not just while the series has no
+ * image, so this is also the replace path. Alt text describes one particular
+ * photograph: carried over to a different one it would be saved as a
+ * description of the new image, and a screen reader would confidently report
+ * something that image does not show. So a change of media drops the
+ * description in every language — re-uploading the same media leaves it alone.
  */
 function handleImageUpload(results) {
   if (results && results.length > 0 && results[0].success) {
-    localSeries.value.mediaId = results[0].media.id;
+    const uploadedMediaId = results[0].media.id;
+
+    if (localSeries.value.mediaId !== uploadedMediaId) {
+      for (const language of localSeries.value.getLanguages()) {
+        localSeries.value.content(language).imageAlt = '';
+      }
+    }
+
+    localSeries.value.mediaId = uploadedMediaId;
   }
 }
 
@@ -344,9 +359,17 @@ onMounted(() => {
               follows the language tab chosen in the details section above
               rather than carrying a selector of its own. It is only offered
               once there is an image to describe.
+
+              Keyed on the media so a replacement image gets a fresh editor.
+              The editor seeds Decorative-or-Describe once, from the model it is
+              handed, and re-seeds only when that model's identity changes —
+              which an upload over an existing image does not do. Without the
+              key the editor would sit on Describe with an empty box, offering
+              the new photograph a mode its own content does not support.
             -->
             <ImageAltEditor
               v-if="currentMedia"
+              :key="localSeries.mediaId"
               :model="localSeries"
               :language="currentLanguage"
               :disabled="state.isSaving"

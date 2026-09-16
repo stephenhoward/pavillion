@@ -161,8 +161,23 @@ describe('EditEventView - image alt text', () => {
       stubs: {
         EventRecurrenceView: true,
         languagePicker: true,
-        ImageUpload: true,
-        ImageWorkspace: true,
+        // The image panel's two children are stubbed with the controls that
+        // drive them, because attaching, replacing, and removing the image is
+        // exactly what these tests need to put the alt editor through.
+        ImageUpload: {
+          template: '<button class="stub-upload" @click="$emit(\'upload-complete\', '
+            + '[{ success: true, media: { id: \'media-2\' } }])"></button>',
+          props: ['calendarId', 'multiple'],
+          emits: ['upload-complete'],
+        },
+        ImageWorkspace: {
+          template: '<div class="stub-workspace">'
+            + '<button class="stub-replace" @click="$emit(\'replace\')"></button>'
+            + '<button class="stub-remove" @click="$emit(\'remove\')"></button>'
+            + '</div>',
+          props: ['image'],
+          emits: ['adjust', 'replace', 'remove'],
+        },
         CategorySelector: true,
         SeriesSelector: true,
       },
@@ -240,6 +255,69 @@ describe('EditEventView - image alt text', () => {
     const payload = savedEvents[0].toObject();
     expect(payload.content.en.imageAlt).toBe('A crowd under string lights');
     expect(payload.content.fr.imageAlt).toBe('Une foule sous des guirlandes');
+  });
+
+  it('clears the alt text in every language when the image is removed', async () => {
+    const wrapper = await mountEditor(serializedEvent({
+      mediaId: 'media-1',
+      content: {
+        en: { name: 'Test Event', imageAlt: 'A crowd under string lights' },
+        fr: { name: 'Événement test', imageAlt: 'Une foule sous des guirlandes' },
+      },
+    }));
+
+    await wrapper.find('.stub-remove').trigger('click');
+    await nextTick();
+
+    // A description with no image left to describe is stale in every language,
+    // so it goes with the image rather than being saved as an orphan.
+    const event = (wrapper.vm as any).editorState.event;
+    expect(event.content('en').imageAlt).toBe('');
+    expect(event.content('fr').imageAlt).toBe('');
+    expect(wrapper.find('.image-alt-editor').exists()).toBe(false);
+
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(savedEvents).toHaveLength(1);
+    const payload = savedEvents[0].toObject();
+    expect(payload.content.en.imageAlt).toBe('');
+    expect(payload.content.fr.imageAlt).toBe('');
+  });
+
+  it('clears the alt text when the image is replaced, and starts the new one decorative', async () => {
+    const wrapper = await mountEditor(serializedEvent({
+      mediaId: 'media-1',
+      content: {
+        en: { name: 'Test Event', imageAlt: 'A crowd under string lights' },
+        fr: { name: 'Événement test', imageAlt: 'Une foule sous des guirlandes' },
+      },
+    }));
+
+    await wrapper.find('.stub-replace').trigger('click');
+    await nextTick();
+
+    // Replacing detaches the old image first, so the uploader is what the
+    // panel offers in the meantime.
+    expect(wrapper.find('.image-alt-editor').exists()).toBe(false);
+
+    await wrapper.find('.stub-upload').trigger('click');
+    await nextTick();
+
+    const event = (wrapper.vm as any).editorState.event;
+    expect(event.content('en').imageAlt).toBe('');
+    expect(event.content('fr').imageAlt).toBe('');
+
+    // Carried over, the old description would be saved as a description of the
+    // new photograph — a screen reader confidently reporting something that is
+    // not there, which is worse than saying nothing. So the new image arrives
+    // Decorative, the documented default and a legitimate choice, rather than
+    // in Describe with an empty box that implies the author left a job undone.
+    const editor = wrapper.find('.image-alt-editor');
+    expect(editor.exists()).toBe(true);
+    expect(editor.find('textarea').exists()).toBe(false);
+    const radios = editor.findAll('input[type="radio"]');
+    expect((radios[0].element as HTMLInputElement).checked).toBe(true);
   });
 
   it('sends an empty alt text for every language after the author chooses Decorative', async () => {
