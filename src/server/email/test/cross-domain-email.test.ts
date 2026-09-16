@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 
 import EmailService from '@/server/email/service/email';
 import { EmailStore } from '@/server/email/transport/testing-transport';
@@ -17,6 +18,8 @@ import { initI18Next } from '@/server/common/test/lib/i18next';
 
 // Initialize i18next for template rendering
 initI18Next();
+
+const TEST_DOMAIN: string = config.get('domain');
 
 describe('Cross-Domain Email Integration', () => {
   let sandbox: sinon.SinonSandbox;
@@ -129,9 +132,12 @@ describe('Cross-Domain Email Integration', () => {
       const emails = emailStore.findByRecipient('neweditor@test.com');
       expect(emails.length).toBe(1);
 
-      // Verify email contains relevant calendar information
+      // The calendar link is one of the few places we tell a human what their
+      // calendar's address is, so it has to be the address DEC-018 serves —
+      // absolute, at the domain root, never the retired /view/ spelling.
       const emailText = emails[0].text;
-      expect(emailText).toBeDefined();
+      expect(emailText).toContain(`https://${TEST_DOMAIN}/my-calendar`);
+      expect(emailText).not.toContain('/view/');
     });
   });
 

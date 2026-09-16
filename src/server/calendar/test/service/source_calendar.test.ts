@@ -58,7 +58,7 @@ describe('resolveSourceCalendars', () => {
     expect(ctx.event.sourceCalendar).not.toBeNull();
     expect(ctx.event.sourceCalendar!.urlName).toBe('original-cal');
     expect(ctx.event.sourceCalendar!.host).toBe(TEST_DOMAIN);
-    expect(ctx.event.sourceCalendar!.url).toBe('/view/original-cal');
+    expect(ctx.event.sourceCalendar!.url).toBe('/original-cal');
   });
 
   it('should mark as repost but leave sourceCalendar null when urlName is unavailable', async () => {

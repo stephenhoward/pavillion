@@ -65,7 +65,7 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
  * first", carried over to behaviour.
  *
  * Scope note: this is about the public API (`/api/public/v1`), the surface
- * that serves the anonymous `/view/` site. The widget API used as the control
+ * that serves the anonymous public site. The widget API used as the control
  * is a different surface — DEC-011 classes embedding a calendar into a
  * non-federated web property as an outbound platform bridge, so the widget's
  * 402 to an anonymous embedder is deliberate and stays as it is.

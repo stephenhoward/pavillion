@@ -1,6 +1,7 @@
 import { RouteRecordRaw } from 'vue-router';
 
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { DISCOVER_PATH } from '@/common/routing/public-paths';
 
 /**
  * Whatever vue-router accepts as a route's `component`.
@@ -30,11 +31,16 @@ export interface SiteRouteComponents {
  * Builds the public site's route table — the single declaration of which paths
  * the site SPA can match.
  *
- * Calendars live at the domain root. '/discover' is a static segment, which
+ * Calendars live at the domain root. DISCOVER_PATH is a static segment, which
  * vue-router ranks above the '/:calendar' param regardless of declaration
  * order, so the discovery page is never swallowed by the calendar route —
  * and 'discover' is a reserved url name (src/common/routing/reserved-segments.ts)
- * so no calendar can claim it in the other direction either.
+ * so no calendar can claim it in the other direction either. It is read from
+ * src/common/routing/public-paths.ts rather than spelled again, so the segment
+ * every link generator emits and the segment this table matches cannot drift.
+ * The parameterized shapes below cannot be sourced the same way — a builder
+ * emits a concrete path, not a ':param' template — so the contract test joins
+ * the builders' output to this table instead.
  *
  * The locale alternation is derived from AVAILABLE_LANGUAGES minus the default
  * code, never hard-coded, so enabling a language adds its prefixed routes here
@@ -46,7 +52,7 @@ export interface SiteRouteComponents {
  */
 export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [
-    { path: '/discover', component: components.discovery, name: 'discovery' },
+    { path: DISCOVER_PATH, component: components.discovery, name: 'discovery' },
     { path: '/:calendar', component: components.calendar, name: 'calendar' },
     { path: '/:calendar/events/:event', component: components.event, name: 'event' },
     { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: components.instance, name: 'instance' },
@@ -62,7 +68,7 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
     // Locale-prefixed variants — unnamed intentionally.
     // Navigation uses the default-locale named routes; useLocale.localizedPath() adds the prefix.
     routes.push(
-      { path: `/:locale(${pattern})/discover`, component: components.discovery },
+      { path: `/:locale(${pattern})${DISCOVER_PATH}`, component: components.discovery },
       { path: `/:locale(${pattern})/:calendar`, component: components.calendar },
       { path: `/:locale(${pattern})/:calendar/events/:event`, component: components.event },
       { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: components.instance },

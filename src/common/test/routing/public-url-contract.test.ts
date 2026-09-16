@@ -1,6 +1,7 @@
 /**
  * The public-URL contract: the join between the paths the SERVER hands to the
- * site shell and the paths the site SPA's vue-router can actually match.
+ * site shell, the paths the site SPA's vue-router can actually match, and the
+ * paths the shared builders EMIT.
  *
  * Each side already has its own suite — src/server/common/test/app_routes.test.ts
  * pins what the server serves, src/site/test/router-locale-guard.test.ts pins
@@ -10,9 +11,10 @@
  * (8f47ac27 emitted a '/view/…' target into a <RouterLink>) and a human found
  * it by reading code.
  *
- * Both tables are imported from the modules that ship them, never mirrored:
- * `createRouter` from @/server/app_routes and `buildSiteRoutes` from
- * @/site/routes. Reading the server's dispositions off the real Express router
+ * All three are imported from the modules that ship them, never mirrored:
+ * `createRouter` from @/server/app_routes, `buildSiteRoutes` from @/site/routes
+ * and the builders from @/common/routing/public-paths. Reading the server's
+ * dispositions off the real Express router
  * needs no HTTP — walking `router.stack` and identifying the first matching
  * layer's handler by reference equality against the `handlers` object is the
  * same first-match-wins ordering the server uses at runtime.
@@ -32,6 +34,7 @@ import sinon from 'sinon';
 import { createRouter as createServerPageRouter } from '@/server/app_routes';
 import { buildSiteRoutes } from '@/site/routes';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
+import { DISCOVER_PATH, calendarPath, eventPath, seriesPath } from '@/common/routing/public-paths';
 import {
   AVAILABLE_LANGUAGES,
   DEFAULT_LANGUAGE_CODE,
@@ -412,6 +415,55 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
 
       const observed = corpus.map(entry => [viewTwin(entry), siteRouter.resolve(viewTwin(entry)).matched.length]);
       expect(observed).toEqual(corpus.map(entry => [viewTwin(entry), 0]));
+    });
+  });
+
+  // Direction 4: the EMITTER side. Directions 1-3 join two RESOLVERS, and both
+  // this file's corpus and the site router come from the same site route table,
+  // so a link generator emitting a shape that table does not describe stays
+  // invisible to all three — which is exactly the 8f47ac27 failure class, at a
+  // source none of them watches. src/common/routing/public-paths.ts is the
+  // production declaration of the shapes the server, client and site emit, so
+  // its concrete output is resolved here against both resolvers.
+  describe('every path the shared builders emit is served and matchable', () => {
+    const builderPaths: [string, string][] = [
+      ['DISCOVER_PATH', DISCOVER_PATH],
+      ['calendarPath', calendarPath(SAMPLE_PARAMS.calendar)],
+      ['eventPath', eventPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.event)],
+      ['eventPath (instance)', eventPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.event, SAMPLE_PARAMS.startTime)],
+      ['seriesPath', seriesPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.series)],
+    ];
+
+    it('hands every builder output to the site shell', () => {
+      const observed = builderPaths.map(([name, path]) => [name, disposition(path)]);
+
+      expect(observed).toEqual(builderPaths.map(([name]) => [name, 'site_index']));
+    });
+
+    it('resolves every builder output to its intended site route', () => {
+      const observed = builderPaths.map(([name, path]) => [name, siteRouter.resolve(path).name ?? null]);
+
+      expect(observed).toEqual([
+        ['DISCOVER_PATH', 'discovery'],
+        ['calendarPath', 'calendar'],
+        ['eventPath', 'event'],
+        ['eventPath (instance)', 'instance'],
+        ['seriesPath', 'series'],
+      ]);
+    });
+
+    // The join in the other direction. Only the unprefixed shapes carry names
+    // (the locale-prefixed twins are deliberately unnamed — useLocale wraps a
+    // builder's output rather than navigating to a prefixed route), so the named
+    // routes are exactly the set a builder must be able to address. A page shape
+    // added to the table with no builder to emit it is a page nothing links to.
+    it('covers every named shape in the site route table', () => {
+      const addressable = siteRoutes
+        .map(route => route.name)
+        .filter((name): name is string => typeof name === 'string');
+      const covered = builderPaths.map(([, path]) => siteRouter.resolve(path).name);
+
+      expect([...new Set(covered)].sort()).toEqual([...addressable].sort());
     });
   });
 

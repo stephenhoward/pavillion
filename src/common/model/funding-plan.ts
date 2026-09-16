@@ -79,7 +79,7 @@ export type FundingStatus = 'admin_exempt' | 'grant' | 'covered' | 'not_covered'
 export const FUNDING_GATED_FEATURES = {
   // Scope (DEC-004): this gates the embedding surface only — the widget data
   // endpoint and the widget-domain configuration. A calendar's own public
-  // /view/ pages stay anonymously readable whatever its funding state. The
+  // pages stay anonymously readable whatever its funding state. The
   // widget is the one gate that legitimately faces an anonymous caller,
   // because embedding into a non-federated site is an outbound bridge; the
   // public read of the calendar itself never is.

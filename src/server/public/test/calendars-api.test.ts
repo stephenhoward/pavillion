@@ -311,7 +311,7 @@ describe('Public Calendar API - GET /calendar/:urlName projection', () => {
 
   function buildCalendarWithLeakyInternals(listed: boolean): Calendar {
     const calendar = new Calendar('cal-id', 'test-calendar');
-    calendar.publicUrl = 'https://pavillion.dev/view/test-calendar';
+    calendar.publicUrl = 'https://pavillion.dev/test-calendar';
     calendar.languages = ['en'];
     calendar.description = '';
     calendar.defaultDateRange = '1month';
