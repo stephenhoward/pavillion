@@ -21,6 +21,13 @@ export default [
       '@stylistic/no-trailing-spaces': ['error'],
       '@stylistic/eol-last': ['error', 'always'],
       '@stylistic/brace-style': ['error', 'stroustrup', { allowSingleLine: true }],
+
+      // Keep literal control and invisible characters out of source. A regex
+      // built from raw control codepoints renders as an unreviewable diff (git
+      // calls the file binary once a NUL lands in it), so character tables are
+      // written as \uXXXX escapes and this rule is what enforces that.
+      'no-control-regex': 'error',
+      'no-misleading-character-class': 'error',
     },
   },
   // Typescript config

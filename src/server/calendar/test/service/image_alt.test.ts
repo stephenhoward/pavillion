@@ -21,7 +21,7 @@ describe('validateImageAlt', () => {
   });
 
   it('should return empty string for a value that normalizes away entirely', () => {
-    expect(validateImageAlt('<b></b>​‮')).toBe('');
+    expect(validateImageAlt('<b></b>\u200B\u202E')).toBe('');
   });
 
   // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ describe('validateImageAlt', () => {
   });
 
   it('should strip markup and control characters', () => {
-    expect(validateImageAlt('<b>A dog</b>​on a beach')).toBe('A dogon a beach');
+    expect(validateImageAlt('<b>A dog</b>\u200Bon a\u0007 beach')).toBe('A dogon a beach');
   });
 
   it('should collapse newlines introduced by a textarea to spaces', () => {
