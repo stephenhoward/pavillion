@@ -136,6 +136,44 @@ export function validateMediaTransform(eventParams: Record<string, any>): void {
 }
 
 /**
+ * Validates `imageAlt` for every language of a content payload before any of
+ * those languages has been persisted.
+ *
+ * {@link validateImageAlt} throws, and the create/update content loops write
+ * one row per language. Neither createEvent nor updateEvent opens a
+ * transaction of its own, and the API calls both without one, so a throw from
+ * inside the loop would leave the languages already written in place while the
+ * request 400s — half of the author's edit saved under an error message. A
+ * pre-pass keeps the rejection whole: nothing is written unless every language
+ * is acceptable.
+ *
+ * The in-loop {@link validateImageAlt} calls stay where they are; after this
+ * pass they are a normalization step that cannot throw for a reason this pass
+ * would have caught.
+ *
+ * Author-facing paths only. Inbound federation normalizes through
+ * {@link sanitizeImageAlt}, which never throws, so those paths have no
+ * partial-write problem from this cause and get no pre-pass.
+ *
+ * @param content - The payload's `content` map, keyed by language. Absent,
+ *   non-object, and falsy per-language entries are skipped: those write no
+ *   alt text (an update deletes the row instead).
+ * @throws {ValidationError} From {@link validateImageAlt}, unchanged in
+ *   message and `fields` key, for the first offending language.
+ */
+export function validateContentImageAlts(content: unknown): void {
+  if (!content || typeof content !== 'object') {
+    return;
+  }
+  for (const entry of Object.values(content as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    validateImageAlt((entry as Record<string, any>).imageAlt);
+  }
+}
+
+/**
  * Scrubs an external URL for safe inclusion in structured logs.
  *
  * External URLs may contain sensitive material in their query string or
@@ -697,6 +735,11 @@ class EventService {
     // Bounds-check media transform values before any persistence.
     validateMediaTransform(eventParams);
 
+    // Validate every language's imageAlt before the event row or any content
+    // row is written — the per-language loop below throws, and this method
+    // holds no transaction when called without one.
+    validateContentImageAlts(eventParams.content);
+
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
 
@@ -968,6 +1011,11 @@ class EventService {
 
     // Bounds-check media transform values before any persistence.
     validateMediaTransform(eventParams);
+
+    // Validate every language's imageAlt before the first content row is
+    // updated. Without this, an over-long alt text on the second language
+    // would 400 the request with the first language's edit already saved.
+    validateContentImageAlts(eventParams.content);
 
     const eventEntity = await EventEntity.findByPk(eventId);
 

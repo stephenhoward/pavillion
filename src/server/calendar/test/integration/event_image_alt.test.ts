@@ -172,6 +172,32 @@ describe('Event content imageAlt — write paths (integration)', () => {
       expect(fetched.content('en').imageAlt).toBe('Original alt text');
     });
 
+    it('writes no language when a later language has an over-long imageAlt', async () => {
+      // Rejection is all-or-nothing across languages. validateImageAlt throws,
+      // the content loop writes one row per language, and neither createEvent
+      // nor updateEvent opens a transaction — so validating inside the loop
+      // would commit the first language's edit and then 400 on the second,
+      // leaving half the author's update saved under an error message. Every
+      // other test here uses a single language and cannot see this.
+      const created = await calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        content: { en: { name: 'Partial Write Event', imageAlt: 'Original alt text' } },
+        start_date: '2026-07-10',
+      });
+
+      await expect(calendarInterface.updateEvent(testAccount, created.id, {
+        content: {
+          en: { name: 'Partial Write Event Renamed', imageAlt: 'Corrected alt text' },
+          fr: { name: 'Événement partiel', imageAlt: 'a'.repeat(IMAGE_ALT_MAX_LENGTH + 1) },
+        },
+      })).rejects.toThrow(ValidationError);
+
+      const fetched = await calendarInterface.getEventById(created.id);
+      expect(fetched.content('en').name).toBe('Partial Write Event');
+      expect(fetched.content('en').imageAlt).toBe('Original alt text');
+      expect(fetched.hasContent('fr')).toBe(false);
+    });
+
     it('keeps a content row whose only field is imageAlt', async () => {
       // A decorative-by-default image that the author described in one
       // language only still produces a real content row: the update loop must
