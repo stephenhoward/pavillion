@@ -23,7 +23,7 @@ Public site visitors should receive zero cookies:
 // The site app should not initialize passport, sessions, or any cookie-based auth
 
 // Safe: language preference via URL prefix, not cookie
-// /en/view/mycalendar -- language in URL, not stored in cookie
+// /es/mycalendar -- language in URL, not stored in cookie
 ```
 
 ### Authenticated App Storage

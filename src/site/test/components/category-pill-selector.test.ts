@@ -13,11 +13,11 @@ import CategoryPillSelector from '@/site/components/category-pill-selector.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
-  { path: '/view/:calendar', component: {}, name: 'calendar' },
-  { path: '/:locale/view/:calendar', component: {}, name: 'calendar-locale' },
+  { path: '/:calendar', component: {}, name: 'calendar' },
+  { path: '/:locale/:calendar', component: {}, name: 'calendar-locale' },
 ];
 
-const mountCategoryPillSelector = async (props: Record<string, any> = {}, initialRoute = '/view/test-calendar') => {
+const mountCategoryPillSelector = async (props: Record<string, any> = {}, initialRoute = '/test-calendar') => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -237,7 +237,7 @@ describe('CategoryPillSelector Component', () => {
       // Mount with Spanish locale route
       const { wrapper } = await mountCategoryPillSelector(
         { categories },
-        '/es/view/test-calendar',
+        '/es/test-calendar',
       );
       currentWrapper = wrapper;
 
@@ -261,7 +261,7 @@ describe('CategoryPillSelector Component', () => {
       // Mount with French locale route, but only English content exists
       const { wrapper } = await mountCategoryPillSelector(
         { categories },
-        '/fr/view/test-calendar',
+        '/fr/test-calendar',
       );
       currentWrapper = wrapper;
 
@@ -282,7 +282,7 @@ describe('CategoryPillSelector Component', () => {
       // Start in English
       const { wrapper, router } = await mountCategoryPillSelector(
         { categories },
-        '/view/test-calendar',
+        '/test-calendar',
       );
       currentWrapper = wrapper;
       await nextTick();
@@ -292,7 +292,7 @@ describe('CategoryPillSelector Component', () => {
 
       // Switch to Spanish by changing the route and i18next language
       await i18next.changeLanguage('es');
-      await router.push('/es/view/test-calendar');
+      await router.push('/es/test-calendar');
       await nextTick();
       await nextTick();
 
@@ -1149,7 +1149,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = await mountCategoryPillSelector(
         { categories },
-        '/es/view/test-calendar',
+        '/es/test-calendar',
       );
       currentWrapper = wrapper;
 
@@ -1171,7 +1171,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = await mountCategoryPillSelector(
         { categories, selectedCategories: ['1'] },
-        '/es/view/test-calendar',
+        '/es/test-calendar',
       );
       currentWrapper = wrapper;
 
@@ -1192,7 +1192,7 @@ describe('CategoryPillSelector Component', () => {
       // Start in English
       const { wrapper, router } = await mountCategoryPillSelector(
         { categories },
-        '/view/test-calendar',
+        '/test-calendar',
       );
       currentWrapper = wrapper;
 
@@ -1203,7 +1203,7 @@ describe('CategoryPillSelector Component', () => {
 
       // Switch to Spanish via both i18next and router navigation
       await i18next.changeLanguage('es');
-      await router.push('/es/view/test-calendar');
+      await router.push('/es/test-calendar');
       await nextTick();
       await nextTick();
 

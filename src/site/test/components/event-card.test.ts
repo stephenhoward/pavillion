@@ -139,11 +139,11 @@ async function mountEventCard(
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/view/:calendar', component: { template: '<div />' }, name: 'calendar' },
-      { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div />' }, name: 'instance' },
+      { path: '/:calendar', component: { template: '<div />' }, name: 'calendar' },
+      { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div />' }, name: 'instance' },
     ],
   });
-  await router.push('/view/test-calendar');
+  await router.push('/test-calendar');
   await router.isReady();
 
   const pinia = createPinia();
@@ -229,7 +229,7 @@ describe('EventCard', () => {
       const link = wrapper.find('.event-title-link');
       expect(link.exists()).toBe(true);
       const href = link.attributes('href') ?? '';
-      expect(href).toContain('/view/my-calendar/events/evt-abc/20260508-1800');
+      expect(href).toContain('/my-calendar/events/evt-abc/20260508-1800');
       wrapper.unmount();
     });
 
@@ -242,7 +242,7 @@ describe('EventCard', () => {
       const link = wrapper.find('.event-title-link');
       expect(link.exists()).toBe(true);
       // Without detailHref, the href is the site-computed localizedPath value.
-      expect(link.attributes('href')).toBe('/view/site-cal/events/evt-default/20260610-1200');
+      expect(link.attributes('href')).toBe('/site-cal/events/evt-default/20260610-1200');
       wrapper.unmount();
     });
 

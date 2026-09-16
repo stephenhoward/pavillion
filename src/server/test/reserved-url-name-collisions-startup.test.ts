@@ -18,8 +18,7 @@ import { reportReservedUrlNameCollisions, reportReservedUrlNameCollisionsSafely 
  * The silent-when-clean branch is the one that most needs a test: a healthy
  * instance takes it on every single boot, and a regression there would either
  * spam every operator's log or — worse, in the other direction — swallow the
- * warning that says a calendar will be unreachable at the site root once public
- * calendar URLs move there.
+ * warning that says a calendar's public page is unreachable at the site root.
  */
 describe('reportReservedUrlNameCollisions', () => {
   beforeEach(() => {
@@ -68,13 +67,28 @@ describe('reportReservedUrlNameCollisions', () => {
     expect(message).toContain('rename it in the calendar\'s settings');
   });
 
-  it('says the calendar resolves today, so the warning is not read as live breakage', () => {
-    // Lookups apply the shape rule only, so a calendar named 'admin' still
-    // resolves, serves its actor document and federates. The warning is about
-    // the move of public calendar URLs to the site root, which has not shipped.
+  it('states the collision as breakage happening now, not a migration still to come', () => {
+    // DEC-018 already moved public calendar URLs to the domain root, and the
+    // site routes exclude a reserved first segment, so /admin answers with the
+    // application shell rather than the calendar's page — today, on every
+    // request. A warning written in the future tense would read as housekeeping
+    // an operator can defer, which is the opposite of what they should do.
     reportReservedUrlNameCollisions([{ urlName: 'admin', reason: 'reserved_segment' }]);
 
-    expect(warnMock.mock.calls[0][1]).toContain('resolves normally today');
+    const message = warnMock.mock.calls[0][1];
+    expect(message).toContain('unreachable at the site root today');
+    expect(message).not.toContain('resolves normally today');
+    expect(message).not.toContain('once public calendar URLs move');
+  });
+
+  it('tells the operator what still works, so the warning is not read as a lost calendar', () => {
+    // DEC-018 rule 4 keeps name resolution off the reserved list: the calendar
+    // still serves its actor document, answers WebFinger and receives inbox
+    // deliveries. Only the human-facing page is shadowed, and an operator
+    // weighing a rename against the links it breaks needs to know that.
+    reportReservedUrlNameCollisions([{ urlName: 'admin', reason: 'reserved_segment' }]);
+
+    expect(warnMock.mock.calls[0][1]).toContain('still federates');
   });
 
   it('logs no account or owner identifier alongside the url name', () => {
@@ -90,7 +104,7 @@ describe('reportReservedUrlNameCollisions', () => {
  * The wrapper the boot sequence actually calls. It exists for one reason: the
  * report runs inside the database-initialization try, whose catch exits the
  * process, so an unguarded throw here would take an instance down over
- * read-only diagnostics about a migration that has not happened yet.
+ * read-only diagnostics an operator has to act on by hand anyway.
  */
 describe('reportReservedUrlNameCollisionsSafely', () => {
   beforeEach(() => {

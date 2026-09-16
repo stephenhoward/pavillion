@@ -5,6 +5,7 @@ import i18next from 'i18next';
 import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-vue-next';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { seriesPath } from '@/common/routing/public-paths';
 import SeriesService from '@/client/service/series';
 import SeriesEditor from './series-editor.vue';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
@@ -245,8 +246,24 @@ onMounted(async () => {
           </div>
 
           <div class="series-actions">
+            <!--
+              A series has no server-stamped public address the way a calendar
+              does, so the shape comes from the shared builder. A plain href,
+              not a RouterLink: the public series page is the site SPA's, and
+              an in-SPA navigation would never reach the server that serves it.
+
+              Unlike the calendar link elsewhere in this app, this is root-
+              relative: the builder emits no origin, because that requires
+              configuration only a server caller has, and the calendar link is
+              absolute only because the server stamped it. So this link works
+              in the browser but isn't copy-pasteable as-is. Neither link
+              carries a locale prefix — Calendar.publicUrl is the origin plus
+              calendarPath and nothing else — so both open the default-locale
+              page. Locale is the site SPA's concern via localizedPath, which
+              this app has no equivalent of.
+            -->
             <a
-              :href="'/view/' + props.calendarUrlName + '/series/' + series.urlName"
+              :href="seriesPath(props.calendarUrlName, series.urlName)"
               target="_blank"
               rel="noopener noreferrer"
               class="icon-button"

@@ -460,7 +460,7 @@ describe('calendar.vue - Calendar title display', () => {
       history: createMemoryHistory(),
       routes: [
         {
-          path: '/view/:calendar',
+          path: '/:calendar',
           name: 'calendar',
           component: calendar,
         },
@@ -481,7 +481,7 @@ describe('calendar.vue - Calendar title display', () => {
     mockCalendar.addContent(content);
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
-    await router.push('/view/test_calendar');
+    await router.push('/test_calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -507,7 +507,7 @@ describe('calendar.vue - Calendar title display', () => {
     const mockCalendar = new Calendar('calendar-456', 'bare_calendar');
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
-    await router.push('/view/bare_calendar');
+    await router.push('/bare_calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -541,12 +541,12 @@ describe('calendar.vue - Calendar title display', () => {
     const esRouter = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/view/:calendar', name: 'calendar', component: calendar },
-        { path: '/es/view/:calendar', component: calendar },
+        { path: '/:calendar', name: 'calendar', component: calendar },
+        { path: '/es/:calendar', component: calendar },
       ],
     });
 
-    await esRouter.push('/es/view/my_calendar');
+    await esRouter.push('/es/my_calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -606,14 +606,14 @@ describe('calendar.vue - Locale-aware event card links', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/view/:calendar', name: 'calendar', component: calendar },
-        { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
+        { path: '/:calendar', name: 'calendar', component: calendar },
+        { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
       ],
     });
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
 
-    await router.push('/view/test-calendar');
+    await router.push('/test-calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -641,24 +641,24 @@ describe('calendar.vue - Locale-aware event card links', () => {
 
     const href = link.attributes('href');
     // Default locale — no /en/ prefix; final segment is the UTC slug.
-    expect(href).toBe('/view/test-calendar/events/event-abc/20260315-1000');
+    expect(href).toBe('/test-calendar/events/event-abc/20260315-1000');
   });
 
   it('event card links include locale prefix for non-default locale (es)', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/view/:calendar', name: 'calendar', component: calendar },
-        { path: '/es/view/:calendar', component: calendar },
-        { path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
-        { path: '/es/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div/>' } },
+        { path: '/:calendar', name: 'calendar', component: calendar },
+        { path: '/es/:calendar', component: calendar },
+        { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
+        { path: '/es/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div/>' } },
       ],
     });
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
 
     // Navigate to the Spanish-locale calendar page
-    await router.push('/es/view/test-calendar');
+    await router.push('/es/test-calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -686,7 +686,7 @@ describe('calendar.vue - Locale-aware event card links', () => {
 
     const href = link.attributes('href');
     // Non-default locale — must include /es/ prefix; final segment is the UTC slug.
-    expect(href).toBe('/es/view/test-calendar/events/event-abc/20260315-1000');
+    expect(href).toBe('/es/test-calendar/events/event-abc/20260315-1000');
   });
 });
 
@@ -730,12 +730,12 @@ describe('calendar.vue - Locale-aware day group headings', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/view/:calendar', name: 'calendar', component: calendar },
+        { path: '/:calendar', name: 'calendar', component: calendar },
       ],
     });
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
-    await router.push('/view/test-calendar');
+    await router.push('/test-calendar');
 
     const wrapper = mount(calendar, {
       global: {
@@ -769,13 +769,13 @@ describe('calendar.vue - Locale-aware day group headings', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/view/:calendar', name: 'calendar', component: calendar },
-        { path: '/es/view/:calendar', component: calendar },
+        { path: '/:calendar', name: 'calendar', component: calendar },
+        { path: '/es/:calendar', component: calendar },
       ],
     });
 
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
-    await router.push('/es/view/test-calendar');
+    await router.push('/es/test-calendar');
 
     const wrapper = mount(calendar, {
       global: {

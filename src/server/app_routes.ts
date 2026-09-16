@@ -8,6 +8,7 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
+import { DISCOVER_PATH } from '@/common/routing/public-paths';
 
 const environment = process.env.NODE_ENV;
 
@@ -469,7 +470,7 @@ export function createRouter(
       // toSameOriginPath does the separator stripping, so '/view', '/view/' and
       // '/view//' all arrive here as '/' — the no-calendar case.
       const rest = toSameOriginPath(unprefixedPath.slice('/view'.length));
-      const canonicalPath = rest === '/' ? '/discover' : rest;
+      const canonicalPath = rest === '/' ? DISCOVER_PATH : rest;
 
       res.redirect(301, withQueryString(await localizeRedirectTarget(canonicalPath, locale), req));
     },
@@ -485,7 +486,7 @@ export function createRouter(
     locale_root_redirect: async (req: Request, res: Response) => {
       const { locale } = stripLocalePrefix(req.path);
 
-      res.redirect(301, withQueryString(await localizeRedirectTarget('/discover', locale), req));
+      res.redirect(301, withQueryString(await localizeRedirectTarget(DISCOVER_PATH, locale), req));
     },
 
     /**

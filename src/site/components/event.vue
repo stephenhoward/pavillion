@@ -12,6 +12,7 @@ import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import AddToCalendar from './add-to-calendar.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
+import { calendarPath, seriesPath } from '@/common/routing/public-paths';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -196,7 +197,7 @@ function closeReportModal() {
     <!-- Back link header -->
     <header v-if="state.calendar" class="event-back-header">
       <p class="breadcrumb">
-        <a :href="localizedPath('/view/' + state.calendar.urlName)"
+        <a :href="localizedPath(calendarPath(state.calendar.urlName))"
            class="back-link"
         >
           <ArrowLeft :size="16" class="back-arrow" aria-hidden="true" />
@@ -250,7 +251,7 @@ function closeReportModal() {
               <a v-for="category in state.event.categories"
                  :key="category.id"
                  class="event-category-badge"
-                 :href="localizedPath('/view/' + state.calendar.urlName) + '?categories=' + category.id"
+                 :href="localizedPath(calendarPath(state.calendar.urlName)) + '?categories=' + category.id"
               >
                 {{ localizedContent(category).name }}
               </a>
@@ -328,7 +329,7 @@ function closeReportModal() {
         >
           <span class="series-label">{{ t('series.label') }}</span>
           <a
-            :href="localizedPath('/view/' + state.calendar.urlName + '/series/' + state.event.series.urlName)"
+            :href="localizedPath(seriesPath(state.calendar.urlName, state.event.series.urlName))"
             class="event-series-link"
             :aria-label="t('series.part_of', { name: localizedContent(state.event.series).name })"
           >{{ localizedContent(state.event.series).name }}</a>

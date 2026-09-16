@@ -11,6 +11,7 @@ import ReportEvent from './report-event.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import { calendarPath, seriesPath } from '@/common/routing/public-paths';
 import type { EventCategory } from '@/common/model/event_category';
 
 const { t } = useTranslation('system');
@@ -49,7 +50,7 @@ function closeReportModal() {
  * view filtered by category id. Locale-aware via `localizedPath`.
  */
 function categoryHrefBuilder(category: EventCategory): string {
-  return localizedPath('/view/' + state.calendar.urlName) + '?categories=' + category.id;
+  return localizedPath(calendarPath(state.calendar.urlName)) + '?categories=' + category.id;
 }
 
 onBeforeMount(async () => {
@@ -111,7 +112,7 @@ onBeforeMount(async () => {
     <!-- Back link header -->
     <header v-if="state.calendar" class="instance-back-header">
       <p class="breadcrumb">
-        <a :href="localizedPath('/view/' + state.calendar.urlName)"
+        <a :href="localizedPath(calendarPath(state.calendar.urlName))"
            class="back-link"
         >
           <ArrowLeft :size="16" class="back-arrow" aria-hidden="true" />
@@ -137,7 +138,7 @@ onBeforeMount(async () => {
       >
         <span class="series-label">{{ t('series.label') }}</span>
         <a
-          :href="localizedPath('/view/' + state.calendar.urlName + '/series/' + state.instance.event.series.urlName)"
+          :href="localizedPath(seriesPath(state.calendar.urlName, state.instance.event.series.urlName))"
           class="event-series-link"
           :aria-label="t('series.part_of', { name: localizedContent(state.instance.event.series).name })"
         >{{ localizedContent(state.instance.event.series).name }}</a>

@@ -3,8 +3,8 @@
  *
  * Validates:
  * - The 'Back to calendar' breadcrumb uses localizedPath() so that
- *   locale-prefixed URLs are preserved (e.g. /es/view/:calendar).
- * - The default locale (en) breadcrumb links to /view/:calendar (no prefix).
+ *   locale-prefixed URLs are preserved (e.g. /es/:calendar).
+ * - The default locale (en) breadcrumb links to /:calendar (no prefix).
  * - The breadcrumb displays a prominent "← Back to {calendar name}" link.
  * - Category badge links use localizedPath() for locale awareness.
  * - Category badge links use category.id (UUID) as the query param, not the English display name.
@@ -179,21 +179,21 @@ import EventInstance from '@/site/components/event-instance.vue';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
+    path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
     component: EventInstance,
     name: 'instance',
   },
   {
-    path: '/view/:calendar',
+    path: '/:calendar',
     component: { template: '<div />' },
     name: 'calendar',
   },
   {
-    path: '/es/view/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
+    path: '/es/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
     component: EventInstance,
   },
   {
-    path: '/es/view/:calendar',
+    path: '/es/:calendar',
     component: { template: '<div />' },
   },
 ];
@@ -473,41 +473,41 @@ describe('eventInstance breadcrumb locale behaviour', () => {
   describe('breadcrumb link generation', () => {
     it('should call localizedPath with the calendar path to generate the breadcrumb href', async () => {
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
-      expect(mockLocalizedPath).toHaveBeenCalledWith('/view/test_calendar');
+      expect(mockLocalizedPath).toHaveBeenCalledWith('/test_calendar');
       wrapper.unmount();
     });
 
-    it('should set breadcrumb href to /view/test_calendar for default locale (no prefix)', async () => {
+    it('should set breadcrumb href to /test_calendar for default locale (no prefix)', async () => {
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path, // default locale: no prefix added
       );
 
       const link = wrapper.find('.breadcrumb a');
       expect(link.exists()).toBe(true);
-      expect(link.attributes('href')).toBe('/view/test_calendar');
+      expect(link.attributes('href')).toBe('/test_calendar');
       wrapper.unmount();
     });
 
-    it('should set breadcrumb href to /es/view/test_calendar when localizedPath adds es prefix', async () => {
+    it('should set breadcrumb href to /es/test_calendar when localizedPath adds es prefix', async () => {
       const wrapper = await mountInstance(
-        '/es/view/test_calendar/events/evt-1/20260301-1000',
+        '/es/test_calendar/events/evt-1/20260301-1000',
         (path) => '/es' + path, // Spanish locale: adds /es prefix
       );
 
       const link = wrapper.find('.breadcrumb a');
       expect(link.exists()).toBe(true);
-      expect(link.attributes('href')).toBe('/es/view/test_calendar');
+      expect(link.attributes('href')).toBe('/es/test_calendar');
       wrapper.unmount();
     });
 
     it('should display the calendar name within "Back to {name}" text', async () => {
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -519,7 +519,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
 
     it('should include a back arrow indicator in the breadcrumb', async () => {
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -560,7 +560,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCategories = [makeCategoryObject('uuid-arts-123', { en: 'Arts' })];
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -574,7 +574,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCategories = [makeCategoryObject('uuid-sports-456', { en: 'Sports & Recreation' })];
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -593,12 +593,12 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCurrentLocale.value = 'en';
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
       // localizedPath should have been called with the calendar view path
-      expect(mockLocalizedPath).toHaveBeenCalledWith('/view/test_calendar');
+      expect(mockLocalizedPath).toHaveBeenCalledWith('/test_calendar');
       wrapper.unmount();
     });
 
@@ -607,7 +607,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCurrentLocale.value = 'es';
 
       const wrapper = await mountInstance(
-        '/es/view/test_calendar/events/evt-1/20260301-1000',
+        '/es/test_calendar/events/evt-1/20260301-1000',
         (path) => '/es' + path, // Spanish: prepend /es
       );
 
@@ -626,7 +626,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCurrentLocale.value = 'en';
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -641,7 +641,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCurrentLocale.value = 'es';
 
       const wrapper = await mountInstance(
-        '/es/view/test_calendar/events/evt-1/20260301-1000',
+        '/es/test_calendar/events/evt-1/20260301-1000',
         (path) => '/es' + path,
       );
 
@@ -656,7 +656,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockCurrentLocale.value = 'es';
 
       const wrapper = await mountInstance(
-        '/es/view/test_calendar/events/evt-1/20260301-1000',
+        '/es/test_calendar/events/evt-1/20260301-1000',
         (path) => '/es' + path,
       );
 
@@ -677,7 +677,7 @@ describe('eventInstance category badge locale behaviour', () => {
       ];
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -693,7 +693,7 @@ describe('eventInstance category badge locale behaviour', () => {
       ];
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -710,7 +710,7 @@ describe('eventInstance category badge locale behaviour', () => {
       mockLocation = null;
 
       const wrapper = await mountInstance(
-        '/view/test_calendar/events/evt-1/20260301-1000',
+        '/test_calendar/events/evt-1/20260301-1000',
         (path) => path,
       );
 
@@ -754,7 +754,7 @@ describe('eventInstance location display', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -771,7 +771,7 @@ describe('eventInstance location display', () => {
     mockLocation = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -790,7 +790,7 @@ describe('eventInstance location display', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -813,7 +813,7 @@ describe('eventInstance location display', () => {
     );
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -837,7 +837,7 @@ describe('eventInstance location display', () => {
     );
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -857,7 +857,7 @@ describe('eventInstance location display', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -870,7 +870,7 @@ describe('eventInstance location display', () => {
     mockEventAccessibilityInfo = 'ASL interpreter will be provided';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -897,7 +897,7 @@ describe('eventInstance location display', () => {
     mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -926,7 +926,7 @@ describe('eventInstance location display', () => {
     mockSpace = makeSpaceObject('Pacific Room', { en: 'Hearing loop, 3rd floor' });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -971,7 +971,7 @@ describe('eventInstance end time display', () => {
     mockEnd = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -994,7 +994,7 @@ describe('eventInstance end time display', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1019,7 +1019,7 @@ describe('eventInstance end time display', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1056,7 +1056,7 @@ describe('eventInstance document.title', () => {
     mockEventName = 'My Awesome Concert';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1068,7 +1068,7 @@ describe('eventInstance document.title', () => {
     mockEventName = 'Test Event';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1103,7 +1103,7 @@ describe('eventInstance series link display', () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1116,7 +1116,7 @@ describe('eventInstance series link display', () => {
     mockSeries = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1129,13 +1129,13 @@ describe('eventInstance series link display', () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
     const seriesLink = wrapper.find('.event-series-link');
     expect(seriesLink.exists()).toBe(true);
-    expect(seriesLink.attributes('href')).toBe('/view/test_calendar/series/yoga-classes');
+    expect(seriesLink.attributes('href')).toBe('/test_calendar/series/yoga-classes');
     wrapper.unmount();
   });
 
@@ -1144,7 +1144,7 @@ describe('eventInstance series link display', () => {
     mockCurrentLocale.value = 'en';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1159,13 +1159,13 @@ describe('eventInstance series link display', () => {
     mockCurrentLocale.value = 'es';
 
     const wrapper = await mountInstance(
-      '/es/view/test_calendar/events/evt-1/20260301-1000',
+      '/es/test_calendar/events/evt-1/20260301-1000',
       (path) => '/es' + path,
     );
 
     const seriesLink = wrapper.find('.event-series-link');
     expect(seriesLink.exists()).toBe(true);
-    expect(seriesLink.attributes('href')).toBe('/es/view/test_calendar/series/yoga-classes');
+    expect(seriesLink.attributes('href')).toBe('/es/test_calendar/series/yoga-classes');
     wrapper.unmount();
   });
 
@@ -1173,7 +1173,7 @@ describe('eventInstance series link display', () => {
     mockSeries = makeSeriesObject('book-club', { en: 'Book Club' });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1211,7 +1211,7 @@ describe('eventInstance recurrence display', () => {
     mockRecurrenceSummary = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1223,7 +1223,7 @@ describe('eventInstance recurrence display', () => {
     mockRecurrenceSummary = makeRecurrenceSummary('recurrence.weekly_on_days', { days: ['SA'] });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1237,7 +1237,7 @@ describe('eventInstance recurrence display', () => {
     mockRecurrenceSummary = makeRecurrenceSummary('recurrence.every_day');
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1251,7 +1251,7 @@ describe('eventInstance recurrence display', () => {
     mockRecurrenceSummary = makeRecurrenceSummary('recurrence.weekly_on_days', { days: ['MO', 'WE'] });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1273,7 +1273,7 @@ describe('eventInstance recurrence display', () => {
     });
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1289,7 +1289,7 @@ describe('eventInstance recurrence display', () => {
     mockRecurrenceSummary = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1328,7 +1328,7 @@ describe('eventInstance source calendar pill', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1341,7 +1341,7 @@ describe('eventInstance source calendar pill', () => {
     mockSourceCalendar = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1357,7 +1357,7 @@ describe('eventInstance source calendar pill', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1374,7 +1374,7 @@ describe('eventInstance source calendar pill', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1391,7 +1391,7 @@ describe('eventInstance source calendar pill', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1409,7 +1409,7 @@ describe('eventInstance source calendar pill', () => {
     };
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1446,7 +1446,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'tickets';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1461,7 +1461,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'rsvp';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1477,7 +1477,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'more_info';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1495,7 +1495,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'tickets';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1508,7 +1508,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = null;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1521,7 +1521,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'tickets';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1534,7 +1534,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'hack';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1547,7 +1547,7 @@ describe('event instance external URL CTA button', () => {
     mockUrlPrompt = 'tickets';
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1582,7 +1582,7 @@ describe('eventInstance cancelled badge', () => {
     mockIsCancelled = true;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1596,7 +1596,7 @@ describe('eventInstance cancelled badge', () => {
     mockIsCancelled = false;
 
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260301-1000',
+      '/test_calendar/events/evt-1/20260301-1000',
       (path) => path,
     );
 
@@ -1633,7 +1633,7 @@ describe('eventInstance invalid startTime slug', () => {
     // as invalid. The component must short-circuit to notFound without
     // calling the backend.
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/20260230-1000',
+      '/test_calendar/events/evt-1/20260230-1000',
       (path) => path,
     );
 
@@ -1645,7 +1645,7 @@ describe('eventInstance invalid startTime slug', () => {
     // Year 1900 is outside the [currentYear - 5, currentYear + 10] year-bounds
     // guard in parseInstanceSlug (rejected before Luxon's isValid check).
     const wrapper = await mountInstance(
-      '/view/test_calendar/events/evt-1/19000101-0000',
+      '/test_calendar/events/evt-1/19000101-0000',
       (path) => path,
     );
 

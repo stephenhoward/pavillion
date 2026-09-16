@@ -78,21 +78,21 @@ import SeriesView from '@/site/components/series-view.vue';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/view/:calendar/series/:series',
+    path: '/:calendar/series/:series',
     component: SeriesView,
     name: 'series',
   },
   {
-    path: '/view/:calendar',
+    path: '/:calendar',
     component: { template: '<div />' },
     name: 'calendar',
   },
   {
-    path: '/es/view/:calendar/series/:series',
+    path: '/es/:calendar/series/:series',
     component: SeriesView,
   },
   {
-    path: '/es/view/:calendar',
+    path: '/es/:calendar',
     component: { template: '<div />' },
   },
 ];
@@ -221,7 +221,7 @@ describe('SeriesView', () => {
 
   describe('series content display', () => {
     it('renders the series name as h1', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const h1 = wrapper.find('h1');
       expect(h1.exists()).toBe(true);
@@ -230,14 +230,14 @@ describe('SeriesView', () => {
     });
 
     it('renders the series description', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       expect(wrapper.text()).toContain('A weekly yoga series');
       wrapper.unmount();
     });
 
     it('sets document.title to "Series Name | Pavillion" after loading', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       expect(document.title).toBe('Yoga Classes | Pavillion');
       wrapper.unmount();
@@ -246,47 +246,47 @@ describe('SeriesView', () => {
 
   describe('breadcrumb navigation', () => {
     it('renders a breadcrumb back link to the calendar', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const link = wrapper.find('.breadcrumb a');
       expect(link.exists()).toBe(true);
       wrapper.unmount();
     });
 
-    it('breadcrumb href is /view/test_calendar for default locale', async () => {
+    it('breadcrumb href is /test_calendar for default locale', async () => {
       const wrapper = await mountSeriesView(
-        '/view/test_calendar/series/yoga-classes',
+        '/test_calendar/series/yoga-classes',
         (path) => path,
       );
 
       const link = wrapper.find('.breadcrumb a');
-      expect(link.attributes('href')).toBe('/view/test_calendar');
+      expect(link.attributes('href')).toBe('/test_calendar');
       wrapper.unmount();
     });
 
     it('breadcrumb href is locale-prefixed when locale is Spanish', async () => {
       const wrapper = await mountSeriesView(
-        '/es/view/test_calendar/series/yoga-classes',
+        '/es/test_calendar/series/yoga-classes',
         (path) => '/es' + path,
       );
 
       const link = wrapper.find('.breadcrumb a');
-      expect(link.attributes('href')).toBe('/es/view/test_calendar');
+      expect(link.attributes('href')).toBe('/es/test_calendar');
       wrapper.unmount();
     });
 
     it('calls localizedPath with the calendar path for the breadcrumb', async () => {
       const wrapper = await mountSeriesView(
-        '/view/test_calendar/series/yoga-classes',
+        '/test_calendar/series/yoga-classes',
         (path) => path,
       );
 
-      expect(mockLocalizedPath).toHaveBeenCalledWith('/view/test_calendar');
+      expect(mockLocalizedPath).toHaveBeenCalledWith('/test_calendar');
       wrapper.unmount();
     });
 
     it('breadcrumb includes the calendar name', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const link = wrapper.find('.breadcrumb a');
       expect(link.text()).toContain('Test Calendar');
@@ -296,7 +296,7 @@ describe('SeriesView', () => {
 
   describe('event list', () => {
     it('renders a list of events in the series', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const items = wrapper.findAll('.series-event-item');
       expect(items.length).toBe(2);
@@ -304,7 +304,7 @@ describe('SeriesView', () => {
     });
 
     it('each event item shows the event name', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const items = wrapper.findAll('.series-event-item');
       expect(items[0].text()).toContain('Morning Yoga');
@@ -313,11 +313,11 @@ describe('SeriesView', () => {
     });
 
     it('each event item links to the event page', async () => {
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const links = wrapper.findAll('.series-event-item a');
-      expect(links[0].attributes('href')).toContain('/view/test_calendar/events/event-1');
-      expect(links[1].attributes('href')).toContain('/view/test_calendar/events/event-2');
+      expect(links[0].attributes('href')).toContain('/test_calendar/events/event-1');
+      expect(links[1].attributes('href')).toContain('/test_calendar/events/event-2');
       wrapper.unmount();
     });
 
@@ -328,7 +328,7 @@ describe('SeriesView', () => {
         pagination: { total: 0, limit: 20, offset: 0 },
       };
 
-      const wrapper = await mountSeriesView('/view/test_calendar/series/empty-series');
+      const wrapper = await mountSeriesView('/test_calendar/series/empty-series');
 
       expect(wrapper.find('.series-no-events').exists()).toBe(true);
       wrapper.unmount();
@@ -343,7 +343,7 @@ describe('SeriesView', () => {
         pagination: { total: 2, limit: 20, offset: 0 },
       };
 
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       expect(wrapper.find('.series-pagination').exists()).toBe(false);
       wrapper.unmount();
@@ -356,7 +356,7 @@ describe('SeriesView', () => {
         pagination: { total: 25, limit: 20, offset: 0 },
       };
 
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       expect(wrapper.find('.series-pagination').exists()).toBe(true);
       wrapper.unmount();
@@ -369,7 +369,7 @@ describe('SeriesView', () => {
         pagination: { total: 25, limit: 20, offset: 0 },
       };
 
-      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 
       const prevBtn = wrapper.find('.series-pagination .prev-page');
       expect(prevBtn.attributes('disabled')).toBeDefined();
@@ -381,7 +381,7 @@ describe('SeriesView', () => {
     it('shows NotFound when calendar does not exist', async () => {
       mockCalendar = null;
 
-      const wrapper = await mountSeriesView('/view/nonexistent_cal/series/yoga-classes');
+      const wrapper = await mountSeriesView('/nonexistent_cal/series/yoga-classes');
 
       expect(wrapper.find('.not-found-stub').exists()).toBe(true);
       wrapper.unmount();
@@ -394,7 +394,7 @@ describe('SeriesView', () => {
         pagination: { total: 0, limit: 20, offset: 0 },
       };
 
-      const wrapper = await mountSeriesView('/view/test_calendar/series/nonexistent-series');
+      const wrapper = await mountSeriesView('/test_calendar/series/nonexistent-series');
 
       expect(wrapper.find('.not-found-stub').exists()).toBe(true);
       wrapper.unmount();
@@ -406,7 +406,7 @@ describe('SeriesView', () => {
       mockCurrentLocale.value = 'es';
 
       const wrapper = await mountSeriesView(
-        '/es/view/test_calendar/series/yoga-classes',
+        '/es/test_calendar/series/yoga-classes',
         (path) => '/es' + path,
       );
 

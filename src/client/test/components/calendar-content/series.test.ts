@@ -37,6 +37,7 @@ const createWrapper = (props = {}) => {
   return mountComponent(SeriesTab, router, {
     props: {
       calendarId: 'calendar-123',
+      calendarUrlName: 'my-calendar',
       ...props,
     },
   });
@@ -165,6 +166,30 @@ describe('Series Tab Component', () => {
       const deleteButtons = wrapper.findAll('.icon-button--danger');
       expect(editButtons.length).toBeGreaterThanOrEqual(1);
       expect(deleteButtons.length).toBeGreaterThanOrEqual(1);
+    });
+
+    /**
+     * The "view public page" link leaves the client SPA entirely — the
+     * authenticated router has no route for a public series page — so it is a
+     * plain href that the server resolves, and it has to carry the address
+     * DEC-018 actually serves rather than the retired `/view/` spelling.
+     */
+    it('links each series to its public page at the domain root', async () => {
+      const mockSeries = [
+        createTestSeries('series-1', 'Summer Festival', 'summer-festival', 5),
+      ];
+
+      vi.spyOn(SeriesService.prototype, 'loadSeries').mockResolvedValue(mockSeries);
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.series.length > 0;
+      }, { timeout: 1000 });
+
+      const publicLink = wrapper.find('.series-actions a');
+      expect(publicLink.attributes('href')).toBe('/my-calendar/series/summer-festival');
     });
   });
 

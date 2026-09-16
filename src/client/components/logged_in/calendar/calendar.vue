@@ -186,9 +186,18 @@ const handleLoadEvents = async (filters) => {
                 <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
                 <span v-else>{{ calendarUrlName }}</span>
               </h1>
+              <!--
+                The organizer's shareable address: the string they copy out of
+                this page and hand to other people. Both the destination and the
+                text are the server's `publicUrl` so they cannot disagree — this
+                link used to template its own href, which is how it kept sending
+                people to `/view/...` after DEC-018 moved the page to the root.
+                A plain href, not a RouterLink: the public page belongs to the
+                site SPA, so this has to be a full-page navigation.
+              -->
               <a
                 v-if="state.calendar"
-                :href="`/view/${state.calendar.urlName}`"
+                :href="state.calendar.publicUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="calendar-public-link"
