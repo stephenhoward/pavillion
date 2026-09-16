@@ -361,6 +361,25 @@ describe('useLocalizedContent', () => {
       expect(resolveImageAlt(event, cal, false)).toBe('');
     });
 
+    it('should trust the caller over the event when the flag and the repost state disagree', () => {
+      // The only combination that falsifies "the function re-derives the
+      // exclusion from repostStatus instead of trusting the caller": the event
+      // IS a repost, yet the caller says the calendar default image is on
+      // screen. Every other case agrees with both readings, so without this one
+      // the repostStatus assignment above is inert. The flag is the seam --
+      // it moves to the event card's own media computed in follow-up work, and
+      // this test is what stops the exclusion migrating back in here.
+      const event = makeEvent([{ lang: 'en', name: 'Reposted concert' }]);
+      event.repostStatus = 'auto';
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('Calendar default alt');
+    });
+
     it('should return an empty string when the calendar is unavailable', () => {
       const event = makeEvent([{ lang: 'en', name: 'Concert' }]);
 

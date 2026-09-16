@@ -60,7 +60,12 @@ const props = withDefaults(defineProps<{
 
 const uid = useId();
 const modeName = `${uid}-mode`;
+const decorativeId = `${uid}-decorative`;
+const decorativeHelpId = `${uid}-decorative-help`;
+const describeId = `${uid}-describe`;
+const describeHelpId = `${uid}-describe-help`;
 const textareaId = `${uid}-description`;
+const hintId = `${uid}-description-hint`;
 
 /**
  * Reports whether any language on a model carries alt text. This is what
@@ -142,37 +147,52 @@ function setMode(next: AltMode): void {
     <fieldset class="image-alt-editor__modes" :disabled="disabled">
       <legend class="image-alt-editor__legend field-label">{{ t('legend') }}</legend>
 
-      <label class="image-alt-editor__mode">
-        <input type="radio"
+      <!--
+        The help text sits outside the <label> and is attached with
+        aria-describedby instead: inside the label it would join each radio's
+        accessible name and then be announced a second time as page text. The
+        visible option label stays in a <label for> so clicking it still
+        selects the radio.
+      -->
+      <div class="image-alt-editor__mode">
+        <input :id="decorativeId"
+               type="radio"
                class="radio"
                :name="modeName"
                value="decorative"
                :checked="mode === 'decorative'"
+               :aria-describedby="decorativeHelpId"
                @change="setMode('decorative')" />
         <span class="image-alt-editor__mode-text">
-          <span class="image-alt-editor__mode-label">{{ t('decorative_label') }}</span>
-          <span class="field-help">{{ t('decorative_help') }}</span>
+          <label class="image-alt-editor__mode-label" :for="decorativeId">
+            {{ t('decorative_label') }}
+          </label>
+          <span :id="decorativeHelpId" class="field-help">{{ t('decorative_help') }}</span>
         </span>
-      </label>
+      </div>
 
       <p v-if="hasStash"
          class="image-alt-editor__stash-note alert alert--warning"
-         role="status">
+         role="alert">
         {{ t('stash_note') }}
       </p>
 
-      <label class="image-alt-editor__mode">
-        <input type="radio"
+      <div class="image-alt-editor__mode">
+        <input :id="describeId"
+               type="radio"
                class="radio"
                :name="modeName"
                value="describe"
                :checked="mode === 'describe'"
+               :aria-describedby="describeHelpId"
                @change="setMode('describe')" />
         <span class="image-alt-editor__mode-text">
-          <span class="image-alt-editor__mode-label">{{ t('describe_label') }}</span>
-          <span class="field-help">{{ t('describe_help') }}</span>
+          <label class="image-alt-editor__mode-label" :for="describeId">
+            {{ t('describe_label') }}
+          </label>
+          <span :id="describeHelpId" class="field-help">{{ t('describe_help') }}</span>
         </span>
-      </label>
+      </div>
     </fieldset>
 
     <div v-if="mode === 'describe'" class="form-field">
@@ -183,9 +203,12 @@ function setMode(next: AltMode): void {
                 class="field-textarea"
                 :maxlength="IMAGE_ALT_MAX_LENGTH"
                 :disabled="disabled"
+                :aria-describedby="hintId"
                 rows="3"
                 v-model="model.content(language).imageAlt" />
-      <p class="field-help">{{ t('description_hint') }}</p>
+      <!-- Associated, not merely adjacent: the hint carries the length cap, and
+           a forms-mode screen reader never reaches unassociated sibling text. -->
+      <p :id="hintId" class="field-help">{{ t('description_hint') }}</p>
     </div>
   </div>
 </template>
@@ -220,11 +243,6 @@ function setMode(next: AltMode): void {
   display: flex;
   align-items: flex-start;
   gap: var(--pav-space-sm);
-  cursor: pointer;
-}
-
-.image-alt-editor__modes:disabled .image-alt-editor__mode {
-  cursor: default;
 }
 
 .image-alt-editor__mode .radio {
@@ -239,9 +257,18 @@ function setMode(next: AltMode): void {
   gap: var(--pav-space-xs);
 }
 
+/*
+ * The pointer cursor belongs to the clickable label alone, not to the whole
+ * row: the help text beside it is described-by, not a click target.
+ */
 .image-alt-editor__mode-label {
   font-size: var(--pav-font-size-sm);
   color: var(--pav-text-primary);
+  cursor: pointer;
+}
+
+.image-alt-editor__modes:disabled .image-alt-editor__mode-label {
+  cursor: default;
 }
 
 .image-alt-editor__stash-note {
