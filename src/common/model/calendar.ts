@@ -20,7 +20,6 @@ class Calendar extends TranslatedModel<CalendarContent> {
   defaultEventImageId: string | null = null;
   defaultEventImage: Media | null = null;
   listed: boolean = true;
-  _content: Record<string, CalendarContent> = {};
 
   /**
    * Creates new content for a specified language.

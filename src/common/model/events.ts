@@ -72,7 +72,6 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   mediaZoom: number = 1.0;
   parentEvent: CalendarEvent | null = null;
   eventSourceUrl: string = '';
-  _content: Record<string, CalendarEventContent> = {};
   schedules: CalendarEventSchedule[] = [];
   categories: EventCategory[] = [];
   series: EventSeries | null = null;
