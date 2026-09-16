@@ -16,6 +16,7 @@ import {
   SeriesEventCalendarMismatchError,
 } from '@/common/exceptions/series';
 import { EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import SeriesRoutes from '@/server/calendar/api/v1/series';
 import CalendarInterface from '@/server/calendar/interface';
@@ -301,6 +302,35 @@ describe('Series API', () => {
       expect(response.body.error).toBe('A series with this name already exists');
       expect(response.body.errorName).toBe('DuplicateSeriesNameError');
     });
+
+    it('should return 400 with a fields map for a rejected field value', async () => {
+      // SeriesService validates content.imageAlt with the rejecting validator on
+      // the stated grounds that there is someone to show the error to. That only
+      // holds if the route maps ValidationError; unmapped it 500s and the editor
+      // has no `fields` entry to attach the message to.
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      const getCalendarStub = seriesSandbox.stub(calendarInterface, 'getCalendar');
+      const createStub = seriesSandbox.stub(calendarInterface, 'createSeries');
+
+      getCalendarStub.resolves(mockCalendar);
+      createStub.rejects(new ValidationError('imageAlt must be 500 characters or fewer', {
+        imageAlt: ['must be 500 characters or fewer'],
+      }));
+
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'calendar-id';
+        routes.createSeries(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ urlName: 'my-series', content: { en: { name: 'My Series', imageAlt: 'a'.repeat(501) } } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields.imageAlt).toEqual(['must be 500 characters or fewer']);
+    });
   });
 
   describe('GET /calendars/:calendarId/series/:seriesId', () => {
@@ -499,6 +529,33 @@ describe('Series API', () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid series URL name');
       expect(response.body.errorName).toBe('InvalidSeriesUrlNameError');
+    });
+
+    it('should return 400 with a fields map for a rejected field value', async () => {
+      // Update is a separate catch block from create, so it needs its own case.
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      const getCalendarStub = seriesSandbox.stub(calendarInterface, 'getCalendar');
+      const updateStub = seriesSandbox.stub(calendarInterface, 'updateSeries');
+
+      getCalendarStub.resolves(mockCalendar);
+      updateStub.rejects(new ValidationError('imageAlt must be a string', {
+        imageAlt: ['must be a string'],
+      }));
+
+      router.put('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'calendar-id';
+        req.params.seriesId = 'series-id';
+        routes.updateSeries(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .put('/handler')
+        .send({ content: { en: { name: 'My Series', imageAlt: { en: 'nope' } } } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields.imageAlt).toEqual(['must be a string']);
     });
   });
 

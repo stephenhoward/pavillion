@@ -153,6 +153,33 @@ describe('Calendar content imageAlt — write paths (integration)', () => {
       expect(fetched!.content('en').imageAlt).toBe('');
     });
 
+    it('keeps name and description on an imageAlt-only update', async () => {
+      // The payload shape the alt editor produces: content[lang] carries
+      // imageAlt and nothing else. The two field classes diverge here and both
+      // halves matter — name and description are patch (guarded by
+      // `!== undefined`, so omitting preserves), imageAlt is replace (omitting
+      // clears, which is what makes the Decorative toggle persist). Reading the
+      // settings update's own calendar row without its content would blank the
+      // stored name and description with the empty strings of a fabricated
+      // content model.
+      const calendar = await newCalendar();
+
+      await calendarInterface.updateCalendarSettings(testAccount, calendar.id, {
+        content: {
+          en: { name: 'Alt Only Calendar', description: 'A description worth keeping' },
+        },
+      });
+
+      await calendarInterface.updateCalendarSettings(testAccount, calendar.id, {
+        content: { en: { imageAlt: 'A banner of paper lanterns' } },
+      });
+
+      const fetched = await calendarInterface.getCalendar(calendar.id);
+      expect(fetched!.content('en').name).toBe('Alt Only Calendar');
+      expect(fetched!.content('en').description).toBe('A description worth keeping');
+      expect(fetched!.content('en').imageAlt).toBe('A banner of paper lanterns');
+    });
+
     it('writes nothing at all when a later language has an over-long imageAlt', async () => {
       // Rejection is all-or-nothing. updateCalendarSettings opens no
       // transaction and writes the calendar row before it reaches the content

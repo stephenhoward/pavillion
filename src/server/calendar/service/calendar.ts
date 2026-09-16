@@ -1499,7 +1499,14 @@ class CalendarService {
       }
     }
 
-    const calendarEntity = await CalendarEntity.findByPk(calendarId);
+    // Content is included because the update loop below patches the stored
+    // content models in place. Without it `toModel()` attaches no content,
+    // `calendar.content(lang)` fabricates a blank CalendarContent, and a
+    // settings PATCH carrying only `imageAlt` writes that blank name and
+    // description over the stored ones.
+    const calendarEntity = await CalendarEntity.findByPk(calendarId, {
+      include: [CalendarContentEntity],
+    });
     if (!calendarEntity) {
       throw new CalendarNotFoundError();
     }
@@ -1540,6 +1547,9 @@ class CalendarService {
     if (settings.content) {
       const calendar = calendarEntity.toModel();
       for (const [language, contentData] of Object.entries(settings.content)) {
+        // Starts from the stored row (the fetch above includes content), so the
+        // two `!== undefined` guards below mean an omitted name or description
+        // keeps its stored value.
         const content = calendar.content(language);
         if (contentData.name !== undefined) {
           content.name = contentData.name;
@@ -1547,8 +1557,15 @@ class CalendarService {
         if (contentData.description !== undefined) {
           content.description = contentData.description;
         }
-        // Replace, not patch: an update that omits imageAlt clears the stored
-        // one, which is what makes the editor's Decorative toggle persist.
+        // imageAlt is deliberately unguarded where those two are guarded:
+        // replace, not patch. An update that omits it clears the stored one,
+        // which is what makes the editor's Decorative toggle persist.
+        //
+        // `?? ''` is the optional-request-field to required-model-field
+        // conversion, not a second copy of the nullish mapping in
+        // validateImageAlt: CalendarContent.imageAlt is `string`, and
+        // createCalendarContent below is the one place the value is normalized
+        // and bounds-checked.
         content.imageAlt = contentData.imageAlt ?? '';
         await this.createCalendarContent(calendarId, content);
       }

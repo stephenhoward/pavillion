@@ -8,6 +8,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { ValidationError } from '@/common/exceptions/base';
+import { validateContentImageAlts } from '@/server/calendar/service/image_alt';
 import CalendarInterface from '../../interface';
 
 class CalendarRoutes {
@@ -55,6 +56,17 @@ class CalendarRoutes {
     }
 
     try {
+      // Creating a calendar with content is two service calls, and only the
+      // second one validates content.imageAlt. Left alone, a bad alt text 400s
+      // after createCalendar has already committed the calendar row and its
+      // owner membership and emitted `calendar.created` (which provisions the
+      // ActivityPub actor) — so the urlName is consumed and the author's retry
+      // with the same name gets a 409 instead. There is no rollback to reach
+      // for once the actor has been provisioned, so the payload is checked
+      // before the first write. updateCalendarSettings still runs the same
+      // pre-pass; this one only moves the rejection earlier.
+      validateContentImageAlts(req.body.content);
+
       // Create calendar with the specified URL name and optional title
       const calendarTitle = req.body.content?.en?.name || req.body.urlName;
       const calendar = await this.service.createCalendar(
