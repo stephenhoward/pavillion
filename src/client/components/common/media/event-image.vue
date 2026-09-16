@@ -33,11 +33,16 @@
       <span class="processing-text">{{ t('display.processing_image') }}</span>
     </div>
 
-    <!-- Loaded image -->
+    <!--
+      Loaded image. This is an owner-facing preview of an image the owner just
+      picked, so the picture needs no description here and alt="" is the whole
+      decorative contract — no role="presentation", no aria-hidden. The filename
+      is never used: it describes the file, not the picture, and reads as noise.
+    -->
     <img
       v-else-if="!imageError && imageBlobUrl"
       :src="imageBlobUrl"
-      :alt="media.originalFilename || 'Event image'"
+      alt=""
       @error="handleImageError"
     />
 
@@ -48,10 +53,6 @@
                 role="alert"
                 aria-live="polite">
       {{ t('display.image_load_error') }}
-    </figcaption>
-    <figcaption v-else-if="!isProcessing && imageBlobUrl && media.originalFilename && media.originalFilename !== 'Event image'"
-                class="image-caption">
-      {{ media.originalFilename }}
     </figcaption>
   </figure>
 </template>

@@ -17,6 +17,9 @@
  * - Remote source calendar links open in new tab.
  * - Cancelled badge renders when instance.isCancelled is true; hidden otherwise.
  * - Card receives a cancelled de-emphasis class when instance.isCancelled is true.
+ * - Image alt text describes the image actually shown: the event's own alt for
+ *   the event's media, the calendar's alt for the calendar default image, and
+ *   '' (decorative) otherwise. The event name is never used as alt text.
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -28,6 +31,7 @@ import { DateTime } from 'luxon';
 
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
@@ -55,6 +59,9 @@ vi.mock('@/site/components/event-image.vue', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import EventCard from '@/site/components/event-card.vue';
+// Resolves to the stub declared above; imported so alt can be asserted as the
+// prop the card passes rather than as rendered markup the stub never emits.
+import EventImage from '@/site/components/event-image.vue';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,6 +79,7 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     content: (_lang: string) => ({
       name: overrides.name ?? 'Test Event',
       description: overrides.description ?? 'A description of the event.',
+      imageAlt: overrides.imageAlt ?? '',
     }),
     hasContent: (_lang: string) => true,
     getLanguages: () => ['en'],
@@ -116,6 +124,15 @@ function makeInstance(
     instance.isCancelled = opts.isCancelled;
   }
   return instance;
+}
+
+/**
+ * Create a calendar carrying alt text for its default event image.
+ */
+function makeCalendar(imageAlt: string): Calendar {
+  const calendar = new Calendar('cal-1', 'test-calendar');
+  calendar.addContent(new CalendarContent('en', 'Test Calendar', 'Desc', imageAlt));
+  return calendar;
 }
 
 /**
@@ -520,6 +537,76 @@ describe('EventCard', () => {
       // Event's own media takes priority even for reposts
       expect(wrapper.find('.event-image-stub').exists()).toBe(true);
       expect(wrapper.find('.no-image-fallback').exists()).toBe(false);
+      wrapper.unmount();
+    });
+  });
+
+  describe('image alt text', () => {
+    const defaultImage = { id: 'default-img-1', mimeType: 'image/jpeg' };
+
+    it('should describe the event image with the event alt text', async () => {
+      const event = makeEvent({
+        name: 'Summer Concert',
+        media: { id: 'media-1' },
+        imageAlt: 'A band playing on an outdoor stage',
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', {
+        calendar: makeCalendar('The calendar default alt'),
+        defaultImage,
+      });
+
+      expect(wrapper.findComponent(EventImage).props('alt'))
+        .toBe('A band playing on an outdoor stage');
+      wrapper.unmount();
+    });
+
+    it('should describe the calendar default image with the calendar alt text', async () => {
+      const event = makeEvent({ name: 'Summer Concert', media: null, repostStatus: 'none' });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', {
+        calendar: makeCalendar('A crowd in the town square'),
+        defaultImage,
+      });
+
+      expect(wrapper.findComponent(EventImage).props('alt'))
+        .toBe('A crowd in the town square');
+      wrapper.unmount();
+    });
+
+    it('should not use the calendar alt text for a repost that shows no default image', async () => {
+      // The card withholds the local calendar's default image from reposts, so
+      // the calendar's alt would describe an image that is not on screen.
+      const event = makeEvent({ name: 'Summer Concert', media: null, repostStatus: 'manual' });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', {
+        calendar: makeCalendar('A crowd in the town square'),
+        defaultImage,
+      });
+
+      expect(wrapper.findComponent(EventImage).props('alt')).toBe('');
+      wrapper.unmount();
+    });
+
+    it('should render decorative alt when the event image has no alt text', async () => {
+      const event = makeEvent({ name: 'Summer Concert', media: { id: 'media-1' }, imageAlt: '' });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', {
+        calendar: makeCalendar('The calendar default alt'),
+      });
+
+      const alt = wrapper.findComponent(EventImage).props('alt');
+      expect(alt).toBe('');
+      expect(alt).not.toBe('Summer Concert');
+      wrapper.unmount();
+    });
+
+    it('should render decorative alt when no calendar is supplied', async () => {
+      const event = makeEvent({ name: 'Summer Concert', media: null, repostStatus: 'none' });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
+
+      expect(wrapper.findComponent(EventImage).props('alt')).toBe('');
       wrapper.unmount();
     });
   });

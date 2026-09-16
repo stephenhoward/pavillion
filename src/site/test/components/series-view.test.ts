@@ -37,7 +37,7 @@ vi.mock('@/site/components/not-found.vue', () => ({
 }));
 
 vi.mock('@/site/components/event-image.vue', () => ({
-  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'focalPointX', 'focalPointY', 'zoom'] },
+  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'alt', 'focalPointX', 'focalPointY', 'zoom'] },
 }));
 
 // Mutable mock data
@@ -71,6 +71,9 @@ vi.mock('@/site/service/calendar', () => {
 // Subject under test
 // ---------------------------------------------------------------------------
 import SeriesView from '@/site/components/series-view.vue';
+// Resolves to the stub declared above; imported so alt can be asserted as the
+// prop the view passes rather than as rendered markup the stub never emits.
+import EventImage from '@/site/components/event-image.vue';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,16 +142,21 @@ function makeCalendar(urlName: string, name: string) {
   };
 }
 
-function makeSeries(urlName: string, name: string, description: string = '') {
+function makeSeries(
+  urlName: string,
+  name: string,
+  description: string = '',
+  opts: { mediaId?: string | null; imageAlt?: string } = {},
+) {
   return {
     id: `series-${urlName}`,
     urlName,
     calendarId: 'cal-id',
-    mediaId: null,
+    mediaId: opts.mediaId ?? null,
     mediaFocalPointX: 0.5,
     mediaFocalPointY: 0.5,
     mediaZoom: 1.0,
-    content: (_lang: string) => ({ name, description }),
+    content: (_lang: string) => ({ name, description, imageAlt: opts.imageAlt ?? '' }),
     hasContent: (_lang: string) => true,
     getLanguages: () => ['en'],
   };
@@ -240,6 +248,40 @@ describe('SeriesView', () => {
       const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
 
       expect(document.title).toBe('Yoga Classes | Pavillion');
+      wrapper.unmount();
+    });
+  });
+
+  describe('series image alt text', () => {
+    it('describes the series image with the series alt text', async () => {
+      mockSeriesResult = {
+        series: makeSeries('yoga-classes', 'Yoga Classes', '', {
+          mediaId: 'media-1',
+          imageAlt: 'A mat unrolled in a sunlit studio',
+        }),
+        events: [],
+        pagination: { total: 0, limit: 20, offset: 0 },
+      };
+
+      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+
+      expect(wrapper.findComponent(EventImage).props('alt'))
+        .toBe('A mat unrolled in a sunlit studio');
+      wrapper.unmount();
+    });
+
+    it('renders a decorative series image when the series has no alt text', async () => {
+      mockSeriesResult = {
+        series: makeSeries('yoga-classes', 'Yoga Classes', '', { mediaId: 'media-1' }),
+        events: [],
+        pagination: { total: 0, limit: 20, offset: 0 },
+      };
+
+      const wrapper = await mountSeriesView('/view/test_calendar/series/yoga-classes');
+
+      const alt = wrapper.findComponent(EventImage).props('alt');
+      expect(alt).toBe('');
+      expect(alt).not.toBe('Yoga Classes');
       wrapper.unmount();
     });
   });

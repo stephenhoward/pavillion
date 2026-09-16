@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useTranslation('system');
-const { localizedContent, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
+const { localizedContent, localizedField, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
 
 /**
  * Returns true when start and end fall on the same calendar day.
@@ -158,7 +158,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
     <EventImage
       :media="instance.event.media"
       context="feature"
-      :alt="localizedContent(instance.event).name"
+      :alt="localizedField(instance.event, 'imageAlt')"
       :focal-point-x="instance.event.mediaFocalPointX"
       :focal-point-y="instance.event.mediaFocalPointY"
       :zoom="instance.event.mediaZoom"

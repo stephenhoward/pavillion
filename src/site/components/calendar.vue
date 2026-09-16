@@ -173,6 +173,7 @@ onBeforeMount(async () => {
               <EventCard
                 :instance="instance"
                 :calendar-url-name="calendarUrlName"
+                :calendar="publicCalendarStore.currentCalendar"
                 :default-image="defaultEventImage"
               />
             </li>

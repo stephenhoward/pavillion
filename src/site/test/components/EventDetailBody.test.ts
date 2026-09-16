@@ -60,6 +60,9 @@ vi.mock('@/site/components/add-to-calendar.vue', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
+// Resolves to the stub declared above; imported so alt can be asserted as the
+// prop the body passes rather than as rendered markup the stub never emits.
+import EventImage from '@/site/components/event-image.vue';
 
 // ---------------------------------------------------------------------------
 // Fixture builders
@@ -77,6 +80,7 @@ interface InstanceOverrides {
   isCancelled?: boolean;
   end?: any;
   accessibilityInfo?: string;
+  imageAlt?: string;
 }
 
 /**
@@ -152,6 +156,7 @@ function makeInstance(overrides: InstanceOverrides = {}): any {
         name: 'Test Event',
         description: 'A description of the event.',
         accessibilityInfo: overrides.accessibilityInfo ?? '',
+        imageAlt: overrides.imageAlt ?? '',
       }),
       hasContent: (_lang: string) => true,
       getLanguages: () => ['en'],
@@ -252,6 +257,28 @@ describe('EventDetailBody', () => {
       });
       expect(wrapper.find('.hero-image-wrapper').exists()).toBe(true);
       expect(wrapper.find('.event-image-stub').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('describes the hero image with the event alt text', () => {
+      const wrapper = mountBody({
+        instance: makeInstance({
+          media: { id: 'media-1', url: 'image.jpg' },
+          imageAlt: 'A band playing on an outdoor stage',
+        }),
+      });
+      expect(wrapper.findComponent(EventImage).props('alt'))
+        .toBe('A band playing on an outdoor stage');
+      wrapper.unmount();
+    });
+
+    it('renders a decorative hero image when the event has no alt text', () => {
+      const wrapper = mountBody({
+        instance: makeInstance({ media: { id: 'media-1', url: 'image.jpg' } }),
+      });
+      const alt = wrapper.findComponent(EventImage).props('alt');
+      expect(alt).toBe('');
+      expect(alt).not.toBe('Test Event');
       wrapper.unmount();
     });
 
