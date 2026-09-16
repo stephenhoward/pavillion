@@ -119,6 +119,7 @@ class CalendarContent extends Model implements TranslatedContentModel {
   language: string = 'en';
   name: string = '';
   description: string = '';
+  imageAlt: string = '';
 
   /**
    * Creates new content for a calendar in a specific language.
@@ -126,11 +127,13 @@ class CalendarContent extends Model implements TranslatedContentModel {
    * @param {string} language - The language code for this content
    * @param {string} [name] - Optional name/title of the calendar
    * @param {string} [description] - Optional description of the calendar
+   * @param {string} [imageAlt] - Optional alt text for the calendar's default event image
    */
-  constructor( language: string, name?: string, description?: string) {
+  constructor( language: string, name?: string, description?: string, imageAlt?: string) {
     super();
     this.name = name ?? '';
     this.description = description ?? '';
+    this.imageAlt = imageAlt ?? '';
     this.language = language;
   }
 
@@ -141,7 +144,7 @@ class CalendarContent extends Model implements TranslatedContentModel {
    * @returns {CalendarContent} A new CalendarContent instance
    */
   static fromObject(obj: Record<string, any>): CalendarContent {
-    return new CalendarContent(obj.language, obj.name, obj.description);
+    return new CalendarContent(obj.language, obj.name, obj.description, obj.imageAlt);
   }
 
   /**
@@ -154,16 +157,17 @@ class CalendarContent extends Model implements TranslatedContentModel {
       language: this.language,
       name: this.name,
       description: this.description,
+      imageAlt: this.imageAlt,
     };
   }
 
   /**
    * Determines if the content has any meaningful data.
    *
-   * @returns {boolean} True if both name and description are empty
+   * @returns {boolean} True if name, description, and imageAlt are all empty
    */
   isEmpty(): boolean {
-    return this.name === '' && this.description === '';
+    return this.name === '' && this.description === '' && this.imageAlt === '';
   }
 }
 

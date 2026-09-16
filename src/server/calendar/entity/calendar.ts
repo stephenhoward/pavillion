@@ -102,6 +102,14 @@ class CalendarContentEntity extends Model {
   @Column({ type: DataType.TEXT })
   declare description: string;
 
+  /**
+   * Alt text for the calendar's default event image, in this row's language.
+   * Nullable: null and empty string both mean "no alt in this language", so the
+   * model normalizes null to '' rather than carrying the distinction upward.
+   */
+  @Column({ type: DataType.TEXT })
+  declare image_alt: string | null;
+
   @BelongsTo(() => CalendarEntity)
   declare calendar: CalendarEntity;
 
@@ -109,6 +117,7 @@ class CalendarContentEntity extends Model {
     let content = new CalendarContent( this.language );
     content.name = this.name;
     content.description = this.description;
+    content.imageAlt = this.image_alt ?? '';
 
     return content;
   }
@@ -118,6 +127,7 @@ class CalendarContentEntity extends Model {
       language: content.language as string,
       name: content.name,
       description: content.description,
+      image_alt: content.imageAlt,
     });
   }
 };
