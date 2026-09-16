@@ -402,6 +402,43 @@ describe('ProcessInboxService - source_series parsing', () => {
     expect(capturedDefaults.source_series.anotherField).toBeUndefined();
   });
 
+  it('should discard a peer-supplied series imageAlt', async () => {
+    // Series alt text is author-facing only: the series write paths call the
+    // rejecting validateImageAlt, not sanitizeImageAlt, precisely because no
+    // inbound path reaches event_series_content. This test is what keeps that
+    // true — if the allow-list ever widens to carry imageAlt, a peer's value
+    // would land on a path built to reject rather than drop, and the
+    // discriminator in the epic design (is there anyone to return an error to?)
+    // would have to be revisited before it does.
+    const eventApId = `https://remote.example.com/events/${uuidv4()}`;
+    const seriesId = 'https://remote.example.com/series/with-alt';
+    const eventObject = {
+      id: eventApId,
+      type: 'Event',
+      attributedTo: calendarActorUri,
+      name: 'Test Event',
+      series: {
+        id: seriesId,
+        name: 'Known Series',
+        imageAlt: 'a'.repeat(5000),
+      },
+    };
+
+    let capturedDefaults: any = null;
+    sandbox.stub(EventObjectEntity, 'findOrCreate').callsFake(async (options: any) => {
+      capturedDefaults = options.defaults;
+      return [{ event_id: options.defaults.event_id } as any, true];
+    });
+    sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+
+    const createActivity = new CreateActivity(calendarActorUri, eventObject);
+    await inboxService['processCreateEvent'](testCalendar, createActivity);
+
+    expect(capturedDefaults).not.toBeNull();
+    expect(capturedDefaults.source_series).toEqual({ id: seriesId, name: 'Known Series' });
+    expect(capturedDefaults.source_series.imageAlt).toBeUndefined();
+  });
+
   // ─── processUpdateEvent tests ────────────────────────────────────────────────
 
   it('should update source_series on EventObjectEntity when updating an event with series', async () => {

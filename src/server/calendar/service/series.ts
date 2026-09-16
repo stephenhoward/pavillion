@@ -19,6 +19,7 @@ import {
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 
 /**
  * Service for managing event series within calendars.
@@ -67,6 +68,7 @@ class SeriesService {
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws InvalidSeriesUrlNameError if urlName format is invalid
    * @throws SeriesUrlNameAlreadyExistsError if urlName is already taken in this calendar
+   * @throws ValidationError if any language's imageAlt is invalid
    */
   async createSeries(account: Account, calendarId: string, seriesData: Record<string, any>): Promise<EventSeries> {
     // Get calendar and verify ownership/editor permissions
@@ -101,6 +103,11 @@ class SeriesService {
         throw new Error('Media not found or does not belong to this calendar');
       }
     }
+
+    // Validate every language's imageAlt before the series row or any content
+    // row is written — the per-language loop below throws, and this method
+    // holds no transaction.
+    validateContentImageAlts(seriesData.content);
 
     // Create the series entity
     const seriesEntity = EventSeriesEntity.build({
@@ -209,6 +216,7 @@ class SeriesService {
    * @throws CalendarNotFoundError if calendar doesn't exist
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws Error if urlName change is attempted
+   * @throws ValidationError if any language's imageAlt is invalid
    */
   async updateSeries(account: Account, seriesId: string, seriesData: Record<string, any>, calendarId?: string): Promise<EventSeries> {
     // Get series to verify it exists
@@ -234,6 +242,12 @@ class SeriesService {
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
+
+    // Validate every language's imageAlt before the media_id update or the
+    // first content row is written. Without this, an over-long alt text on the
+    // second language would reject the request with the first language's edit
+    // already saved.
+    validateContentImageAlts(seriesData.content);
 
     // Validate mediaId ownership if provided via MediaInterface
     if (seriesData.mediaId !== undefined) {
@@ -284,6 +298,10 @@ class SeriesService {
           if (c.description !== undefined) {
             contentEntity.description = c.description;
           }
+          // Replace, not patch: validateImageAlt maps nullish to '', so an
+          // update that omits imageAlt clears the stored one. That is what
+          // makes the editor's Decorative toggle persist.
+          contentEntity.image_alt = validateImageAlt(c.imageAlt);
           await contentEntity.save();
         }
         else {
@@ -533,6 +551,22 @@ class SeriesService {
 
   /**
    * Create series content for a specific language.
+   *
+   * This is the single funnel every series content row passes through on
+   * creation, which is where `imageAlt` is normalized. Series has no inbound
+   * federation writer — `parseSourceSeries` allow-lists a peer's series down to
+   * `{ id, name, description }` onto the event's `source_series` JSON and never
+   * reaches this table — so every caller is author-facing and the rejecting
+   * validator is the right one: there is always someone to show the error to.
+   *
+   * @param {string} seriesId - Series the content row belongs to
+   * @param {string} language - Language code for this row
+   * @param {Record<string,any>} content - Content fields for this language
+   * @returns {Promise<EventSeriesContent>} The content that was written
+   * @throws {ValidationError} When `imageAlt` is a non-string or over-long.
+   *   Callers validate the whole payload up front via
+   *   {@link validateContentImageAlts}, so by the time this runs the call is a
+   *   normalization that cannot throw for a reason the pre-pass would have caught.
    */
   private async createSeriesContent(seriesId: string, language: string, content: Record<string, any>): Promise<EventSeriesContent> {
     const contentEntity = EventSeriesContentEntity.build({
@@ -541,6 +575,7 @@ class SeriesService {
       language,
       name: content.name,
       description: content.description ?? null,
+      image_alt: validateImageAlt(content.imageAlt),
     });
     await contentEntity.save();
 

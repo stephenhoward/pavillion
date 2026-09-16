@@ -69,3 +69,42 @@ export function sanitizeImageAlt(raw: unknown): string {
   const normalized = toPlainText(raw).trim();
   return normalized.length > IMAGE_ALT_MAX_LENGTH ? '' : normalized;
 }
+
+/**
+ * Validates `imageAlt` for every language of a content payload before any of
+ * those languages has been persisted.
+ *
+ * {@link validateImageAlt} throws, and the event, series, and calendar
+ * create/update content loops each write one row per language. None of those
+ * service methods opens a transaction of its own, and the APIs call them
+ * without one, so a throw from inside a loop would leave the languages already
+ * written in place while the request 400s — half of the author's edit saved
+ * under an error message. A pre-pass keeps the rejection whole: nothing is
+ * written unless every language is acceptable.
+ *
+ * The in-loop {@link validateImageAlt} calls stay where they are; after this
+ * pass they are a normalization step that cannot throw for a reason this pass
+ * would have caught.
+ *
+ * Author-facing paths only. Inbound federation normalizes through
+ * {@link sanitizeImageAlt}, which never throws, so those paths have no
+ * partial-write problem from this cause and get no pre-pass.
+ *
+ * @param {unknown} content - The payload's `content` map, keyed by language.
+ *   Absent, non-object, and falsy per-language entries are skipped: those write
+ *   no alt text (an update deletes the row instead).
+ * @returns {void}
+ * @throws {ValidationError} From {@link validateImageAlt}, unchanged in
+ *   message and `fields` key, for the first offending language.
+ */
+export function validateContentImageAlts(content: unknown): void {
+  if (!content || typeof content !== 'object') {
+    return;
+  }
+  for (const entry of Object.values(content as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    validateImageAlt((entry as Record<string, any>).imageAlt);
+  }
+}
