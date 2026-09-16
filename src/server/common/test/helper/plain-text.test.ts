@@ -120,4 +120,45 @@ describe('toPlainText', () => {
     // is what reaches them — the helper does no escaping of its own.
     expect(toPlainText('" onmouseover="alert(1)')).toBe('" onmouseover="alert(1)');
   });
+
+  // ---------------------------------------------------------------------------
+  // Call-exactly-once contract.
+  //
+  // This helper is deliberately NOT idempotent, and these tests exist so that
+  // property is a recorded decision rather than a surprise. It decodes once and
+  // strips once, so each pass peels one layer off a double-encoded payload.
+  // Running it twice is a double-decode — the entity-smuggling vector that
+  // single-decode exists to close — and it also makes the stored value depend
+  // on how many times a write path happened to normalize.
+  //
+  // If someone "fixes" this to be idempotent, that is a security change and
+  // needs to be reasoned about, not a cleanup. These tests should fail loudly.
+  // ---------------------------------------------------------------------------
+  describe('is deliberately not idempotent', () => {
+    it('peels exactly one layer off a double-encoded payload per call', () => {
+      const doubleEncoded = '&amp;lt;b&amp;gt;bold&amp;lt;/b&amp;gt;';
+
+      const once = toPlainText(doubleEncoded);
+      expect(once).toBe('&lt;b&gt;bold&lt;/b&gt;');
+
+      // The second call decodes what the first left encoded and then strips the
+      // tag it just revealed. This is why callers must normalize exactly once.
+      expect(toPlainText(once)).toBe('bold');
+      expect(toPlainText(once)).not.toBe(once);
+    });
+
+    it('turns a double-encoded script tag into a live-looking one on a second pass', () => {
+      const once = toPlainText('&amp;lt;script&amp;gt;x&amp;lt;/script&amp;gt;');
+      expect(once).toBe('&lt;script&gt;x&lt;/script&gt;');
+      expect(toPlainText(once)).toBe('x');
+    });
+
+    it('is stable for input that was never encoded', () => {
+      // The hazard is specific to encoded input; ordinary text is unaffected,
+      // which is why a stray second call is easy to miss in review.
+      for (const value of ['plain text', 'a dog on a beach', '&lt;b&gt;once&lt;/b&gt;']) {
+        expect(toPlainText(toPlainText(value))).toBe(toPlainText(value));
+      }
+    });
+  });
 });

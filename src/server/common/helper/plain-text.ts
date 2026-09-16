@@ -68,6 +68,18 @@ const LINE_BREAK_RUN_RE = /[\t\n]+/g;
  * Ordinary spaces are left as they are: this normalizes away what cannot be
  * seen, not the author's spacing. Callers decide about trimming and length.
  *
+ * **Call this exactly once on any given value — it is deliberately not
+ * idempotent, and a second pass is a security regression, not a no-op.**
+ * Step 2 decodes once and step 3 strips once, so a double-encoded payload
+ * gives up one layer per pass: `&amp;lt;b&amp;gt;bold&amp;lt;/b&amp;gt;`
+ * becomes `&lt;b&gt;bold&lt;/b&gt;` after one call and `bold` after two.
+ * Running it twice is therefore a double-decode, which is the entity-smuggling
+ * vector single-decode exists to close, and it also makes the stored value
+ * depend on how many times the write path happened to normalize. Every write
+ * path today calls it exactly once, via `validateImageAlt`/`sanitizeImageAlt`
+ * or `sanitize`; a caller that already holds normalized text must not
+ * re-normalize it "to be safe".
+ *
  * This is defense-in-depth, never the only defense: escaping at the sink is
  * still the caller's obligation.
  *
