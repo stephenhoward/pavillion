@@ -2,10 +2,10 @@ import { defineStore } from 'pinia';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { getDefaultDateRange } from '@/common/utils/datePresets';
-import { Calendar } from '@/common/model/calendar';
-import type { DefaultDateRange } from '@/common/model/calendar';
+import type { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import type { Media } from '@/common/model/media';
 import ModelService from '@/client/service/models';
+import CalendarService from '@/site/service/calendar';
 
 export interface PublicCalendarState {
   // Calendar data
@@ -16,11 +16,17 @@ export interface PublicCalendarState {
    * default event image's alt text, and that resolution is per-visitor-locale,
    * so it cannot be flattened to a string at load time. Both the site and the
    * widget read the default image from this store and so both need the model.
+   *
+   * It is hydrated from the PUBLIC projection, so only `id`, `urlName`,
+   * `publicUrl`, `description`, `languages`, `defaultDateRange`,
+   * `defaultEventImage` and `content` carry real values. Every other field is a
+   * fabricated default — notably `listed`, which the "absent means true"
+   * back-compat rule in `src/common/model/calendar.ts` invents as `true`. It
+   * type-checks and it is wrong; do not read it here.
    */
   currentCalendar: Calendar | null;
   serverDefaultDateRange: DefaultDateRange;
   calendarDefaultDateRange: DefaultDateRange;
-  defaultEventImage: Media | null;
   isCalendarSettingsLoaded: boolean;
 
   // Category filtering
@@ -67,7 +73,6 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     currentCalendar: null,
     serverDefaultDateRange: '2weeks',
     calendarDefaultDateRange: '2weeks',
-    defaultEventImage: null,
     isCalendarSettingsLoaded: false,
     availableCategories: [],
     selectedCategoryIds: [],
@@ -86,6 +91,20 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
   }),
 
   getters: {
+    /**
+     * The calendar's default event image, read off the loaded calendar rather
+     * than stored beside it. Holding it separately meant one value lived in the
+     * store twice in two shapes — the raw public projection alongside the
+     * hydrated `Media` on `currentCalendar` — and the raw copy was typed as a
+     * `Media` it was not. Reading through the model keeps a single
+     * representation, and keeps the image and its alt text (resolved from the
+     * same calendar's translated content) from ever describing each other
+     * wrongly.
+     */
+    defaultEventImage(): Media | null {
+      return this.currentCalendar?.defaultEventImage ?? null;
+    },
+
     /**
      * Get events filtered by selected categories
      */
@@ -208,38 +227,35 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Load calendar data to get settings like defaultDateRange and defaultEventImage
+     * Load the calendar whose settings drive the public views (defaultDateRange,
+     * defaultEventImage) and retain it hydrated on `currentCalendar`, because its
+     * translated content carries the default event image's alt text and that has
+     * to be resolved per visitor locale at render time.
      *
-     * The hydrated Calendar is retained on `currentCalendar` as well, because
-     * its translated content carries the default event image's alt text and
-     * that has to be resolved per visitor locale at render time.
+     * The fetch and the hydration both go through CalendarService so the model
+     * layer has exactly one place that turns this endpoint's payload into a
+     * Calendar. The service caches by urlName, and both callers
+     * (`src/site/components/calendar.vue`, `src/widget/components/widget-container.vue`)
+     * have already asked it for this calendar before reaching here — so this is
+     * normally a cache read, not a second request, and `currentCalendar` is the
+     * very instance the page is already rendering from rather than an
+     * independent copy of it that could drift.
      */
     async loadCalendar(calendarUrlName: string) {
       try {
-        const calendarData = await ModelService.getModel(
-          `/api/public/v1/calendar/${calendarUrlName}`,
-        );
+        const calendarService = new CalendarService();
+        const calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
 
-        this.currentCalendar = calendarData ? Calendar.fromObject(calendarData) : null;
+        this.currentCalendar = calendar;
 
-        if (calendarData && calendarData.defaultDateRange) {
-          // Use the calendar's specific setting
-          this.calendarDefaultDateRange = calendarData.defaultDateRange;
-        }
-        else {
-          // Fall back to the server-level default
-          this.calendarDefaultDateRange = this.serverDefaultDateRange;
-        }
-
-        // Extract the default event image (public API returns { id, mimeType } or null)
-        this.defaultEventImage = calendarData?.defaultEventImage ?? null;
+        // Use the calendar's own setting when it has one, else the server-level default
+        this.calendarDefaultDateRange = calendar?.defaultDateRange ?? this.serverDefaultDateRange;
       }
       catch (error) {
         console.error('Error loading calendar:', error);
         // Fall back to server default if we can't load the calendar
         this.calendarDefaultDateRange = this.serverDefaultDateRange;
         this.currentCalendar = null;
-        this.defaultEventImage = null;
       }
       finally {
         this.isCalendarSettingsLoaded = true;
@@ -422,8 +438,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     clearAll() {
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
+      // Nulls the default event image too — it is a getter over this calendar.
       this.currentCalendar = null;
-      this.defaultEventImage = null;
       this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];
       this.selectedCategoryIds = [];
