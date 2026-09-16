@@ -18,6 +18,7 @@ export interface CalendarActor {
   remoteDomain: string | null;
   inboxUrl: string | null;
   sharedInboxUrl: string | null;
+  pageUrl: string | null;
   lastFetched: Date | null;
   publicKey: string | null;
   privateKey: string | null;
@@ -111,6 +112,29 @@ class CalendarActorEntity extends Model {
   declare shared_inbox_url: string | null;
 
   /**
+   * The public page URL the remote peer declares in its actor document's `url`
+   * property — where a human goes to see that calendar on the peer's site.
+   * Null when the peer declared nothing usable, or when the row was created by
+   * an inbound activity that never fetched the actor document; the display path
+   * then falls back to guessing the peer's route shape.
+   *
+   * Written **once, at follow time**, and never refreshed: `followCalendar` is
+   * the only path that fetches a peer's actor document, and no job re-reads it
+   * (`isMetadataStale` has no caller outside `remote_calendar.ts`). A row that
+   * starts NULL stays NULL until that peer is followed.
+   *
+   * Populated only through `sanitizePeerPageUrl`, which allowlists the scheme,
+   * rejects userinfo and pins the host to the actor URI's — this value becomes
+   * an anchor href on anonymous public pages.
+   *
+   * A **display snapshot** in the DEC-015 sense, never a policy surface: its
+   * staleness is tolerable and nothing may gate authorization, trust, or
+   * routing on it.
+   */
+  @Column({ type: DataType.STRING(2048), allowNull: true })
+  declare page_url: string | null;
+
+  /**
    * When the remote calendar's metadata was last fetched.
    * Used for cache invalidation.
    */
@@ -156,6 +180,7 @@ class CalendarActorEntity extends Model {
       remoteDomain: this.remote_domain ?? null,
       inboxUrl: this.inbox_url ?? null,
       sharedInboxUrl: this.shared_inbox_url ?? null,
+      pageUrl: this.page_url ?? null,
       lastFetched: this.last_fetched ?? null,
       publicKey: this.public_key ?? null,
       privateKey: this.private_key ?? null,
@@ -178,6 +203,7 @@ class CalendarActorEntity extends Model {
       remote_domain: calendarActor.remoteDomain,
       inbox_url: calendarActor.inboxUrl,
       shared_inbox_url: calendarActor.sharedInboxUrl,
+      page_url: calendarActor.pageUrl,
       last_fetched: calendarActor.lastFetched,
       public_key: calendarActor.publicKey,
       private_key: calendarActor.privateKey,

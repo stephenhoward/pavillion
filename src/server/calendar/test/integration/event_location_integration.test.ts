@@ -457,7 +457,7 @@ describe('EventInstanceService - Space eager-loading on listing endpoints', () =
     calendarInterface = new CalendarInterface(eventBus);
     calendarInterface.setActivityPubInterface({
       getSharedEventStatusMap: async () => new Map(),
-      getEventSourceActorUris: async () => new Map<string, string>(),
+      getEventSourceActors: async () => new Map<string, string>(),
       findCalendarActorByCalendarId: async () => null,
     } as any);
 

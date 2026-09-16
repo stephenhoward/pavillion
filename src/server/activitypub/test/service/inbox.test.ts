@@ -1684,6 +1684,7 @@ describe('Relationship-Based Inbox Filtering', () => {
     remoteDomain: 'remote.federation.test',
     inboxUrl: null,
     sharedInboxUrl: null,
+    pageUrl: null,
     lastFetched: null,
     publicKey: null,
     privateKey: null,

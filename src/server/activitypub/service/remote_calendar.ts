@@ -103,6 +103,7 @@ export default class RemoteCalendarService {
       displayName?: string | null;
       inboxUrl?: string | null;
       sharedInboxUrl?: string | null;
+      pageUrl?: string | null;
       publicKey?: string | null;
     },
   ): Promise<CalendarActor | null> {
@@ -126,6 +127,9 @@ export default class RemoteCalendarService {
     }
     if (metadata.sharedInboxUrl !== undefined) {
       entity.shared_inbox_url = metadata.sharedInboxUrl;
+    }
+    if (metadata.pageUrl !== undefined) {
+      entity.page_url = metadata.pageUrl;
     }
     if (metadata.publicKey !== undefined) {
       entity.public_key = metadata.publicKey;
@@ -152,6 +156,7 @@ export default class RemoteCalendarService {
       displayName?: string | null;
       inboxUrl?: string | null;
       sharedInboxUrl?: string | null;
+      pageUrl?: string | null;
       publicKey?: string | null;
     },
   ): Promise<CalendarActor | null> {
@@ -175,6 +180,9 @@ export default class RemoteCalendarService {
     }
     if (metadata.sharedInboxUrl !== undefined) {
       entity.shared_inbox_url = metadata.sharedInboxUrl;
+    }
+    if (metadata.pageUrl !== undefined) {
+      entity.page_url = metadata.pageUrl;
     }
     if (metadata.publicKey !== undefined) {
       entity.public_key = metadata.publicKey;

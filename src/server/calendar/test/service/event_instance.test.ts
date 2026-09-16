@@ -1383,7 +1383,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     // getEventInstanceWithDetails tests elsewhere; here we want to exercise
     // only the find-or-materialize branching logic.
     sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
-    sandbox.stub(service as any, 'fetchRemoteActorUriMap').resolves(new Map());
+    sandbox.stub(service as any, 'fetchRemoteSourceActorMap').resolves(new Map());
   });
 
   afterEach(() => {

@@ -7,7 +7,7 @@ import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import {
   InvalidRemoteCalendarIdentifierError,
   AlreadyFollowingError,
@@ -19,20 +19,44 @@ import { SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/e
 import db from '@/server/common/entity/db';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
-// Mock CalendarActor model for testing (remote type)
+const MOCK_CALENDAR_ACTOR_ID = 'mock-calendar-actor-uuid';
+const MOCK_CALENDAR_ACTOR_URI = 'https://testdomain.com/calendars/testcalendar';
+
+// Mock CalendarActorEntity row for stubs that stand in for the Sequelize entity.
 // Note: Uses snake_case property names to match database entity schema
 const mockRemoteCalendar = {
-  id: 'mock-calendar-actor-uuid',
+  id: MOCK_CALENDAR_ACTOR_ID,
   actor_type: 'remote',
   calendar_id: null,
-  actor_uri: 'https://testdomain.com/calendars/testcalendar',
+  actor_uri: MOCK_CALENDAR_ACTOR_URI,
   remote_display_name: null,
   remote_domain: 'testdomain.com',
   inbox_url: null,
   shared_inbox_url: null,
+  page_url: null,
   public_key: null,
   private_key: null,
   last_fetched: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+// Mock CalendarActor model (remote type) for stubs typed against the domain
+// model rather than the entity — RemoteCalendarService returns this shape.
+const mockRemoteCalendarActor: CalendarActor = {
+  id: MOCK_CALENDAR_ACTOR_ID,
+  actorType: 'remote',
+  calendarId: null,
+  remoteCalendarId: null,
+  actorUri: MOCK_CALENDAR_ACTOR_URI,
+  remoteDisplayName: null,
+  remoteDomain: 'testdomain.com',
+  inboxUrl: null,
+  sharedInboxUrl: null,
+  pageUrl: null,
+  lastFetched: null,
+  publicKey: null,
+  privateKey: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -73,10 +97,10 @@ describe("followCalendar", () => {
 
     // Mock RemoteCalendarService methods
     let findOrCreateStub = sandbox.stub(service.remoteCalendarService, 'findOrCreateByActorUri');
-    findOrCreateStub.resolves(mockRemoteCalendar);
+    findOrCreateStub.resolves(mockRemoteCalendarActor);
 
     let updateMetadataStub = sandbox.stub(service.remoteCalendarService, 'updateMetadata');
-    updateMetadataStub.resolves(mockRemoteCalendar);
+    updateMetadataStub.resolves(mockRemoteCalendarActor);
 
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
     getExistingFollowStub.resolves(null);
@@ -131,10 +155,10 @@ describe("followCalendar", () => {
 
     // Mock RemoteCalendarService methods
     let findOrCreateStub = sandbox.stub(service.remoteCalendarService, 'findOrCreateByActorUri');
-    findOrCreateStub.resolves(mockRemoteCalendar);
+    findOrCreateStub.resolves(mockRemoteCalendarActor);
 
     let updateMetadataStub = sandbox.stub(service.remoteCalendarService, 'updateMetadata');
-    updateMetadataStub.resolves(mockRemoteCalendar);
+    updateMetadataStub.resolves(mockRemoteCalendarActor);
 
     // Simulate an existing follow record
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
