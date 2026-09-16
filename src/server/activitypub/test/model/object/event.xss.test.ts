@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
+import { CalendarEventContent } from '@/common/model/events';
 import { EventObject } from '@/server/activitypub/model/object/event';
 
 /**
@@ -365,6 +366,55 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
       });
       expect(r.content.en.imageAlt).toBe('A crowd');
       expect(r.content.en.evil).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Structural tripwire for the allow-list.
+  //
+  // The allow-list is a silent, direction-asymmetric coupling: adding a field
+  // to CalendarEventContent (in `src/common`) requires a deliberate edit in the
+  // ActivityPub domain, and forgetting that edit fails INVISIBLY — the new
+  // field simply never arrives from a peer, with no error anywhere. That is not
+  // hypothetical; it is exactly what happened to `imageAlt`, which was added to
+  // the model in an earlier bead and reached the wire unhandled.
+  //
+  // The assertions above catch the allow-list being widened back into a spread.
+  // This one catches the opposite direction: a new content field on the model
+  // that nobody added to the allow-list.
+  // ---------------------------------------------------------------------------
+  describe('content allow-list tracks the CalendarEventContent model', () => {
+    it('names every key CalendarEventContent.toObject emits, except language', () => {
+      // ALLOWED_CONTENT_KEYS is module-private, so read it the way a peer
+      // experiences it: the key set the sanitizer emits for a content entry.
+      const allowList = Object.keys(
+        EventObject.parseInboundEvent({
+          'pavillion:content': { en: { name: 'Festival' } },
+        }).content.en,
+      ).sort();
+
+      // `language` is the one deliberate exclusion: an entry's language is the
+      // key it is filed under, and the calendar service overwrites any
+      // wire-supplied value with that key.
+      const emittedContentKeys = Object.keys(new CalendarEventContent('en').toObject())
+        .filter((key) => key !== 'language')
+        .sort();
+
+      // `title` needs no exception here, and is not excused into one. It is not
+      // a declared CalendarEventContent field, but toObject() emits it
+      // alongside `name` as the wire alias that fromObject reads back
+      // (`obj.name || obj.title`). It is genuinely part of the emitted key set,
+      // so it belongs in the allow-list on its own terms and the comparison
+      // below is exact rather than fudged.
+      expect(emittedContentKeys).toContain('title');
+
+      expect(
+        allowList,
+        'CalendarEventContent.toObject() emits a key the inbound federation '
+        + 'sanitizer does not name. Add the key to ALLOWED_CONTENT_KEYS in '
+        + 'src/server/activitypub/model/object/event.ts, or a peer can never '
+        + 'send this field.',
+      ).toEqual(emittedContentKeys);
     });
   });
 });

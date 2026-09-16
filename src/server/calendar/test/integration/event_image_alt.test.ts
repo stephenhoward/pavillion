@@ -271,5 +271,29 @@ describe('Event content imageAlt — write paths (integration)', () => {
       expect(fetched.content('en').name).toBe('Remote Event Renamed');
       expect(fetched.content('en').imageAlt).toBe('');
     });
+
+    it('drops an over-long imageAlt on a language the peer update adds for the first time', async () => {
+      // The update loop has two arms, and the tests above only reach the one
+      // that finds an existing row. A peer adding a translation takes the other
+      // arm, which writes through createEventContent({ untrusted: true }) — a
+      // different call site with the same obligation: normalize, never reject.
+      const event = await calendarInterface.addRemoteEvent(testCalendar, {
+        id: remoteEventId(7),
+        content: { en: { name: 'Remote Event', imageAlt: 'Original remote alt' } },
+      });
+
+      await calendarInterface.updateRemoteEvent(testCalendar, {
+        id: event.id,
+        content: {
+          en: { name: 'Remote Event', imageAlt: 'Original remote alt' },
+          fr: { name: 'Événement distant', imageAlt: 'a'.repeat(IMAGE_ALT_MAX_LENGTH + 1) },
+        },
+      });
+
+      const fetched = await calendarInterface.getEventById(event.id);
+      expect(fetched.content('fr').name).toBe('Événement distant');
+      expect(fetched.content('fr').imageAlt).toBe('');
+      expect(fetched.content('en').imageAlt).toBe('Original remote alt');
+    });
   });
 });

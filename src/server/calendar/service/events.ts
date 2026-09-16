@@ -889,13 +889,24 @@ class EventService {
    * - `untrusted` writes normalize it away instead. A peer's over-long or
    *   non-string alt text must not cost us the whole inbound event.
    *
+   * What `untrusted` actually discriminates is **recourse, not provenance**:
+   * is there anyone to return an error to? Remote-in-provenance is not the
+   * test. A user-initiated ingest (ICS import, hosted-provider OAuth sync)
+   * pulls remote data but has a user standing in front of it, so it takes the
+   * strict default and reports the rejection rather than silently discarding
+   * the value. Pass `true` only when a rejection would have nowhere to go.
+   *
+   * Scope: the flag currently governs `imageAlt` and nothing else. `name`,
+   * `description` and `accessibilityInfo` on the same call get nothing from it.
+   *
    * @param {string} eventId - Event the content row belongs to
    * @param {string} language - Language code for this row
    * @param {Record<string,any>} contentParams - Content fields for this language
    * @param {Transaction} [tx] - Enclosing transaction, if any
    * @param {object} [options] - Write options
-   * @param {boolean} [options.untrusted] - True when contentParams came from a
-   *   federated payload rather than from the content's author
+   * @param {boolean} [options.untrusted] - True when there is no caller to
+   *   return a validation error to, so invalid `imageAlt` must be normalized
+   *   away rather than rejected
    * @returns {Promise<CalendarEventContent>} The content that was written
    */
   async createEventContent(eventId: string, language: string, contentParams: Record<string,any>, tx?: Transaction, options: { untrusted?: boolean } = {}): Promise<CalendarEventContent> {
