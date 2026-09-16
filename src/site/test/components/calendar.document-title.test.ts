@@ -94,7 +94,7 @@ import Calendar from '@/site/components/calendar.vue';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/view/:calendar',
+    path: '/:calendar',
     component: Calendar,
     name: 'calendar',
   },
@@ -143,7 +143,7 @@ describe('calendar.vue document.title', () => {
   it('should set document.title to "Calendar Name | Pavillion" after loading calendar data', async () => {
     mockCalendarName = 'Downtown Events';
 
-    const wrapper = await mountCalendar('/view/test_calendar');
+    const wrapper = await mountCalendar('/test_calendar');
 
     expect(document.title).toBe('Downtown Events | Pavillion');
     wrapper.unmount();
@@ -152,7 +152,7 @@ describe('calendar.vue document.title', () => {
   it('should set document.title using the localized calendar name', async () => {
     mockCalendarName = 'Test Calendar';
 
-    const wrapper = await mountCalendar('/view/test_calendar');
+    const wrapper = await mountCalendar('/test_calendar');
 
     expect(document.title).toBe('Test Calendar | Pavillion');
     wrapper.unmount();

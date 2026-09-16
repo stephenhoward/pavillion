@@ -8,6 +8,7 @@ import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
 import { useLocale } from '@/site/composables/useLocale';
+import { calendarPath, eventPath } from '@/common/routing/public-paths';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -141,7 +142,7 @@ onBeforeMount(async () => {
     >
       <p class="breadcrumb">
         <a
-          :href="localizedPath('/view/' + state.calendar.urlName)"
+          :href="localizedPath(calendarPath(state.calendar.urlName))"
           class="back-link"
         >
           <span
@@ -200,7 +201,7 @@ onBeforeMount(async () => {
             class="series-event-item"
           >
             <a
-              :href="localizedPath('/view/' + state.calendar.urlName + '/events/' + event.id)"
+              :href="localizedPath(eventPath(state.calendar.urlName, event.id))"
               class="series-event-link"
             >
               {{ localizedContent(event).name }}

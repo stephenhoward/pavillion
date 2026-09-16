@@ -566,12 +566,12 @@ describe('EventDetailBody', () => {
       const cats = [makeCategory('cat-1', 'Music')];
       const wrapper = mountBody({
         instance: makeInstance({ categories: cats }),
-        categoryHrefBuilder: (cat) => `/view/test_calendar?category=${cat.id}`,
+        categoryHrefBuilder: (cat) => `/test_calendar?category=${cat.id}`,
       });
       const badge = wrapper.find('.event-category-badge');
       expect(badge.exists()).toBe(true);
       expect(badge.element.tagName).toBe('A');
-      expect(badge.attributes('href')).toBe('/view/test_calendar?category=cat-1');
+      expect(badge.attributes('href')).toBe('/test_calendar?category=cat-1');
       wrapper.unmount();
     });
 

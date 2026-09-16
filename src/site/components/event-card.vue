@@ -7,6 +7,7 @@ import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
+import { eventPath } from '@/common/routing/public-paths';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import type { Media } from '@/common/model/media';
 
@@ -113,9 +114,9 @@ const media = computed(() => {
  *
  * When `detailHref` is provided (e.g. by the widget host), it is returned
  * directly and the `localizedPath`-based site URL is NOT computed. When the
- * prop is omitted, the site computes its standard `/view/...` path with a
- * minute-precision UTC timestamp slug (`yyyymmdd-hhmm`) derived from the
- * instance's start time.
+ * prop is omitted, the site computes its standard public event-occurrence path
+ * (`eventPath`) with a minute-precision UTC timestamp slug (`yyyymmdd-hhmm`)
+ * derived from the instance's start time.
  */
 const detailPath = computed(() => {
   if (props.detailHref !== undefined) {
@@ -124,7 +125,7 @@ const detailPath = computed(() => {
   const eventId = props.instance.event.id;
   const slug = formatInstanceSlug(props.instance.start);
   return localizedPath(
-    `/view/${props.calendarUrlName}/events/${eventId}/${slug}`,
+    eventPath(props.calendarUrlName, eventId, slug),
   );
 });
 </script>

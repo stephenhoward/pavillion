@@ -8,6 +8,7 @@ import CalendarService, { type PublicCalendarListing } from '../service/calendar
 import { useLocale } from '../composables/useLocale';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { calendarPath } from '@/common/routing/public-paths';
 
 const { t } = useTranslation('system');
 const { currentLocale, localizedPath } = useLocale();
@@ -56,10 +57,11 @@ const instanceDescription = computed<string>(() => {
  * it must match a route in the site router's table (src/site/app.ts) exactly. A
  * RouterLink navigates inside the SPA and never reaches the server, so an
  * unroutable path here renders the page chrome with no content rather than
- * following the server's redirect the way a plain href would.
+ * following the server's redirect the way a plain href would. The shape itself
+ * comes from the shared builder so it cannot drift from the route table.
  */
-function calendarPath(urlName: string): string {
-  return localizedPath(`/${urlName}`);
+function calendarTileHref(urlName: string): string {
+  return localizedPath(calendarPath(urlName));
 }
 
 const instanceHost = computed<string>(() => {
@@ -85,7 +87,7 @@ const displayListings = computed<DisplayListing[]>(() => {
     const content = localizedContent(listing.calendar);
     return {
       listing,
-      href: calendarPath(listing.calendar.urlName),
+      href: calendarTileHref(listing.calendar.urlName),
       name: content?.name || listing.calendar.urlName,
       description: content?.description || '',
       handle: host ? `${listing.calendar.urlName}@${host}` : '',

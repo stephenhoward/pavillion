@@ -41,7 +41,7 @@ export default class CalendarService {
 
 
   /**
-   * List public discoverable calendars for the /view/ landing page.
+   * List public discoverable calendars for the /discover landing page.
    *
    * Calls GET /api/public/v1/calendars, which returns a bare array of
    * { id, urlName, content[], lastEventActivity } rows sorted by
