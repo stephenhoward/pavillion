@@ -39,6 +39,27 @@ describe('public path builders', () => {
       expect(calendarPath('a/../admin')).toBe('/a%2F..%2Fadmin');
       expect(calendarPath('cal?x=1')).toBe('/cal%3Fx%3D1');
     });
+
+    // Pins the escape properties the module doc rests on, not just the output
+    // shape — a regression from encodeURIComponent to encodeURI would still
+    // produce a leading '/' and would still pass every other test above.
+    it('never emits a scheme-relative authority, because "/" is always encoded', () => {
+      const path = calendarPath('//evil.com');
+
+      expect(path).toBe('/%2F%2Fevil.com');
+      expect(path.startsWith('//')).toBe(false);
+    });
+
+    it('encodes a leading backslash, so a WHATWG relative-slash-state parser cannot read it as an authority separator', () => {
+      // app_routes.ts documents a percent-decoding reverse proxy as a reachable
+      // topology, so an input that is a literal backslash here is not a
+      // hypothetical — see toSameOriginPath and its doc comment there.
+      expect(calendarPath('\\evil.com')).toBe('/%5Cevil.com');
+    });
+
+    it('leaves ".." unencoded, because the safety argument rests on "/" being encoded, not on the dots', () => {
+      expect(calendarPath('..')).toBe('/..');
+    });
   });
 
   describe('eventPath', () => {
@@ -57,6 +78,10 @@ describe('public path builders', () => {
 
     it('percent-encodes every dynamic segment', () => {
       expect(eventPath('my cal', 'a/b', 'x y')).toBe('/my%20cal/events/a%2Fb/x%20y');
+    });
+
+    it('cannot reach a sibling calendar through a dotted event id, because ".." has no "/" to traverse with', () => {
+      expect(eventPath('cal', '..')).toBe('/cal/events/..');
     });
   });
 
