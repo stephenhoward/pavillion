@@ -24,6 +24,12 @@ export function useLocalizedContent() {
    * 2. Default language (English)
    * 3. First available language on the model
    *
+   * Each step asks `hasContent`, which selects a row on the fields read off a
+   * selected row and not on "does this row hold anything at all" — a language
+   * whose row carries only alt text is skipped here rather than chosen and
+   * rendered blank. See {@link TranslatedContentModel.hasDisplayContent}; the
+   * alt text itself is resolved by {@link localizedField}.
+   *
    * @param model - A TranslatedModel instance (Calendar, CalendarEvent, EventCategory, etc.)
    * @returns The translated content in the best available language
    */

@@ -4,8 +4,18 @@
  * "Decorative" is not a stored flag — it is the absence of alt text — so both
  * the editor's mode switch and each parent's image-removal path have to express
  * it by writing the model. They live together here because they are two halves
- * of one definition: `anyLanguageHasAlt` is what "described" means in storage,
- * and `clearImageAlt` is the only way to reach the other state.
+ * of one definition: `anyLanguageHasAlt` decides which state the editor opens
+ * in, and `clearImageAlt` is the only way to reach the other state.
+ *
+ * **"Described" is derived in three places and they must agree.** This editor
+ * asks `anyLanguageHasAlt`, the public site asks `localizedField` (site
+ * composable `useLocalizedContent`), and the AS2 `altMap` loop
+ * (`src/server/activitypub/model/object/event.ts`) asks whether the value
+ * survives a trim. Whitespace is therefore not alt text anywhere: the server
+ * trims on write, so a value that only this module counted would seed the
+ * editor to Describe and come back Decorative on the next mount, and a value
+ * only the site counted would be announced to a screen reader as a description
+ * the author never wrote.
  *
  * **Decorative is model-wide.** `localizedField` (the site composable that
  * renders alt text) falls back ACROSS languages — current locale, then English,
@@ -29,14 +39,18 @@ export interface ImageAltContent extends TranslatedContentModel {
 }
 
 /**
- * Reports whether any language on a model carries alt text. This is what
- * "describe" means in storage, so it is also how the editor's mode is seeded.
+ * Reports whether any language on a model carries alt text, which is how the
+ * editor's mode is seeded.
+ *
+ * A whitespace-only value does not count, matching `localizedField` and the
+ * AS2 `altMap` loop — the other two derivations of "described" (see the module
+ * docblock).
  *
  * @param model - The model to inspect
- * @returns True when at least one language has non-empty alt text
+ * @returns True when at least one language has non-blank alt text
  */
 export function anyLanguageHasAlt(model: TranslatedModel<ImageAltContent>): boolean {
-  return model.getLanguages().some((lang) => model.content(lang).imageAlt !== '');
+  return model.getLanguages().some((lang) => model.content(lang).imageAlt.trim() !== '');
 }
 
 /**

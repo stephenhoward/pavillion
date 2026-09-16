@@ -31,6 +31,15 @@ export class EventCategoryContent extends Model implements TranslatedContentMode
   }
 
   /**
+   * The name is the whole of a category's translated content, so it is also
+   * the whole of what a consumer reads off a selected row. See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   */
+  hasDisplayContent(): boolean {
+    return this.name.length > 0;
+  }
+
+  /**
    * Convert to plain object for serialization.
    */
   toObject(): Record<string, any> {

@@ -432,6 +432,45 @@ describe('MetaTags Helper', () => {
       expect(result!.description).toBe('Un gran evento');
     });
 
+    // The render-boundary twin of content-languages.test.ts's "does not count a
+    // language carrying only alt text". resolveContentLocale picks a row and
+    // the caller reads the title and description off it, so a row carrying
+    // only alt text must not be selected -- a peer that federates
+    // `pavillion:content.fr = { imageAlt: ... }` would otherwise blank the
+    // page title and description for French crawlers and link previews.
+    it('does not resolve to a language whose row carries only alt text', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      const event = createMockEvent();
+      event.addContent(new CalendarEventContent('fr', '', '', '', 'Une salle comble'));
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'fr', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Test Event');
+      expect(result!.description).toBe('A great event');
+    });
+
+    it('does not resolve a calendar site name from an alt-only row', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      calendar.addContent(new CalendarContent('fr', '', '', 'Une banniere de lanternes'));
+      const event = createMockEvent();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'fr', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.siteName).toBe('My Calendar');
+    });
+
     it('should fall back to default locale for invalid locale strings', async () => {
       const iface = createMockInterface();
       const calendar = createMockCalendar();

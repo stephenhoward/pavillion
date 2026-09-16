@@ -65,6 +65,33 @@ interface TranslatedContentModel {
    * @returns {boolean} True if the content is empty
    */
   isEmpty(): boolean;
+
+  /**
+   * Whether this row carries something that speaks for its language — the
+   * fields a consumer reads off a row it *selected* by language.
+   *
+   * This is deliberately not `isEmpty()` inverted. `isEmpty()` answers a
+   * different question: does this row hold anything at all. That is the right
+   * question for a save path deciding whether a row is worth persisting, and
+   * the wrong one for a consumer choosing which language's row to render,
+   * because every content field added to a model widens `isEmpty()` and so
+   * silently widens any gate computed from it. `imageAlt` is the field that
+   * made that concrete: it describes an image rather than translating the
+   * page, the render boundary resolves it per field (`localizedField`) and
+   * never reads it off a selected row, so a row carrying only alt text would
+   * be selected as a locale's content and serve a blank name and description
+   * where the visitor previously fell back to English.
+   *
+   * The same reasoning produced `mappedContentLanguages` at the ActivityPub
+   * boundary (see DEC-014); this is its render-boundary twin. Implementations
+   * enumerate the fields a row consumer renders rather than delegating to
+   * `isEmpty()`, so adding a content field is a decision taken here instead of
+   * an automatic widening: a field resolved per field at the render boundary
+   * must not be listed, a field read off the selected row must.
+   *
+   * @returns {boolean} True when a field a row consumer renders is populated
+   */
+  hasDisplayContent(): boolean;
 }
 
 /**
@@ -152,14 +179,24 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
   }
 
   /**
-   * Determines if the model has non-empty content for the specified language.
+   * Determines if the model has content for the specified language that
+   * speaks for that language — a stored row carrying something a consumer
+   * reading the whole row will render.
+   *
+   * This is the row-selection predicate: every consumer that picks one
+   * language's row for display goes through it (`localizedContent` in the site
+   * and widget, `resolveContentLocale` behind the meta tags), which is why it
+   * asks {@link TranslatedContentModel.hasDisplayContent} rather than negating
+   * `isEmpty()`. A caller that wants the different question "is a row stored
+   * for this language at all" — a save path, or a test proving absence —
+   * asks `getLanguages().includes(language)`.
    *
    * @param {string} language - The language code to check
-   * @returns {boolean} True if content exists and is not empty
+   * @returns {boolean} True if a row exists and carries renderable content
    */
   hasContent(language: string): boolean {
     const content = this.ownContent(language);
-    return content !== undefined && ! content.isEmpty();
+    return content !== undefined && content.hasDisplayContent();
   }
 
   /**

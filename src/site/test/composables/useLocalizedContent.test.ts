@@ -161,6 +161,47 @@ describe('useLocalizedContent', () => {
     });
   });
 
+  describe('when the locale row carries only alt text', () => {
+    // The render-boundary twin of content-languages.test.ts's "does not count
+    // a language carrying only alt text". Alt text is resolved per field by
+    // localizedField and is never read off the selected row, so a row holding
+    // nothing else must not be selected -- doing so serves a blank name and
+    // description to that locale's visitors instead of the English fallback.
+    it('falls back to English rather than selecting the alt-only row', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+      ]);
+      cal.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedContent, localizedField } = useLocalizedContent();
+      const result = localizedContent(cal);
+
+      expect(result.language).toBe('en');
+      expect(result.name).toBe('English Name');
+      expect(result.description).toBe('Description in en');
+      // The alt text on that row is still the French visitor's alt text: the
+      // row is skipped for selection, not ignored.
+      expect(localizedField(cal, 'imageAlt')).toBe('Une salle comble');
+    });
+
+    it('selects the alt-only row only when no other language has content', () => {
+      const cal = new Calendar('cal-1', 'mycalendar');
+      cal.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedContent } = useLocalizedContent();
+
+      // With nothing to fall back to, resolution reaches the first stored
+      // language rather than fabricating a row.
+      expect(localizedContent(cal).language).toBe('fr');
+    });
+  });
+
   describe('when no content exists', () => {
     it('should return empty content for the current locale', () => {
       const cal = new Calendar('cal-1', 'mycalendar');

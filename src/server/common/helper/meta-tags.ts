@@ -204,6 +204,13 @@ function sanitizeDescription(raw: string): string {
  * to the default language code. If the model has no content for the resolved
  * locale, falls back to the first available language.
  *
+ * This is a row selector: the caller reads the name and description off the
+ * row for the locale returned here. `hasContentFn` is therefore always the
+ * model's `hasContent`, which selects on the fields a row consumer renders
+ * rather than on "does this row hold anything at all" — a language whose row
+ * carries only alt text is skipped rather than resolved to and rendered as an
+ * empty title. See `TranslatedContentModel.hasDisplayContent`.
+ *
  * @param hasContentFn - Function to check if content exists for a locale
  * @param getLanguagesFn - Function to get all available content languages
  * @param requestedLocale - The locale requested by the client

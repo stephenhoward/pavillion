@@ -183,6 +183,29 @@ describe('TranslatedModel content map hardening', () => {
     expect(calendar.hasContent('en')).toBe(false);
   });
 
+  // The render-boundary twin of content-languages.test.ts's "does not count a
+  // language carrying only alt text". hasContent is the row-selection
+  // predicate, so a row that holds nothing a row consumer renders must not be
+  // selected as that locale's content — the row is stored (getLanguages sees
+  // it) and isEmpty() still reports it as carrying something.
+  it('hasContent is false for a row carrying only alt text', () => {
+    const calendar = new Calendar('cal-1');
+    calendar.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+    expect(calendar.hasContent('fr')).toBe(false);
+    expect(calendar.getLanguages()).toContain('fr');
+    expect(calendar.content('fr').isEmpty()).toBe(false);
+  });
+
+  it('hasContent is true for a row whose only populated field is one a consumer reads', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    // Accessibility info is read off the selected row, so unlike alt text it
+    // makes the row stand for its language.
+    event.addContent(new CalendarEventContent('fr', '', '', 'Accès de plain-pied'));
+
+    expect(event.hasContent('fr')).toBe(true);
+  });
+
   it('still lazily creates and reuses a row for an ordinary language code', () => {
     const calendar = new Calendar('cal-1');
     expect(calendar.getLanguages()).toEqual([]);

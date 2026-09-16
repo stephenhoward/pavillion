@@ -400,6 +400,20 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   isEmpty(): boolean {
     return this.name === '' && this.description === '' && this.accessibilityInfo === '' && this.imageAlt === '';
   }
+
+  /**
+   * The name, the description, and the accessibility info are all read off an
+   * event's selected content row. `imageAlt` is excluded: it describes the
+   * event image, is resolved per field at the render boundary, and a row
+   * carrying only alt text would otherwise be chosen as this locale's content
+   * and render an event with a blank title. See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   *
+   * @returns {boolean} True if a name, description, or accessibility info is present
+   */
+  hasDisplayContent(): boolean {
+    return this.name !== '' || this.description !== '' || this.accessibilityInfo !== '';
+  }
 };
 
 /**

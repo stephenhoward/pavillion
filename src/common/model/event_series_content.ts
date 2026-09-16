@@ -40,6 +40,18 @@ export class EventSeriesContent extends Model implements TranslatedContentModel 
   }
 
   /**
+   * The name and the description are what a consumer reads off a series'
+   * selected content row. `imageAlt` is excluded: it describes the series
+   * image, is resolved per field at the render boundary, and a row carrying
+   * only alt text would otherwise be chosen as this locale's content and
+   * render a series with no name. See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   */
+  hasDisplayContent(): boolean {
+    return this.name.length > 0 || this.description.length > 0;
+  }
+
+  /**
    * Convert to plain object for serialization.
    */
   toObject(): Record<string, any> {
