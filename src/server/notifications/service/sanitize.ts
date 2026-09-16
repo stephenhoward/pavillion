@@ -12,12 +12,14 @@ import { toPlainText } from '@/server/common/helper/plain-text';
  * 2. Truncate to `maxLen` characters, trimming any trailing unpaired
  *    high surrogate so we never emit invalid UTF-16
  *
- * This is defense-in-depth: clients must still render the result as plain text
- * (never `v-html` or any HTML-rendering context).
+ * This is defense-in-depth. The result is NOT HTML-escaped: stripping tags is
+ * not escaping, so `"`, `'` and bare `<`/`>` survive (see {@link toPlainText}).
+ * Escaping is the caller's obligation at the sink — never `v-html` or any other
+ * HTML-rendering context.
  *
  * @param {string} text - Raw user-supplied or federated text
  * @param {number} maxLen - Maximum character length of the returned string
- * @returns {string} Sanitized text, safe for storage
+ * @returns {string} Sanitized plain text, safe to store; escape it at the sink
  */
 export function sanitize(text: string, maxLen: number): string {
   // Step 1: Normalize to plain text (includes the nullish guard)
