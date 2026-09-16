@@ -77,4 +77,57 @@ describe('EventContentEntity', () => {
 
     expect(model.accessibilityInfo).toBe('');
   });
+
+  test('converts entity to model with imageAlt', () => {
+    const entity = EventContentEntity.build({
+      ...sampleData,
+      image_alt: 'A band playing on an outdoor stage.',
+    });
+    const model = entity.toModel();
+
+    expect(model.imageAlt).toBe('A band playing on an outdoor stage.');
+  });
+
+  test('creates entity from model with imageAlt', () => {
+    const model = new CalendarEventContent(
+      'es',
+      'Evento de prueba',
+      'Una descripcion',
+      '',
+      'Un grupo tocando en un escenario al aire libre.',
+    );
+    const entity = EventContentEntity.fromModel(model);
+
+    expect(entity.image_alt).toBe('Un grupo tocando en un escenario al aire libre.');
+  });
+
+  test('round-trip conversion preserves imageAlt', () => {
+    const originalModel = new CalendarEventContent(
+      'fr',
+      'Événement',
+      'Description',
+      '',
+      'Un groupe sur une scène en plein air.',
+    );
+    const convertedModel = EventContentEntity.fromModel(originalModel).toModel();
+
+    expect(convertedModel.imageAlt).toBe(originalModel.imageAlt);
+  });
+
+  test('handles null image_alt by converting to empty string', () => {
+    const entity = EventContentEntity.build({
+      ...sampleData,
+      image_alt: null,
+    });
+    const model = entity.toModel();
+
+    expect(model.imageAlt).toBe('');
+  });
+
+  test('handles an absent image_alt column value as empty string', () => {
+    const entity = EventContentEntity.build(sampleData);
+    const model = entity.toModel();
+
+    expect(model.imageAlt).toBe('');
+  });
 });
