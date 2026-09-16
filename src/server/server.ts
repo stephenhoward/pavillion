@@ -236,11 +236,19 @@ function configureProxy(app: express.Application): void {
 }
 
 /**
- * Reports calendars whose stored url name the reserved-segment list now
- * forbids. Such a calendar is reachable today — public calendar URLs are still
- * served under /view/:calendarName, and lookups apply the shape rule only — but
- * will be shadowed by application routing once those URLs move to the site
- * root. This is pre-migration housekeeping, not a report of current breakage.
+ * Reports calendars whose stored url name the reserved-segment list forbids.
+ * Public calendar URLs live at the domain root (DEC-018), so such a calendar's
+ * public page is shadowed by application routing right now: the site routes
+ * exclude a reserved first segment, so both /:urlName and /:locale/:urlName are
+ * answered by the application shell, and the legacy /view/:urlName redirect
+ * only lands on that same shadowed path. This is a report of current breakage,
+ * not pre-migration housekeeping.
+ *
+ * The calendar itself is not lost. DEC-018 rule 4 keeps name resolution off the
+ * reserved list — `getCalendarByName` gates on the shape rule alone — so the
+ * calendar still serves its actor document, answers WebFinger and receives
+ * inbox deliveries. Only the human-facing page is unreachable, which is what
+ * makes the trade an operator has to weigh a real one.
  *
  * Diagnostic only — renaming is the operator's call, since an automatic rename
  * would break every existing link to the calendar. A healthy instance is the
@@ -256,7 +264,7 @@ function reportReservedUrlNameCollisions(collisions: ReservedUrlNameCollision[])
   for (const { urlName, reason } of collisions) {
     logger.warn(
       { urlName, reason },
-      'Calendar url name is reserved for application routing; it resolves normally today, but will be unreachable at the site root once public calendar URLs move there — rename it in the calendar\'s settings before that change ships',
+      'Calendar url name is reserved for application routing; its public page is unreachable at the site root today, because an application route answers that address instead — the calendar still federates and serves its actor document — rename it in the calendar\'s settings to restore the page, accepting that existing links to it will break',
     );
   }
 }
@@ -264,8 +272,8 @@ function reportReservedUrlNameCollisions(collisions: ReservedUrlNameCollision[])
 /**
  * Runs the startup collision report without letting it become a boot failure.
  *
- * The report is read-only diagnostics about a migration that has not happened
- * yet, so a failing query is never a reason for an instance not to come up.
+ * The report is read-only diagnostics about a collision only an operator can
+ * resolve, so a failing query is never a reason for an instance not to come up.
  * Left inside the database-initialization try, any throw here would abort boot
  * under 'Failed to initialize database' — a cause it did not have.
  *

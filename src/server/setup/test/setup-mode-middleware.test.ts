@@ -85,6 +85,20 @@ describe('Setup Mode Middleware', () => {
       expect(response.headers.location).toBe('/setup');
     });
 
+    it('should redirect a root-level public calendar page to /setup', async () => {
+      // DEC-018 put public calendar pages at the domain root, so the paths an
+      // anonymous visitor hits now share a namespace with the exempt segments
+      // (/setup, /health, /assets). The exemption list is anchored, so a
+      // calendar page is not exempt — but nothing pinned that until now, and a
+      // loosened anchor would hand a half-configured instance to the public.
+      const response = await request(app)
+        .get('/test-calendar')
+        .set('Accept', 'text/html')
+        .expect(302);
+
+      expect(response.headers.location).toBe('/setup');
+    });
+
     it('should return 503 for API requests when in setup mode', async () => {
       const response = await request(app)
         .get('/api/v1/calendars')
