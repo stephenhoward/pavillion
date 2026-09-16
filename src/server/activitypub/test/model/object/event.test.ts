@@ -13,7 +13,7 @@ vi.mock('@/server/common/helper/logger', () => ({
   createLogger: () => ({ warn: mockWarn, error: vi.fn(), info: vi.fn(), debug: vi.fn() }),
 }));
 
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
@@ -659,6 +659,198 @@ describe('EventObject', () => {
         type: 'Image',
         url: `https://${domain}/api/v1/media/event-img-uuid`,
         mediaType: 'image/jpeg',
+      });
+    });
+
+    describe('image alt text (AS2 Image name/nameMap)', () => {
+
+      const approvedEventMedia = () =>
+        new Media('event-img-uuid', 'calendar-uuid', 'ghi789', 'event.jpg', 'image/jpeg', 3072, 'approved');
+      const approvedCalendarMedia = () =>
+        new Media('default-img-uuid', 'calendar-uuid', 'def456', 'default.png', 'image/png', 2048, 'approved');
+
+      it('should emit image.name when exactly one language has alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', 'A cat asleep on a piano'));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.image.name).toBe('A cat asleep on a piano');
+        expect(result.image).not.toHaveProperty('nameMap');
+      });
+
+      it('should emit image.nameMap when two or more languages have alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', 'A cat asleep on a piano'));
+        event.addContent(new CalendarEventContent('es', 'Evento Con Imagen', '', '', 'Un gato dormido en un piano'));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.image.nameMap).toEqual({
+          en: 'A cat asleep on a piano',
+          es: 'Un gato dormido en un piano',
+        });
+        expect(result.image).not.toHaveProperty('name');
+      });
+
+      it('should omit both name and nameMap when the image is decorative', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Image', 'A description'));
+        event.addContent(new CalendarEventContent('es', 'Evento Con Imagen', 'Una descripcion'));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        // An Image with no name IS the decorative signal; an empty name would
+        // instead claim the description is missing.
+        expect(result.image).toEqual({
+          type: 'Image',
+          url: `https://${domain}/api/v1/media/event-img-uuid`,
+          mediaType: 'image/jpeg',
+        });
+      });
+
+      it('should skip languages whose alt text is empty', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', 'A cat asleep on a piano'));
+        event.addContent(new CalendarEventContent('es', 'Evento Con Imagen', '', '', ''));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        // One language with alt text, so the singular form — not a one-entry map.
+        expect(result.image.name).toBe('A cat asleep on a piano');
+        expect(result.image).not.toHaveProperty('nameMap');
+      });
+
+      it('should treat a whitespace-only alt text as decorative, as the site does', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Image', '', '', '   '));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        // The decorative state is derived independently on the site, in the
+        // widget and here; localizedField treats a whitespace-only value as
+        // empty, so the wire must too or the same image is described in one
+        // place and decorative in another.
+        expect(result.image).toEqual({
+          type: 'Image',
+          url: `https://${domain}/api/v1/media/event-img-uuid`,
+          mediaType: 'image/jpeg',
+        });
+      });
+
+      it("should use the calendar's alt text when the calendar default image is emitted", () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        calendar.defaultEventImage = approvedCalendarMedia();
+        calendar.addContent(new CalendarContent('en', 'My Calendar', '', 'The community hall at dusk'));
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        // The event describes an image it is not emitting; that alt must not
+        // be attached to the calendar's default image.
+        event.addContent(new CalendarEventContent('en', 'Event Without Image', '', '', 'A cat asleep on a piano'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.image.url).toBe(`https://${domain}/api/v1/media/default-img-uuid`);
+        expect(result.image.name).toBe('The community hall at dusk');
+      });
+
+      it("should use the event's alt text, not the calendar's, when the event has its own media", () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        calendar.defaultEventImage = approvedCalendarMedia();
+        calendar.addContent(new CalendarContent('en', 'My Calendar', '', 'The community hall at dusk'));
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event With Own Image', '', '', 'A cat asleep on a piano'));
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.image.url).toBe(`https://${domain}/api/v1/media/event-img-uuid`);
+        expect(result.image.name).toBe('A cat asleep on a piano');
+      });
+
+      it('should emit no alt for the calendar default image when the calendar marked it decorative', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        calendar.defaultEventImage = approvedCalendarMedia();
+        calendar.addContent(new CalendarContent('en', 'My Calendar', 'A description'));
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Event Without Image', ''));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.image).toEqual({
+          type: 'Image',
+          url: `https://${domain}/api/v1/media/default-img-uuid`,
+          mediaType: 'image/png',
+        });
+      });
+    });
+
+    describe('alt-only languages and the nameMap gate', () => {
+
+      it('should not promote name to nameMap when a second language carries only alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Only English Name', 'Only English Desc'));
+        // Alt text is content, but it is not content nameMap/summaryMap carry.
+        // Counting it toward the gate would flip the event's own wire format to
+        // the map form while adding no entry to any map.
+        event.addContent(new CalendarEventContent('es', '', '', '', 'Un gato dormido en un piano'));
+        event.media = new Media('event-img-uuid', 'calendar-uuid', 'ghi789', 'event.jpg', 'image/jpeg', 3072, 'approved');
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.name).toBe('Only English Name');
+        expect(result).not.toHaveProperty('nameMap');
+        expect(result).not.toHaveProperty('summaryMap');
+        expect(result).not.toHaveProperty('contentMap');
+
+        // The alt text itself still federates, on the Image and in
+        // pavillion:content — only the event's name/summary shape is unaffected.
+        expect(result.image.name).toBe('Un gato dormido en un piano');
+        expect(result['pavillion:content'].es.imageAlt).toBe('Un gato dormido en un piano');
+      });
+
+      it('should not promote name to nameMap when a second language carries only accessibilityInfo', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Only English Name', 'Only English Desc'));
+        event.addContent(new CalendarEventContent('es', '', '', 'Rampa disponible'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.name).toBe('Only English Name');
+        expect(result).not.toHaveProperty('nameMap');
+      });
+
+      it('should still emit nameMap when a second language carries a name alongside alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+        event.addContent(new CalendarEventContent('es', 'Spanish Name', '', '', 'Un gato dormido en un piano'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.nameMap).toEqual({ en: 'English Name', es: 'Spanish Name' });
+      });
+
+      it('should emit summaryMap when a second language carries only a description', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+        event.addContent(new CalendarEventContent('es', '', 'Spanish Desc'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.summaryMap).toEqual({ en: 'English Desc', es: 'Spanish Desc' });
       });
     });
 

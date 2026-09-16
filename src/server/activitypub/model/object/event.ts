@@ -12,6 +12,7 @@ import { resolveEventStartTime } from '@/server/activitypub/model/object/start-t
 import { createLogger } from '@/server/common/helper/logger';
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 import { mapEventCategoriesToFep } from '@/server/activitypub/helper/fep_category_map';
+import { mappedContentLanguages } from '@/server/activitypub/helper/content-languages';
 
 const logger = createLogger('activitypub');
 
@@ -252,10 +253,11 @@ class EventObject extends ActivityPubObject {
       result['pavillion:space'] = this._buildPavillionSpace(event.space, calendar);
     }
 
-    // nameMap/summaryMap: only when 2+ languages have content
-    const contentLanguages = Object.keys(event._content).filter(
-      lang => event._content[lang] && !event._content[lang].isEmpty(),
-    );
+    // nameMap/summaryMap: only when 2+ languages have mapped content — a
+    // non-empty name or description. See mappedContentLanguages for why this is
+    // not `isEmpty()`: a language row holding only alt text is content, but it
+    // is not content these maps carry.
+    const contentLanguages = mappedContentLanguages(event._content);
     if (contentLanguages.length >= 2) {
       const nameMap: Record<string, string> = {};
       const summaryMap: Record<string, string> = {};
@@ -289,11 +291,49 @@ class EventObject extends ActivityPubObject {
     // image: event's own media takes precedence, then calendar default; omit if neither exists
     const media = event.media ?? calendar.defaultEventImage;
     if (media && media.status === 'approved') {
-      result.image = {
+      const image: Record<string, any> = {
         type: 'Image',
         url: `https://${domain}/api/v1/media/${media.id}`,
         mediaType: media.mimeType,
       };
+
+      // Alt text is read from whichever model supplied the media — the event
+      // for its own image, the calendar for its default — so the description
+      // always belongs to the image actually on the wire. Same one-vs-many
+      // shape as the event's own name/nameMap.
+      //
+      // Both keys are omitted when no language has alt text. That is the
+      // decorative contract carried onto the wire: an Image with no name says
+      // "this image adds nothing the event text does not already say", which is
+      // what a peer should render as alt="". Emitting an empty name instead
+      // would be a claim that the description is missing.
+      //
+      // Emptiness is tested with `.trim()`, matching `localizedField` in
+      // src/site/composables/useLocalizedContent.ts. The decorative state is
+      // derived independently on the site, in the widget and here, and the
+      // three must agree; a bare `!== ''` would make a whitespace-only alt
+      // decorative on the site while it carried a `name` on the wire. Both of
+      // today's write paths trim, so the divergence is unreachable — this keeps
+      // it unreachable for a write path that does not.
+      const altContent: Record<string, { imageAlt: string }> = event.media
+        ? event._content
+        : calendar._content;
+      const altMap: Record<string, string> = {};
+      for (const lang of Object.keys(altContent)) {
+        const alt = altContent[lang]?.imageAlt;
+        if (alt && alt.trim() !== '') {
+          altMap[lang] = alt;
+        }
+      }
+      const altLanguages = Object.keys(altMap);
+      if (altLanguages.length === 1) {
+        image.name = altMap[altLanguages[0]];
+      }
+      else if (altLanguages.length >= 2) {
+        image.nameMap = altMap;
+      }
+
+      result.image = image;
     }
 
     // attachment Link + pavillion:urlPrompt: emit only when BOTH fields are set.
@@ -813,7 +853,11 @@ class EventObject extends ActivityPubObject {
    *
    * Length is not bounded here. The columns belong to the calendar domain and
    * so does their cap: EventService normalizes federated content through
-   * sanitizeImageAlt on the way into storage.
+   * sanitizeImageAlt on the way into storage. That split — this layer strips
+   * markup and closes the key set, the calendar domain owns the cap — is
+   * recorded in DEC-014 (agent-os/product/decisions/dec-014-create-original-
+   * announce-repost.md), which is also where the version-skew consequence of
+   * closing the key set here is written down.
    */
   private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
     const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo', 'imageAlt'] as const;

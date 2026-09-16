@@ -138,6 +138,23 @@ describe('NoteObject', () => {
       expect(result.contentMap.es).toContain('Spanish Title');
     });
 
+    it('does not emit nameMap when the second language carries only alt text', () => {
+      const calendar = new Calendar('cal-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'cal-uuid');
+      event.addContent(new CalendarEventContent('en', 'English Title', 'English desc'));
+      // The Note carries no image, so alt text is invisible to it entirely. It
+      // shares EventObject's gate so the two emissions cannot disagree about
+      // whether this event is multilingual.
+      event.addContent(new CalendarEventContent('es', '', '', '', 'Un gato dormido en un piano'));
+
+      const note = new NoteObject(calendar, event);
+      const result = note.toActivityPubObject();
+
+      expect(result.name).toBe('English Title');
+      expect(result).not.toHaveProperty('nameMap');
+      expect(result).not.toHaveProperty('contentMap');
+    });
+
     it('falls back to first non-en language when en has no name', () => {
       const calendar = new Calendar('cal-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'cal-uuid');
