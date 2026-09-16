@@ -35,6 +35,7 @@ const routes: RouteRecordRaw[] = [
 const mockCalendar = {
   id: 'cal-1',
   urlName: 'test-calendar',
+  publicUrl: 'https://pavillion.dev/test-calendar',
   content: (_lang: string) => ({ name: 'Test Calendar' }),
   languages: ['en'],
 };
@@ -164,6 +165,20 @@ describe('Calendar View Tabs', () => {
       expect(wrapper.find('#places-panel').attributes('aria-labelledby')).toBe('places-tab');
       expect(wrapper.find('#categories-panel').attributes('aria-labelledby')).toBe('categories-tab');
       expect(wrapper.find('#series-panel').attributes('aria-labelledby')).toBe('series-tab');
+    });
+
+    /**
+     * The header link is the organizer's shareable address — the string they
+     * copy and hand to other people — so where it points and what it reads must
+     * be the same value, and that value is the server's `publicUrl`. Building
+     * the href locally is how the two drifted apart while `/view/` was retired.
+     */
+    it('should point the public link at the server-supplied publicUrl', async () => {
+      const { wrapper } = await createWrapper();
+
+      const publicLink = wrapper.find('a.calendar-public-link');
+      expect(publicLink.attributes('href')).toBe(mockCalendar.publicUrl);
+      expect(publicLink.text()).toContain(mockCalendar.publicUrl);
     });
   });
 

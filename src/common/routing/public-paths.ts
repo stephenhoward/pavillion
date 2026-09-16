@@ -7,11 +7,11 @@
  * shown to an organizer) and the site SPA (its own internal links). Each one
  * used to template the shape inline, which is how `/view/…` survived in a
  * `<RouterLink>` long after the routes moved (8f47ac27). These builders are
- * the intended single declaration of that shape; server-side adoption is
- * done, and the frontend sweep — moving the remaining inline `/view/…`
- * templating out of the site SPA and the client SPA's calendar components —
- * is in progress. Two server generators stay outside this module rather than
- * being folded in:
+ * the single declaration of that shape, and all three consumers are now on
+ * them — the client SPA only indirectly for a calendar's address, which it
+ * renders from the server-stamped `Calendar.publicUrl` so the link an
+ * organizer copies and the text they read cannot disagree. Two server
+ * generators stay outside this module rather than being folded in:
  *
  * - `src/server/activitypub/model/userprofile.ts` builds the actor
  *   document's `url` alongside three sibling URIs (`id`, `inbox`, `outbox`)

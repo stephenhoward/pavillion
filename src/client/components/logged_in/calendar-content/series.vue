@@ -12,6 +12,7 @@ import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { useToast } from '@/client/composables/useToast';
+import { seriesPath } from '@/common/routing/public-paths';
 
 const props = defineProps({
   calendarId: {
@@ -245,8 +246,14 @@ onMounted(async () => {
           </div>
 
           <div class="series-actions">
+            <!--
+              A series has no server-stamped public address the way a calendar
+              does, so the shape comes from the shared builder. A plain href,
+              not a RouterLink: the public series page is the site SPA's, and
+              an in-SPA navigation would never reach the server that serves it.
+            -->
             <a
-              :href="'/view/' + props.calendarUrlName + '/series/' + series.urlName"
+              :href="seriesPath(props.calendarUrlName, series.urlName)"
               target="_blank"
               rel="noopener noreferrer"
               class="icon-button"

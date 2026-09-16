@@ -136,8 +136,15 @@ async function loadCalendars() {
                     {{ t('role_editor') }}
                   </span>
 
+                  <!--
+                    The calendar's public address, from the server rather than
+                    templated here, for the same reason as the calendar page's
+                    header link. A plain href, not the RouterLink below it: the
+                    public page is served by the site SPA, so following it is a
+                    full-page navigation out of this app.
+                  -->
                   <a
-                    :href="`/view/${info.calendar.urlName}`"
+                    :href="info.calendar.publicUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="calendar-card__public-link"
