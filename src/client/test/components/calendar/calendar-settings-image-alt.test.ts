@@ -130,23 +130,24 @@ function stubScreenLoads(calendar: Calendar): void {
   } as never);
 }
 
-describe('CalendarSettings — default image alt text', () => {
-  beforeAll(async () => {
-    await i18next.init({
-      lng: 'en',
-      resources: {
-        en: {
-          calendars: SETTINGS_TRANSLATIONS,
-          media: MEDIA_TRANSLATIONS,
-        },
+// i18next is a module singleton, so both suites below share one initialisation.
+beforeAll(async () => {
+  await i18next.init({
+    lng: 'en',
+    resources: {
+      en: {
+        calendars: SETTINGS_TRANSLATIONS,
+        media: MEDIA_TRANSLATIONS,
       },
-    });
+    },
   });
+});
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
+describe('CalendarSettings — default image alt text', () => {
   it('offers no alt editor while the calendar has no default image', async () => {
     stubScreenLoads(createCalendar({ withImage: false }));
 
@@ -226,6 +227,151 @@ describe('CalendarSettings — default image alt text', () => {
         // replaces imageAlt rather than patching it, so an omitted language
         // would silently clear whatever is stored for it.
         en: { name: 'My Calendar', description: 'A calendar', imageAlt: 'A crowded street fair' },
+        es: { name: 'Mi Calendario', description: 'Un calendario', imageAlt: '' },
+      },
+    }));
+
+    wrapper.unmount();
+  });
+
+  it('persists the cleared alt text in the same request that removes the image', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair', altEs: 'Una feria concurrida' }));
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(createCalendar({ withImage: false }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    await wrapper.find('.remove-image-btn').trigger('click');
+    await flushPromises();
+
+    // Removing the image unmounts the editor, so this request is the last
+    // chance the cleared description has to reach the server.
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpy).toHaveBeenCalledWith('calendar-123', {
+      defaultEventImageId: null,
+      content: {
+        en: { name: 'My Calendar', description: 'A calendar', imageAlt: '' },
+        es: { name: 'Mi Calendario', description: 'Un calendario', imageAlt: '' },
+      },
+    });
+
+    wrapper.unmount();
+  });
+});
+
+/**
+ * The screen has no Save button, so the alt editor persists on focus leaving
+ * it. What makes that safe is the `relatedTarget` check: the editor holds two
+ * radios and a textarea, and saving between them would disable the control the
+ * author is moving to.
+ */
+describe('CalendarSettings — saving the default image alt text', () => {
+  /**
+   * Dispatches a real bubbling focusout. `trigger()` cannot stand in for it:
+   * the whole decision the screen makes here reads `relatedTarget`, which only
+   * a constructed FocusEvent carries.
+   *
+   * @param {Element} from - The control focus is leaving
+   * @param {EventTarget | null} relatedTarget - What receives focus, or null
+   *   when focus leaves the document entirely
+   */
+  function focusOut(from: Element, relatedTarget: EventTarget | null): void {
+    from.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget }));
+  }
+
+  it('does not save while focus moves between the editor\'s own controls', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair' }));
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(createCalendar({ altEn: 'A crowded street fair' }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    const editor = wrapper.find('.image-alt-editor');
+    const radio = editor.findAll('input[type="radio"]')[1].element;
+    const textarea = editor.find('textarea').element;
+
+    focusOut(radio, textarea);
+    await flushPromises();
+
+    // A save here would set isSaving, which disables the editor — taking the
+    // author's focus away mid-interaction.
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(textarea.disabled).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('saves the alt text when focus leaves the editor', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair' }));
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(createCalendar({ altEn: 'A market at dusk' }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    const textarea = wrapper.find('.image-alt-editor textarea');
+    await textarea.setValue('A market at dusk');
+
+    focusOut(textarea.element, wrapper.find('#calendarTitle-en').element);
+    await flushPromises();
+
+    expect(updateSpy).toHaveBeenCalledWith('calendar-123', expect.objectContaining({
+      content: {
+        en: { name: 'My Calendar', description: 'A calendar', imageAlt: 'A market at dusk' },
+        es: { name: 'Mi Calendario', description: 'Un calendario', imageAlt: '' },
+      },
+    }));
+
+    wrapper.unmount();
+  });
+
+  it('saves when focus leaves the document entirely', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair' }));
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(createCalendar({ altEn: 'A crowded street fair' }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    const textarea = wrapper.find('.image-alt-editor textarea');
+    await textarea.setValue('A market at dusk');
+
+    // Tabbing to browser chrome, or clicking dead space: nothing receives
+    // focus, and the author is still done with the editor.
+    focusOut(textarea.element, null);
+    await flushPromises();
+
+    expect(updateSpy).toHaveBeenCalledWith('calendar-123', expect.objectContaining({
+      content: expect.objectContaining({
+        en: { name: 'My Calendar', description: 'A calendar', imageAlt: 'A market at dusk' },
+      }),
+    }));
+
+    wrapper.unmount();
+  });
+
+  it('saves the Decorative choice once focus leaves the editor', async () => {
+    stubScreenLoads(createCalendar({ altEn: 'A crowded street fair', altEs: 'Una feria concurrida' }));
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(createCalendar({ withImage: true }));
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    const editor = wrapper.find('.image-alt-editor');
+    const decorative = editor.findAll('input[type="radio"]')[0];
+    await decorative.trigger('change');
+
+    focusOut(decorative.element, wrapper.find('#calendarTitle-en').element);
+    await flushPromises();
+
+    // Decorative is the absence of alt text in every language, not a flag, so
+    // what has to reach the server is the cleared value for each of them.
+    expect(updateSpy).toHaveBeenCalledWith('calendar-123', expect.objectContaining({
+      content: {
+        en: { name: 'My Calendar', description: 'A calendar', imageAlt: '' },
         es: { name: 'Mi Calendario', description: 'Un calendario', imageAlt: '' },
       },
     }));

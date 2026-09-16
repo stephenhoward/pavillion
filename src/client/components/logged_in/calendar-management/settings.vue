@@ -136,13 +136,26 @@
             unambiguous this far from the tabs. The image itself is stored the
             moment it is uploaded; its description is content and saves with the
             rest of the calendar's content.
+
+            This screen has no Save button: every field here persists on the
+            event that ends the author's interaction with it. The editor's
+            equivalent of that event is focus leaving the *component*, not any
+            one of its controls, because it holds three focusable controls and
+            moving between them is still interaction — hence the wrapper, whose
+            element is a stable `currentTarget` for the bubbled `focusout`
+            regardless of what the child renders as its root.
           -->
-          <ImageAltEditor
+          <div
             v-if="state.defaultEventImage && localCalendar"
-            :model="localCalendar"
-            :language="currentLanguage"
-            :disabled="state.isSaving"
-          />
+            class="default-image-alt"
+            @focusout="handleAltFocusOut"
+          >
+            <ImageAltEditor
+              :model="localCalendar"
+              :language="currentLanguage"
+              :disabled="state.isSaving"
+            />
+          </div>
         </div>
 
         <!--
@@ -440,6 +453,37 @@ const loadSettings = async () => {
 };
 
 /**
+ * The translated-content payload a save carries.
+ *
+ * `imageAlt` is sent for every language on every save, never only when it
+ * changed: the server replaces rather than patches it, so an omitted value
+ * clears the stored column. That is what lets the editor's Decorative
+ * choice — which is the absence of alt text, not a stored flag — persist,
+ * and it is also why a partial payload would silently destroy alt text.
+ *
+ * @param {object} options - How the payload should treat alt text
+ * @param {boolean} options.dropImageAlt - Send an empty description in every
+ *   language, for the save that removes the image being described. The working
+ *   model is left alone so that a failed request changes nothing.
+ * @returns {Record<string, { name: string; description: string; imageAlt: string }>}
+ *   Content keyed by language code
+ */
+const buildContentPayload = ({ dropImageAlt = false } = {}) => {
+  const contentPayload: Record<string, { name: string; description: string; imageAlt: string }> = {};
+  if (localCalendar.value) {
+    for (const lang of localCalendar.value.getLanguages()) {
+      const c = localCalendar.value.content(lang);
+      contentPayload[lang] = {
+        name: c.name,
+        description: c.description,
+        imageAlt: dropImageAlt ? '' : c.imageAlt,
+      };
+    }
+  }
+  return contentPayload;
+};
+
+/**
  * Save calendar settings
  */
 const saveSettings = async () => {
@@ -448,26 +492,9 @@ const saveSettings = async () => {
     state.error = '';
     state.success = '';
 
-    // `imageAlt` is sent for every language on every save, never only when it
-    // changed: the server replaces rather than patches it, so an omitted value
-    // clears the stored column. That is what lets the editor's Decorative
-    // choice — which is the absence of alt text, not a stored flag — persist,
-    // and it is also why a partial payload would silently destroy alt text.
-    const contentPayload: Record<string, { name: string; description: string; imageAlt: string }> = {};
-    if (localCalendar.value) {
-      for (const lang of localCalendar.value.getLanguages()) {
-        const c = localCalendar.value.content(lang);
-        contentPayload[lang] = {
-          name: c.name,
-          description: c.description,
-          imageAlt: c.imageAlt,
-        };
-      }
-    }
-
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultDateRange: state.defaultDateRange,
-      content: contentPayload,
+      content: buildContentPayload(),
     });
 
     state.success = t('save_success');
@@ -481,6 +508,28 @@ const saveSettings = async () => {
   finally {
     state.isSaving = false;
   }
+};
+
+/**
+ * Persist the alt editor's work when focus leaves it.
+ *
+ * `focusout` rather than `blur` because only the former bubbles, and the event
+ * is worth intercepting only when focus lands outside the editor: it holds two
+ * radios and a textarea, and a save between them would flip `state.isSaving`,
+ * which is bound to the editor's `disabled` prop — disabling the control the
+ * author was moving to and taking their focus with it.
+ *
+ * `relatedTarget` is null when focus leaves the document altogether (tabbing to
+ * browser chrome, clicking dead space), which is the author finishing with the
+ * editor and so does save.
+ *
+ * @param {FocusEvent} event - The bubbled focusout
+ */
+const handleAltFocusOut = (event: FocusEvent) => {
+  const next = event.relatedTarget;
+  const editor = event.currentTarget;
+  if (next instanceof Node && editor instanceof Node && editor.contains(next)) return;
+  saveSettings();
 };
 
 /**
@@ -533,15 +582,17 @@ const removeDefaultImage = async () => {
     state.error = '';
     state.success = '';
 
+    // A description with no image left to describe is stale in every language,
+    // so it goes with the image — and it goes in the same request, because the
+    // editor that would otherwise have carried it to the server is unmounted by
+    // this very removal. Nothing else on the screen would push it afterwards.
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultEventImageId: null,
+      content: buildContentPayload({ dropImageAlt: true }),
     });
 
     state.defaultEventImage = null;
 
-    // A description with no image left to describe is stale in every language,
-    // so the working model drops it along with the image. It leaves the stored
-    // rows on the next content save, like any other content edit here.
     if (localCalendar.value) {
       for (const lang of localCalendar.value.getLanguages()) {
         localCalendar.value.content(lang).imageAlt = '';
