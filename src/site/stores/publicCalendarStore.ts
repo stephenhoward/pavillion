@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { getDefaultDateRange } from '@/common/utils/datePresets';
+import { Calendar } from '@/common/model/calendar';
 import type { DefaultDateRange } from '@/common/model/calendar';
 import type { Media } from '@/common/model/media';
 import ModelService from '@/client/service/models';
@@ -9,6 +10,14 @@ import ModelService from '@/client/service/models';
 export interface PublicCalendarState {
   // Calendar data
   currentCalendarUrlName: string | null;
+  /**
+   * The loaded calendar, kept as a hydrated model rather than discarded after
+   * its settings are extracted. Its translated content is what resolves the
+   * default event image's alt text, and that resolution is per-visitor-locale,
+   * so it cannot be flattened to a string at load time. Both the site and the
+   * widget read the default image from this store and so both need the model.
+   */
+  currentCalendar: Calendar | null;
   serverDefaultDateRange: DefaultDateRange;
   calendarDefaultDateRange: DefaultDateRange;
   defaultEventImage: Media | null;
@@ -55,6 +64,7 @@ export interface FilterOptions {
 export const usePublicCalendarStore = defineStore('publicCalendar', {
   state: (): PublicCalendarState => ({
     currentCalendarUrlName: null,
+    currentCalendar: null,
     serverDefaultDateRange: '2weeks',
     calendarDefaultDateRange: '2weeks',
     defaultEventImage: null,
@@ -199,12 +209,18 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
 
     /**
      * Load calendar data to get settings like defaultDateRange and defaultEventImage
+     *
+     * The hydrated Calendar is retained on `currentCalendar` as well, because
+     * its translated content carries the default event image's alt text and
+     * that has to be resolved per visitor locale at render time.
      */
     async loadCalendar(calendarUrlName: string) {
       try {
         const calendarData = await ModelService.getModel(
           `/api/public/v1/calendar/${calendarUrlName}`,
         );
+
+        this.currentCalendar = calendarData ? Calendar.fromObject(calendarData) : null;
 
         if (calendarData && calendarData.defaultDateRange) {
           // Use the calendar's specific setting
@@ -222,6 +238,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         console.error('Error loading calendar:', error);
         // Fall back to server default if we can't load the calendar
         this.calendarDefaultDateRange = this.serverDefaultDateRange;
+        this.currentCalendar = null;
         this.defaultEventImage = null;
       }
       finally {
@@ -405,6 +422,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     clearAll() {
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
+      this.currentCalendar = null;
       this.defaultEventImage = null;
       this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];

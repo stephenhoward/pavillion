@@ -5,6 +5,8 @@ import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventCategory } from '@/common/model/event_category';
 import { CalendarEvent } from '@/common/model/events';
+import { Calendar } from '@/common/model/calendar';
+import ModelService from '@/client/service/models';
 
 // Mock ModelService
 vi.mock('@/client/service/models', () => ({
@@ -807,6 +809,62 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       await store.reloadWithFilters();
 
       expect(loadCategoriesSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadCalendar action', () => {
+    const calendarPayload = {
+      id: 'cal-1',
+      urlName: 'test-calendar',
+      defaultDateRange: '1month',
+      defaultEventImage: { id: 'media-1', mimeType: 'image/jpeg' },
+      content: {
+        en: { name: 'Test Calendar', description: 'Desc', imageAlt: 'A packed room' },
+        fr: { name: 'Calendrier', description: 'Desc', imageAlt: 'Une salle comble' },
+      },
+    };
+
+    it('retains the loaded calendar as a hydrated model carrying translated alt text', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.currentCalendar).toBeInstanceOf(Calendar);
+      expect(store.currentCalendar?.urlName).toBe('test-calendar');
+      expect(store.currentCalendar?.content('en').imageAlt).toBe('A packed room');
+      expect(store.currentCalendar?.content('fr').imageAlt).toBe('Une salle comble');
+    });
+
+    it('still extracts the default event image and date range', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.defaultEventImage).toEqual({ id: 'media-1', mimeType: 'image/jpeg' });
+      expect(store.calendarDefaultDateRange).toBe('1month');
+    });
+
+    it('clears the retained calendar when the load fails', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+      await store.loadCalendar('test-calendar');
+      expect(store.currentCalendar).not.toBeNull();
+
+      vi.mocked(ModelService.getModel).mockRejectedValue(new Error('network down'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.currentCalendar).toBeNull();
+      expect(store.defaultEventImage).toBeNull();
+    });
+
+    it('clears the retained calendar on clearAll', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+      await store.loadCalendar('test-calendar');
+
+      store.clearAll();
+
+      expect(store.currentCalendar).toBeNull();
     });
   });
 });
