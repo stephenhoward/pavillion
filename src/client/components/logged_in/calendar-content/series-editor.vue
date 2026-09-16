@@ -13,6 +13,7 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
+import { clearImageAlt } from '@/client/components/common/media/image-alt';
 
 const emit = defineEmits(['close', 'saved']);
 
@@ -171,9 +172,7 @@ function handleImageUpload(results) {
     const uploadedMediaId = results[0].media.id;
 
     if (localSeries.value.mediaId !== uploadedMediaId) {
-      for (const language of localSeries.value.getLanguages()) {
-        localSeries.value.content(language).imageAlt = '';
-      }
+      clearImageAlt(localSeries.value);
     }
 
     localSeries.value.mediaId = uploadedMediaId;

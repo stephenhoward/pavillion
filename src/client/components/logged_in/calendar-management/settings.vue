@@ -267,6 +267,7 @@ import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
+import { clearImageAlt } from '@/client/components/common/media/image-alt';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
@@ -636,9 +637,7 @@ const removeDefaultImage = async () => {
     state.defaultEventImage = null;
 
     if (localCalendar.value) {
-      for (const lang of localCalendar.value.getLanguages()) {
-        localCalendar.value.content(lang).imageAlt = '';
-      }
+      clearImageAlt(localCalendar.value);
     }
 
     state.success = t('save_success');

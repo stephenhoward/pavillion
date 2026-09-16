@@ -28,15 +28,12 @@
 import { computed, ref, useId, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
-import { TranslatedContentModel, TranslatedModel } from '@/common/model/model';
-
-/**
- * The slice of translated content this editor needs. CalendarEventContent,
- * EventSeriesContent, and CalendarContent all satisfy it.
- */
-interface ImageAltContent extends TranslatedContentModel {
-  imageAlt: string;
-}
+import { TranslatedModel } from '@/common/model/model';
+import {
+  anyLanguageHasAlt,
+  clearImageAlt,
+  type ImageAltContent,
+} from '@/client/components/common/media/image-alt';
 
 /**
  * Mirrors IMAGE_ALT_MAX_LENGTH in src/server/calendar/service/image_alt.ts,
@@ -66,17 +63,6 @@ const describeId = `${uid}-describe`;
 const describeHelpId = `${uid}-describe-help`;
 const textareaId = `${uid}-description`;
 const hintId = `${uid}-description-hint`;
-
-/**
- * Reports whether any language on a model carries alt text. This is what
- * "describe" means in storage, so it is also how the mode is seeded.
- *
- * @param {TranslatedModel<ImageAltContent>} model - The model to inspect
- * @returns {boolean} True when at least one language has non-empty alt text
- */
-function anyLanguageHasAlt(model: TranslatedModel<ImageAltContent>): boolean {
-  return model.getLanguages().some((lang) => model.content(lang).imageAlt !== '');
-}
 
 const mode = ref<AltMode>(anyLanguageHasAlt(props.model) ? 'describe' : 'decorative');
 
@@ -120,12 +106,12 @@ function setMode(next: AltMode): void {
   if (next === 'decorative') {
     const cleared: Record<string, string> = {};
     for (const lang of props.model.getLanguages()) {
-      const content = props.model.content(lang);
-      if (content.imageAlt !== '') {
-        cleared[lang] = content.imageAlt;
+      const alt = props.model.content(lang).imageAlt;
+      if (alt !== '') {
+        cleared[lang] = alt;
       }
-      content.imageAlt = '';
     }
+    clearImageAlt(props.model);
     stash.value = cleared;
   }
   else {

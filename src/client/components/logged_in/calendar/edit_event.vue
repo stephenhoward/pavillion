@@ -1139,6 +1139,7 @@ import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
 import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
+import { clearImageAlt } from '@/client/components/common/media/image-alt';
 import CategorySelector from './category-selector.vue';
 import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
@@ -1406,18 +1407,13 @@ const handleImageAdjust = ({ mediaFocalPointX, mediaFocalPointY, mediaZoom }) =>
 /**
  * Drop the description of the image being detached, in every language.
  *
- * Alt text describes one particular photograph, so it cannot outlive it. On a
- * removal it would be saved with nothing left to describe; on a replacement it
- * would be saved as a description of the new photograph, and a screen reader
- * would then confidently report something the image does not show. Nothing
- * else clears it: the working event keeps its identity across the swap, so the
- * alt editor never re-seeds itself from the changed media.
+ * This screen has to do it explicitly: the working event keeps its identity
+ * across a removal or a swap, so the alt editor never re-seeds itself from the
+ * changed media and nothing else would clear the text.
  */
-const clearImageAlt = () => {
+const clearEventImageAlt = () => {
   if (!editorState.event) return;
-  for (const language of editorState.event.getLanguages()) {
-    editorState.event.content(language).imageAlt = '';
-  }
+  clearImageAlt(editorState.event);
 };
 
 /**
@@ -1426,7 +1422,7 @@ const clearImageAlt = () => {
 const handleImageReplace = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
-  clearImageAlt();
+  clearEventImageAlt();
 };
 
 /**
@@ -1435,7 +1431,7 @@ const handleImageReplace = () => {
 const handleImageRemove = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
-  clearImageAlt();
+  clearEventImageAlt();
   if (editorState.event) {
     editorState.event.mediaFocalPointX = 0.5;
     editorState.event.mediaFocalPointY = 0.5;
