@@ -7,6 +7,7 @@ import SeriesEditor from '@/client/components/logged_in/calendar-content/series-
 import SeriesService from '@/client/service/series';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { DuplicateSeriesNameError } from '@/common/exceptions/series';
 
 const routes: RouteRecordRaw[] = [
   { path: '/calendar/:calendar/manage', component: {}, name: 'manage' },
@@ -184,5 +185,67 @@ describe('SeriesEditor — image section', () => {
       // Original mediaId unchanged
       expect(wrapper.find('.event-image-stub').attributes('data-media-id')).toBe('existing-id');
     });
+  });
+});
+
+describe('SeriesEditor — save flow', () => {
+  let wrapper: any;
+  let mockSave: any;
+
+  beforeEach(() => {
+    mockSave = vi.fn().mockResolvedValue(createSeries());
+    vi.spyOn(SeriesService.prototype, 'saveSeries').mockImplementation(mockSave);
+  });
+
+  afterEach(() => {
+    if (wrapper) {
+      wrapper.unmount();
+    }
+    vi.restoreAllMocks();
+  });
+
+  it('should disable the save button until the details form reports it can save', async () => {
+    wrapper = createWrapper(createNewSeries());
+    await nextTick();
+
+    const saveButton = wrapper.find('.btn-save');
+    expect(saveButton.attributes('disabled')).toBeDefined();
+
+    await wrapper.find('#series-url-name').setValue('fall-expo');
+    await wrapper.find('#name-en').setValue('Fall Expo');
+
+    expect(saveButton.attributes('disabled')).toBeUndefined();
+  });
+
+  it('should save the series and emit saved then close', async () => {
+    const series = createSeries();
+    wrapper = createWrapper(series);
+    await nextTick();
+
+    await wrapper.find('.btn-save').trigger('click');
+    await nextTick();
+    await nextTick();
+
+    expect(mockSave).toHaveBeenCalledWith(series);
+    const saved = wrapper.emitted('saved');
+    expect(saved).toBeTruthy();
+    expect((saved[0][0] as EventSeries).id).toBe('series-1');
+    expect(wrapper.emitted('close')).toBeTruthy();
+  });
+
+  it('should show the mapped error and stay open when the save fails', async () => {
+    mockSave.mockRejectedValue(new DuplicateSeriesNameError());
+    wrapper = createWrapper(createSeries());
+    await nextTick();
+
+    await wrapper.find('.btn-save').trigger('click');
+    await nextTick();
+    await nextTick();
+
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain('A series with this name already exists');
+    expect(wrapper.emitted('saved')).toBeFalsy();
+    expect(wrapper.emitted('close')).toBeFalsy();
   });
 });
