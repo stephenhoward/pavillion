@@ -899,14 +899,23 @@ form {
             <h2 class="section-header">EVENT IMAGE</h2>
 
             <div class="section-card">
-              <!-- Show workspace when an image is attached, uploader otherwise -->
-              <ImageWorkspace
-                v-if="eventImage"
-                :image="eventImage"
-                @adjust="handleImageAdjust"
-                @replace="handleImageReplace"
-                @remove="handleImageRemove"
-              />
+              <!-- Show workspace when an image is attached, uploader otherwise.
+                   The alt editor belongs to the attached image, so it shares the
+                   workspace's condition rather than carrying its own; it writes
+                   straight onto the working event and follows the language tabs
+                   above, so the save path needs no knowledge of it. -->
+              <template v-if="eventImage">
+                <ImageWorkspace
+                  :image="eventImage"
+                  @adjust="handleImageAdjust"
+                  @replace="handleImageReplace"
+                  @remove="handleImageRemove"
+                />
+                <ImageAltEditor
+                  :model="editorState.event"
+                  :language="currentLanguage"
+                />
+              </template>
               <ImageUpload
                 v-else
                 :calendar-id="editorState.event.calendarId || 'default'"
@@ -1124,6 +1133,7 @@ import SingleEventCancelControl from './SingleEventCancelControl.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
+import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
 import CategorySelector from './category-selector.vue';
 import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';

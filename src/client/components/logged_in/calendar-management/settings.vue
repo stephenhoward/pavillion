@@ -127,6 +127,22 @@
               @upload-complete="handleDefaultImageUpload"
             />
           </div>
+
+          <!--
+            Alt text for the default image is per-language content on the
+            calendar, so it follows the language tab chosen in the content card
+            above rather than carrying a selector of its own — the editor's own
+            textarea label names that language, which is what keeps it
+            unambiguous this far from the tabs. The image itself is stored the
+            moment it is uploaded; its description is content and saves with the
+            rest of the calendar's content.
+          -->
+          <ImageAltEditor
+            v-if="state.defaultEventImage && localCalendar"
+            :model="localCalendar"
+            :language="currentLanguage"
+            :disabled="state.isSaving"
+          />
         </div>
 
         <!--
@@ -232,6 +248,7 @@ import { useLanguageManagement } from '@/client/composables/useLanguageManagemen
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
+import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
@@ -431,13 +448,19 @@ const saveSettings = async () => {
     state.error = '';
     state.success = '';
 
-    const contentPayload: Record<string, { name: string; description: string }> = {};
+    // `imageAlt` is sent for every language on every save, never only when it
+    // changed: the server replaces rather than patches it, so an omitted value
+    // clears the stored column. That is what lets the editor's Decorative
+    // choice — which is the absence of alt text, not a stored flag — persist,
+    // and it is also why a partial payload would silently destroy alt text.
+    const contentPayload: Record<string, { name: string; description: string; imageAlt: string }> = {};
     if (localCalendar.value) {
       for (const lang of localCalendar.value.getLanguages()) {
         const c = localCalendar.value.content(lang);
         contentPayload[lang] = {
           name: c.name,
           description: c.description,
+          imageAlt: c.imageAlt,
         };
       }
     }
@@ -515,6 +538,16 @@ const removeDefaultImage = async () => {
     });
 
     state.defaultEventImage = null;
+
+    // A description with no image left to describe is stale in every language,
+    // so the working model drops it along with the image. It leaves the stored
+    // rows on the next content save, like any other content edit here.
+    if (localCalendar.value) {
+      for (const lang of localCalendar.value.getLanguages()) {
+        localCalendar.value.content(lang).imageAlt = '';
+      }
+    }
+
     state.success = t('save_success');
     clearMessages();
   }

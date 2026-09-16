@@ -12,6 +12,7 @@ import LanguagePicker from '@/client/components/common/language-picker.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
+import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
 
 const emit = defineEmits(['close', 'saved']);
 
@@ -337,6 +338,19 @@ onMounted(() => {
               @files-changed="handleFilesChanged"
             />
             <p class="field-help">{{ tEditor('image_help') }}</p>
+
+            <!--
+              Alt text is per-language content on the series, so the editor
+              follows the language tab chosen in the details section above
+              rather than carrying a selector of its own. It is only offered
+              once there is an image to describe.
+            -->
+            <ImageAltEditor
+              v-if="currentMedia"
+              :model="localSeries"
+              :language="currentLanguage"
+              :disabled="state.isSaving"
+            />
           </div>
         </section>
 

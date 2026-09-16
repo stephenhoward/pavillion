@@ -185,4 +185,47 @@ describe('SeriesEditor — image section', () => {
       expect(wrapper.find('.event-image-stub').attributes('data-media-id')).toBe('existing-id');
     });
   });
+
+  describe('alt text editor', () => {
+    it('is absent while the series has no image to describe', async () => {
+      wrapper = createWrapper(createSeries(null));
+      await nextTick();
+
+      expect(wrapper.find('.image-alt-editor').exists()).toBe(false);
+    });
+
+    it('is offered once the series has an image', async () => {
+      wrapper = createWrapper(createSeries('media-abc-123'));
+      await nextTick();
+
+      expect(wrapper.find('.image-alt-editor').exists()).toBe(true);
+    });
+
+    it('appears as soon as an upload gives the series an image', async () => {
+      wrapper = createWrapper(createSeries(null));
+      await nextTick();
+
+      wrapper.vm.handleImageUpload([{ success: true, media: { id: 'new-media-id' } }]);
+      await nextTick();
+
+      expect(wrapper.find('.image-alt-editor').exists()).toBe(true);
+    });
+
+    it('edits the alt text of the language the editor is showing', async () => {
+      const series = createSeries('media-abc-123');
+      series.content('en').imageAlt = 'A band on an outdoor stage';
+
+      wrapper = createWrapper(series);
+      await nextTick();
+
+      // The editor has no language selector of its own: it follows the tab
+      // selection in the details section and writes onto the working model,
+      // which is what the Save button then sends.
+      const textarea = wrapper.find('.image-alt-editor textarea');
+      expect((textarea.element as HTMLTextAreaElement).value).toBe('A band on an outdoor stage');
+
+      await textarea.setValue('A brass band playing to a seated crowd');
+      expect(series.content('en').imageAlt).toBe('A brass band playing to a seated crowd');
+    });
+  });
 });
