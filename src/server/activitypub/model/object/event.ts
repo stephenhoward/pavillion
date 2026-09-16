@@ -259,8 +259,15 @@ class EventObject extends ActivityPubObject {
     // is not content these maps carry.
     const contentLanguages = mappedContentLanguages(event._content);
     if (contentLanguages.length >= 2) {
-      const nameMap: Record<string, string> = {};
-      const summaryMap: Record<string, string> = {};
+      // Null-prototype accumulators, for the same reason as altMap below: a
+      // language code is attacker-supplied and `__proto__` is a legitimate own
+      // key on `_content`. These three are write-only today, so the swallowed
+      // write is the only reachable half — a `__proto__` row would silently
+      // drop out of the map instead of reaching the wire. Keeping them
+      // null-prototype makes the entry an ordinary own property and keeps any
+      // future keyed read off the prototype chain.
+      const nameMap: Record<string, string> = Object.create(null);
+      const summaryMap: Record<string, string> = Object.create(null);
       let hasSummaryEntries = false;
 
       for (const lang of contentLanguages) {
@@ -280,7 +287,7 @@ class EventObject extends ActivityPubObject {
       if (hasSummaryEntries) {
         result.summaryMap = summaryMap;
         // contentMap: HTML-wrapped descriptions for interop (Mobilizon, Gancio, Friendica)
-        const contentMap: Record<string, string> = {};
+        const contentMap: Record<string, string> = Object.create(null);
         for (const [lang, desc] of Object.entries(summaryMap)) {
           contentMap[lang] = `<p>${desc}</p>`;
         }
@@ -325,7 +332,7 @@ class EventObject extends ActivityPubObject {
       const altContent: Record<string, { imageAlt: string }> = event.media
         ? event._content
         : calendar._content;
-      const altMap: Record<string, string> = {};
+      const altMap: Record<string, string> = Object.create(null);
       for (const lang of Object.keys(altContent)) {
         const alt = altContent[lang]?.imageAlt;
         if (alt && alt.trim() !== '') {
@@ -339,7 +346,20 @@ class EventObject extends ActivityPubObject {
         // reads stays internally consistent with the rest of the object. The
         // map holds only non-empty values, so a hit on primaryLanguage is
         // already a usable string.
-        image.name = altMap[primaryLanguage] ?? altMap[altLanguages[0]];
+        //
+        // The lookup is own-property-only because a language code is attacker-
+        // supplied: `_content` is a null-prototype map, so `__proto__` is a
+        // legitimate own key that round-trips through the model, and
+        // `primaryLanguage` can therefore be the literal string `'__proto__'`.
+        // On a plain `{}` accumulator that key would be swallowed on write (the
+        // `__proto__` setter ignores primitives) and resolve through the
+        // prototype chain on read, putting `Object.prototype` — an object where
+        // a string belongs — into `image.name` on the wire. Both halves are
+        // needed: the null prototype makes the write an ordinary own property,
+        // and `Object.hasOwn` keeps the read off any inherited slot.
+        image.name = Object.hasOwn(altMap, primaryLanguage)
+          ? altMap[primaryLanguage]
+          : altMap[altLanguages[0]];
         if (altLanguages.length >= 2) {
           image.nameMap = altMap;
         }

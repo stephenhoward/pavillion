@@ -814,6 +814,53 @@ describe('EventObject', () => {
           mediaType: 'image/png',
         });
       });
+
+      it('emits a string image.name when the primary content language is __proto__', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        // `_content` is a null-prototype map, so `__proto__` is a legitimate own
+        // key that round-trips through the model — `express.json()` makes it an
+        // own key on a parsed body and the content write loops take the map key
+        // verbatim as the row's language. It is therefore reachable as the
+        // primary language, and the alt accumulator must neither swallow the
+        // write nor resolve the read through the prototype chain.
+        event.addContent(
+          new CalendarEventContent('__proto__', 'Event With Image', '', '', 'A cat asleep on a piano'),
+        );
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+        // Assert on the serialized shape: that is what reaches a follower, and
+        // the defect put `Object.prototype` — an object where a string belongs —
+        // into `image.name`, so a peer calling `.toLowerCase()` on it threw.
+        const wire = JSON.parse(JSON.stringify(result));
+
+        expect(typeof wire.image.name).toBe('string');
+        expect(wire.image.name).toBe('A cat asleep on a piano');
+      });
+
+      it('never emits a non-string image.name when __proto__ is one of several alt languages', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(
+          new CalendarEventContent('__proto__', 'Event With Image', '', '', 'A cat asleep on a piano'),
+        );
+        event.addContent(
+          new CalendarEventContent('es', 'Evento Con Imagen', '', '', 'Un gato dormido en un piano'),
+        );
+        event.media = approvedEventMedia();
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+        const wire = JSON.parse(JSON.stringify(result));
+
+        expect(typeof wire.image.name).toBe('string');
+        // Every value in the emitted nameMap is a string too — the map goes
+        // straight to JSON.stringify, so an inherited slot leaking in would
+        // federate as an object.
+        for (const value of Object.values(wire.image.nameMap ?? {})) {
+          expect(typeof value).toBe('string');
+        }
+      });
     });
 
     describe('alt-only languages and the nameMap gate', () => {
