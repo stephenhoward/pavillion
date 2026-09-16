@@ -3,6 +3,7 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
+import { calendarPath } from '@/common/routing/public-paths';
 
 const textTemplate = compileTemplate('src/server/calendar', 'editor_notification_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/calendar', 'editor_notification_email.html.hbs');
@@ -32,7 +33,9 @@ class EditorNotificationEmail extends EmailMessage {
 
   buildMessage(language: string): MailData {
     const domain = config.get('domain');
-    const calendarUrl = `${domain}/view/${this.calendar.urlName}`;
+    // Absolute: both templates render this as an anchor href, and a mail client
+    // has no origin to resolve a scheme-less value against.
+    const calendarUrl = `https://${domain}${calendarPath(this.calendar.urlName)}`;
     const calendarName = this.calendar.content(language).name;
 
     return {

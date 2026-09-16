@@ -155,7 +155,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       expect(results[0].event.sourceCalendar).not.toBeNull();
       expect(results[0].event.sourceCalendar!.urlName).toBe('original-cal');
       expect(results[0].event.sourceCalendar!.host).toBe(TEST_DOMAIN);
-      expect(results[0].event.sourceCalendar!.url).toBe('/view/original-cal');
+      expect(results[0].event.sourceCalendar!.url).toBe('/original-cal');
     });
 
     it('should populate sourceCalendar from the page URL the peer declared', async () => {

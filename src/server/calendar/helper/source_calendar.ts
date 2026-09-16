@@ -1,5 +1,6 @@
 import config from 'config';
 import { CalendarEvent } from '@/common/model/events';
+import { calendarPath } from '@/common/routing/public-paths';
 import type { EventSourceActor } from '@/server/activitypub/interface';
 
 /**
@@ -60,10 +61,13 @@ export async function resolveSourceCalendars(
       }
       if (ctx.sourceCalendarUrlName) {
         const domain: string = config.get('domain');
+        // Our own domain, so the shared builder applies — unlike the remote
+        // branch in parseAttributedToUri below, which must keep guessing the
+        // retired spelling on a peer's host.
         ctx.event.sourceCalendar = {
           urlName: ctx.sourceCalendarUrlName,
           host: domain,
-          url: `/view/${ctx.sourceCalendarUrlName}`,
+          url: calendarPath(ctx.sourceCalendarUrlName),
         };
       }
     }

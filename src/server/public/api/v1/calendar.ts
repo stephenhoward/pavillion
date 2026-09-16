@@ -24,7 +24,7 @@ import ExpressHelper from '@/server/common/helper/express';
  *
  * Dropped from the calendar root:
  *   - `listed` — owner-discovery flag; knowing whether a calendar is hidden
- *     from the /view/ index is not the public's business.
+ *     from the /discover index is not the public's business.
  *   - `widgetAllowedDomain` — operator-internal embed-policy config.
  *   - `defaultEventImageId` — internal FK; the projected
  *     `defaultEventImage.id` already carries the identifier callers need.
@@ -263,8 +263,8 @@ export default class CalendarRoutes {
   }
 
   /**
-   * GET /api/public/v1/calendars — list listed calendars for the /view/
-   * discovery landing page.
+   * GET /api/public/v1/calendars — list listed calendars for the /discover
+   * landing page.
    *
    * Returns a bare array of `{ id, urlName, content[], lastEventActivity }`
    * built field-by-field via an explicit allow-list projection. This is

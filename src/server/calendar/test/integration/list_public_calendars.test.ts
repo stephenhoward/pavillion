@@ -1,7 +1,7 @@
 /**
  * Integration tests for CalendarService.listPublicCalendars (pv-u4ew.2).
  *
- * Covers the public-discovery query that powers the /view/ landing page:
+ * Covers the public-discovery query that powers the /discover landing page:
  *   - listed=true / listed=false filtering
  *   - MAX(event.updatedAt) → lastEventActivity aggregate per calendar
  *   - ORDER BY activity DESC NULLS LAST (no-event calendars sort last)

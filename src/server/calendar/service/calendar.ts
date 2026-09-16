@@ -18,6 +18,7 @@ import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { isReservedRouteSegment, RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
+import { calendarPath } from '@/common/routing/public-paths';
 import { ValidationError } from '@/common/exceptions/base';
 import { MediaNotFoundError } from '@/common/exceptions/media';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -81,8 +82,16 @@ class CalendarService {
     this.moderationInterface = moderationInterface;
   }
 
+  /**
+   * Stamps the calendar's absolute public address onto the model.
+   *
+   * This is the value an organizer is shown as their shareable URL and the one
+   * the public API hands out, so it has to be the address DEC-018 actually
+   * serves — `calendarPath` is that shape, and the origin is this instance's
+   * configured domain.
+   */
   private withPublicUrl(calendar: Calendar): Calendar {
-    calendar.publicUrl = 'https://' + config.get('domain') + '/view/' + calendar.urlName;
+    calendar.publicUrl = 'https://' + config.get('domain') + calendarPath(calendar.urlName);
     return calendar;
   }
 
@@ -1810,7 +1819,7 @@ class CalendarService {
   }
 
   /**
-   * List public-discoverable calendars for the /view/ discovery page.
+   * List public-discoverable calendars for the /discover page.
    *
    * Returns every calendar with `listed = true`, paired with the timestamp of
    * its most-recent publicly-visible event activity, sorted by that timestamp
