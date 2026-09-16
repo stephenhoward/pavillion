@@ -80,5 +80,15 @@
     "focal_explanation": "The focal point determines how your image is cropped across card and banner displays.",
     "replace_image": "Replace image",
     "remove": "Remove"
+  },
+  "alt_editor": {
+    "legend": "Screen readers",
+    "decorative_label": "Decorative",
+    "decorative_help": "The image is hidden from screen readers. This is the right choice when the image adds nothing beyond the text already on the page.",
+    "describe_label": "Describe this image",
+    "describe_help": "Screen readers read your description in place of the image.",
+    "description_label": "Image description ({{language}})",
+    "description_hint": "Write what the image shows. There is no need to start with \"image of\".",
+    "stash_note": "The descriptions you wrote will be removed when you save. Switch back to describing the image to restore them."
   }
 }
