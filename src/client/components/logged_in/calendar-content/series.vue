@@ -253,12 +253,14 @@ onMounted(async () => {
               an in-SPA navigation would never reach the server that serves it.
 
               Unlike the calendar link elsewhere in this app, this is root-
-              relative and carries no locale prefix: the builder deliberately
-              knows neither (locale is the site SPA's concern via
-              localizedPath, which this app has no equivalent of; origin
-              requires configuration only a server caller has). So this link
-              opens the default-locale page and isn't copy-pasteable as-is,
-              where the calendar link is both locale-correct and absolute.
+              relative: the builder emits no origin, because that requires
+              configuration only a server caller has, and the calendar link is
+              absolute only because the server stamped it. So this link works
+              in the browser but isn't copy-pasteable as-is. Neither link
+              carries a locale prefix — Calendar.publicUrl is the origin plus
+              calendarPath and nothing else — so both open the default-locale
+              page. Locale is the site SPA's concern via localizedPath, which
+              this app has no equivalent of.
             -->
             <a
               :href="seriesPath(props.calendarUrlName, series.urlName)"

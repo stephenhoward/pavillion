@@ -1,3 +1,5 @@
+import { calendarPath } from '@/common/routing/public-paths';
+
 class UserProfileResponse {
   id: string;
   type: string;
@@ -9,6 +11,15 @@ class UserProfileResponse {
    * their actor documents. It is deliberately the canonical root URL rather
    * than the `/view/` spelling that only 301s to it, because on our own domain
    * we know our own version.
+   *
+   * The path comes from `calendarPath`, the shared declaration of that shape,
+   * with this instance's origin prepended the way `CalendarService.withPublicUrl`
+   * and `EditorNotificationEmail` compose theirs. The three sibling URIs here
+   * address the `/calendars/:urlName/...` AP-protocol namespace, which that
+   * module does not model; `url` is the one field of the four that is a public
+   * page. Peers cache this value (`calendar_actor.page_url`) on machines we do
+   * not administer, so it is the last field in the product that should be
+   * spelled by hand.
    *
    * Built unconditionally from the url name, and the reserved list is
    * deliberately NOT consulted: DEC-018 rule 4 says reservation governs
@@ -30,7 +41,7 @@ class UserProfileResponse {
     this.id = 'https://' + domain + '/calendars/' + urlName;
     this.type = 'Organization';
     this.preferredUsername = urlName;
-    this.url = 'https://' + domain + '/' + urlName;
+    this.url = `https://${domain}${calendarPath(urlName)}`;
     this.inbox = 'https://' + domain + '/calendars/' + urlName + '/inbox';
     this.outbox = 'https://' + domain + '/calendars/' + urlName + '/outbox';
     this.publicKey = publicKey || '';

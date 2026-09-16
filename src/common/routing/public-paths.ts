@@ -11,22 +11,19 @@
  * them — the client SPA imports them directly for a series page's link, and
  * indirectly for a calendar's address, which it renders from the
  * server-stamped `Calendar.publicUrl` so the link an organizer copies and
- * the text they read cannot disagree. Two server
- * generators stay outside this module rather than being folded in:
+ * the text they read cannot disagree. One server generator stays outside this
+ * module rather than being folded in:
  *
- * - `src/server/activitypub/model/userprofile.ts` builds the actor
- *   document's `url` alongside three sibling URIs (`id`, `inbox`, `outbox`)
- *   that address the `/calendars/:urlName/...` AP-protocol namespace, which
- *   this module doesn't model at all. `url` is the only one of the four that
- *   happens to want the public-page shape, and this module only emits
- *   root-relative paths (see "Origin" below), so using it here would still
- *   mean hand-concatenating the origin — no less hand-rolling than today,
- *   applied to one field out of four.
  * - `src/server/common/helper/meta-tags.ts` builds the SSR canonical/og:url
  *   path by echoing back segments `parseEventPageParams` captured from the
  *   raw request path, which — per that function's own doc — are matched
  *   pre-decode and may already be percent-encoded. Routing them through
  *   `eventPath` would percent-encode them a second time.
+ *
+ * Emitting an absolute URL is not a reason to stay outside: a server caller
+ * prepends `https://{config.domain}` to a path from here, which is what
+ * `CalendarService.withPublicUrl`, `EditorNotificationEmail` and the actor
+ * document's `url` (`src/server/activitypub/model/userprofile.ts`) all do.
  *
  * Deliberately NOT here:
  *

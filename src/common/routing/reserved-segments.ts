@@ -55,7 +55,7 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = Object.freeze([
   'calendar',
   'calendars',
   'coverage',
-  'discover',
+  'discover', // emitted as DISCOVER_PATH in src/common/routing/public-paths.ts
   'event',
   'feed',
   'funding',
