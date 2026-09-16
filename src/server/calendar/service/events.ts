@@ -25,6 +25,7 @@ import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
+import { sanitizeImageAlt, validateImageAlt } from '@/server/calendar/service/image_alt';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
@@ -875,8 +876,33 @@ class EventService {
     return schedule;
   }
 
-  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>, tx?: Transaction): Promise<CalendarEventContent> {
+  /**
+   * Writes one language's content row for an event.
+   *
+   * This is the single funnel every content row passes through on creation,
+   * which is where `imageAlt` is normalized. Two callers are on the inbound
+   * federation path (addRemoteEvent, updateRemoteEvent), so the funnel has to
+   * serve both trust levels:
+   *
+   * - Author-facing writes (default) reject an invalid alt text, so the error
+   *   and the stored value never disagree.
+   * - `untrusted` writes normalize it away instead. A peer's over-long or
+   *   non-string alt text must not cost us the whole inbound event.
+   *
+   * @param {string} eventId - Event the content row belongs to
+   * @param {string} language - Language code for this row
+   * @param {Record<string,any>} contentParams - Content fields for this language
+   * @param {Transaction} [tx] - Enclosing transaction, if any
+   * @param {object} [options] - Write options
+   * @param {boolean} [options.untrusted] - True when contentParams came from a
+   *   federated payload rather than from the content's author
+   * @returns {Promise<CalendarEventContent>} The content that was written
+   */
+  async createEventContent(eventId: string, language: string, contentParams: Record<string,any>, tx?: Transaction, options: { untrusted?: boolean } = {}): Promise<CalendarEventContent> {
     contentParams.language = language;
+    contentParams.imageAlt = options.untrusted
+      ? sanitizeImageAlt(contentParams.imageAlt)
+      : validateImageAlt(contentParams.imageAlt);
     const content = CalendarEventContent.fromObject(contentParams);
 
     const contentEntity = EventContentEntity.fromModel(content);
@@ -1021,6 +1047,9 @@ class EventService {
             name: name,
             description: c.description,
             accessibility_info: c.accessibilityInfo ?? '',
+            // validateImageAlt maps nullish to '', matching the `?? ''` idiom
+            // above: an omitted alt text clears the stored one.
+            image_alt: validateImageAlt(c.imageAlt),
           }, { transaction: tx });
           event.addContent(contentEntity.toModel());
         }
@@ -1433,7 +1462,9 @@ class EventService {
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
-        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
+        // untrusted: the content came off the wire from a peer, so an invalid
+        // field is normalized away rather than rejecting the whole event.
+        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>, undefined, { untrusted: true }));
       }
     }
 
@@ -1498,6 +1529,10 @@ class EventService {
             name: c.name,
             description: c.description,
             accessibility_info: c.accessibilityInfo ?? '',
+            // Without this the peer's correction to its own alt text would
+            // never land. sanitizeImageAlt, not validateImageAlt: this row is
+            // written from the wire, so a bad value is dropped, not thrown on.
+            image_alt: sanitizeImageAlt(c.imageAlt),
           });
           event.addContent(contentEntity.toModel());
         }
@@ -1510,7 +1545,7 @@ class EventService {
           delete c.language;
 
           if (Object.keys(c).length > 0) {
-            event.addContent(await this.createEventContent(eventParams.id, language, c));
+            event.addContent(await this.createEventContent(eventParams.id, language, c, undefined, { untrusted: true }));
           }
         }
       }

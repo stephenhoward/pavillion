@@ -47,12 +47,12 @@ function stripHtmlTags(html: string): string {
  */
 export interface RemoteEventParams {
   /**
-   * Per-language content entries, normally `{ name, description }` with HTML
-   * stripped. The entry shape is dynamic: the Pavillion-format sanitizer
-   * spreads unhandled entry keys through (e.g. `accessibilityInfo`) and
-   * passes non-object entries raw, so this is not typed to the nominal
-   * two-field shape. When no resolution branch produces content, a raw wire
-   * `content` value passes through unmodified via the spread.
+   * Per-language content entries with HTML stripped. The Pavillion-format
+   * sanitizer emits a fixed allow-listed key set (see
+   * `EventObject._sanitizeContentObject`), but still passes non-object entries
+   * raw, and when no resolution branch produces content a raw wire `content`
+   * value passes through unmodified via the top-level spread — so this stays
+   * untyped rather than naming the nominal shape.
    */
   content?: Record<string, any>;
   /** Wire-provided category list, passed through unvalidated. */
@@ -791,20 +791,41 @@ class EventObject extends ActivityPubObject {
   }
 
   /**
-   * Sanitizes a Pavillion content object (language-keyed { name, description } entries).
-   * Applies stripHtmlTags to all string values to prevent XSS from federated sources.
+   * Sanitizes a Pavillion content object (language-keyed content entries).
+   *
+   * This is an **allow-list**, not a spread. Every key a content entry may
+   * carry is named here and stripped of HTML; a key that is not named is
+   * dropped. The earlier `...entry` spread passed unnamed keys through
+   * unsanitized, which is how `imageAlt` reached the database off the wire
+   * with no tag stripping and no bound, and it would have done the same for
+   * the next content field added to the model. Adding a content field is now
+   * a deliberate edit here.
+   *
+   * The names mirror what CalendarEventContent.fromObject reads: `title` is
+   * its documented fallback for `name`, so it is sanitized rather than left to
+   * arrive raw behind an empty `name`. `language` is deliberately absent — the
+   * language of an entry is the key it is filed under, and the calendar
+   * service overwrites any wire-supplied value with that key.
+   *
+   * A non-string value becomes undefined rather than passing through, so a
+   * downstream update writes nothing for that field instead of writing a
+   * non-string into a text column.
+   *
+   * Length is not bounded here. The columns belong to the calendar domain and
+   * so does their cap: EventService normalizes federated content through
+   * sanitizeImageAlt on the way into storage.
    */
   private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
+    const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo', 'imageAlt'] as const;
     const sanitized: Record<string, any> = {};
     for (const lang of Object.keys(content)) {
       const entry = content[lang];
       if (entry && typeof entry === 'object') {
-        sanitized[lang] = {
-          ...entry,
-          name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : entry.name,
-          description: typeof entry.description === 'string' ? stripHtmlTags(entry.description) : entry.description,
-          accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? stripHtmlTags(entry.accessibilityInfo) : entry.accessibilityInfo,
-        };
+        const allowed: Record<string, any> = {};
+        for (const key of ALLOWED_CONTENT_KEYS) {
+          allowed[key] = typeof entry[key] === 'string' ? stripHtmlTags(entry[key]) : undefined;
+        }
+        sanitized[lang] = allowed;
       }
       else {
         sanitized[lang] = entry;

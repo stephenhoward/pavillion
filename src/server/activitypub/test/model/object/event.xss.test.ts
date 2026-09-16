@@ -293,4 +293,78 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
       expectInert(r.content.en.name);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Content allow-list. `_sanitizeContentObject` used to spread unhandled entry
+  // keys straight through, so a content field the sanitizer had not been taught
+  // about (imageAlt was the first) reached storage with no tag stripping at
+  // all. The sanitizer now names every key it will emit; anything else is
+  // dropped. These assertions are what fails if the allow-list is widened back
+  // into a spread.
+  // ---------------------------------------------------------------------------
+  describe('pavillion:content allow-list', () => {
+    it('strips markup in imageAlt, like every other content field', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': {
+          en: { name: 'Festival', imageAlt: '<img src=x onerror=alert(1)>A crowd at dusk' },
+        },
+      });
+      expectInert(r.content.en.imageAlt);
+      expect(r.content.en.imageAlt).toBe('A crowd at dusk');
+    });
+
+    it('strips markup in title, the documented fallback for name', () => {
+      // fromObject reads `obj.name || obj.title`, so an empty name hands the
+      // stored value to title — which the old spread passed through raw.
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': { en: { name: '', title: '<b>Festival</b>' } },
+      });
+      expectInert(r.content.en.title);
+      expect(r.content.en.title).toBe('Festival');
+    });
+
+    it('drops a content key the sanitizer does not name', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': {
+          en: {
+            name: 'Festival',
+            // A field a future model might gain, or one a peer invented.
+            imageCaption: '<script>alert(1)</script>',
+            mediaId: 'not-yours',
+          },
+        },
+      });
+      expect(r.content.en.imageCaption).toBeUndefined();
+      expect(r.content.en.mediaId).toBeUndefined();
+      expect(Object.keys(r.content.en).sort()).toEqual(
+        ['accessibilityInfo', 'description', 'imageAlt', 'name', 'title'],
+      );
+    });
+
+    it('drops a wire-supplied language, which the entry key already decides', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': { en: { name: 'Festival', language: 'fr' } },
+      });
+      expect(r.content.en.language).toBeUndefined();
+    });
+
+    it('drops a non-string content value instead of passing it through', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': {
+          en: { name: 42, description: { nested: 'object' }, imageAlt: ['an', 'array'] },
+        },
+      });
+      expect(r.content.en.name).toBeUndefined();
+      expect(r.content.en.description).toBeUndefined();
+      expect(r.content.en.imageAlt).toBeUndefined();
+    });
+
+    it('applies the allow-list to the old bare-content format too', () => {
+      const r = EventObject.parseInboundEvent({
+        content: { en: { name: 'Festival', imageAlt: '<b>A crowd</b>', evil: '<script>x</script>' } },
+      });
+      expect(r.content.en.imageAlt).toBe('A crowd');
+      expect(r.content.en.evil).toBeUndefined();
+    });
+  });
 });
