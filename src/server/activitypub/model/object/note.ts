@@ -8,6 +8,7 @@ import { EventObject } from '@/server/activitypub/model/object/event';
 import { resolveEventStartTime } from '@/server/activitypub/model/object/start-time';
 
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
+import { mappedContentLanguages } from '@/server/activitypub/helper/content-languages';
 
 /**
  * Wraps a CalendarEvent as an ActivityStreams `Note` for Mastodon-class
@@ -153,12 +154,11 @@ class NoteObject extends ActivityPubObject {
       result.url = resolvedUrl;
     }
 
-    // nameMap/contentMap: only when 2+ languages have content (mirrors
-    // EventObject's gate). The map values are per-language renderings of the
-    // same content shape.
-    const contentLanguages = Object.keys(event._content).filter(
-      lang => event._content[lang] && !event._content[lang].isEmpty(),
-    );
+    // nameMap/contentMap: only when 2+ languages have mapped content. Shares
+    // EventObject's gate by calling the same function rather than restating it,
+    // so the two cannot drift apart as content fields are added to the model.
+    // The map values are per-language renderings of the same content shape.
+    const contentLanguages = mappedContentLanguages(event._content);
     if (contentLanguages.length >= 2) {
       const nameMap: Record<string, string> = {};
       const contentMap: Record<string, string> = {};

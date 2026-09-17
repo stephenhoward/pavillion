@@ -94,7 +94,7 @@ describe('TranslatedModel.displayName', () => {
  */
 describe('TranslatedModel content map hardening', () => {
   const HOSTILE_KEYS = ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf'];
-  const WRITTEN_FIELDS = ['name', 'description'];
+  const WRITTEN_FIELDS = ['name', 'description', 'imageAlt'];
 
   const emptyObject = () => ({}) as Record<string, unknown>;
 
@@ -122,9 +122,11 @@ describe('TranslatedModel content map hardening', () => {
 
     content.name = 'PWNED';
     content.description = 'PWNED';
+    content.imageAlt = 'ALT-PWNED';
 
     expect(emptyObject().name).toBeUndefined();
     expect(emptyObject().description).toBeUndefined();
+    expect(emptyObject().imageAlt).toBeUndefined();
 
     // The row was stored on the model as an own key rather than re-parenting
     // the map or vanishing.
@@ -138,7 +140,7 @@ describe('TranslatedModel content map hardening', () => {
     // with JSON.parse, which — unlike an object literal — makes `__proto__` an
     // own enumerable property, so it survives Object.entries and reaches
     // content() as a language code.
-    const body = JSON.parse('{"__proto__":{"name":"PWNED","description":"PWNED"}}');
+    const body = JSON.parse('{"__proto__":{"name":"PWNED","description":"PWNED","imageAlt":"ALT-PWNED"}}');
     expect(Object.keys(body)).toEqual(['__proto__']);
 
     const calendar = new Calendar('cal-1');
@@ -146,10 +148,12 @@ describe('TranslatedModel content map hardening', () => {
       const content = calendar.content(language);
       content.name = values.name;
       content.description = values.description;
+      content.imageAlt = values.imageAlt;
     }
 
     expect(emptyObject().name).toBeUndefined();
     expect(emptyObject().description).toBeUndefined();
+    expect(emptyObject().imageAlt).toBeUndefined();
     // The hostile key is stored as ordinary data on this model alone.
     expect(calendar.content('__proto__').name).toBe('PWNED');
   });
@@ -177,6 +181,29 @@ describe('TranslatedModel content map hardening', () => {
     const calendar = new Calendar('cal-1');
     calendar.addContent(new CalendarContent('en'));
     expect(calendar.hasContent('en')).toBe(false);
+  });
+
+  // The render-boundary twin of content-languages.test.ts's "does not count a
+  // language carrying only alt text". hasContent is the row-selection
+  // predicate, so a row that holds nothing a row consumer renders must not be
+  // selected as that locale's content — the row is stored (getLanguages sees
+  // it) and isEmpty() still reports it as carrying something.
+  it('hasContent is false for a row carrying only alt text', () => {
+    const calendar = new Calendar('cal-1');
+    calendar.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+    expect(calendar.hasContent('fr')).toBe(false);
+    expect(calendar.getLanguages()).toContain('fr');
+    expect(calendar.content('fr').isEmpty()).toBe(false);
+  });
+
+  it('hasContent is true for a row whose only populated field is one a consumer reads', () => {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    // Accessibility info is read off the selected row, so unlike alt text it
+    // makes the row stand for its language.
+    event.addContent(new CalendarEventContent('fr', '', '', 'Accès de plain-pied'));
+
+    expect(event.hasContent('fr')).toBe(true);
   });
 
   it('still lazily creates and reuses a row for an ordinary language code', () => {

@@ -298,12 +298,22 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
   // ---------------------------------------------------------------------------
   // Content allow-list. `_sanitizeContentObject` used to spread unhandled entry
   // keys straight through, so a content field the sanitizer had not been taught
-  // about reached storage with no tag stripping at all — `title`, the
-  // documented fallback for `name`, was one such field already on the model.
-  // The sanitizer now names every key it will emit; anything else is dropped. These assertions are what fails if the allow-list is widened back
+  // about (imageAlt was the first) reached storage with no tag stripping at
+  // all. The sanitizer now names every key it will emit; anything else is
+  // dropped. These assertions are what fails if the allow-list is widened back
   // into a spread.
   // ---------------------------------------------------------------------------
   describe('pavillion:content allow-list', () => {
+    it('strips markup in imageAlt, like every other content field', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': {
+          en: { name: 'Festival', imageAlt: '<img src=x onerror=alert(1)>A crowd at dusk' },
+        },
+      });
+      expectInert(r.content.en.imageAlt);
+      expect(r.content.en.imageAlt).toBe('A crowd at dusk');
+    });
+
     it('strips markup in title, the documented fallback for name', () => {
       // fromObject reads `obj.name || obj.title`, so an empty name hands the
       // stored value to title — which the old spread passed through raw.
@@ -328,7 +338,7 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
       expect(r.content.en.imageCaption).toBeUndefined();
       expect(r.content.en.mediaId).toBeUndefined();
       expect(Object.keys(r.content.en).sort()).toEqual(
-        ['accessibilityInfo', 'description', 'name', 'title'],
+        ['accessibilityInfo', 'description', 'imageAlt', 'name', 'title'],
       );
     });
 
@@ -342,19 +352,19 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
     it('drops a non-string content value instead of passing it through', () => {
       const r = EventObject.parseInboundEvent({
         'pavillion:content': {
-          en: { name: 42, description: { nested: 'object' }, accessibilityInfo: ['an', 'array'] },
+          en: { name: 42, description: { nested: 'object' }, imageAlt: ['an', 'array'] },
         },
       });
       expect(r.content.en.name).toBeUndefined();
       expect(r.content.en.description).toBeUndefined();
-      expect(r.content.en.accessibilityInfo).toBeUndefined();
+      expect(r.content.en.imageAlt).toBeUndefined();
     });
 
     it('applies the allow-list to the old bare-content format too', () => {
       const r = EventObject.parseInboundEvent({
-        content: { en: { name: 'Festival', description: '<b>A crowd</b>', evil: '<script>x</script>' } },
+        content: { en: { name: 'Festival', imageAlt: '<b>A crowd</b>', evil: '<script>x</script>' } },
       });
-      expect(r.content.en.description).toBe('A crowd');
+      expect(r.content.en.imageAlt).toBe('A crowd');
       expect(r.content.en.evil).toBeUndefined();
     });
   });
@@ -366,8 +376,8 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
   // to CalendarEventContent (in `src/common`) requires a deliberate edit in the
   // ActivityPub domain, and forgetting that edit fails INVISIBLY — the new
   // field simply never arrives from a peer, with no error anywhere. That is not
-  // hypothetical: it is how the spread let an unnamed field reach the wire
-  // unhandled in the first place.
+  // hypothetical; it is exactly what happened to `imageAlt`, which was added to
+  // the model in an earlier bead and reached the wire unhandled.
   //
   // The assertions above catch the allow-list being widened back into a spread.
   // This one catches the opposite direction: a new content field on the model

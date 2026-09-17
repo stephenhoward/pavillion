@@ -344,6 +344,7 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   name: string = '';
   description: string = '';
   accessibilityInfo: string = '';
+  imageAlt: string = '';
 
   /**
    * Constructor for CalendarEventContent.
@@ -352,12 +353,14 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
    * @param {string} [name] - Optional name/title of the event
    * @param {string} [description] - Optional description of the event
    * @param {string} [accessibilityInfo] - Optional accessibility information
+   * @param {string} [imageAlt] - Optional alt text for the event image
    */
-  constructor( language: string, name?: string, description?: string, accessibilityInfo?: string) {
+  constructor( language: string, name?: string, description?: string, accessibilityInfo?: string, imageAlt?: string) {
     super();
     this.name = name ?? '';
     this.description = description ?? '';
     this.accessibilityInfo = accessibilityInfo ?? '';
+    this.imageAlt = imageAlt ?? '';
     this.language = language;
   }
 
@@ -370,7 +373,7 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   static fromObject(obj: Record<string, any>): CalendarEventContent {
     // Support both 'name' and 'title' field names for API compatibility
     const name = obj.name || obj.title || '';
-    return new CalendarEventContent(obj.language, name, obj.description, obj.accessibilityInfo);
+    return new CalendarEventContent(obj.language, name, obj.description, obj.accessibilityInfo, obj.imageAlt);
   }
 
   /**
@@ -385,16 +388,31 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
       name: this.name,
       description: this.description,
       accessibilityInfo: this.accessibilityInfo,
+      imageAlt: this.imageAlt,
     };
   }
 
   /**
    * Determines if the content has any meaningful data.
    *
-   * @returns {boolean} True if name, description, and accessibilityInfo are all empty
+   * @returns {boolean} True if name, description, accessibilityInfo, and imageAlt are all empty
    */
   isEmpty(): boolean {
-    return this.name === '' && this.description === '' && this.accessibilityInfo === '';
+    return this.name === '' && this.description === '' && this.accessibilityInfo === '' && this.imageAlt === '';
+  }
+
+  /**
+   * The name, the description, and the accessibility info are all read off an
+   * event's selected content row. `imageAlt` is excluded: it describes the
+   * event image, is resolved per field at the render boundary, and a row
+   * carrying only alt text would otherwise be chosen as this locale's content
+   * and render an event with a blank title. See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   *
+   * @returns {boolean} True if a name, description, or accessibility info is present
+   */
+  hasDisplayContent(): boolean {
+    return this.name !== '' || this.description !== '' || this.accessibilityInfo !== '';
   }
 };
 

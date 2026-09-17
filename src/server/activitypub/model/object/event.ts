@@ -12,6 +12,7 @@ import { resolveEventStartTime } from '@/server/activitypub/model/object/start-t
 import { createLogger } from '@/server/common/helper/logger';
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 import { mapEventCategoriesToFep } from '@/server/activitypub/helper/fep_category_map';
+import { mappedContentLanguages } from '@/server/activitypub/helper/content-languages';
 
 const logger = createLogger('activitypub');
 
@@ -252,13 +253,21 @@ class EventObject extends ActivityPubObject {
       result['pavillion:space'] = this._buildPavillionSpace(event.space, calendar);
     }
 
-    // nameMap/summaryMap: only when 2+ languages have content
-    const contentLanguages = Object.keys(event._content).filter(
-      lang => event._content[lang] && !event._content[lang].isEmpty(),
-    );
+    // nameMap/summaryMap: only when 2+ languages have mapped content — a
+    // non-empty name or description. See mappedContentLanguages for why this is
+    // not `isEmpty()`: a language row holding only alt text is content, but it
+    // is not content these maps carry.
+    const contentLanguages = mappedContentLanguages(event._content);
     if (contentLanguages.length >= 2) {
-      const nameMap: Record<string, string> = {};
-      const summaryMap: Record<string, string> = {};
+      // Null-prototype accumulators: a language code is attacker-supplied and
+      // `__proto__` is a legitimate own key on `_content`, which is itself a
+      // null-prototype map. These are write-only today, so the swallowed write
+      // is the only reachable half — a `__proto__` row would silently drop out
+      // of the map instead of reaching the wire. Keeping them null-prototype
+      // makes the entry an ordinary own property and keeps any future keyed
+      // read off the prototype chain.
+      const nameMap: Record<string, string> = Object.create(null);
+      const summaryMap: Record<string, string> = Object.create(null);
       let hasSummaryEntries = false;
 
       for (const lang of contentLanguages) {
@@ -278,7 +287,7 @@ class EventObject extends ActivityPubObject {
       if (hasSummaryEntries) {
         result.summaryMap = summaryMap;
         // contentMap: HTML-wrapped descriptions for interop (Mobilizon, Gancio, Friendica)
-        const contentMap: Record<string, string> = {};
+        const contentMap: Record<string, string> = Object.create(null);
         for (const [lang, desc] of Object.entries(summaryMap)) {
           contentMap[lang] = `<p>${desc}</p>`;
         }
@@ -796,11 +805,11 @@ class EventObject extends ActivityPubObject {
    * This is an **allow-list**, not a spread. Every key a content entry may
    * carry is named here and stripped of HTML; a key that is not named is
    * dropped. The earlier `...entry` spread passed unnamed keys through
-   * unsanitized, so any content field the sanitizer had not been taught about
-   * reached storage with no tag stripping at all — and it would have done the
-   * same for the next field added to the model. Adding a content field is now
-   * a deliberate edit here, and the structural test in event.xss.test.ts fails
-   * if that edit is forgotten.
+   * unsanitized, which is how `imageAlt` would have reached the database off
+   * the wire with no tag stripping and no bound, and it would have done the
+   * same for the next content field added to the model. Adding a content field
+   * is now a deliberate edit here, and the structural test in
+   * event.xss.test.ts fails if that edit is forgotten.
    *
    * The names mirror what CalendarEventContent.fromObject reads: `title` is
    * its documented fallback for `name`, so it is sanitized rather than left to
@@ -816,7 +825,7 @@ class EventObject extends ActivityPubObject {
    * so does their cap.
    */
   private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
-    const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo'] as const;
+    const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo', 'imageAlt'] as const;
     const sanitized: Record<string, any> = {};
     for (const lang of Object.keys(content)) {
       const entry = content[lang];

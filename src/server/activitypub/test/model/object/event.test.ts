@@ -662,6 +662,65 @@ describe('EventObject', () => {
       });
     });
 
+    describe('alt-only languages and the nameMap gate', () => {
+
+      it('should not promote name to nameMap when a second language carries only alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Only English Name', 'Only English Desc'));
+        // Alt text is content, but it is not content nameMap/summaryMap carry.
+        // Counting it toward the gate would flip the event's own wire format to
+        // the map form while adding no entry to any map.
+        event.addContent(new CalendarEventContent('es', '', '', '', 'Un gato dormido en un piano'));
+        event.media = new Media('event-img-uuid', 'calendar-uuid', 'ghi789', 'event.jpg', 'image/jpeg', 3072, 'approved');
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.name).toBe('Only English Name');
+        expect(result).not.toHaveProperty('nameMap');
+        expect(result).not.toHaveProperty('summaryMap');
+        expect(result).not.toHaveProperty('contentMap');
+
+        // The alt text itself still rides pavillion:content — only the event's
+        // own name/summary shape is unaffected.
+        expect(result['pavillion:content'].es.imageAlt).toBe('Un gato dormido en un piano');
+      });
+
+      it('should not promote name to nameMap when a second language carries only accessibilityInfo', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Only English Name', 'Only English Desc'));
+        event.addContent(new CalendarEventContent('es', '', '', 'Rampa disponible'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.name).toBe('Only English Name');
+        expect(result).not.toHaveProperty('nameMap');
+      });
+
+      it('should still emit nameMap when a second language carries a name alongside alt text', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+        event.addContent(new CalendarEventContent('es', 'Spanish Name', '', '', 'Un gato dormido en un piano'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.nameMap).toEqual({ en: 'English Name', es: 'Spanish Name' });
+      });
+
+      it('should emit summaryMap when a second language carries only a description', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+        event.addContent(new CalendarEventContent('es', '', 'Spanish Desc'));
+
+        const result = new EventObject(calendar, event).toActivityPubObject();
+
+        expect(result.summaryMap).toEqual({ en: 'English Desc', es: 'Spanish Desc' });
+      });
+    });
+
     describe('externalUrl + urlPrompt serialization', () => {
 
       it('should emit attachment Link and pavillion:urlPrompt when both fields are set', () => {

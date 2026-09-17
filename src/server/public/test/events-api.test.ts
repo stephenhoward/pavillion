@@ -6,7 +6,7 @@ import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
@@ -1262,6 +1262,30 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
       expect(response.status).toBe(200);
       assertEventRootProjection(response.body.event);
+    });
+
+    it('getEvent: exposes imageAlt inside content, with the root key set unchanged', async () => {
+      // `content` is the one event-root key the projection passes through
+      // whole, so per-language fields reach the public site and widget without
+      // a projection change. The alt text an image needs to be announced by a
+      // screen reader is useless if it stops at the API boundary — and the
+      // key-set assertion below is what proves nothing else came with it.
+      const event = makeEventWithFkLeakSurface();
+      event.addContent(new CalendarEventContent('en', 'Illustrated Event', 'Desc', 'Ramp access', 'A crowd dancing under string lights'));
+      event.addContent(new CalendarEventContent('fr', 'Événement illustré', 'Desc', '', 'Une foule qui danse'));
+      apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_PROJ_UUID}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.content.en.imageAlt).toBe('A crowd dancing under string lights');
+      expect(response.body.content.fr.imageAlt).toBe('Une foule qui danse');
+      // No other projection change: the event-root allow-list is untouched.
+      assertEventRootProjection(response.body);
     });
 
     it('getSeries: returns only allow-listed event-root keys on each event in events[]', async () => {
