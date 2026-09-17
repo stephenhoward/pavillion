@@ -52,7 +52,6 @@ class EventLocationContent extends Model implements TranslatedContentModel {
  * Contains address information and multilingual accessibility details.
  */
 class EventLocation extends TranslatedModel<EventLocationContent> {
-  _content: Record<string, EventLocationContent> = {};
   name: string = '';
   address: string = '';
   city: string = '';
@@ -219,7 +218,6 @@ class EventLocationSpaceContent extends Model implements TranslatedContentModel 
  * its own translatable name and accessibility information.
  */
 class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
-  _content: Record<string, EventLocationSpaceContent> = {};
   placeId: string = '';
   // Identity hint for AP-originated records (inbound dedup).
   // Null for locally-created Spaces.

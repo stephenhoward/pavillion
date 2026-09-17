@@ -73,7 +73,41 @@ interface TranslatedContentModel {
  * @template T - The type of translated content this model contains
  */
 abstract class TranslatedModel<T extends TranslatedContentModel> extends PrimaryModel {
-  _content: Record<string, T> = {};
+  /**
+   * Content rows keyed by language code.
+   *
+   * The map has a **null prototype** and every read below tests for an *own*
+   * property. Language codes reach this map from request bodies —
+   * `express.json()` parses with `JSON.parse`, which makes `__proto__` an own
+   * enumerable key that survives `Object.entries`, so a caller iterating a
+   * client-supplied content map can hand any string in here. On a plain object
+   * `_content['__proto__']` resolves through the prototype chain to
+   * `Object.prototype`, which a truthiness guard reads as "already present":
+   * the row is handed to the caller and whatever the caller writes onto it
+   * lands on `Object.prototype` process-wide. A null prototype makes those
+   * keys ordinary data — `__proto__` assigns an own property rather than
+   * re-parenting the map — and the own-property tests keep the lookups honest
+   * for a map that some other code path replaced with a plain object.
+   *
+   * Subclasses must not redeclare this field: a class-field initializer in a
+   * subclass runs after `super()` and would replace this map with a plain
+   * object. The type is already narrowed by the `T` they pass in.
+   */
+  _content: Record<string, T> = Object.create(null);
+
+  /**
+   * Reads the stored content row for a language without creating one, by own
+   * property only, so inherited keys (`__proto__`, `constructor`, `toString`,
+   * …) resolve to `undefined` rather than to something off the prototype
+   * chain.
+   *
+   * @param {string} language - The language code
+   * @returns {T | undefined} The stored content row, or undefined if there is none
+   * @private
+   */
+  private ownContent(language: string): T | undefined {
+    return Object.hasOwn(this._content, language) ? this._content[language] : undefined;
+  }
 
   /**
    * Creates a new content instance for the specified language.
@@ -93,7 +127,7 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
    * @returns {T} The translated content for the specified language
    */
   content(language: string): T {
-    if ( ! this._content[language] ) {
+    if ( ! this.ownContent(language) ) {
       this._content[language] = this.createContent(language);
     }
     return this._content[language];
@@ -124,8 +158,8 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
    * @returns {boolean} True if content exists and is not empty
    */
   hasContent(language: string): boolean {
-    return this._content[language] !== undefined
-            && ! this._content[language].isEmpty();
+    const content = this.ownContent(language);
+    return content !== undefined && ! content.isEmpty();
   }
 
   /**
