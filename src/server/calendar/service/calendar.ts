@@ -28,6 +28,7 @@ import EmailInterface from '@/server/email/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 import { isValidUuidV4 } from '@/server/common/helper/uuid';
+import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 
 const logger = createLogger('calendar');
 import FundingInterface from '@/server/funding/interface';
@@ -1377,14 +1378,37 @@ class CalendarService {
   }
 
   /**
-   * Saves a calendar content translation to the database
+   * Saves a calendar content translation to the database.
    *
-   * @param calendarId - The ID of the calendar
-   * @param content - The content translation to save
-   * @returns The saved content entity
+   * This is the single door every calendar content row passes through, and it
+   * takes a whole `CalendarContent` model rather than a field list — so the
+   * `imageAlt` normalization belongs here, not in the API handler above it. A
+   * future caller building its content from a request body would otherwise land
+   * unbounded attacker text in an unconstrained TEXT column with no validator
+   * in path.
+   *
+   * Calendar content has no inbound federation writer, so every caller is
+   * author-facing and takes the rejecting validator: there is always someone to
+   * show the error to.
+   *
+   * Both branches write `image_alt`. Create and update are separate enforcement
+   * sites, and an update branch that omits the field silently drops every alt
+   * edit an author makes to an existing language row.
+   *
+   * @param {string} calendarId - The ID of the calendar
+   * @param {import('@/common/model/calendar').CalendarContent} content - The
+   *   content translation to save
+   * @returns {Promise<import('@/server/calendar/entity/calendar').CalendarContentEntity>}
+   *   The saved content entity
+   * @throws {ValidationError} When `imageAlt` is a non-string or over-long.
+   *   Callers that write several languages validate them all up front via
+   *   {@link validateContentImageAlts}, so nothing is persisted before the
+   *   whole payload is known to be acceptable.
    */
   async createCalendarContent(calendarId: string, content: import('@/common/model/calendar').CalendarContent): Promise<import('@/server/calendar/entity/calendar').CalendarContentEntity> {
     const { CalendarContentEntity } = await import('@/server/calendar/entity/calendar');
+
+    const imageAlt = validateImageAlt(content.imageAlt);
 
     // Create a new content entity from the model
     const contentEntity = CalendarContentEntity.fromModel(content);
@@ -1392,6 +1416,7 @@ class CalendarService {
     // Set the calendar ID and generate a new ID if needed
     contentEntity.calendar_id = calendarId;
     contentEntity.id = contentEntity.id || uuidv4();
+    contentEntity.image_alt = imageAlt;
 
     // Find existing content for this language
     const existingContent = await CalendarContentEntity.findOne({
@@ -1406,6 +1431,7 @@ class CalendarService {
       await existingContent.update({
         name: content.name,
         description: content.description,
+        image_alt: imageAlt,
       });
       return existingContent;
     }
@@ -1424,6 +1450,7 @@ class CalendarService {
    * @returns The updated calendar
    * @throws CalendarNotFoundError if calendar not found
    * @throws CalendarEditorPermissionError if permission denied
+   * @throws ValidationError if any language's imageAlt is invalid
    */
   async updateCalendarSettings(
     account: Account,
@@ -1431,7 +1458,7 @@ class CalendarService {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
-      content?: Record<string, { name?: string; description?: string }>;
+      content?: Record<string, { name?: string; description?: string; imageAlt?: string }>;
     },
   ): Promise<Calendar> {
     // Validate required fields
@@ -1454,6 +1481,11 @@ class CalendarService {
       }
     }
 
+    // Validate every language's imageAlt before the first setting or content
+    // row is written — the per-language loop below throws, and this method
+    // holds no transaction.
+    validateContentImageAlts(settings.content);
+
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
@@ -1467,7 +1499,14 @@ class CalendarService {
       }
     }
 
-    const calendarEntity = await CalendarEntity.findByPk(calendarId);
+    // Content is included because the update loop below patches the stored
+    // content models in place. Without it `toModel()` attaches no content,
+    // `calendar.content(lang)` fabricates a blank CalendarContent, and a
+    // settings PATCH carrying only `imageAlt` writes that blank name and
+    // description over the stored ones.
+    const calendarEntity = await CalendarEntity.findByPk(calendarId, {
+      include: [CalendarContentEntity],
+    });
     if (!calendarEntity) {
       throw new CalendarNotFoundError();
     }
@@ -1508,6 +1547,9 @@ class CalendarService {
     if (settings.content) {
       const calendar = calendarEntity.toModel();
       for (const [language, contentData] of Object.entries(settings.content)) {
+        // Starts from the stored row (the fetch above includes content), so the
+        // two `!== undefined` guards below mean an omitted name or description
+        // keeps its stored value.
         const content = calendar.content(language);
         if (contentData.name !== undefined) {
           content.name = contentData.name;
@@ -1515,6 +1557,16 @@ class CalendarService {
         if (contentData.description !== undefined) {
           content.description = contentData.description;
         }
+        // imageAlt is deliberately unguarded where those two are guarded:
+        // replace, not patch. An update that omits it clears the stored one,
+        // which is what makes the editor's Decorative toggle persist.
+        //
+        // `?? ''` is the optional-request-field to required-model-field
+        // conversion, not a second copy of the nullish mapping in
+        // validateImageAlt: CalendarContent.imageAlt is `string`, and
+        // createCalendarContent below is the one place the value is normalized
+        // and bounds-checked.
+        content.imageAlt = contentData.imageAlt ?? '';
         await this.createCalendarContent(calendarId, content);
       }
     }

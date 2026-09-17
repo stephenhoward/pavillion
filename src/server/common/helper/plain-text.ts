@@ -76,8 +76,26 @@ const LINE_BREAK_RUN_RE = /[\t\n]+/g;
  * Running it twice is therefore a double-decode, which is the entity-smuggling
  * vector single-decode exists to close, and it also makes the stored value
  * depend on how many times the write path happened to normalize. Every write
- * path today calls it exactly once, via `sanitize`; a caller that already
- * holds normalized text must not re-normalize it "to be safe".
+ * path today calls it exactly once, via `validateImageAlt`/`sanitizeImageAlt`
+ * or `sanitize`; a caller that already holds normalized text must not
+ * re-normalize it "to be safe".
+ *
+ * **One sanctioned exception: federated text.** The ActivityPub parser runs
+ * its own `striptags(he.decode(...))` over inbound values as it normalizes the
+ * wire object, and the calendar domain then runs `sanitizeImageAlt` (and so
+ * this helper) over the same value on the way into storage, so those two
+ * passes compose into a double-decode. That is the arrangement DEC-014
+ * records, and it is deliberate: neither layer may be load-bearing for the
+ * other's guarantee, because `sanitizeImageAlt` is also the door a
+ * non-federated caller comes through and must hold on its own. The
+ * composition is tolerable because this helper decodes and *then* strips: the
+ * second decode's output is handed straight to `striptags`, so a layer of
+ * entity encoding that survives the first pass is unwrapped into markup and
+ * removed rather than stored as markup. What the double pass can change is the
+ * surviving *text* of a deliberately double-encoded payload, which is a
+ * fidelity cost on hostile input, not an escape. Nothing else may claim this
+ * exception — it is written down here because the passes are in two different
+ * domains and neither can see the other.
  *
  * This is defense-in-depth, never the only defense: escaping at the sink is
  * still the caller's obligation.
