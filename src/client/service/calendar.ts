@@ -348,6 +348,13 @@ export default class CalendarService {
 
   /**
    * Update calendar settings including content translations
+   *
+   * The three content fields are not symmetric on the server: `name` and
+   * `description` are left alone when absent, while `imageAlt` is replaced —
+   * an omitted value clears the stored column. A caller that sends content at
+   * all must therefore send `imageAlt` for every language it sends, or it
+   * erases alt text it never meant to touch.
+   *
    * @param calendarId The ID of the calendar
    * @param settings The settings to update
    * @returns Promise<Calendar> The updated calendar
@@ -357,7 +364,7 @@ export default class CalendarService {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
-      content?: Record<string, { name?: string; description?: string }>;
+      content?: Record<string, { name?: string; description?: string; imageAlt?: string }>;
     },
   ): Promise<Calendar> {
     try {

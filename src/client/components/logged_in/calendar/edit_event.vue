@@ -899,14 +899,28 @@ form {
             <h2 class="section-header">EVENT IMAGE</h2>
 
             <div class="section-card">
-              <!-- Show workspace when an image is attached, uploader otherwise -->
-              <ImageWorkspace
-                v-if="eventImage"
-                :image="eventImage"
-                @adjust="handleImageAdjust"
-                @replace="handleImageReplace"
-                @remove="handleImageRemove"
-              />
+              <!-- Show workspace when an image is attached, uploader otherwise.
+                   The alt editor belongs to the attached image, so it shares the
+                   workspace's condition rather than carrying its own; it writes
+                   straight onto the working event and follows the language tabs
+                   above, so the save path needs no knowledge of it.
+
+                   Sharing that condition is also what starts a replacement
+                   image off Decorative: replacing detaches the image first, so
+                   the editor unmounts with it and the one that comes back is
+                   seeded afresh from the cleared model. -->
+              <template v-if="eventImage">
+                <ImageWorkspace
+                  :image="eventImage"
+                  @adjust="handleImageAdjust"
+                  @replace="handleImageReplace"
+                  @remove="handleImageRemove"
+                />
+                <ImageAltEditor
+                  :model="editorState.event"
+                  :language="currentLanguage"
+                />
+              </template>
               <ImageUpload
                 v-else
                 :calendar-id="editorState.event.calendarId || 'default'"
@@ -1124,6 +1138,8 @@ import SingleEventCancelControl from './SingleEventCancelControl.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import ImageWorkspace from '@/client/components/common/media/image-workspace.vue';
+import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
+import { clearImageAlt } from '@/client/components/common/media/image-alt';
 import CategorySelector from './category-selector.vue';
 import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
@@ -1389,11 +1405,24 @@ const handleImageAdjust = ({ mediaFocalPointX, mediaFocalPointY, mediaZoom }) =>
 };
 
 /**
+ * Drop the description of the image being detached, in every language.
+ *
+ * This screen has to do it explicitly: the working event keeps its identity
+ * across a removal or a swap, so the alt editor never re-seeds itself from the
+ * changed media and nothing else would clear the text.
+ */
+const clearEventImageAlt = () => {
+  if (!editorState.event) return;
+  clearImageAlt(editorState.event);
+};
+
+/**
  * Handle image replacement — clears the current image so the uploader re-appears.
  */
 const handleImageReplace = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
+  clearEventImageAlt();
 };
 
 /**
@@ -1402,6 +1431,7 @@ const handleImageReplace = () => {
 const handleImageRemove = () => {
   mediaId.value = null;
   localPreviewUrl.value = null;
+  clearEventImageAlt();
   if (editorState.event) {
     editorState.event.mediaFocalPointX = 0.5;
     editorState.event.mediaFocalPointY = 0.5;

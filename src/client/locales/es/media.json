@@ -80,5 +80,15 @@
     "focal_explanation": "El punto focal determina cómo se recorta tu imagen en las visualizaciones de tarjeta y banner.",
     "replace_image": "Reemplazar imagen",
     "remove": "Eliminar"
+  },
+  "alt_editor": {
+    "legend": "Lectores de pantalla",
+    "decorative_label": "Decorativa",
+    "decorative_help": "La imagen se oculta a los lectores de pantalla. Esta es la opción adecuada cuando la imagen no aporta nada más allá del texto que ya está en la página.",
+    "describe_label": "Describir esta imagen",
+    "describe_help": "Los lectores de pantalla leen tu descripción en lugar de la imagen.",
+    "description_label": "Descripción de la imagen ({{language}})",
+    "description_hint": "Escribe lo que muestra la imagen. No hace falta empezar con «imagen de».",
+    "stash_note": "Las descripciones que escribiste se eliminarán al guardar. Vuelve a describir la imagen para restaurarlas."
   }
 }
