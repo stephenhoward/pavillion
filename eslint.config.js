@@ -21,6 +21,19 @@ export default [
       '@stylistic/no-trailing-spaces': ['error'],
       '@stylistic/eol-last': ['error', 'always'],
       '@stylistic/brace-style': ['error', 'stroustrup', { allowSingleLine: true }],
+
+      // A regex built from raw control codepoints renders as an unreviewable
+      // diff (git calls the file binary once a NUL lands in it), so character
+      // tables are written as \uXXXX escapes.
+      //
+      // Scope, so nobody over-trusts these: no-control-regex flags control
+      // codepoints in a regex in EITHER form, literal or escaped -- it catches
+      // the NUL that causes the binary diff, but it does not enforce the
+      // escaping convention itself, and it says nothing about bidi (U+202E) or
+      // zero-width (U+200B) characters, which lint clean either way. Enforcing
+      // the convention repo-wide would need a script (cf. scripts/check-raw-sql.ts).
+      'no-control-regex': 'error',
+      'no-misleading-character-class': 'error',
     },
   },
   // Typescript config

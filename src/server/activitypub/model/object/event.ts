@@ -12,6 +12,7 @@ import { resolveEventStartTime } from '@/server/activitypub/model/object/start-t
 import { createLogger } from '@/server/common/helper/logger';
 import { sanitizeExternalUrlHref } from '@/server/activitypub/helper/url-sanitizer';
 import { mapEventCategoriesToFep } from '@/server/activitypub/helper/fep_category_map';
+import { mappedContentLanguages } from '@/server/activitypub/helper/content-languages';
 
 const logger = createLogger('activitypub');
 
@@ -47,12 +48,12 @@ function stripHtmlTags(html: string): string {
  */
 export interface RemoteEventParams {
   /**
-   * Per-language content entries, normally `{ name, description }` with HTML
-   * stripped. The entry shape is dynamic: the Pavillion-format sanitizer
-   * spreads unhandled entry keys through (e.g. `accessibilityInfo`) and
-   * passes non-object entries raw, so this is not typed to the nominal
-   * two-field shape. When no resolution branch produces content, a raw wire
-   * `content` value passes through unmodified via the spread.
+   * Per-language content entries with HTML stripped. The Pavillion-format
+   * sanitizer emits a fixed allow-listed key set (see
+   * `EventObject._sanitizeContentObject`), but still passes non-object entries
+   * raw, and when no resolution branch produces content a raw wire `content`
+   * value passes through unmodified via the top-level spread — so this stays
+   * untyped rather than naming the nominal shape.
    */
   content?: Record<string, any>;
   /** Wire-provided category list, passed through unvalidated. */
@@ -252,13 +253,21 @@ class EventObject extends ActivityPubObject {
       result['pavillion:space'] = this._buildPavillionSpace(event.space, calendar);
     }
 
-    // nameMap/summaryMap: only when 2+ languages have content
-    const contentLanguages = Object.keys(event._content).filter(
-      lang => event._content[lang] && !event._content[lang].isEmpty(),
-    );
+    // nameMap/summaryMap: only when 2+ languages have mapped content — a
+    // non-empty name or description. See mappedContentLanguages for why this is
+    // not `isEmpty()`: a language row holding only alt text is content, but it
+    // is not content these maps carry.
+    const contentLanguages = mappedContentLanguages(event._content);
     if (contentLanguages.length >= 2) {
-      const nameMap: Record<string, string> = {};
-      const summaryMap: Record<string, string> = {};
+      // Null-prototype accumulators, for the same reason as altMap below: a
+      // language code is attacker-supplied and `__proto__` is a legitimate own
+      // key on `_content`. These three are write-only today, so the swallowed
+      // write is the only reachable half — a `__proto__` row would silently
+      // drop out of the map instead of reaching the wire. Keeping them
+      // null-prototype makes the entry an ordinary own property and keeps any
+      // future keyed read off the prototype chain.
+      const nameMap: Record<string, string> = Object.create(null);
+      const summaryMap: Record<string, string> = Object.create(null);
       let hasSummaryEntries = false;
 
       for (const lang of contentLanguages) {
@@ -278,7 +287,7 @@ class EventObject extends ActivityPubObject {
       if (hasSummaryEntries) {
         result.summaryMap = summaryMap;
         // contentMap: HTML-wrapped descriptions for interop (Mobilizon, Gancio, Friendica)
-        const contentMap: Record<string, string> = {};
+        const contentMap: Record<string, string> = Object.create(null);
         for (const [lang, desc] of Object.entries(summaryMap)) {
           contentMap[lang] = `<p>${desc}</p>`;
         }
@@ -289,11 +298,74 @@ class EventObject extends ActivityPubObject {
     // image: event's own media takes precedence, then calendar default; omit if neither exists
     const media = event.media ?? calendar.defaultEventImage;
     if (media && media.status === 'approved') {
-      result.image = {
+      const image: Record<string, any> = {
         type: 'Image',
         url: `https://${domain}/api/v1/media/${media.id}`,
         mediaType: media.mimeType,
       };
+
+      // Alt text is read from whichever model supplied the media — the event
+      // for its own image, the calendar for its default — so the description
+      // always belongs to the image actually on the wire.
+      //
+      // The shape mirrors the event's own name/nameMap exactly: `name` is set
+      // whenever ANY language has alt text, and `nameMap` is ADDED when two or
+      // more do. The two keys are not alternatives. Emitting only `nameMap`
+      // for a multilingual image would hand no alt text at all to a peer that
+      // reads just `name` (Mastodon-class) — the wrong failure mode for an
+      // accessibility feature, and inconsistent with how the event's own title
+      // reaches those same peers.
+      //
+      // Both keys are omitted when no language has alt text. That is the
+      // decorative contract carried onto the wire: an Image with no name says
+      // "this image adds nothing the event text does not already say", which is
+      // what a peer should render as alt="". Emitting an empty name instead
+      // would be a claim that the description is missing.
+      //
+      // Emptiness is tested with `.trim()`, matching `localizedField` in
+      // src/site/composables/useLocalizedContent.ts. The decorative state is
+      // derived independently on the site, in the widget and here, and the
+      // three must agree; a bare `!== ''` would make a whitespace-only alt
+      // decorative on the site while it carried a `name` on the wire. Both of
+      // today's write paths trim, so the divergence is unreachable — this keeps
+      // it unreachable for a write path that does not.
+      const altContent: Record<string, { imageAlt: string }> = event.media
+        ? event._content
+        : calendar._content;
+      const altMap: Record<string, string> = Object.create(null);
+      for (const lang of Object.keys(altContent)) {
+        const alt = altContent[lang]?.imageAlt;
+        if (alt && alt.trim() !== '') {
+          altMap[lang] = alt;
+        }
+      }
+      const altLanguages = Object.keys(altMap);
+      if (altLanguages.length > 0) {
+        // Singular `name` uses the same primary-language-then-first-non-empty
+        // pick as the event's own name, so the flat surface a name-only peer
+        // reads stays internally consistent with the rest of the object. The
+        // map holds only non-empty values, so a hit on primaryLanguage is
+        // already a usable string.
+        //
+        // The lookup is own-property-only because a language code is attacker-
+        // supplied: `_content` is a null-prototype map, so `__proto__` is a
+        // legitimate own key that round-trips through the model, and
+        // `primaryLanguage` can therefore be the literal string `'__proto__'`.
+        // On a plain `{}` accumulator that key would be swallowed on write (the
+        // `__proto__` setter ignores primitives) and resolve through the
+        // prototype chain on read, putting `Object.prototype` — an object where
+        // a string belongs — into `image.name` on the wire. Both halves are
+        // needed: the null prototype makes the write an ordinary own property,
+        // and `Object.hasOwn` keeps the read off any inherited slot.
+        image.name = Object.hasOwn(altMap, primaryLanguage)
+          ? altMap[primaryLanguage]
+          : altMap[altLanguages[0]];
+        if (altLanguages.length >= 2) {
+          image.nameMap = altMap;
+        }
+      }
+
+      result.image = image;
     }
 
     // attachment Link + pavillion:urlPrompt: emit only when BOTH fields are set.
@@ -791,20 +863,45 @@ class EventObject extends ActivityPubObject {
   }
 
   /**
-   * Sanitizes a Pavillion content object (language-keyed { name, description } entries).
-   * Applies stripHtmlTags to all string values to prevent XSS from federated sources.
+   * Sanitizes a Pavillion content object (language-keyed content entries).
+   *
+   * This is an **allow-list**, not a spread. Every key a content entry may
+   * carry is named here and stripped of HTML; a key that is not named is
+   * dropped. The earlier `...entry` spread passed unnamed keys through
+   * unsanitized, which is how `imageAlt` reached the database off the wire
+   * with no tag stripping and no bound, and it would have done the same for
+   * the next content field added to the model. Adding a content field is now
+   * a deliberate edit here.
+   *
+   * The names mirror what CalendarEventContent.fromObject reads: `title` is
+   * its documented fallback for `name`, so it is sanitized rather than left to
+   * arrive raw behind an empty `name`. `language` is deliberately absent — the
+   * language of an entry is the key it is filed under, and the calendar
+   * service overwrites any wire-supplied value with that key.
+   *
+   * A non-string value becomes undefined rather than passing through, so a
+   * downstream update writes nothing for that field instead of writing a
+   * non-string into a text column.
+   *
+   * Length is not bounded here. The columns belong to the calendar domain and
+   * so does their cap: EventService normalizes federated content through
+   * sanitizeImageAlt on the way into storage. That split — this layer strips
+   * markup and closes the key set, the calendar domain owns the cap — is
+   * recorded in DEC-014 (agent-os/product/decisions/dec-014-create-original-
+   * announce-repost.md), which is also where the version-skew consequence of
+   * closing the key set here is written down.
    */
   private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
+    const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo', 'imageAlt'] as const;
     const sanitized: Record<string, any> = {};
     for (const lang of Object.keys(content)) {
       const entry = content[lang];
       if (entry && typeof entry === 'object') {
-        sanitized[lang] = {
-          ...entry,
-          name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : entry.name,
-          description: typeof entry.description === 'string' ? stripHtmlTags(entry.description) : entry.description,
-          accessibilityInfo: typeof entry.accessibilityInfo === 'string' ? stripHtmlTags(entry.accessibilityInfo) : entry.accessibilityInfo,
-        };
+        const allowed: Record<string, any> = {};
+        for (const key of ALLOWED_CONTENT_KEYS) {
+          allowed[key] = typeof entry[key] === 'string' ? stripHtmlTags(entry[key]) : undefined;
+        }
+        sanitized[lang] = allowed;
       }
       else {
         sanitized[lang] = entry;

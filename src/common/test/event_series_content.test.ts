@@ -115,4 +115,68 @@ describe('EventSeriesContent', () => {
     expect(restored.name).toBe(original.name);
     expect(restored.description).toBe(original.description);
   });
+
+  test('creates content with default empty imageAlt', () => {
+    const content = new EventSeriesContent('en', 'Summer Concert Series', 'A weekly outdoor concert.');
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('serializes imageAlt in toObject', () => {
+    const content = new EventSeriesContent('en', 'Summer Concert Series', 'A weekly outdoor concert.', 'A crowd dancing in a park');
+
+    expect(content.toObject().imageAlt).toBe('A crowd dancing in a park');
+  });
+
+  test('deserializes imageAlt from fromObject', () => {
+    const content = EventSeriesContent.fromObject({
+      language: 'en',
+      name: 'Summer Concert Series',
+      description: 'A weekly outdoor concert.',
+      imageAlt: 'A poster for the series',
+    });
+
+    expect(content.imageAlt).toBe('A poster for the series');
+  });
+
+  test('fromObject treats null imageAlt as empty string', () => {
+    const content = EventSeriesContent.fromObject({
+      language: 'en',
+      name: 'Summer Concert Series',
+      description: 'A weekly outdoor concert.',
+      imageAlt: null,
+    });
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('fromObject handles missing imageAlt', () => {
+    const content = EventSeriesContent.fromObject({
+      language: 'en',
+      name: 'Summer Concert Series',
+      description: 'A weekly outdoor concert.',
+    });
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('round-trip serialization preserves imageAlt', () => {
+    const original = new EventSeriesContent('fr', 'Série', 'Description', 'Une affiche de la série');
+
+    const restored = EventSeriesContent.fromObject(original.toObject());
+
+    expect(restored.imageAlt).toBe(original.imageAlt);
+  });
+
+  test('isEmpty returns false when only imageAlt is set', () => {
+    const content = new EventSeriesContent('en', '', '', 'A photo of the venue');
+
+    expect(content.isEmpty()).toBe(false);
+  });
+
+  test('isEmpty returns true when imageAlt is empty along with every other field', () => {
+    const content = new EventSeriesContent('en', '', '', '');
+
+    expect(content.isEmpty()).toBe(true);
+  });
 });

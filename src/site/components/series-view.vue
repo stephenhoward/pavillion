@@ -15,7 +15,7 @@ const route = useRoute();
 const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const seriesId = route.params.series;
-const { localizedContent } = useLocalizedContent();
+const { localizedContent, localizedField } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -155,6 +155,7 @@ onBeforeMount(async () => {
       <EventImage
         :media="state.series.mediaId ? { id: state.series.mediaId } : null"
         context="feature"
+        :alt="localizedField(state.series, 'imageAlt')"
         :focal-point-x="state.series.mediaFocalPointX"
         :focal-point-y="state.series.mediaFocalPointY"
         :zoom="state.series.mediaZoom"

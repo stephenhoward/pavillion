@@ -354,4 +354,29 @@ describe('Public Calendar API - GET /calendar/:urlName projection', () => {
     expect(response.status).toBe(200);
     assertCalendarRootProjection(response.body);
   });
+
+  it('exposes imageAlt inside content, with the root key set unchanged', async () => {
+    // `content` is the one calendar-root key the projection passes through
+    // whole, so per-language fields reach the public site and widget without a
+    // projection change. The alt text for a calendar's default event image is
+    // what an anonymous screen-reader user hears on every event card that falls
+    // back to it, so it has to survive the public boundary.
+    const calendar = buildCalendarWithLeakyInternals(true);
+    calendar.addContent(new CalendarContent('en', 'Test Calendar', '', 'A banner of paper lanterns'));
+    calendar.addContent(new CalendarContent('fr', 'Calendrier test', '', 'Une bannière de lanternes'));
+    apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+
+    router.get('/handler', (req, res) => {
+      req.params.urlName = 'test-calendar';
+      routes.getCalendar(req, res);
+    });
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(200);
+    expect(response.body.content.en.imageAlt).toBe('A banner of paper lanterns');
+    expect(response.body.content.fr.imageAlt).toBe('Une bannière de lanternes');
+    // No other projection change: the calendar-root allow-list is untouched.
+    assertCalendarRootProjection(response.body);
+  });
 });

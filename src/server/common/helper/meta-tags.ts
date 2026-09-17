@@ -202,7 +202,14 @@ function sanitizeDescription(raw: string): string {
  *
  * Validates the requested locale against enabled language codes, falling back
  * to the default language code. If the model has no content for the resolved
- * locale, falls back to the first available language.
+ * locale, falls back to the first available language that has content.
+ *
+ * This is a row selector: the caller reads the name and description off the
+ * row for the locale returned here. `hasContentFn` is therefore always the
+ * model's `hasContent`, which selects on the fields a row consumer renders
+ * rather than on "does this row hold anything at all" — a language whose row
+ * carries only alt text is skipped rather than resolved to and rendered as an
+ * empty title. See `TranslatedContentModel.hasDisplayContent`.
  *
  * @param hasContentFn - Function to check if content exists for a locale
  * @param getLanguagesFn - Function to get all available content languages
@@ -225,10 +232,15 @@ function resolveContentLocale(
     return locale;
   }
 
-  // Fall back to first available language
+  // Fall back to the first available language that carries display content.
+  // `getLanguagesFn` lists every stored row, including ones holding only alt
+  // text, so the same `hasContentFn` check the requested locale went through is
+  // applied here too — otherwise the fallback reintroduces exactly the blank
+  // title and description that check exists to avoid.
   const available = getLanguagesFn();
-  if (available.length > 0) {
-    return available[0];
+  const usable = available.find(lang => hasContentFn(lang));
+  if (usable) {
+    return usable;
   }
 
   return null;

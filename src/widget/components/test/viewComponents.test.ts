@@ -9,6 +9,7 @@ import WeekView from '../week-view.vue';
 import MonthView from '../month-view.vue';
 import ListView from '../list-view.vue';
 import EventCard from '@/site/components/event-card.vue';
+import EventImage from '@/site/components/event-image.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { useWidgetStore } from '../../stores/widgetStore';
 
@@ -109,6 +110,57 @@ describe('Widget View Components', () => {
       const overflow = wrapper.find('.event-overflow');
       expect(overflow.exists()).toBe(true);
       expect(overflow.text()).toContain('+2');
+    });
+
+    // The week view only ever shows an event's own media, so the alt it passes
+    // is always the event's own alt text — never a calendar default's.
+    const buildImageInstance = (id: string, dayKey: string, imageAlt: string) => ({
+      id,
+      start: { toLocal: () => ({ toISODate: () => dayKey, toLocaleString: () => '10:00 AM' }) },
+      event: {
+        id: `evt-${id}`,
+        content: () => ({ name: 'Summer Concert', imageAlt }),
+        hasContent: () => true,
+        getLanguages: () => ['en'],
+        media: { id: 'media-1' },
+        mediaFocalPointX: 0.5,
+        mediaFocalPointY: 0.5,
+        mediaZoom: 1.0,
+        categories: [],
+      },
+    });
+
+    it('describes an event image with the event alt text', async () => {
+      const publicStore = usePublicCalendarStore();
+      const today = DateTime.now().toISODate()!;
+      publicStore.allEvents = [
+        buildImageInstance('1', today, 'A band playing on an outdoor stage'),
+      ] as any;
+
+      const wrapper = mount(WeekView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      expect(wrapper.findComponent(EventImage).props('alt'))
+        .toBe('A band playing on an outdoor stage');
+    });
+
+    it('renders a decorative event image when the event has no alt text', async () => {
+      const publicStore = usePublicCalendarStore();
+      const today = DateTime.now().toISODate()!;
+      publicStore.allEvents = [buildImageInstance('1', today, '')] as any;
+
+      const wrapper = mount(WeekView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      const alt = wrapper.findComponent(EventImage).props('alt');
+      expect(alt).toBe('');
+      expect(alt).not.toBe('Summer Concert');
     });
   });
 

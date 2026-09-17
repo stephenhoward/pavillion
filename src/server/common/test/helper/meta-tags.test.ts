@@ -432,6 +432,72 @@ describe('MetaTags Helper', () => {
       expect(result!.description).toBe('Un gran evento');
     });
 
+    // The render-boundary twin of content-languages.test.ts's "does not count a
+    // language carrying only alt text". resolveContentLocale picks a row and
+    // the caller reads the title and description off it, so a row carrying
+    // only alt text must not be selected -- a peer that federates
+    // `pavillion:content.fr = { imageAlt: ... }` would otherwise blank the
+    // page title and description for French crawlers and link previews.
+    it('does not resolve to a language whose row carries only alt text', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      const event = createMockEvent();
+      event.addContent(new CalendarEventContent('fr', '', '', '', 'Une salle comble'));
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'fr', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Test Event');
+      expect(result!.description).toBe('A great event');
+    });
+
+    // The twin of the test above on the OTHER resolution path. The requested
+    // locale check is not the only way a row gets selected: when no row exists
+    // for the requested (or default) locale, the final fallback picks from
+    // `getLanguages()`, which lists every stored row including alt-only ones.
+    // An unchecked `available[0]` there blanks og:title and og:description for
+    // crawlers and link unfurlers exactly as a requested-locale hit would.
+    it('does not fall back to a language whose row carries only alt text', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      const event = new CalendarEvent('event-uuid-1', 'cal-uuid-1');
+      // Alt-only row added first, so it is `getLanguages()[0]`.
+      event.addContent(new CalendarEventContent('fr', '', '', '', 'Une salle comble'));
+      event.addContent(new CalendarEventContent('es', 'Evento de Prueba', 'Un gran evento'));
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      // English is requested and no English row exists, so resolution reaches
+      // the final fallback rather than the requested-locale branch.
+      const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Evento de Prueba');
+      expect(result!.description).toBe('Un gran evento');
+    });
+
+    it('does not resolve a calendar site name from an alt-only row', async () => {
+      const iface = createMockInterface();
+      const calendar = createMockCalendar();
+      calendar.addContent(new CalendarContent('fr', '', '', 'Une banniere de lanternes'));
+      const event = createMockEvent();
+
+      (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+
+      const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+      const result = await buildEventMetaTags(iface, params, 'fr', baseUrl);
+
+      expect(result).not.toBeNull();
+      expect(result!.siteName).toBe('My Calendar');
+    });
+
     it('should fall back to default locale for invalid locale strings', async () => {
       const iface = createMockInterface();
       const calendar = createMockCalendar();

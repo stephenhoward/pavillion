@@ -127,6 +127,40 @@
               @upload-complete="handleDefaultImageUpload"
             />
           </div>
+
+          <!--
+            Alt text for the default image is per-language content on the
+            calendar, so it follows the language tab chosen in the content card
+            above rather than carrying a selector of its own — the editor's own
+            textarea label names that language, which is what keeps it
+            unambiguous this far from the tabs. The image itself is stored the
+            moment it is uploaded; its description is content and saves with the
+            rest of the calendar's content.
+
+            This screen has no Save button: every field here persists on the
+            event that ends the author's interaction with it. The editor's
+            equivalent of that event is focus leaving the *component*, not any
+            one of its controls, because it holds three focusable controls and
+            moving between them is still interaction — hence the wrapper, whose
+            element is a stable `currentTarget` for the bubbled `focusout`
+            regardless of what the child renders as its root.
+
+            That save holds `isSavingAlt` rather than the screen-wide
+            `isSaving`, and this editor is its only reader: a save fired by
+            focus leaving a control must not disable the control focus is
+            arriving at, or the browser drops focus to <body>.
+          -->
+          <div
+            v-if="state.defaultEventImage && localCalendar"
+            class="default-image-alt"
+            @focusout="handleAltFocusOut"
+          >
+            <ImageAltEditor
+              :model="localCalendar"
+              :language="currentLanguage"
+              :disabled="state.isSavingAlt"
+            />
+          </div>
         </div>
 
         <!--
@@ -232,6 +266,8 @@ import { useLanguageManagement } from '@/client/composables/useLanguageManagemen
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
+import ImageAltEditor from '@/client/components/common/media/ImageAltEditor.vue';
+import { clearImageAlt } from '@/client/components/common/media/image-alt';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
@@ -269,6 +305,7 @@ const contentLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(nul
 const state = reactive<{
   isLoading: boolean;
   isSaving: boolean;
+  isSavingAlt: boolean;
   error: string;
   success: string;
   defaultDateRange: DefaultDateRange;
@@ -278,6 +315,7 @@ const state = reactive<{
 }>({
   isLoading: false,
   isSaving: false,
+  isSavingAlt: false,
   error: '',
   success: '',
   defaultDateRange: '2weeks',
@@ -423,28 +461,50 @@ const loadSettings = async () => {
 };
 
 /**
- * Save calendar settings
+ * The translated-content payload a save carries.
+ *
+ * `imageAlt` is sent for every language on every save, never only when it
+ * changed: the server replaces rather than patches it, so an omitted value
+ * clears the stored column. That is what lets the editor's Decorative
+ * choice — which is the absence of alt text, not a stored flag — persist,
+ * and it is also why a partial payload would silently destroy alt text.
+ *
+ * @param {object} options - How the payload should treat alt text
+ * @param {boolean} options.dropImageAlt - Send an empty description in every
+ *   language, for the save that removes the image being described. The working
+ *   model is left alone so that a failed request changes nothing.
+ * @returns {Record<string, { name: string; description: string; imageAlt: string }>}
+ *   Content keyed by language code
  */
-const saveSettings = async () => {
+const buildContentPayload = ({ dropImageAlt = false } = {}) => {
+  const contentPayload: Record<string, { name: string; description: string; imageAlt: string }> = {};
+  if (localCalendar.value) {
+    for (const lang of localCalendar.value.getLanguages()) {
+      const c = localCalendar.value.content(lang);
+      contentPayload[lang] = {
+        name: c.name,
+        description: c.description,
+        imageAlt: dropImageAlt ? '' : c.imageAlt,
+      };
+    }
+  }
+  return contentPayload;
+};
+
+/**
+ * Send the calendar's settings and report the outcome on the screen.
+ *
+ * Which busy flag is held for the duration is the caller's business, not this
+ * function's — see `saveSettings` and `saveAltText`.
+ */
+const persistSettings = async () => {
   try {
-    state.isSaving = true;
     state.error = '';
     state.success = '';
 
-    const contentPayload: Record<string, { name: string; description: string }> = {};
-    if (localCalendar.value) {
-      for (const lang of localCalendar.value.getLanguages()) {
-        const c = localCalendar.value.content(lang);
-        contentPayload[lang] = {
-          name: c.name,
-          description: c.description,
-        };
-      }
-    }
-
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultDateRange: state.defaultDateRange,
-      content: contentPayload,
+      content: buildContentPayload(),
     });
 
     state.success = t('save_success');
@@ -455,9 +515,64 @@ const saveSettings = async () => {
     state.error = t('error_saving');
     clearMessages();
   }
+};
+
+/**
+ * Save calendar settings, as triggered by one of this screen's own fields.
+ */
+const saveSettings = async () => {
+  state.isSaving = true;
+  try {
+    await persistSettings();
+  }
   finally {
     state.isSaving = false;
   }
+};
+
+/**
+ * Save the same settings, but on behalf of the alt editor.
+ *
+ * The request is identical; only the flag differs, and the flag is the point.
+ * This save is triggered by focus *leaving* a control, so whatever it disables
+ * is disabled at the moment focus is in flight. A control disabled while focus
+ * is moving to it ends up disabled and unfocused, and the browser falls back to
+ * `document.body` — a keyboard author Shift+Tabbing out of the editor onto
+ * "Remove default image" would lose their place and have to tab from the top.
+ * `state.isSavingAlt` is therefore read by the alt editor alone, which is the
+ * one control this save must not leave focusable-but-stale.
+ */
+const saveAltText = async () => {
+  state.isSavingAlt = true;
+  try {
+    await persistSettings();
+  }
+  finally {
+    state.isSavingAlt = false;
+  }
+};
+
+/**
+ * Persist the alt editor's work when focus leaves it.
+ *
+ * `focusout` rather than `blur` because only the former bubbles, and the event
+ * is worth intercepting only when focus lands outside the editor: it holds two
+ * radios and a textarea, and a save between them would flip
+ * `state.isSavingAlt`, which is bound to the editor's `disabled` prop —
+ * disabling the control the author was moving to and taking their focus with
+ * it.
+ *
+ * `relatedTarget` is null when focus leaves the document altogether (tabbing to
+ * browser chrome, clicking dead space), which is the author finishing with the
+ * editor and so does save.
+ *
+ * @param {FocusEvent} event - The bubbled focusout
+ */
+const handleAltFocusOut = (event: FocusEvent) => {
+  const next = event.relatedTarget;
+  const editor = event.currentTarget;
+  if (next instanceof Node && editor instanceof Node && editor.contains(next)) return;
+  saveAltText();
 };
 
 /**
@@ -510,11 +625,21 @@ const removeDefaultImage = async () => {
     state.error = '';
     state.success = '';
 
+    // A description with no image left to describe is stale in every language,
+    // so it goes with the image — and it goes in the same request, because the
+    // editor that would otherwise have carried it to the server is unmounted by
+    // this very removal. Nothing else on the screen would push it afterwards.
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultEventImageId: null,
+      content: buildContentPayload({ dropImageAlt: true }),
     });
 
     state.defaultEventImage = null;
+
+    if (localCalendar.value) {
+      clearImageAlt(localCalendar.value);
+    }
+
     state.success = t('save_success');
     clearMessages();
   }

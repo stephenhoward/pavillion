@@ -199,6 +199,50 @@ describe('Public Series API', () => {
       expect(seriesEventsStub.calledWith('series-1', 'cal-id', 20, 0)).toBe(true);
     });
 
+    it('exposes imageAlt inside content, with the series-root key set unchanged', async () => {
+      // `content` is one of the keys the series projection passes through
+      // whole, so per-language fields reach the public site and widget without
+      // a projection change. Alt text an image needs to be announced by a
+      // screen reader is useless if it stops at the API boundary — and the
+      // key-set assertion is what proves nothing else came with it.
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = makeSeries('series-1', 'cal-id', 'yoga-classes');
+      series.content('en').imageAlt = 'A class stretching on mats';
+      const fr = new EventSeriesContent('fr');
+      fr.name = 'Cours de yoga';
+      fr.imageAlt = 'Un cours qui s\'étire sur des tapis';
+      series.addContent(fr);
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [], total: 0 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'yoga-classes';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.content.en.imageAlt).toBe('A class stretching on mats');
+      expect(response.body.content.fr.imageAlt).toBe('Un cours qui s\'étire sur des tapis');
+      // No other projection change: the series-root allow-list is untouched.
+      expect(Object.keys(response.body).sort()).toEqual([
+        'content',
+        'events',
+        'id',
+        'mediaFocalPointX',
+        'mediaFocalPointY',
+        'mediaZoom',
+        'pagination',
+        'urlName',
+      ]);
+      expect(response.body.calendarId).toBeUndefined();
+      expect(response.body.mediaId).toBeUndefined();
+    });
+
     it('should use custom limit and offset for pagination', async () => {
       const calendar = new Calendar('cal-id', 'test-calendar');
       const series = makeSeries('series-1', 'cal-id', 'yoga-classes');

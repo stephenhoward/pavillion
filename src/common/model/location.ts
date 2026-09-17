@@ -27,6 +27,15 @@ class EventLocationContent extends Model implements TranslatedContentModel {
   }
 
   /**
+   * The accessibility info is the whole of a location's translated content, so
+   * it is also the whole of what a consumer reads off a selected row. See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   */
+  hasDisplayContent(): boolean {
+    return this.accessibilityInfo.trim().length > 0;
+  }
+
+  /**
    * Convert to plain object for serialization.
    */
   toObject(): Record<string, any> {
@@ -52,7 +61,6 @@ class EventLocationContent extends Model implements TranslatedContentModel {
  * Contains address information and multilingual accessibility details.
  */
 class EventLocation extends TranslatedModel<EventLocationContent> {
-  _content: Record<string, EventLocationContent> = {};
   name: string = '';
   address: string = '';
   city: string = '';
@@ -191,6 +199,16 @@ class EventLocationSpaceContent extends Model implements TranslatedContentModel 
   }
 
   /**
+   * The name and the accessibility info are the whole of a Space's translated
+   * content, and both are read off a selected row (`spaceDisplayName` and
+   * `spaceAccessibilityInfo`). See
+   * {@link TranslatedContentModel.hasDisplayContent}.
+   */
+  hasDisplayContent(): boolean {
+    return this.name.trim().length > 0 || this.accessibilityInfo.trim().length > 0;
+  }
+
+  /**
    * Convert to plain object for serialization.
    */
   toObject(): Record<string, any> {
@@ -219,7 +237,6 @@ class EventLocationSpaceContent extends Model implements TranslatedContentModel 
  * its own translatable name and accessibility information.
  */
 class EventLocationSpace extends TranslatedModel<EventLocationSpaceContent> {
-  _content: Record<string, EventLocationSpaceContent> = {};
   placeId: string = '';
   // Identity hint for AP-originated records (inbound dedup).
   // Null for locally-created Spaces.

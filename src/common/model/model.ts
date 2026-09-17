@@ -65,6 +65,33 @@ interface TranslatedContentModel {
    * @returns {boolean} True if the content is empty
    */
   isEmpty(): boolean;
+
+  /**
+   * Whether this row carries something that speaks for its language — the
+   * fields a consumer reads off a row it *selected* by language.
+   *
+   * This is deliberately not `isEmpty()` inverted. `isEmpty()` answers a
+   * different question: does this row hold anything at all. That is the right
+   * question for a save path deciding whether a row is worth persisting, and
+   * the wrong one for a consumer choosing which language's row to render,
+   * because every content field added to a model widens `isEmpty()` and so
+   * silently widens any gate computed from it. `imageAlt` is the field that
+   * made that concrete: it describes an image rather than translating the
+   * page, the render boundary resolves it per field (`localizedField`) and
+   * never reads it off a selected row, so a row carrying only alt text would
+   * be selected as a locale's content and serve a blank name and description
+   * where the visitor previously fell back to English.
+   *
+   * The same reasoning produced `mappedContentLanguages` at the ActivityPub
+   * boundary (see DEC-014); this is its render-boundary twin. Implementations
+   * enumerate the fields a row consumer renders rather than delegating to
+   * `isEmpty()`, so adding a content field is a decision taken here instead of
+   * an automatic widening: a field resolved per field at the render boundary
+   * must not be listed, a field read off the selected row must.
+   *
+   * @returns {boolean} True when a field a row consumer renders is populated
+   */
+  hasDisplayContent(): boolean;
 }
 
 /**
@@ -73,7 +100,41 @@ interface TranslatedContentModel {
  * @template T - The type of translated content this model contains
  */
 abstract class TranslatedModel<T extends TranslatedContentModel> extends PrimaryModel {
-  _content: Record<string, T> = {};
+  /**
+   * Content rows keyed by language code.
+   *
+   * The map has a **null prototype** and every read below tests for an *own*
+   * property. Language codes reach this map from request bodies —
+   * `express.json()` parses with `JSON.parse`, which makes `__proto__` an own
+   * enumerable key that survives `Object.entries`, so a caller iterating a
+   * client-supplied content map can hand any string in here. On a plain object
+   * `_content['__proto__']` resolves through the prototype chain to
+   * `Object.prototype`, which a truthiness guard reads as "already present":
+   * the row is handed to the caller and whatever the caller writes onto it
+   * lands on `Object.prototype` process-wide. A null prototype makes those
+   * keys ordinary data — `__proto__` assigns an own property rather than
+   * re-parenting the map — and the own-property tests keep the lookups honest
+   * for a map that some other code path replaced with a plain object.
+   *
+   * Subclasses must not redeclare this field: a class-field initializer in a
+   * subclass runs after `super()` and would replace this map with a plain
+   * object. The type is already narrowed by the `T` they pass in.
+   */
+  _content: Record<string, T> = Object.create(null);
+
+  /**
+   * Reads the stored content row for a language without creating one, by own
+   * property only, so inherited keys (`__proto__`, `constructor`, `toString`,
+   * …) resolve to `undefined` rather than to something off the prototype
+   * chain.
+   *
+   * @param {string} language - The language code
+   * @returns {T | undefined} The stored content row, or undefined if there is none
+   * @private
+   */
+  private ownContent(language: string): T | undefined {
+    return Object.hasOwn(this._content, language) ? this._content[language] : undefined;
+  }
 
   /**
    * Creates a new content instance for the specified language.
@@ -93,7 +154,7 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
    * @returns {T} The translated content for the specified language
    */
   content(language: string): T {
-    if ( ! this._content[language] ) {
+    if ( ! this.ownContent(language) ) {
       this._content[language] = this.createContent(language);
     }
     return this._content[language];
@@ -118,14 +179,24 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
   }
 
   /**
-   * Determines if the model has non-empty content for the specified language.
+   * Determines if the model has content for the specified language that
+   * speaks for that language — a stored row carrying something a consumer
+   * reading the whole row will render.
+   *
+   * This is the row-selection predicate: every consumer that picks one
+   * language's row for display goes through it (`localizedContent` in the site
+   * and widget, `resolveContentLocale` behind the meta tags), which is why it
+   * asks {@link TranslatedContentModel.hasDisplayContent} rather than negating
+   * `isEmpty()`. A caller that wants the different question "is a row stored
+   * for this language at all" — a save path, or a test proving absence —
+   * asks `getLanguages().includes(language)`.
    *
    * @param {string} language - The language code to check
-   * @returns {boolean} True if content exists and is not empty
+   * @returns {boolean} True if a row exists and carries renderable content
    */
   hasContent(language: string): boolean {
-    return this._content[language] !== undefined
-            && ! this._content[language].isEmpty();
+    const content = this.ownContent(language);
+    return content !== undefined && content.hasDisplayContent();
   }
 
   /**

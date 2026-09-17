@@ -187,6 +187,14 @@ class EventContentEntity extends Model {
   @Column({ type: DataType.TEXT })
   declare accessibility_info: string;
 
+  /**
+   * Alt text for the event's image, in this row's language. Nullable: null and
+   * empty string both mean "no alt in this language", so the model normalizes
+   * null to '' rather than carrying the distinction upward.
+   */
+  @Column({ type: DataType.TEXT })
+  declare image_alt: string | null;
+
   @BelongsTo(() => EventEntity)
   declare event: EventEntity;
 
@@ -195,6 +203,7 @@ class EventContentEntity extends Model {
     content.name = this.name;
     content.description = this.description;
     content.accessibilityInfo = this.accessibility_info ?? '';
+    content.imageAlt = this.image_alt ?? '';
 
     return content;
   }
@@ -205,6 +214,7 @@ class EventContentEntity extends Model {
       name: content.name,
       description: content.description,
       accessibility_info: content.accessibilityInfo,
+      image_alt: content.imageAlt,
     });
   }
 };

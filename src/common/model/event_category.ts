@@ -7,8 +7,6 @@ import { EventCategoryContent as EventCategoryContent } from './event_category_c
  * Category names are translatable through EventCategoryContent.
  */
 export class EventCategory extends TranslatedModel<EventCategoryContent> {
-  _content: Record<string, EventCategoryContent> = {};
-
   /**
    * Wire-only count of events currently assigned to this category within the
    * scope of the API response that produced it (e.g. matching a date window

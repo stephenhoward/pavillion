@@ -985,6 +985,7 @@ describe('Editor API', () => {
 // Import CalendarRoutes for settings API tests
 import CalendarRoutes from '@/server/calendar/api/v1/calendar';
 import { Media } from '@/common/model/media';
+import { IMAGE_ALT_MAX_LENGTH } from '@/server/calendar/service/image_alt';
 
 describe('Calendar Settings API', () => {
   let routes: CalendarRoutes;
@@ -1144,6 +1145,78 @@ describe('Calendar Settings API', () => {
       // Authenticated responses include all fields
       expect(response.body.defaultEventImage.originalFilename).toBe('photo.jpg');
       expect(response.body.defaultEventImage.fileSize).toBe(12345);
+    });
+  });
+});
+
+describe('Calendar Creation API', () => {
+  let routes: CalendarRoutes;
+  let router: express.Router;
+  let calendarInterface: CalendarInterface;
+  let createSandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    routes = new CalendarRoutes(calendarInterface);
+    router = express.Router();
+  });
+
+  afterEach(() => {
+    createSandbox.restore();
+  });
+
+  describe('POST /calendars', () => {
+    it('should reject an invalid imageAlt before the calendar is created', async () => {
+      // Creating a calendar with content is two service calls and only the
+      // second validates imageAlt. Rejecting after createCalendar would leave
+      // the calendar row, its owner membership and its ActivityPub actor in
+      // place with the urlName consumed, so the author's retry with the same
+      // name would 409. createCalendar must not be reached at all.
+      const createStub = createSandbox.stub(calendarInterface, 'createCalendar');
+      const settingsStub = createSandbox.stub(calendarInterface, 'updateCalendarSettings');
+
+      router.post('/handler', addRequestUser, (req, res) => {
+        routes.createCalendar(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          urlName: 'new-calendar',
+          content: { en: { name: 'New Calendar', imageAlt: 'a'.repeat(IMAGE_ALT_MAX_LENGTH + 1) } },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields.imageAlt).toBeDefined();
+      expect(createStub.called).toBe(false);
+      expect(settingsStub.called).toBe(false);
+    });
+
+    it('should create the calendar when the content is acceptable', async () => {
+      const calendar = new Calendar('cal-id', 'new-calendar');
+      const createStub = createSandbox.stub(calendarInterface, 'createCalendar');
+      const settingsStub = createSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      const getStub = createSandbox.stub(calendarInterface, 'getCalendar');
+
+      createStub.resolves(calendar);
+      settingsStub.resolves(calendar);
+      getStub.resolves(calendar);
+
+      router.post('/handler', addRequestUser, (req, res) => {
+        routes.createCalendar(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          urlName: 'new-calendar',
+          content: { en: { name: 'New Calendar', imageAlt: 'A banner of paper lanterns' } },
+        });
+
+      expect(response.status).toBe(200);
+      expect(createStub.called).toBe(true);
+      expect(settingsStub.called).toBe(true);
     });
   });
 });

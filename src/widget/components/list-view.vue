@@ -62,6 +62,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
             <EventCard
               :instance="instance"
               :calendar-url-name="widgetStore.calendarUrlName!"
+              :calendar="publicStore.currentCalendar"
               :default-image="defaultEventImage"
               :detail-href="buildDetailHref(instance)"
             />

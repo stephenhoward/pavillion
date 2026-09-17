@@ -44,6 +44,17 @@ export class EventSeriesContentEntity extends Model {
   })
   declare description: string | null;
 
+  /**
+   * Alt text for the series image, in this row's language. Nullable: null and
+   * empty string both mean "no alt in this language", so the model normalizes
+   * null to '' rather than carrying the distinction upward.
+   */
+  @Column({
+    type: DataType.TEXT,
+    allowNull: true,
+  })
+  declare image_alt: string | null;
+
   // Associations
   @BelongsTo(() => EventSeriesEntity)
   declare series: EventSeriesEntity;
@@ -56,6 +67,7 @@ export class EventSeriesContentEntity extends Model {
       this.language,
       this.name,
       this.description ?? '',
+      this.image_alt ?? '',
     );
   }
 
@@ -67,6 +79,7 @@ export class EventSeriesContentEntity extends Model {
       language: model.language,
       name: model.name,
       description: model.description || null,
+      image_alt: model.imageAlt,
     });
   }
 }

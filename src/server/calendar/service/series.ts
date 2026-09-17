@@ -19,6 +19,7 @@ import {
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 
 /**
  * Service for managing event series within calendars.
@@ -67,8 +68,23 @@ class SeriesService {
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws InvalidSeriesUrlNameError if urlName format is invalid
    * @throws SeriesUrlNameAlreadyExistsError if urlName is already taken in this calendar
+   * @throws ValidationError if any language's imageAlt is invalid
    */
   async createSeries(account: Account, calendarId: string, seriesData: Record<string, any>): Promise<EventSeries> {
+    // Validate every language's imageAlt before the series row or any content
+    // row is written — the per-language loop below throws, and this method
+    // holds no transaction.
+    //
+    // This runs ahead of the existence and permission checks rather than after
+    // them, matching createEvent/updateEvent/updateCalendarSettings: the
+    // pre-pass reads nothing but the request body, so there is no work worth
+    // doing before it, and a payload that can never be stored should not cost a
+    // calendar lookup, a duplicate-urlName query and a MediaInterface round
+    // trip first. Consequence: a request that is both unauthorized and
+    // malformed now reports the malformed alt text rather than the permission
+    // failure, which is already how the three sibling methods answer.
+    validateContentImageAlts(seriesData.content);
+
     // Get calendar and verify ownership/editor permissions
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
@@ -209,8 +225,20 @@ class SeriesService {
    * @throws CalendarNotFoundError if calendar doesn't exist
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws Error if urlName change is attempted
+   * @throws ValidationError if any language's imageAlt is invalid
    */
   async updateSeries(account: Account, seriesId: string, seriesData: Record<string, any>, calendarId?: string): Promise<EventSeries> {
+    // Validate every language's imageAlt before the media_id update or the
+    // first content row is written. Without this, an over-long alt text on the
+    // second language would reject the request with the first language's edit
+    // already saved.
+    //
+    // As in createSeries, this runs first: updateEvent validates the same way
+    // ahead of its own EventEntity.findByPk, so a request that is both
+    // unresolvable (or unauthorized) and malformed reports the malformed alt
+    // text on all four enforcement sites alike.
+    validateContentImageAlts(seriesData.content);
+
     // Get series to verify it exists
     const series = await this.getSeries(seriesId);
 
@@ -284,6 +312,10 @@ class SeriesService {
           if (c.description !== undefined) {
             contentEntity.description = c.description;
           }
+          // Replace, not patch: validateImageAlt maps nullish to '', so an
+          // update that omits imageAlt clears the stored one. That is what
+          // makes the editor's Decorative toggle persist.
+          contentEntity.image_alt = validateImageAlt(c.imageAlt);
           await contentEntity.save();
         }
         else {
@@ -533,6 +565,22 @@ class SeriesService {
 
   /**
    * Create series content for a specific language.
+   *
+   * This is the single funnel every series content row passes through on
+   * creation, which is where `imageAlt` is normalized. Series has no inbound
+   * federation writer — `parseSourceSeries` allow-lists a peer's series down to
+   * `{ id, name, description }` onto the event's `source_series` JSON and never
+   * reaches this table — so every caller is author-facing and the rejecting
+   * validator is the right one: there is always someone to show the error to.
+   *
+   * @param {string} seriesId - Series the content row belongs to
+   * @param {string} language - Language code for this row
+   * @param {Record<string,any>} content - Content fields for this language
+   * @returns {Promise<EventSeriesContent>} The content that was written
+   * @throws {ValidationError} When `imageAlt` is a non-string or over-long.
+   *   Callers validate the whole payload up front via
+   *   {@link validateContentImageAlts}, so by the time this runs the call is a
+   *   normalization that cannot throw for a reason the pre-pass would have caught.
    */
   private async createSeriesContent(seriesId: string, language: string, content: Record<string, any>): Promise<EventSeriesContent> {
     const contentEntity = EventSeriesContentEntity.build({
@@ -541,6 +589,7 @@ class SeriesService {
       language,
       name: content.name,
       description: content.description ?? null,
+      image_alt: validateImageAlt(content.imageAlt),
     });
     await contentEntity.save();
 

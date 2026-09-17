@@ -9,6 +9,17 @@
  *   - edit_event.vue (the Event editor)
  *   - series-editor.vue (the Series editor)
  *   - calendar-management/settings.vue (the Calendar settings translatable section)
+ *   - common/media/ImageAltEditor.vue — NOT a parent editor. It is a nested
+ *     shared component that puts `.translatable-form-fields` on its OWN root so
+ *     the `.field-*` descendant selectors below resolve wherever it is mounted.
+ *     It has to: of its three call sites, only series-editor.vue carries the
+ *     class on the containing section; edit_event.vue and settings.vue do not.
+ *     Consequence for anyone refactoring this file: if the `.field-*` rules stop
+ *     being descendants of `.translatable-form-fields` (renamed, `:where()`-scoped,
+ *     split out), that component's controls silently lose their styling with no
+ *     build error. Promoting the `.field-*` primitives to standalone global
+ *     classes would remove this coupling for it and for any future shared
+ *     component; see the follow-up bead.
  *
  * The `.form-group` / `.form-input` / `.form-textarea` system used by
  * `admin/settings.vue` and `common/create-location-form.vue` is intentionally

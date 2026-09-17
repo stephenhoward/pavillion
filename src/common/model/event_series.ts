@@ -6,7 +6,6 @@ import { EventSeriesContent } from './event_series_content.js';
  * Series can have names and descriptions in multiple languages.
  */
 export class EventSeries extends TranslatedModel<EventSeriesContent> {
-  _content: Record<string, EventSeriesContent> = {};
   /** Horizontal focal point for media cropping (0.0 = left, 1.0 = right). */
   mediaFocalPointX: number = 0.5;
   /** Vertical focal point for media cropping (0.0 = top, 1.0 = bottom). */

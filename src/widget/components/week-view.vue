@@ -8,8 +8,10 @@ import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import { useWidgetStore } from '../stores/widgetStore';
 import { useSwipeGesture } from '../composables/useSwipeGesture';
 import EventImage from '@/site/components/event-image.vue';
+import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 
 const { t } = useTranslation('system');
+const { resolveImageAlt } = useLocalizedContent();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
 const widgetStore = useWidgetStore();
@@ -175,9 +177,19 @@ onMounted(() => {
             class="event-item"
             @click="openEvent(instance)"
           >
+            <!--
+              The week view shows no calendar default image, so the resolver is
+              always called with no calendar and usesCalendarDefault=false. Under
+              the v-if above that makes it equivalent to reading the event's own
+              alt directly — but only while the guard holds: the resolver returns
+              '' for an event without media, a direct read would not. Calling the
+              resolver keeps the media-source rule in one tested place, so
+              relaxing the guard cannot silently change what is announced.
+            -->
             <EventImage
               v-if="instance.event.media"
               :media="instance.event.media"
+              :alt="resolveImageAlt(instance.event, null, false)"
               :focal-point-x="instance.event.mediaFocalPointX"
               :focal-point-y="instance.event.mediaFocalPointY"
               :zoom="instance.event.mediaZoom"

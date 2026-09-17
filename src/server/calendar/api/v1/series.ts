@@ -11,6 +11,7 @@ import {
   DuplicateSeriesNameError,
   SeriesEventCalendarMismatchError,
 } from '@/common/exceptions/series';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
 class SeriesRoutes {
@@ -107,6 +108,14 @@ class SeriesRoutes {
     }
     catch (error) {
       logError(error, 'Error creating series');
+
+      // SeriesService rejects invalid field values (currently content.imageAlt)
+      // with ValidationError. Without this branch the author gets an opaque 500
+      // and no `fields` map to render the error against the offending input.
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
 
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ "error": "Calendar not found", errorName: 'CalendarNotFoundError' });
@@ -207,6 +216,13 @@ class SeriesRoutes {
     }
     catch (error) {
       logError(error, 'Error updating series');
+
+      // See createSeries above: a rejected field value is the author's to fix,
+      // so it has to reach them as a 400 with its `fields` map intact.
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
 
       if (error instanceof SeriesNotFoundError) {
         res.status(404).json({ "error": "Series not found", errorName: 'SeriesNotFoundError' });

@@ -20,7 +20,7 @@ const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const showReportModal = ref(false);
-const { localizedContent, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
+const { localizedContent, localizedField, spaceDisplayName, spaceAccessibilityInfo: spaceAccessibilityInfoFor } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -214,7 +214,7 @@ function closeReportModal() {
         <EventImage
           :media="state.event.media"
           context="feature"
-          :alt="localizedContent(state.event).name"
+          :alt="localizedField(state.event, 'imageAlt')"
           :focal-point-x="state.event.mediaFocalPointX"
           :focal-point-y="state.event.mediaFocalPointY"
           :zoom="state.event.mediaZoom"

@@ -85,4 +85,69 @@ describe('CalendarEventContent Model', () => {
 
     expect(content.isEmpty()).toBe(true);
   });
+
+  test('creates content with default empty imageAlt', () => {
+    const content = new CalendarEventContent('en', 'Event Name', 'A description');
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('serializes imageAlt in toObject', () => {
+    const content = new CalendarEventContent('en', 'Event Name', 'A description', '', 'A crowd dancing in a park');
+    const obj = content.toObject();
+
+    expect(obj.imageAlt).toBe('A crowd dancing in a park');
+  });
+
+  test('deserializes imageAlt from fromObject', () => {
+    const content = CalendarEventContent.fromObject({
+      language: 'en',
+      name: 'Event Name',
+      description: 'A description',
+      imageAlt: 'A poster for the show',
+    });
+
+    expect(content.imageAlt).toBe('A poster for the show');
+  });
+
+  test('fromObject treats null imageAlt as empty string', () => {
+    const content = CalendarEventContent.fromObject({
+      language: 'en',
+      name: 'Event Name',
+      description: 'A description',
+      imageAlt: null,
+    });
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('fromObject handles missing imageAlt', () => {
+    const content = CalendarEventContent.fromObject({
+      language: 'en',
+      name: 'Event Name',
+      description: 'A description',
+    });
+
+    expect(content.imageAlt).toBe('');
+  });
+
+  test('round-trip conversion preserves imageAlt', () => {
+    const original = new CalendarEventContent('fr', 'Nom', 'Description', 'Accès', 'Une affiche du concert');
+    const roundTrip = CalendarEventContent.fromObject(original.toObject());
+
+    expect(roundTrip.imageAlt).toBe(original.imageAlt);
+    expect(roundTrip.accessibilityInfo).toBe(original.accessibilityInfo);
+  });
+
+  test('isEmpty returns false when only imageAlt is set', () => {
+    const content = new CalendarEventContent('en', '', '', '', 'A photo of the venue');
+
+    expect(content.isEmpty()).toBe(false);
+  });
+
+  test('isEmpty returns true when imageAlt is empty along with every other field', () => {
+    const content = new CalendarEventContent('en', '', '', '', '');
+
+    expect(content.isEmpty()).toBe(true);
+  });
 });

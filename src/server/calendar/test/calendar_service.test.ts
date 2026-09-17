@@ -613,6 +613,7 @@ describe('createCalendarContent', () => {
     expect(contentUpdateStub.calledWith({
       name: 'Test Calendar',
       description: 'A test calendar',
+      image_alt: '',
     })).toBe(true);
 
     expect(result).toBe(existingContent);
