@@ -7,6 +7,8 @@
  * - Zoom > 1 applies transform: scale and transform-origin.
  * - Zoom <= 1 does not apply transform.
  * - Component renders nothing when media is null.
+ * - alt renders the supplied alt text, and alt="" when none is supplied.
+ * - A media filename is never emitted as alt text.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -100,5 +102,40 @@ describe('EventImage', () => {
     const img = wrapper.find('img');
     const style = img.attributes('style') || '';
     expect(style).toContain('--image-zoom: 1.5');
+  });
+
+  it('should render the supplied alt text', async () => {
+    const wrapper = await mountComponent({ alt: 'A crowd dancing at dusk' });
+    const img = wrapper.find('img');
+    expect(img.attributes('alt')).toBe('A crowd dancing at dusk');
+  });
+
+  it('should render an empty alt when no alt is supplied', async () => {
+    const wrapper = await mountComponent();
+    const img = wrapper.find('img');
+    expect(img.attributes('alt')).toBe('');
+  });
+
+  it('should render an empty alt when the supplied alt is empty', async () => {
+    const wrapper = await mountComponent({ alt: '' });
+    const img = wrapper.find('img');
+    expect(img.attributes('alt')).toBe('');
+  });
+
+  it('should never fall back to the media filename for alt text', async () => {
+    // defaultMedia carries originalFilename; a filename describes the file,
+    // not the picture, and must never reach a screen reader.
+    const wrapper = await mountComponent();
+    const img = wrapper.find('img');
+    expect(img.attributes('alt')).toBe('');
+    expect(img.attributes('alt')).not.toContain('photo.jpg');
+  });
+
+  it('should not add presentation roles alongside an empty alt', async () => {
+    // alt="" is the entire decorative contract.
+    const wrapper = await mountComponent();
+    const img = wrapper.find('img');
+    expect(img.attributes('role')).toBeUndefined();
+    expect(img.attributes('aria-hidden')).toBeUndefined();
   });
 });

@@ -3,13 +3,18 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
 interface MediaObject {
   id: string;
-  originalFilename?: string;
 }
 
 const props = withDefaults(defineProps<{
   media: MediaObject | null;
   context?: 'card' | 'hero' | 'feature';
   lazy?: boolean;
+  /**
+   * Alt text for the image. Omitted or empty means the image is decorative,
+   * which renders alt="" — the whole contract; no role="presentation" or
+   * aria-hidden is added. A filename is never a substitute: it describes the
+   * file, not the picture, and reads as noise to a screen reader.
+   */
   alt?: string;
   focalPointX?: number;
   focalPointY?: number;
@@ -165,7 +170,7 @@ onUnmounted(() => {
     <img
       v-if="imageBlobUrl"
       :src="imageBlobUrl"
-      :alt="alt || media?.originalFilename || ''"
+      :alt="alt || ''"
       :style="imageStyle"
       @load="handleImageLoad"
       @error="handleImageError"

@@ -6,10 +6,14 @@
  * - Falls back to the default language (English) when the current locale has no content
  * - Falls back to the first available language when neither current nor default has content
  * - Returns empty content for the current locale when no content exists at all
+ * - localizedField resolves a single field per language, not per content row
+ * - resolveImageAlt picks the alt belonging to the image actually rendered
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import i18next from 'i18next';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
+import { Media } from '@/common/model/media';
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be declared before the composable is imported
@@ -52,13 +56,31 @@ function setI18nextLanguage(lang: string) {
   Object.defineProperty(i18next, 'language', { value: lang, configurable: true });
 }
 
-function makeCalendar(contents: { lang: string; name: string }[]): Calendar {
+function makeCalendar(contents: { lang: string; name: string; imageAlt?: string }[]): Calendar {
   const cal = new Calendar('cal-1', 'mycalendar');
-  for (const { lang, name } of contents) {
-    const content = new CalendarContent(lang, name, `Description in ${lang}`);
+  for (const { lang, name, imageAlt } of contents) {
+    const content = new CalendarContent(lang, name, `Description in ${lang}`, imageAlt);
     cal.addContent(content);
   }
   return cal;
+}
+
+function makeEvent(
+  contents: { lang: string; name: string; imageAlt?: string }[],
+  media: Media | null = null,
+): CalendarEvent {
+  const event = new CalendarEvent('event-1');
+  for (const { lang, name, imageAlt } of contents) {
+    event.addContent(
+      new CalendarEventContent(lang, name, `Description in ${lang}`, '', imageAlt),
+    );
+  }
+  event.media = media;
+  return event;
+}
+
+function makeMedia(): Media {
+  return new Media('media-1', 'cal-1', 'sha', 'DSC_0042.jpg', 'image/jpeg', 1024, 'approved');
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +161,47 @@ describe('useLocalizedContent', () => {
     });
   });
 
+  describe('when the locale row carries only alt text', () => {
+    // The render-boundary twin of content-languages.test.ts's "does not count
+    // a language carrying only alt text". Alt text is resolved per field by
+    // localizedField and is never read off the selected row, so a row holding
+    // nothing else must not be selected -- doing so serves a blank name and
+    // description to that locale's visitors instead of the English fallback.
+    it('falls back to English rather than selecting the alt-only row', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+      ]);
+      cal.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedContent, localizedField } = useLocalizedContent();
+      const result = localizedContent(cal);
+
+      expect(result.language).toBe('en');
+      expect(result.name).toBe('English Name');
+      expect(result.description).toBe('Description in en');
+      // The alt text on that row is still the French visitor's alt text: the
+      // row is skipped for selection, not ignored.
+      expect(localizedField(cal, 'imageAlt')).toBe('Une salle comble');
+    });
+
+    it('selects the alt-only row only when no other language has content', () => {
+      const cal = new Calendar('cal-1', 'mycalendar');
+      cal.addContent(new CalendarContent('fr', '', '', 'Une salle comble'));
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedContent } = useLocalizedContent();
+
+      // With nothing to fall back to, resolution reaches the first stored
+      // language rather than fabricating a row.
+      expect(localizedContent(cal).language).toBe('fr');
+    });
+  });
+
   describe('when no content exists', () => {
     it('should return empty content for the current locale', () => {
       const cal = new Calendar('cal-1', 'mycalendar');
@@ -152,6 +215,229 @@ describe('useLocalizedContent', () => {
       // Should return an empty CalendarContent for 'en'
       expect(result.name).toBe('');
       expect(result.language).toBe('en');
+    });
+  });
+
+  describe('localizedField', () => {
+    it('should return the current locale value when it is populated', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+        { lang: 'fr', name: 'Nom francais', imageAlt: 'Une salle comble' },
+      ]);
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(cal, 'imageAlt')).toBe('Une salle comble');
+    });
+
+    it('should fall back to English per field when the locale row exists but the field is empty', () => {
+      // The French row exists and has a name, but no alt text. Row-level
+      // resolution would make the image decorative for French visitors only.
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+        { lang: 'fr', name: 'Nom francais' },
+      ]);
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedContent, localizedField } = useLocalizedContent();
+
+      // Row selection still picks French -- only the field resolution differs.
+      expect(localizedContent(cal).language).toBe('fr');
+      expect(localizedField(cal, 'imageAlt')).toBe('A packed room');
+    });
+
+    it('should fall back to the first language with a value when English is empty', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name' },
+        { lang: 'de', name: 'Deutscher Name', imageAlt: 'Ein voller Raum' },
+      ]);
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(cal, 'imageAlt')).toBe('Ein voller Raum');
+    });
+
+    it('should return an empty string when no language has a value', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name' },
+        { lang: 'fr', name: 'Nom francais' },
+      ]);
+
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(cal, 'imageAlt')).toBe('');
+    });
+
+    it('should treat a whitespace-only value as empty and fall through', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+        { lang: 'fr', name: 'Nom francais', imageAlt: '   ' },
+      ]);
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(cal, 'imageAlt')).toBe('A packed room');
+    });
+
+    it('should return the selected value exactly as stored', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: '  A packed room  ' },
+      ]);
+
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(cal, 'imageAlt')).toBe('  A packed room  ');
+    });
+
+    it('should return an empty string for a null or undefined model', () => {
+      const { localizedField } = useLocalizedContent();
+
+      expect(localizedField(null, 'imageAlt')).toBe('');
+      expect(localizedField(undefined, 'imageAlt')).toBe('');
+    });
+
+    it('should not materialize a content row for a language the model lacks', () => {
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'A packed room' },
+      ]);
+
+      mockRoute.path = '/fr/mycalendar';
+      setI18nextLanguage('fr');
+
+      const { localizedField } = useLocalizedContent();
+      localizedField(cal, 'imageAlt');
+
+      expect(cal.getLanguages()).toEqual(['en']);
+    });
+  });
+
+  describe('resolveImageAlt', () => {
+    it("should use the event's own alt when the event has its own media", () => {
+      const event = makeEvent(
+        [{ lang: 'en', name: 'Concert', imageAlt: 'The band on stage' }],
+        makeMedia(),
+      );
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, false)).toBe('The band on stage');
+    });
+
+    it("should prefer the event's alt even when the caller allows the calendar default", () => {
+      const event = makeEvent(
+        [{ lang: 'en', name: 'Concert', imageAlt: 'The band on stage' }],
+        makeMedia(),
+      );
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('The band on stage');
+    });
+
+    it("should use the calendar's alt when the calendar default image is shown", () => {
+      const event = makeEvent([{ lang: 'en', name: 'Concert' }]);
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('Calendar default alt');
+    });
+
+    it('should resolve the calendar alt per locale', () => {
+      const event = makeEvent([{ lang: 'en', name: 'Concert' }]);
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+        { lang: 'es', name: 'Nombre', imageAlt: 'Texto alternativo' },
+      ]);
+
+      mockRoute.path = '/es/mycalendar';
+      setI18nextLanguage('es');
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('Texto alternativo');
+    });
+
+    it('should return an empty string when no image is shown', () => {
+      const event = makeEvent([{ lang: 'en', name: 'Concert', imageAlt: 'Unused alt' }]);
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, false)).toBe('');
+    });
+
+    it("should return an empty string when the caller withholds the calendar default (repost)", () => {
+      // A reposted event without its own media never shows the local
+      // calendar's default image, so it must not borrow that image's alt.
+      const event = makeEvent([{ lang: 'en', name: 'Reposted concert' }]);
+      event.repostStatus = 'auto';
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, false)).toBe('');
+    });
+
+    it('should trust the caller over the event when the flag and the repost state disagree', () => {
+      // The only combination that falsifies "the function re-derives the
+      // exclusion from repostStatus instead of trusting the caller": the event
+      // IS a repost, yet the caller says the calendar default image is on
+      // screen. Every other case agrees with both readings, so without this one
+      // the repostStatus assignment above is inert. The flag is the seam --
+      // it moves to the event card's own media computed in follow-up work, and
+      // this test is what stops the exclusion migrating back in here.
+      const event = makeEvent([{ lang: 'en', name: 'Reposted concert' }]);
+      event.repostStatus = 'auto';
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('Calendar default alt');
+    });
+
+    it('should return an empty string when the calendar is unavailable', () => {
+      const event = makeEvent([{ lang: 'en', name: 'Concert' }]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, null, true)).toBe('');
+    });
+
+    it('should return an empty string when the event has media but no alt in any language', () => {
+      const event = makeEvent([{ lang: 'en', name: 'Concert' }], makeMedia());
+      const cal = makeCalendar([
+        { lang: 'en', name: 'English Name', imageAlt: 'Calendar default alt' },
+      ]);
+
+      const { resolveImageAlt } = useLocalizedContent();
+
+      expect(resolveImageAlt(event, cal, true)).toBe('');
     });
   });
 

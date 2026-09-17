@@ -8,17 +8,25 @@ import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
+import type { Calendar } from '@/common/model/calendar';
 import type { Media } from '@/common/model/media';
 
 const props = defineProps<{
   instance: CalendarEventInstance;
   calendarUrlName: string;
+  /**
+   * The calendar this card is being shown on. Supplied so the alt text for the
+   * calendar's default image can be resolved in the visitor's locale; it must
+   * be the same calendar `defaultImage` came from, or the card would describe
+   * one image with another's words.
+   */
+  calendar?: Calendar | null;
   defaultImage?: Media | null;
   detailHref?: string;
 }>();
 
 const { t } = useTranslation('system');
-const { localizedContent, spaceDisplayName } = useLocalizedContent();
+const { localizedContent, resolveImageAlt, spaceDisplayName } = useLocalizedContent();
 const { localizedPath } = useLocale();
 
 /**
@@ -109,6 +117,25 @@ const media = computed(() => {
 });
 
 /**
+ * True when the image on screen is the calendar's default rather than the
+ * event's own. Read off `media` rather than recomputed, so the repost rule
+ * above cannot drift from the rule that chose the picture: the only way to
+ * be showing something without event media is the default-image branch.
+ */
+const usesCalendarDefault = computed(() => {
+  return !props.instance.event.media && media.value !== null;
+});
+
+/**
+ * Alt text describing the image this card is actually showing — the event's
+ * own alt for the event's media, the calendar's for the calendar default, and
+ * '' when the image is decorative or absent.
+ */
+const imageAlt = computed(() => {
+  return resolveImageAlt(props.instance.event, props.calendar, usesCalendarDefault.value);
+});
+
+/**
  * Returns the href for the event detail link.
  *
  * When `detailHref` is provided (e.g. by the widget host), it is returned
@@ -138,7 +165,7 @@ const detailPath = computed(() => {
       <EventImage
         :media="media"
         context="card"
-        :alt="title"
+        :alt="imageAlt"
         :focal-point-x="props.instance.event.mediaFocalPointX"
         :focal-point-y="props.instance.event.mediaFocalPointY"
         :zoom="props.instance.event.mediaZoom"

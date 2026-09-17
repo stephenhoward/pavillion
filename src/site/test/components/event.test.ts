@@ -87,6 +87,10 @@ let mockUrlPrompt: string | null = null;
 // Mutable event-level accessibility info
 let mockEventAccessibilityInfo: string = '';
 
+// Mutable hero image + its alt text so tests can cover the image description
+let mockEventMedia: { id: string } | null = null;
+let mockEventImageAlt: string = '';
+
 // Mutable Space (EventLocationSpace) for tests covering the layered Place + Space display
 let mockSpace: {
   hasContent: (lang: string) => boolean;
@@ -105,10 +109,10 @@ vi.mock('@/site/service/calendar', () => {
       }),
       loadEvent: vi.fn().mockImplementation(() =>
         Promise.resolve({
-          content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo }),
+          content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo, imageAlt: mockEventImageAlt }),
           hasContent: (_lang: string) => true,
           getLanguages: () => ['en'],
-          media: null,
+          media: mockEventMedia,
           mediaFocalPointX: 0.5,
           mediaFocalPointY: 0.5,
           mediaZoom: 1.0,
@@ -142,6 +146,9 @@ vi.mock('@/site/components/event-image.vue', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import EventDetail from '@/site/components/event.vue';
+// Resolves to the stub declared above; imported so alt can be asserted as the
+// prop the page passes rather than as rendered markup the stub never emits.
+import EventImage from '@/site/components/event-image.vue';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1419,6 +1426,51 @@ describe('event external URL CTA button', () => {
     const cta = wrapper.find('.external-link-button');
     expect(cta.exists()).toBe(true);
     expect(cta.attributes('href')).toBe('http://example.com/path');
+    wrapper.unmount();
+  });
+});
+
+describe('event hero image alt text', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockEventName = 'Test Event';
+    mockEventMedia = { id: 'media-1' };
+    mockEventImageAlt = '';
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    // These two are not reset by the other suites' beforeEach hooks, so this
+    // block restores the module-level defaults it changed.
+    mockEventMedia = null;
+    mockEventImageAlt = '';
+  });
+
+  it('should describe the hero image with the event alt text', async () => {
+    mockEventImageAlt = 'A band playing on an outdoor stage';
+
+    const wrapper = await mountEvent(
+      '/view/test_calendar/events/evt-1',
+      (path) => path,
+    );
+
+    expect(wrapper.findComponent(EventImage).props('alt'))
+      .toBe('A band playing on an outdoor stage');
+    wrapper.unmount();
+  });
+
+  it('should render a decorative hero image when the event has no alt text', async () => {
+    mockEventName = 'Summer Concert';
+
+    const wrapper = await mountEvent(
+      '/view/test_calendar/events/evt-1',
+      (path) => path,
+    );
+
+    const alt = wrapper.findComponent(EventImage).props('alt');
+    expect(alt).toBe('');
+    expect(alt).not.toBe('Summer Concert');
     wrapper.unmount();
   });
 });

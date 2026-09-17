@@ -5,6 +5,10 @@ import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventCategory } from '@/common/model/event_category';
 import { CalendarEvent } from '@/common/model/events';
+import { Calendar } from '@/common/model/calendar';
+import { Media } from '@/common/model/media';
+import ModelService from '@/client/service/models';
+import CalendarService from '@/site/service/calendar';
 
 // Mock ModelService
 vi.mock('@/client/service/models', () => ({
@@ -807,6 +811,110 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       await store.reloadWithFilters();
 
       expect(loadCategoriesSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadCalendar action', () => {
+    const calendarPayload = {
+      id: 'cal-1',
+      urlName: 'test-calendar',
+      defaultDateRange: '1month',
+      defaultEventImage: { id: 'media-1', mimeType: 'image/jpeg' },
+      content: {
+        en: { name: 'Test Calendar', description: 'Desc', imageAlt: 'A packed room' },
+        fr: { name: 'Calendrier', description: 'Desc', imageAlt: 'Une salle comble' },
+      },
+    };
+
+    it('retains the loaded calendar as a hydrated model carrying translated alt text', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.currentCalendar).toBeInstanceOf(Calendar);
+      expect(store.currentCalendar?.urlName).toBe('test-calendar');
+      expect(store.currentCalendar?.content('en').imageAlt).toBe('A packed room');
+      expect(store.currentCalendar?.content('fr').imageAlt).toBe('Une salle comble');
+    });
+
+    it('still extracts the default event image and date range', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.defaultEventImage).toBeInstanceOf(Media);
+      expect(store.defaultEventImage?.id).toBe('media-1');
+      expect(store.defaultEventImage?.mimeType).toBe('image/jpeg');
+      expect(store.calendarDefaultDateRange).toBe('1month');
+    });
+
+    it('exposes the default event image as the loaded calendar\'s own image', async () => {
+      // Regression: the image was once stored beside the calendar as the raw
+      // public projection while the calendar carried a hydrated Media. Two
+      // representations of one value meant the image could drift from the
+      // calendar whose alt text describes it.
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      await store.loadCalendar('test-calendar');
+
+      expect(store.defaultEventImage).toBe(store.currentCalendar?.defaultEventImage);
+    });
+
+    it('does not re-fetch a calendar the service has already loaded', async () => {
+      // The page fetches the calendar before asking the store to load its
+      // settings; both must end up with one fetch and one Calendar instance.
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+
+      const calendar = await new CalendarService().getCalendarByUrlName('test-calendar');
+      await store.loadCalendar('test-calendar');
+
+      expect(ModelService.getModel).toHaveBeenCalledTimes(1);
+
+      // Same underlying Calendar, not a second hydration of the same payload.
+      // Identity is asserted by mutation rather than toBe, because the store
+      // hands back a reactive proxy of the object the service returned.
+      calendar!.description = 'edited through the service instance';
+      expect(store.currentCalendar?.description).toBe('edited through the service instance');
+    });
+
+    it('clears the retained calendar when the load fails', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+      await store.loadCalendar('test-calendar');
+      expect(store.currentCalendar).not.toBeNull();
+
+      vi.mocked(ModelService.getModel).mockRejectedValue(new Error('network down'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // A different calendar, because the service caches by url name: a repeat
+      // load of one already in hand cannot fail. What must never happen is the
+      // previous calendar staying behind as the current one — that is how
+      // calendar A's alt text would end up describing calendar B's image.
+      await store.loadCalendar('other-calendar');
+
+      expect(store.currentCalendar).toBeNull();
+      expect(store.defaultEventImage).toBeNull();
+    });
+
+    it('clears the retained calendar on clearAll', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+      await store.loadCalendar('test-calendar');
+
+      store.clearAll();
+
+      expect(store.currentCalendar).toBeNull();
+      expect(store.defaultEventImage).toBeNull();
+    });
+
+    it('drops the retained calendar when the url name changes', async () => {
+      vi.mocked(ModelService.getModel).mockResolvedValue(calendarPayload);
+      store.setCurrentCalendar('test-calendar');
+      await store.loadCalendar('test-calendar');
+      expect(store.currentCalendar).not.toBeNull();
+
+      store.setCurrentCalendar('another-calendar');
+
+      expect(store.currentCalendar).toBeNull();
+      expect(store.defaultEventImage).toBeNull();
     });
   });
 });
