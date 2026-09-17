@@ -539,14 +539,19 @@ initializeFiltersFromURL();
             class="event-item"
             :class="{ selected: isEventSelected(event) }"
             role="listitem">
-          <div class="event-checkbox">
+          <!--
+            A label rather than a div: the control keeps its designed box and the
+            label is what a pointer has to hit. It holds no text of its own, so
+            the input's aria-label remains the accessible name.
+          -->
+          <label class="event-checkbox">
             <input
               type="checkbox"
               :checked="isEventSelected(event)"
               @change.stop="toggleEventSelection(event)"
               :aria-label="t('event.select_label', { name: event.content('en').name })"
             />
-          </div>
+          </label>
           <article
             :aria-labelledby="`event-title-${event.id}`"
             @click="handleEditEvent(event, $event)"
@@ -862,7 +867,11 @@ initializeFiltersFromURL();
       }
 
       .event-checkbox {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
         padding-top: 0.25rem;
+        cursor: pointer;
 
         input[type="checkbox"] {
           width: 1.125rem;

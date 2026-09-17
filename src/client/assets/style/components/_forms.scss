@@ -118,11 +118,21 @@
 }
 
 /* Checkbox and radio styles */
+
+/*
+ * One box size for every checkbox and radio, classed or not: most call sites use
+ * the native control and only a few opt into the custom appearance below, so
+ * without this a single form mixes ~13px native boxes with 18px styled ones.
+ */
+input[type="checkbox"],
+input[type="radio"] {
+  inline-size: var(--pav-control-box-size);
+  block-size: var(--pav-control-box-size);
+}
+
 .checkbox,
 .radio {
   appearance: none;
-  width: 1.125rem;
-  height: 1.125rem;
   border: var(--pav-border-width-2) solid var(--pav-border-color-medium);
   background-color: var(--pav-surface-primary);
   cursor: pointer;
