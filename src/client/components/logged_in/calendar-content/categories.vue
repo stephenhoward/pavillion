@@ -28,13 +28,19 @@
           class="category-card"
           :class="{ 'category-card--selected': state.selectedCategories.has(category.id) }"
         >
-          <input
-            type="checkbox"
-            :checked="state.selectedCategories.has(category.id)"
-            @change="toggleCategorySelection(category.id)"
-            :aria-label="`Select ${category.content(currentLanguage)?.name || 'Unnamed Category'}`"
-            class="category-checkbox"
-          />
+          <!--
+            A label rather than a bare input: the control keeps its designed box
+            and the label is what a pointer has to hit. It holds no text of its
+            own, so the input's aria-label remains the accessible name.
+          -->
+          <label class="category-checkbox">
+            <input
+              type="checkbox"
+              :checked="state.selectedCategories.has(category.id)"
+              @change="toggleCategorySelection(category.id)"
+              :aria-label="`Select ${category.content(currentLanguage)?.name || 'Unnamed Category'}`"
+            />
+          </label>
 
           <div class="category-info">
             <div class="category-info__name">
@@ -629,8 +635,9 @@ onMounted(async () => {
 }
 
 .category-checkbox {
-  width: 20px;
-  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
 }

@@ -44,6 +44,13 @@ select:focus-visible,
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;
+  /*
+   * A min-* floor is not overridable by width/height at any specificity, so the
+   * touch-target rule below would otherwise hold a hidden skip link open at
+   * 44x44 despite every !important here.
+   */
+  min-inline-size: 0 !important;
+  min-block-size: 0 !important;
   padding: 0 !important;
   margin: -1px !important;
   overflow: hidden !important;
@@ -108,24 +115,47 @@ select:focus-visible,
 
 /* ===== INTERACTIVE ELEMENT ENHANCEMENTS ===== */
 
-/* Ensure minimum touch targets (44x44px WCAG guideline) */
+/*
+ * Minimum pointer target, for controls whose own box is the target.
+ *
+ * 44x44 is WCAG 2.1 SC 2.5.5, a AAA criterion this rule reaches for; the AA bar
+ * the project holds itself to asks for no target size at all, and WCAG 2.2 SC
+ * 2.5.8 sets the AA minimum at 24x24. It is an aspiration, not the compliance
+ * floor, which is why it yields to a control's own design below.
+ *
+ * Checkbox and radio are deliberately absent. A min-* floor cannot be overridden
+ * by a component's width/height at any specificity, so listing them here held
+ * every checkbox and radio in the client open at 44x44 — roughly 2.5x their
+ * designed box. Their target comes from the label instead (see below), which is
+ * where it belongs for a control whose painted box is meant to stay small.
+ */
 button,
 [role="button"],
 a,
 [role="link"],
-input[type="checkbox"],
-input[type="radio"],
 select {
-  min-height: 44px;
-  min-width: 44px;
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
 }
 
 /* Exception for inline links */
 p a,
 span a,
 li a {
-  min-height: auto;
-  min-width: auto;
+  min-block-size: auto;
+  min-inline-size: auto;
+}
+
+/*
+ * A label that wraps its own checkbox or radio is that control's pointer target,
+ * so the label carries the minimum and the control keeps its designed box. Only
+ * the box minimums are set: display and alignment stay with the component, which
+ * is what lets a label with multi-line help text keep its own layout.
+ */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
 }
 
 /* Improve button accessibility */

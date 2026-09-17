@@ -65,6 +65,10 @@
   --pav-space-text-paragraph-gap: var(--pav-space-4);    /* 16px paragraph spacing */
   --pav-space-text-heading-gap: var(--pav-space-6);      /* 24px heading margins */
 
+  /* Interactive Control Tokens */
+  --pav-touch-target-min: 2.75rem;                       /* 44px minimum pointer target */
+  --pav-control-box-size: 1.125rem;                      /* 18px checkbox/radio control box */
+
   /* Shell Layout Tokens */
   --pav-shell-sidebar-width: 15rem;                      /* 240px sidebar width */
   --pav-shell-bottom-nav-height: 4rem;                   /* 64px bottom nav height */
