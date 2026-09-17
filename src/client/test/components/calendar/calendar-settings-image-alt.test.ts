@@ -46,10 +46,10 @@ const SETTINGS_TRANSLATIONS = {
 // The alt editor reads its own namespace; supplying it keeps the assertions
 // below matching rendered text rather than raw key names.
 const MEDIA_TRANSLATIONS = {
-  'alt_editor.legend': 'Screen readers',
-  'alt_editor.decorative_label': 'Decorative',
+  'alt_editor.legend': 'Image description for screen readers',
+  'alt_editor.decorative_label': 'Skip description',
   'alt_editor.decorative_help': 'The image is hidden from screen readers.',
-  'alt_editor.describe_label': 'Describe this image',
+  'alt_editor.describe_label': 'Add a description',
   'alt_editor.describe_help': 'Screen readers read your description.',
   'alt_editor.description_label': 'Image description ({{language}})',
   'alt_editor.description_hint': 'Write what the image shows.',

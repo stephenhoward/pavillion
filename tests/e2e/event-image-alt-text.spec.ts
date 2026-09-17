@@ -131,8 +131,8 @@ test.describe('Event image alt text', () => {
     await expect(altEditor).toBeVisible();
 
     // Decorative is the default; describing the image is a deliberate choice.
-    await expect(page.getByRole('radio', { name: 'Decorative' })).toBeChecked();
-    await page.getByRole('radio', { name: 'Describe this image' }).check();
+    await expect(page.getByRole('radio', { name: 'Skip description' })).toBeChecked();
+    await page.getByRole('radio', { name: 'Add a description' }).check();
 
     await page.getByLabel('Image description (English)').fill(ENGLISH_ALT);
 
@@ -170,7 +170,7 @@ test.describe('Event image alt text', () => {
     await openEditorWithImage(page);
 
     // The editor reopens in Describe because a language still carries alt text.
-    await expect(page.getByRole('radio', { name: 'Describe this image' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Add a description' })).toBeChecked();
 
     await page.getByRole('tab', { name: 'Edit French content' }).click();
     const frenchAlt = page.getByLabel('Image description (French)');
@@ -189,7 +189,7 @@ test.describe('Event image alt text', () => {
   test('marks the image decorative and emits an empty alt on the public page', async ({ page }) => {
     await openEditorWithImage(page);
 
-    await page.getByRole('radio', { name: 'Decorative' }).check();
+    await page.getByRole('radio', { name: 'Skip description' }).check();
 
     // Switching to Decorative clears the model and warns that the text written
     // so far is about to go.

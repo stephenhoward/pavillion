@@ -82,10 +82,10 @@
     "remove": "Supprimer"
   },
   "alt_editor": {
-    "legend": "Lecteurs d'écran",
-    "decorative_label": "Décorative",
-    "decorative_help": "L'image est masquée pour les lecteurs d'écran. C'est le bon choix lorsque l'image n'apporte rien de plus que le texte déjà présent sur la page.",
-    "describe_label": "Décrire cette image",
+    "legend": "Description de l'image pour les lecteurs d'écran",
+    "decorative_label": "Ne pas décrire",
+    "decorative_help": "L'image est masquée pour les lecteurs d'écran. Choisissez cette option lorsque l'image est décorative et n'apporte rien de plus que le texte déjà présent sur la page.",
+    "describe_label": "Ajouter une description",
     "describe_help": "Les lecteurs d'écran lisent votre description à la place de l'image.",
     "description_label": "Description de l'image ({{language}})",
     "description_hint": "Écrivez ce que montre l'image. Inutile de commencer par « image de ».",
