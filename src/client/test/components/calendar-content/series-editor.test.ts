@@ -271,6 +271,32 @@ describe('SeriesEditor — image section', () => {
       // description.
       expect(series.content('en').imageAlt).toBe('A band on an outdoor stage');
     });
+
+    it('follows the language tab chosen in the details section', async () => {
+      const series = createSeries('media-abc-123');
+      series.addContent(EventSeriesContent.fromObject({ language: 'fr', name: 'S\u00e9rie d\'\u00e9t\u00e9', description: '' }));
+      series.content('en').imageAlt = 'A band on an outdoor stage';
+      series.content('fr').imageAlt = 'Un orchestre sur une sc\u00e8ne en plein air';
+
+      wrapper = createWrapper(series);
+      await nextTick();
+
+      const textarea = () => wrapper.find('.image-alt-editor textarea');
+      expect((textarea().element as HTMLTextAreaElement).value).toBe('A band on an outdoor stage');
+
+      // The tabs live in the details form, not here: the editor only learns
+      // about the switch because the form announces it. Without that the alt
+      // text would stay on whatever language the editor started on while the
+      // fields above it moved.
+      await wrapper.findComponent('.language-tab-stub').vm.$emit('update:modelValue', 'fr');
+      await nextTick();
+
+      expect((textarea().element as HTMLTextAreaElement).value).toBe('Un orchestre sur une sc\u00e8ne en plein air');
+
+      await textarea().setValue('Un orchestre de cuivres');
+      expect(series.content('fr').imageAlt).toBe('Un orchestre de cuivres');
+      expect(series.content('en').imageAlt).toBe('A band on an outdoor stage');
+    });
   });
 });
 

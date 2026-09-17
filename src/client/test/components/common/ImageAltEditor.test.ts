@@ -275,8 +275,8 @@ describe('ImageAltEditor', () => {
       const decorativeLabel = wrapper.find(`label[for="${decorativeRadio(wrapper).attributes('id')}"]`);
       const describeLabel = wrapper.find(`label[for="${describeRadio(wrapper).attributes('id')}"]`);
 
-      expect(decorativeLabel.text()).toBe('Decorative');
-      expect(describeLabel.text()).toBe('Describe this image');
+      expect(decorativeLabel.text()).toBe('Skip description');
+      expect(describeLabel.text()).toBe('Add a description');
     });
 
     it('announces the pending loss as an alert, not a passive status', async () => {

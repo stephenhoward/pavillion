@@ -25,7 +25,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['submit']);
+const emit = defineEmits(['submit', 'language-change']);
 
 const { t } = useTranslation('series', {
   keyPrefix: 'management',
@@ -63,6 +63,13 @@ watch(() => props.series, (newSeries) => {
     currentLanguage.value = seriesLanguages[0];
   }
 }, { immediate: true });
+
+// This form owns the language tabs, but a host may render translated fields of
+// its own outside it — the series editor's image alt text is content on the
+// same series. Announce the selection so those fields follow the tab the author
+// is looking at; registered after the re-seeding watch above so the first
+// emission carries the language actually shown, not the composable's default.
+watch(currentLanguage, (language) => emit('language-change', language), { immediate: true });
 
 const urlNameInput = ref(null);
 const nameInput = ref(null);

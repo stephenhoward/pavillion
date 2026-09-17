@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { ArrowLeft } from 'lucide-vue-next';
 import SeriesService from '@/client/service/series';
 import { seriesSaveErrorKey } from '@/client/composables/seriesSaveErrorKey';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import SeriesDetailsForm from './series-details-form.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
@@ -43,8 +44,12 @@ watch(() => props.series, (newSeries) => {
   }
 }, { immediate: true });
 
-// The shared details form owns the language tabs and field validation.
+// The shared details form owns the language tabs and field validation, and
+// reports which tab is showing. The image section's alt text is per-language
+// content on the same series, so it follows that selection; until the form has
+// announced one, the default language is what its tabs open on.
 const detailsForm = ref(null);
+const currentLanguage = ref(DEFAULT_LANGUAGE_CODE);
 const hasNewUpload = ref(false);
 
 const currentMedia = computed(() => {
@@ -179,6 +184,7 @@ function handleFilesChanged(files) {
               :series="localSeries"
               :disabled="state.isSaving"
               @submit="saveSeries"
+              @language-change="currentLanguage = $event"
             />
           </div>
         </section>

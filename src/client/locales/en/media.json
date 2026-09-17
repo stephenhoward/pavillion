@@ -82,10 +82,10 @@
     "remove": "Remove"
   },
   "alt_editor": {
-    "legend": "Screen readers",
-    "decorative_label": "Decorative",
-    "decorative_help": "The image is hidden from screen readers. This is the right choice when the image adds nothing beyond the text already on the page.",
-    "describe_label": "Describe this image",
+    "legend": "Image description for screen readers",
+    "decorative_label": "Skip description",
+    "decorative_help": "The image is hidden from screen readers. Choose this when the image is decorative and adds nothing beyond the text already on the page.",
+    "describe_label": "Add a description",
     "describe_help": "Screen readers read your description in place of the image.",
     "description_label": "Image description ({{language}})",
     "description_hint": "Write what the image shows. There is no need to start with \"image of\".",
