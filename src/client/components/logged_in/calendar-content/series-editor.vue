@@ -1,15 +1,10 @@
 <script setup>
-import { reactive, ref, computed, nextTick, onMounted, watch } from 'vue';
+import { reactive, ref, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft } from 'lucide-vue-next';
-import iso6391 from 'iso-639-1-dir';
-import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
-import { EventSeriesContent } from '@/common/model/event_series_content';
-import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError, InvalidSeriesUrlNameError } from '@/common/exceptions/series';
 import SeriesService from '@/client/service/series';
-import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
-import LanguagePicker from '@/client/components/common/language-picker.vue';
-import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import { seriesSaveErrorKey } from '@/client/composables/seriesSaveErrorKey';
+import SeriesDetailsForm from './series-details-form.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 
@@ -40,47 +35,14 @@ const state = reactive({
 // Create a local copy of the series to avoid mutating props
 const localSeries = ref(null);
 
-// Language management composable. Entity-level side effects (adding/dropping
-// per-language content on the series) are wired through the hooks; the
-// composable owns only UI state (active languages, current selection,
-// picker modal visibility). Destructured so refs auto-unwrap in the
-// template.
-const {
-  languages,
-  availableLanguages,
-  currentLanguage,
-  showLanguagePicker,
-  addLanguage,
-  removeLanguage,
-  openLanguagePicker,
-  closeLanguagePicker,
-} = useLanguageManagement({
-  onLanguageAdded: (language) => {
-    if (!localSeries.value) return;
-    if (localSeries.value.getLanguages().includes(language)) return;
-    localSeries.value.addContent(new EventSeriesContent(language, '', ''));
-  },
-  onLanguageRemoved: (language) => {
-    if (!localSeries.value) return;
-    localSeries.value.dropContent(language);
-  },
-});
-
-// Initialize the local series when props change. Re-seed the language
-// composable's active list from the entity so async-loaded series populate
-// their tabs correctly.
 watch(() => props.series, (newSeries) => {
   if (newSeries) {
     localSeries.value = newSeries;
-    const seriesLanguages = newSeries.getLanguages();
-    if (seriesLanguages.length > 0) {
-      languages.value = [...new Set([DEFAULT_LANGUAGE_CODE, ...seriesLanguages])];
-      currentLanguage.value = seriesLanguages[0];
-    }
   }
 }, { immediate: true });
 
-const nameInput = ref(null);
+// The shared details form owns the language tabs and field validation.
+const detailsForm = ref(null);
 const hasNewUpload = ref(false);
 
 const currentMedia = computed(() => {
@@ -88,34 +50,11 @@ const currentMedia = computed(() => {
   return id ? { id } : null;
 });
 
-const erroredTabs = computed(() => {
-  if (!localSeries.value) return [];
-  return localSeries.value.getLanguages().filter(language => {
-    const content = localSeries.value.content(language);
-    return !content || !content.name || content.name.trim().length === 0;
-  });
-});
-
 /**
- * Check if the series can be saved
- * Requires at least one non-empty name and a urlName for new series
+ * Check if the series can be saved; delegated to the details form.
  */
 function canSaveSeries() {
-  if (!localSeries.value) return false;
-
-  const isNew = !localSeries.value.id;
-
-  // For new series, urlName must be set
-  if (isNew && (!localSeries.value.urlName || localSeries.value.urlName.trim().length === 0)) {
-    return false;
-  }
-
-  // Must have at least one non-empty name
-  const seriesLanguages = localSeries.value.getLanguages();
-  return seriesLanguages.some(language => {
-    const content = localSeries.value.content(language);
-    return content && content.name.trim().length > 0;
-  });
+  return detailsForm.value?.canSave() ?? false;
 }
 
 /**
@@ -136,19 +75,12 @@ async function saveSeries() {
     emit('close');
   }
   catch (error) {
-    if (error instanceof DuplicateSeriesNameError) {
-      state.error = t('error_duplicate_name');
-    }
-    else if (error instanceof SeriesUrlNameAlreadyExistsError) {
-      state.error = t('error_duplicate_url_name');
-    }
-    else if (error instanceof InvalidSeriesUrlNameError) {
-      state.error = t('error_invalid_url_name');
-    }
-    else {
+    const isNew = !localSeries.value?.id;
+    const key = seriesSaveErrorKey(error, isNew);
+    if (key === 'error_create_series' || key === 'error_update_series') {
       console.error('Error saving series:', error);
-      state.error = localSeries.value?.id ? t('error_update_series') : t('error_create_series');
     }
+    state.error = t(key);
   }
   finally {
     state.isSaving = false;
@@ -171,27 +103,6 @@ function handleImageUpload(results) {
 function handleFilesChanged(files) {
   hasNewUpload.value = files.length > 0;
 }
-
-/**
- * Handle adding a language from the picker. Delegates to the composable
- * for state and entity side effects (via onLanguageAdded), then closes
- * the picker modal.
- */
-function handleAddLanguage(language) {
-  addLanguage(language);
-  closeLanguagePicker();
-}
-
-// Focus input when component mounts. The watch above handles seeding the
-// composable's currentLanguage from the entity; here we just focus the
-// first input.
-onMounted(() => {
-  nextTick(() => {
-    if (nameInput.value) {
-      nameInput.value.focus();
-    }
-  });
-});
 </script>
 
 <template>
@@ -246,75 +157,14 @@ onMounted(() => {
         <section class="editor-section">
           <h2 class="section-header">{{ tEditor('details_section') }}</h2>
 
-          <div class="section-card translatable-form-fields">
-            <!-- URL Name field - only shown for new series -->
-            <div v-if="!localSeries?.id" class="form-field">
-              <label class="field-label" for="series-url-name">
-                {{ tEditor('url_name') }}
-              </label>
-              <input
-                id="series-url-name"
-                type="text"
-                class="field-input"
-                v-model="localSeries.urlName"
-                :placeholder="tEditor('url_name_placeholder')"
-                :disabled="state.isSaving"
-              />
-              <p class="field-help">{{ tEditor('url_name_help') }}</p>
-            </div>
-
-            <!-- Multilingual name and description fields -->
-            <LanguageTabSelector
-              v-model="currentLanguage"
-              :languages="localSeries?.getLanguages() || []"
-              :errored-tabs="erroredTabs"
-              @add-language="openLanguagePicker"
-              @remove-language="removeLanguage"
+          <div class="section-card">
+            <SeriesDetailsForm
+              v-if="localSeries"
+              ref="detailsForm"
+              :series="localSeries"
+              :disabled="state.isSaving"
+              @submit="saveSeries"
             />
-
-            <div
-              :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
-              class="event-fields"
-            >
-              <div class="form-field">
-                <label class="field-label" :for="`name-${currentLanguage}`">
-                  {{ tEditor('name') }}
-                </label>
-                <input
-                  :id="`name-${currentLanguage}`"
-                  type="text"
-                  class="field-input"
-                  v-model="localSeries.content(currentLanguage).name"
-                  :placeholder="tEditor('name_placeholder')"
-                  :disabled="state.isSaving"
-                  @keyup.enter="saveSeries"
-                  ref="nameInput"
-                />
-              </div>
-
-              <div class="form-field">
-                <label class="field-label" :for="`description-${currentLanguage}`">
-                  {{ tEditor('description') }}
-                </label>
-                <textarea
-                  :id="`description-${currentLanguage}`"
-                  class="field-textarea"
-                  v-model="localSeries.content(currentLanguage).description"
-                  :placeholder="tEditor('description_placeholder')"
-                  :disabled="state.isSaving"
-                  rows="3"
-                />
-              </div>
-
-              <button
-                v-if="localSeries && localSeries.getLanguages().length > 1"
-                type="button"
-                class="remove-translation-link"
-                @click="removeLanguage(currentLanguage)"
-              >
-                {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
-              </button>
-            </div>
           </div>
         </section>
 
@@ -343,15 +193,6 @@ onMounted(() => {
       </div>
     </main>
   </div>
-
-  <!-- Language Picker - rendered outside main for proper stacking -->
-  <LanguagePicker
-    v-if="showLanguagePicker"
-    :languages="availableLanguages"
-    :selectedLanguages="localSeries ? localSeries.getLanguages() : []"
-    @select="handleAddLanguage"
-    @close="closeLanguagePicker"
-  />
 </template>
 
 <style lang="scss" scoped>
@@ -555,41 +396,4 @@ onMounted(() => {
   }
 }
 
-/*
- * Form-field styling (.form-field, .field-label, .field-input,
- * .field-textarea, .field-help) is provided by the shared
- * `_translatable-form.scss` partial via the `.translatable-form-fields`
- * class added on .section-card. The .event-fields container uses the
- * same flex column layout as .section-card itself.
- */
-.event-fields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-lg);
-}
-
-.remove-translation-link {
-  align-self: flex-start;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--pav-color-red-600);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--pav-color-red-700);
-    text-decoration: underline;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-red-400);
-
-    &:hover {
-      color: var(--pav-color-red-300);
-    }
-  }
-}
 </style>

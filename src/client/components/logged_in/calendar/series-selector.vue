@@ -1,8 +1,12 @@
 <script setup>
-import { reactive, computed, onMounted, watch } from 'vue';
+import { reactive, computed, onMounted, ref, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
+import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { EventSeries } from '@/common/model/event_series';
+import { EventSeriesContent } from '@/common/model/event_series_content';
 import SeriesService from '@/client/service/series';
+import CreateSeriesModal from '@/client/components/logged_in/calendar-content/create-series-modal.vue';
 
 const props = defineProps({
   calendarId: {
@@ -28,12 +32,59 @@ const { t } = useTranslation('event_editor', {
 const seriesService = new SeriesService();
 const currentLanguage = computed(() => i18next.language);
 
+// Template ref to the "+ New series" trigger; focus returns here when the
+// create modal closes (WCAG 2.4.3 Focus Order, 2.4.7 Focus Visible).
+const addSeriesButtonRef = ref(null);
+
 const state = reactive({
   availableSeries: [],
   currentSeriesId: null,
   isLoading: false,
   error: '',
+  showCreateModal: false,
+  newSeries: null,
 });
+
+/**
+ * Build a fresh EventSeries for the current calendar and open the create
+ * modal. Seeded with DEFAULT_LANGUAGE_CODE content to match the form's
+ * initial language tab.
+ */
+function openCreateSeries() {
+  const fresh = new EventSeries(null, props.calendarId, '', null);
+  fresh.addContent(new EventSeriesContent(DEFAULT_LANGUAGE_CODE, '', ''));
+  state.newSeries = fresh;
+  state.showCreateModal = true;
+}
+
+/**
+ * Handle the modal's 'saved' emit: add the series to the options, select it,
+ * and notify the parent editor.
+ *
+ * Why the dedupe: SeriesService.loadSeries() returns the same array reference
+ * the series store holds, and saveSeries() pushes the new series into that
+ * store array before 'saved' fires, so availableSeries may already contain
+ * it (same coupling the category selector works around).
+ */
+function onSeriesSaved(savedSeries) {
+  if (!state.availableSeries.some(series => series.id === savedSeries.id)) {
+    state.availableSeries = [...state.availableSeries, savedSeries];
+  }
+  state.currentSeriesId = savedSeries.id;
+  emit('seriesChanged', savedSeries.id);
+}
+
+/**
+ * Close the create modal without changing the selection and restore focus
+ * to the trigger button.
+ */
+function closeCreateModal() {
+  state.showCreateModal = false;
+  state.newSeries = null;
+  nextTick(() => {
+    addSeriesButtonRef.value?.focus();
+  });
+}
 
 /**
  * Load series for the calendar
@@ -138,13 +189,23 @@ onMounted(async () => {
         </option>
       </select>
 
-      <p
-        v-if="state.availableSeries.length === 0"
-        class="no-series help-text"
+      <button
+        ref="addSeriesButtonRef"
+        type="button"
+        class="btn btn--ghost add-series-button"
+        data-test="add-series-button"
+        @click="openCreateSeries"
       >
-        {{ t('no_series_help') }}
-      </p>
+        {{ t('add_series_button') }}
+      </button>
     </div>
+
+    <CreateSeriesModal
+      v-if="state.showCreateModal && state.newSeries"
+      :series="state.newSeries"
+      @saved="onSeriesSaved"
+      @close="closeCreateModal"
+    />
   </div>
 </template>
 
@@ -219,13 +280,7 @@ onMounted(async () => {
   }
 }
 
-.no-series {
-  font-size: 0.75rem;
-  color: var(--pav-color-stone-500);
-  margin: 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+.add-series-button {
+  align-self: flex-start;
 }
 </style>

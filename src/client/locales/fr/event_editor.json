@@ -56,8 +56,7 @@
     "none_option": "Aucune série",
     "loading_series": "Chargement des séries...",
     "error_loading_series": "Erreur lors du chargement des séries",
-    "no_series_available": "Aucune série disponible",
-    "no_series_help": "Créez des séries dans la gestion du calendrier pour regrouper des événements liés"
+    "add_series_button": "+ Nouvelle série"
   },
   "location_picker": {
     "title": "Sélectionner un lieu",

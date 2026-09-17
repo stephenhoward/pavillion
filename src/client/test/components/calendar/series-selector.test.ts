@@ -4,6 +4,7 @@ import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
 import SeriesSelector from '@/client/components/logged_in/calendar/series-selector.vue';
+import CreateSeriesModal from '@/client/components/logged_in/calendar-content/create-series-modal.vue';
 import SeriesService from '@/client/service/series';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
@@ -25,7 +26,7 @@ function createTestSeries(id: string, name: string): EventSeries {
   return series;
 }
 
-const createWrapper = (props = {}) => {
+const createWrapper = (props = {}, attachTo?: Element) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -38,8 +39,31 @@ const createWrapper = (props = {}) => {
       eventId: null,
       ...props,
     },
+    stubs: {
+      // The modal's internals are covered by create-series-modal.test.ts;
+      // here we only drive its saved/close contract.
+      CreateSeriesModal: {
+        template: '<div class="create-series-modal-stub"></div>',
+        props: ['series'],
+        emits: ['saved', 'close'],
+      },
+    },
+    ...(attachTo ? { attachTo } : {}),
   });
 };
+
+async function settle() {
+  await nextTick();
+  await nextTick();
+}
+
+async function openModal(wrapper: any) {
+  await wrapper.find('[data-test="add-series-button"]').trigger('click');
+  await nextTick();
+  const modal = wrapper.findComponent(CreateSeriesModal);
+  expect(modal.exists()).toBe(true);
+  return modal;
+}
 
 describe('SeriesSelector', () => {
   let wrapper: any;
@@ -238,6 +262,128 @@ describe('SeriesSelector', () => {
       const label = wrapper.find('label');
       expect(select.exists()).toBe(true);
       expect(label.exists()).toBe(true);
+    });
+  });
+
+  describe('Inline series creation', () => {
+    it('should render the "+ New series" button under the select', async () => {
+      wrapper = createWrapper();
+      await settle();
+
+      const button = wrapper.find('[data-test="add-series-button"]');
+      expect(button.exists()).toBe(true);
+      expect(button.attributes('type')).toBe('button');
+    });
+
+    it('should render the button when no series exist and drop the management help text', async () => {
+      mockLoadSeries.mockResolvedValue([]);
+      wrapper = createWrapper();
+      await settle();
+
+      expect(wrapper.find('[data-test="add-series-button"]').exists()).toBe(true);
+      expect(wrapper.text()).not.toContain('calendar management');
+    });
+
+    it('should hide the button while loading', async () => {
+      mockLoadSeries = vi.fn().mockReturnValue(new Promise(() => {}));
+      vi.spyOn(SeriesService.prototype, 'loadSeries').mockImplementation(mockLoadSeries);
+      wrapper = createWrapper();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="add-series-button"]').exists()).toBe(false);
+    });
+
+    it('should hide the button in the error state', async () => {
+      mockLoadSeries = vi.fn().mockRejectedValue(new Error('Network error'));
+      vi.spyOn(SeriesService.prototype, 'loadSeries').mockImplementation(mockLoadSeries);
+      wrapper = createWrapper();
+      await settle();
+
+      expect(wrapper.find('[data-test="add-series-button"]').exists()).toBe(false);
+    });
+
+    it('should mount the create modal with a fresh series scoped to the calendar', async () => {
+      wrapper = createWrapper();
+      await settle();
+
+      expect(wrapper.findComponent(CreateSeriesModal).exists()).toBe(false);
+
+      const modal = await openModal(wrapper);
+      const seriesProp = modal.props('series') as EventSeries;
+      expect(seriesProp.calendarId).toBe('calendar-123');
+      expect(seriesProp.id).toBeFalsy();
+      expect(seriesProp.urlName).toBe('');
+      expect(seriesProp.getLanguages()).toContain('en');
+    });
+
+    it('should add the saved series as an option, select it, and emit seriesChanged', async () => {
+      wrapper = createWrapper({ selectedSeriesId: 'series-1' });
+      await settle();
+
+      const modal = await openModal(wrapper);
+      const newSeries = createTestSeries('series-new', 'Winter Market');
+
+      modal.vm.$emit('saved', newSeries);
+      await nextTick();
+
+      const options = wrapper.findAll('option');
+      expect(options.length).toBe(5);
+      expect(options.some((o: any) => o.attributes('value') === 'series-new' && o.text() === 'Winter Market')).toBe(true);
+      expect(wrapper.find('select').element.value).toBe('series-new');
+
+      const emitted = wrapper.emitted('seriesChanged');
+      expect(emitted).toBeTruthy();
+      expect(emitted[emitted.length - 1][0]).toBe('series-new');
+
+      // Still mounted until the modal itself emits close
+      expect(wrapper.findComponent(CreateSeriesModal).exists()).toBe(true);
+      modal.vm.$emit('close');
+      await nextTick();
+      expect(wrapper.findComponent(CreateSeriesModal).exists()).toBe(false);
+      expect(wrapper.find('select').element.value).toBe('series-new');
+    });
+
+    it('should not duplicate the option when the store already appended the saved series', async () => {
+      wrapper = createWrapper();
+      await settle();
+
+      const modal = await openModal(wrapper);
+      const newSeries = createTestSeries('series-new', 'Winter Market');
+      // Simulate SeriesService.saveSeries having pushed into the same array
+      // reference the selector holds.
+      (wrapper.vm.state.availableSeries as EventSeries[]).push(newSeries);
+
+      modal.vm.$emit('saved', newSeries);
+      await nextTick();
+
+      const matches = wrapper.findAll('option').filter((o: any) => o.attributes('value') === 'series-new');
+      expect(matches.length).toBe(1);
+    });
+
+    it('should return focus to the button after the modal closes', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      wrapper = createWrapper({}, host);
+      await settle();
+
+      const modal = await openModal(wrapper);
+      modal.vm.$emit('close');
+      await settle();
+
+      expect(document.activeElement).toBe(wrapper.find('[data-test="add-series-button"]').element);
+      host.remove();
+    });
+
+    it('should not emit seriesChanged when the modal closes without saving', async () => {
+      wrapper = createWrapper();
+      await settle();
+
+      const modal = await openModal(wrapper);
+      modal.vm.$emit('close');
+      await nextTick();
+
+      expect(wrapper.emitted('seriesChanged')).toBeFalsy();
+      expect(wrapper.findComponent(CreateSeriesModal).exists()).toBe(false);
     });
   });
 });
