@@ -341,6 +341,27 @@ describe('Widget API Routes', () => {
     });
   });
 
+  describe('Calendar response projection', () => {
+    it('should return only id, urlName and widgetConfig, never operator-tier calendar fields', async () => {
+      calendar.widgetAllowedDomain = 'https://example.com';
+      calendar.listed = false;
+      calendar.defaultEventImageId = 'media-1';
+      (mockInterface.getCalendarByName as sinon.SinonStub).resolves(calendar);
+      (mockInterface.getCalendarForWidget as sinon.SinonStub).resolves(calendar);
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(200);
+
+      expect(Object.keys(response.body).sort()).toEqual(['id', 'urlName', 'widgetConfig']);
+      // Spell out the disallowed fields for clarity / future regressions.
+      expect(response.body.listed).toBeUndefined();
+      expect(response.body.widgetAllowedDomain).toBeUndefined();
+      expect(response.body.defaultEventImageId).toBeUndefined();
+    });
+  });
+
   describe('Cache headers on calendar response', () => {
     it('should set Cache-Control: public, max-age=60 on 200 response', async () => {
       const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
