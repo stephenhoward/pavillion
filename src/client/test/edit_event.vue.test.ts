@@ -67,7 +67,12 @@ const routes: RouteRecordRaw[] = [
   { path: '/event/:eventId', component: EditEvent, name: 'event_edit', props: true },
 ];
 
-const mountedEditorOnRoute = async (routePath: string, calendars: Calendar[] = [], props = {}) => {
+const mountedEditorOnRoute = async (
+  routePath: string,
+  calendars: Calendar[] = [],
+  props = {},
+  options: { stubs?: Record<string, any>; attachTo?: Element } = {},
+) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -96,7 +101,9 @@ const mountedEditorOnRoute = async (routePath: string, calendars: Calendar[] = [
       languagePicker: true,
       ImageUpload: true,
       CategorySelector: true,
+      ...options.stubs,
     },
+    attachTo: options.attachTo,
   });
 
   // Wait for async initialization
@@ -220,6 +227,47 @@ describe('Editor Behavior - Route-Based', () => {
     const submitButton = wrapper.find('button[type="submit"]');
     expect(submitButton.exists()).toBe(true);
     expect(submitButton.text().toLowerCase()).toMatch(/save changes/i);
+  });
+});
+
+describe('Save validation focus', () => {
+  let currentWrapper: any = null;
+
+  beforeEach(() => {
+    sinon.restore();
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    if (currentWrapper) {
+      currentWrapper.unmount();
+      currentWrapper = null;
+      await nextTick();
+    }
+    document.body.innerHTML = '';
+  });
+
+  it('moves focus to the schedule date input when saving a titled event with no date', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar], {}, {
+      stubs: { EventRecurrenceView: false },
+      attachTo: host,
+    });
+    currentWrapper = wrapper;
+
+    await wrapper.find('#event-name-en').setValue('Title only');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    await nextTick();
+
+    const dateInput = wrapper.find('.schedule-list input[type="date"]');
+    expect(dateInput.exists()).toBe(true);
+    expect(document.activeElement).toBe(dateInput.element);
   });
 });
 
