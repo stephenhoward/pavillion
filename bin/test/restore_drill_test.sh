@@ -17,11 +17,8 @@ TEST_DIR="${SCRIPT_DIR}"
 REPO="$(cd "${TEST_DIR}/../.." && pwd)"
 DRILL="${REPO}/scripts/restore-drill.sh"
 
-# One work directory for the whole file. lib.sh's mktemp_dir registers its
-# cleanup inside the command-substitution subshell, which deletes the directory
-# before the caller can use it, so fixtures are built here instead.
-WORK="$(mktemp -d)"
-trap 'rm -rf "${WORK}"' EXIT
+# One work directory for the whole file, removed by lib.sh's EXIT trap.
+WORK="$(mktemp_dir)"
 
 # Records a failure when forbidden text IS present. The suite's source-level
 # assertions were otherwise all of the "this flag is still here" kind, which
