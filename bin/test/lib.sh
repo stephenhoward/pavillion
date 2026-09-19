@@ -65,21 +65,19 @@ report_results() {
   exit "$_FAILS"
 }
 
-_MKTEMP_DIRS=()
-_mktemp_dir_cleanup() {
-  local d
-  for d in "${_MKTEMP_DIRS[@]}"; do
-    rm -rf "$d"
-  done
-}
+# mktemp_dir is always called as `tmp=$(mktemp_dir)`, i.e. in a
+# command-substitution subshell. Anything it registered there — an EXIT trap,
+# an array entry — would belong to the subshell, and a trap would delete the
+# directory the moment the subshell returned. So the cleanup is set up here,
+# in the sourcing script's own shell: one root directory per test script,
+# removed on that script's EXIT, with every mktemp_dir directory created
+# inside it. A test script that installs its own EXIT trap replaces this one
+# and must remove "${_MKTEMP_ROOT}" itself.
+_MKTEMP_ROOT=$(mktemp -d)
+trap 'rm -rf "${_MKTEMP_ROOT}"' EXIT
 
 mktemp_dir() {
-  # Create temp dir and register cleanup. Accumulates across calls so that
-  # every directory created via mktemp_dir is removed on EXIT, not just the
-  # last one (a bare `trap "..." EXIT` would replace any prior trap).
-  local dir
-  dir=$(mktemp -d)
-  _MKTEMP_DIRS+=("$dir")
-  trap '_mktemp_dir_cleanup' EXIT
-  echo "$dir"
+  # Create a temp dir under the per-script root and echo its path. It is
+  # removed when the sourcing script exits.
+  mktemp -d "${_MKTEMP_ROOT}/tmp.XXXXXXXXXX"
 }
