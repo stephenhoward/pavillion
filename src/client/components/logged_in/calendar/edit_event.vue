@@ -1563,11 +1563,15 @@ const handleSaveEvent = async () => {
   await saveEvent(t, () => {
     resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
   });
-  // Move focus to first errored field for keyboard/screen reader users
+  // Move focus to first errored field for keyboard/screen reader users.
+  // The schedule error marks its non-focusable group wrapper invalid, so
+  // focus the first control inside it; inputs have no descendants and are
+  // focused directly. (This script block is plain JS: no TS generics here.)
   await nextTick();
   if (Object.keys(fieldErrors).length > 0) {
-    const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]');
-    firstInvalid?.focus();
+    const firstInvalid = document.querySelector('[aria-invalid="true"]');
+    const target = firstInvalid?.querySelector('input, select, textarea') ?? firstInvalid;
+    target?.focus();
   }
 };
 
