@@ -223,6 +223,7 @@ describe('parseAttributedToUri', () => {
       ['a subdomain of the actor host', 'https://evil.remote.example.com/x'],
       ['a lookalike suffix host', 'https://remote.example.com.evil.test/x'],
       ['a different port', 'https://remote.example.com:8443/x'],
+      ['an http downgrade of the https actor', 'http://remote.example.com/remote-cal'],
       ['a javascript: URL', 'javascript:alert(document.domain)'],
       ['a data: URL', 'data:text/html;base64,PHNjcmlwdD4='],
       ['an unparseable value', 'not-a-url'],

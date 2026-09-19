@@ -133,7 +133,7 @@ export function parseAttributedToUri(
     //                    peer the root namespace is still the client SPA, which
     //                    answers with its own app shell rather than the calendar.
     // So the retired spelling is the strictly safer guess when we have to guess.
-    const declared = pinnedPageUrl(declaredPageUrl, url.host);
+    const declared = pinnedPageUrl(declaredPageUrl, url.origin);
 
     return {
       urlName,
@@ -171,9 +171,9 @@ export const MAX_PAGE_URL_LENGTH = 2048;
  * anonymous public page. The two must agree on **every** axis, not only the two
  * that are easy to restate:
  *
- *   - scheme allowlist (http/https)
- *   - exact host match, port included
- *   - no userinfo — `URL.host` ignores credentials, so they pass the host pin
+ *   - exact origin match — scheme, host and port all pinned to the actor
+ *     URI's, so the scheme is pinned rather than merely allowlisted
+ *   - no userinfo — `URL.origin` ignores credentials, so they pass the pin
  *   - WHATWG normalization: returning the raw stored string instead of
  *     `parsed.toString()` would emit whitespace, quotes, newlines and control
  *     characters verbatim, which the population side percent-encodes away
@@ -193,18 +193,19 @@ export const MAX_PAGE_URL_LENGTH = 2048;
  * constant moves and in whichever direction.
  *
  * @param declared - The cached page URL, or null/undefined when we have none
- * @param actorHost - The host of the actor URI that declared it
+ * @param actorOrigin - The origin of the actor URI that declared it
  * @returns The normalized URL if it passes, otherwise null so the caller falls
  *   back
  */
-function pinnedPageUrl(declared: string | null | undefined, actorHost: string): string | null {
+function pinnedPageUrl(declared: string | null | undefined, actorOrigin: string): string | null {
   if (typeof declared !== 'string') return null;
   const trimmed = declared.trim();
   if (trimmed === '' || trimmed.length > MAX_PAGE_URL_LENGTH) return null;
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    if (parsed.host !== actorHost) return null;
+    // The http/https allowlist is inherited: parseAttributedToUri already
+    // refuses a non-http(s) actor URI, so matching its origin admits only those.
+    if (parsed.origin !== actorOrigin) return null;
     if (parsed.username || parsed.password) return null;
     const normalized = parsed.toString();
     if (normalized.length > MAX_PAGE_URL_LENGTH) return null;

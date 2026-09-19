@@ -724,7 +724,7 @@ class ActivityPubService {
    * @param identifier The remote calendar identifier (username@domain)
    * @returns Preview information for the remote calendar. `pageUrl` is the
    *   public page the peer declares in its actor document, already sanitized
-   *   and host-pinned; null when the peer declared nothing usable, and absent
+   *   and origin-pinned; null when the peer declared nothing usable, and absent
    *   for a local calendar (whose page URL we build ourselves).
    */
   async lookupRemoteCalendar(identifier: string): Promise<{
