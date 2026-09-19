@@ -248,6 +248,8 @@ describe('SeriesSelector', () => {
 
       const error = wrapper.find('.error');
       expect(error.exists()).toBe(true);
+      expect(error.attributes('role')).toBe('alert');
+      expect(error.attributes('aria-live')).toBe('polite');
     });
   });
 
