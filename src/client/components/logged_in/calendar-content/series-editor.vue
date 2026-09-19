@@ -165,6 +165,7 @@ function handleFilesChanged(files) {
       v-if="state.error"
       class="error"
       role="alert"
+      aria-live="polite"
     >
       {{ state.error }}
     </div>
