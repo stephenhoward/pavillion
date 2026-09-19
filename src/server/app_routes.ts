@@ -9,6 +9,7 @@ import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import { DISCOVER_PATH } from '@/common/routing/public-paths';
+import { escapeRegExp } from '@/common/utils/regexp';
 
 const environment = process.env.NODE_ENV;
 
@@ -38,16 +39,6 @@ export const SERVER_OWNED_SEGMENTS: readonly string[] = Object.freeze([
   'users',
   'widget',
 ]);
-
-/**
- * Escapes regular-expression metacharacters in a literal path segment.
- *
- * @param value - A literal URL path segment
- * @returns The segment, safe to interpolate into a RegExp alternation
- */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Alternation of the enabled locale codes, for the /:locale/... route shapes.
