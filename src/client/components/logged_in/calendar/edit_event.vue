@@ -782,7 +782,9 @@ form {
                 </div>
 
                 <div class="form-field">
-                  <label :for="`event-description-${currentLanguage}`" class="field-label">Description</label>
+                  <label :for="`event-description-${currentLanguage}`" class="field-label">
+                    {{ t('field_description') }}
+                  </label>
                   <textarea
                     :id="`event-description-${currentLanguage}`"
                     name="description"
