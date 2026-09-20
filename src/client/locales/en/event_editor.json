@@ -40,6 +40,7 @@
     "unsaved_changes_confirm": "Leave",
     "unsaved_changes_cancel": "Stay",
     "series_section": "Series",
+    "field_description": "Description",
     "field_accessibility_info": "Accessibility Information",
     "field_accessibility_tooltip": "Information about accessibility features"
   },

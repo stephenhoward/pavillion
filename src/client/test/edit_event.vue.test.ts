@@ -6,6 +6,7 @@ import sinon from 'sinon';
 import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import axios from 'axios';
+import i18next from 'i18next';
 
 import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Calendar } from '@/common/model/calendar';
@@ -158,6 +159,28 @@ describe('Editor Behavior - Route-Based', () => {
     // Should have event editor page layout
     const pageContainer = wrapper.find('.event-editor-page');
     expect(pageContainer.exists()).toBe(true);
+  });
+
+  it('renders the description field label in the interface language', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    // mountComponent re-initializes i18next, so switch language after mounting
+    const originalLanguage = i18next.language;
+    await i18next.changeLanguage('es');
+    try {
+      await nextTick();
+
+      const label = wrapper.find('label[for^="event-description-"]');
+      expect(label.exists()).toBe(true);
+      expect(label.text()).toBe('Descripción');
+    }
+    finally {
+      await i18next.changeLanguage(originalLanguage);
+    }
   });
 
   it('create mode displays correct title', async () => {
