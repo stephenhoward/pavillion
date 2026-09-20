@@ -117,6 +117,7 @@ describe('CreateSeriesModal', () => {
 
     const alert = wrapper.find('[role="alert"]');
     expect(alert.exists()).toBe(true);
+    expect(alert.attributes('aria-live')).toBe('polite');
     expect(alert.text()).toContain('A series with this name already exists');
     expect(wrapper.emitted('saved')).toBeFalsy();
     expect(wrapper.emitted('close')).toBeFalsy();

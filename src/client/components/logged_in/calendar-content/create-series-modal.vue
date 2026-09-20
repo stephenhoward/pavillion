@@ -9,6 +9,7 @@
         v-if="state.error"
         class="alert alert--error"
         role="alert"
+        aria-live="polite"
       >
         {{ state.error }}
       </div>
