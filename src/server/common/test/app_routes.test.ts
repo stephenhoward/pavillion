@@ -783,8 +783,10 @@ describe('app_routes', () => {
       const fallThrough = SERVER_OWNED_SEGMENTS.filter(s => s !== 'widget');
 
       for (const segment of fallThrough) {
-        const res = await request(app).get(`/${segment}/probe`);
-        expect(res.status, `/${segment}/probe must not be answered by the page router`).toBe(404);
+        for (const path of [`/${segment}`, `/${segment}/probe`]) {
+          const res = await request(app).get(path);
+          expect(res.status, `${path} must not be answered by the page router`).toBe(404);
+        }
       }
     });
 
@@ -794,6 +796,15 @@ describe('app_routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('widget.index.html.ejs');
+    });
+
+    // The widget page routes require a subpath, so the bare segment has no
+    // page and is not handed to the client shell either.
+    it('should not serve any shell for a bare /widget', async () => {
+      const app = buildTestApp('en');
+      const res = await request(app).get('/widget');
+
+      expect(res.status).toBe(404);
     });
 
     it('should keep every server-owned segment reserved in the shared module', () => {
@@ -808,6 +819,11 @@ describe('app_routes', () => {
     // is exactly the regression that answers a federation request with an HTML
     // shell. These probes name the paths directly and never read the array.
     it.each([
+      '/api',
+      '/assets',
+      '/calendars',
+      '/users',
+      '/.well-known',
       '/api/probe',
       '/assets/probe',
       '/calendars/probe',

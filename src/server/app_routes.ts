@@ -640,8 +640,12 @@ export function createRouter(
   // Client app catch-all (goes last). The exclusion is the server-owned subset
   // only: those paths belong to routers mounted after this one, and matching
   // them here would answer an API or federation request with an HTML shell.
+  // The exclusion covers the bare segment as well as its subtree, so a handler
+  // a domain later registers at `/calendars` or `/.well-known` itself is not
+  // shadowed; the bare path answers whatever the routers after this one say,
+  // which today is Express's 404.
   router.get(
-    new RegExp(`^/(?!(?:${SERVER_OWNED_SEGMENTS.map(escapeRegExp).join('|')})/).*`, 'i'),
+    new RegExp(`^/(?!(?:${SERVER_OWNED_SEGMENTS.map(escapeRegExp).join('|')})(?:/|$)).*`, 'i'),
     handlers.client_index,
   );
 

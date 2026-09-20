@@ -319,23 +319,14 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       expect(observed).toEqual({
         // Server-owned and client-shell segments: the site router is not
         // supposed to have a route for any of these.
-        //
-        // Every one is probed in its BARE form, which is the single shape where
-        // SERVER_OWNED_SEGMENTS does nothing: the client catch-all excludes
-        // '^/(?:api|…)/' with a trailing slash, so bare '/api' reaches the
-        // client shell while '/api/probe' falls through to the domain router
-        // mounted after the page router. Read as 'client_index' here and
-        // 'falls through' in app_routes.test.ts's server-owned-segment block,
-        // those two are the same rule at two different path depths, not a
-        // contradiction. This file never observes the fall-through disposition;
-        // app_routes.test.ts owns it.
-        '.well-known': 'client_index',
+        // Server-owned segments fall through at every depth; app_routes.test.ts observes the 404.
+        '.well-known': FALLS_THROUGH,
         admin: 'client_index',
-        api: 'client_index',
-        assets: 'client_index',
+        api: FALLS_THROUGH,
+        assets: FALLS_THROUGH,
         auth: 'client_index',
         calendar: 'client_index',
-        calendars: 'client_index',
+        calendars: FALLS_THROUGH,
         coverage: 'client_index',
         event: 'client_index',
         feed: 'client_index',
@@ -346,10 +337,8 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
         policy: 'client_index',
         profile: 'client_index',
         setup: 'client_index',
-        users: 'client_index',
-        // The bare segment falls to the client shell; only '/widget/…' reaches
-        // the widget routes registered above the page routes.
-        widget: 'client_index',
+        users: FALLS_THROUGH,
+        widget: FALLS_THROUGH,
         // The one reserved segment the site SPA owns.
         discover: 'site_index',
         // Reserved permanently, and redirect-only forever (DEC-018).
