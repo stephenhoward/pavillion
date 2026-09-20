@@ -123,8 +123,8 @@ class CalendarActorEntity extends Model {
    * (`isMetadataStale` has no caller outside `remote_calendar.ts`). A row that
    * starts NULL stays NULL until that peer is followed.
    *
-   * Populated only through `sanitizePeerPageUrl`, which allowlists the scheme,
-   * rejects userinfo and pins the host to the actor URI's — this value becomes
+   * Populated only through `sanitizePeerPageUrl`, which pins the scheme, host
+   * and port to the actor URI's and rejects userinfo — this value becomes
    * an anchor href on anonymous public pages.
    *
    * A **display snapshot** in the DEC-015 sense, never a policy surface: its

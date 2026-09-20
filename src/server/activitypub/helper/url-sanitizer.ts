@@ -65,13 +65,16 @@ export const MAX_URL_CANDIDATES = 10;
  * `MAX_URL_CANDIDATES` entries of an array are looked at at all.
  *
  * Security-critical. The result is rendered as an `<a href>` on anonymous
- * public event pages and opened in a new tab, so on top of the scheme
- * allowlist it is **host-pinned to the actor URI's host**: a peer may only
- * declare a page URL on its own host. Without the pin, a hostile peer could
- * put an arbitrary link on our page carrying its own handle as the label.
- * Host equality is exact — `URL.host` includes the port and normalizes case,
- * so a subdomain, a lookalike suffix, or a different port is a different host.
- * `URL.host` ignores userinfo, so credentials are rejected separately: a peer
+ * public event pages and opened in a new tab, so it is **pinned to the actor
+ * URI's origin — scheme, host and port**: a peer may only declare a page URL
+ * on its own origin. Without the pin, a hostile peer could put an arbitrary
+ * link on our page carrying its own handle as the label. Origin equality is
+ * exact — `URL.origin` includes the port and normalizes case, so a subdomain,
+ * a lookalike suffix, or a different port is a different origin. The scheme
+ * half exists because the actor document was necessarily fetched over
+ * `https://`, so an `http://` page URL in it is a cleartext downgrade handed to
+ * anonymous visitors and is refused rather than rendered.
+ * `URL.origin` ignores userinfo, so credentials are rejected separately: a peer
  * may not hand us `https://admin:secret@peer.example/x`, whose visible
  * authority disagrees with the handle we label the link with and which some
  * browsers auto-submit as Basic auth.
@@ -81,9 +84,10 @@ export const MAX_URL_CANDIDATES = 10;
  * [DEC-003](../../../../agent-os/product/decisions/dec-003-domain-driven-architecture.md)
  * boundary; this function is the rule of record, and
  * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
- * table-driven test that keeps the two in step on every axis — scheme, host,
- * userinfo, normalization, length, and the hygiene of the actor URI the host is
- * pinned against. NEVER throws — a single bad field must not fail the follow or
+ * table-driven test that keeps the two in step on every axis — scheme (pinned
+ * to the actor's, not merely allowlisted), host and port, userinfo,
+ * normalization, length, and the hygiene of the actor URI the origin is pinned
+ * against. NEVER throws — a single bad field must not fail the follow or
  * the activity that carried it, which is why the actor URI is validated and
  * re-read through the same parse rather than trimmed once and parsed raw:
  * `String.prototype.trim()` strips NBSP, BOM and other characters the WHATWG
@@ -95,13 +99,13 @@ export const MAX_URL_CANDIDATES = 10;
  * callers read.
  *
  * @param raw - The actor document's `url` property, in any AS2 shape
- * @param actorUri - The actor URI the document was fetched as; pins the host
+ * @param actorUri - The actor URI the document was fetched as; pins the origin
  * @returns The peer's page URL, or null if nothing usable was declared
  */
 export function sanitizePeerPageUrl(raw: unknown, actorUri: string): string | null {
   const sanitizedActorUri = sanitizeExternalUrlHref(actorUri);
   if (!sanitizedActorUri) return null;
-  const actorHost = new URL(sanitizedActorUri).host;
+  const actorOrigin = new URL(sanitizedActorUri).origin;
 
   // Materializing the candidate list can itself throw — an array-like whose
   // `length` is an accessor — so it is guarded alongside the loop body.
@@ -121,7 +125,7 @@ export function sanitizePeerPageUrl(raw: unknown, actorUri: string): string | nu
       const sanitized = sanitizeExternalUrlHref(href);
       if (!sanitized) continue;
       const parsed = new URL(sanitized);
-      if (parsed.host !== actorHost) continue;
+      if (parsed.origin !== actorOrigin) continue;
       if (parsed.username || parsed.password) continue;
       return sanitized;
     }

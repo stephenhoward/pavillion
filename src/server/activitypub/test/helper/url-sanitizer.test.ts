@@ -158,9 +158,8 @@ describe('sanitizePeerPageUrl', () => {
         .toBe('https://remote.example.com/remote-cal');
     });
 
-    it('allows a scheme that differs from the actor URI as long as the host matches', () => {
-      expect(sanitizePeerPageUrl('http://remote.example.com/remote-cal', ACTOR_URI))
-        .toBe('http://remote.example.com/remote-cal');
+    it("pins the scheme to the actor URI's, refusing an http page from an https actor", () => {
+      expect(sanitizePeerPageUrl('http://remote.example.com/remote-cal', ACTOR_URI)).toBeNull();
     });
 
     it('returns null when the actor URI itself is unusable', () => {
@@ -357,6 +356,7 @@ describe('population and render checks agree on every axis', () => {
     ['a lookalike suffix host', 'https://remote.example.com.evil.test/x'],
     ['a trailing-dot host', 'https://remote.example.com./x'],
     ['a different port', 'https://remote.example.com:8443/x'],
+    ['an http downgrade of the https actor', 'http://remote.example.com/remote-cal'],
     ['a javascript: URL', 'javascript:alert(document.domain)'],
     ['a data: URL', 'data:text/html;base64,PHNjcmlwdD4='],
     ['a scheme-relative URL', '//evil.example/x'],
