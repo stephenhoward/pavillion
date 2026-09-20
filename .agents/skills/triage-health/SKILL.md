@@ -136,8 +136,9 @@ string may appear inside a shell argument.** Not in `--description`, not in `--d
 `bd note` message, not in a `gh issue comment --body`, not in an `echo` or heredoc that builds one
 of those.
 
-The script never had this exposure: it runs subprocesses through `execFileSync` with an argv
-array, so no external value ever reaches a command line. That guarantee ends at the script's
+The script never had this exposure: it runs subprocesses through its `run()` helper
+(`run.ts`), which calls `spawnSync` with an argv array and `shell: false` hard-coded, so no
+external value ever reaches a command line. That guarantee ends at the script's
 stdout. You pick the strings back up and hand them to a shell, and the Bash tool runs **zsh**,
 where `$(…)` and backticks substitute **inside double quotes**.
 
