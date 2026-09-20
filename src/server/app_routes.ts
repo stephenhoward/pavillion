@@ -9,7 +9,7 @@ import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import { DISCOVER_PATH } from '@/common/routing/public-paths';
-import { escapeRegExp } from '@/common/utils/regexp';
+import { escapeRegExp } from '@/server/common/helper/regexp';
 
 const environment = process.env.NODE_ENV;
 

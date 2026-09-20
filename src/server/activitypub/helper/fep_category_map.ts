@@ -1,5 +1,5 @@
 import type { EventCategory } from '@/common/model/event_category';
-import { escapeRegExp } from '@/common/utils/regexp';
+import { escapeRegExp } from '@/server/common/helper/regexp';
 
 /**
  * FEP-8a8e event category vocabulary and Pavillion mapping helpers.

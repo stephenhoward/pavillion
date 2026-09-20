@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { escapeRegExp } from '@/common/utils/regexp';
+import { escapeRegExp } from '@/server/common/helper/regexp';
 
 describe('escapeRegExp', () => {
   it('leaves a string with no metacharacters unchanged', () => {
