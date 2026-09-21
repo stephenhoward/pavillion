@@ -1,4 +1,5 @@
 import type { EventCategory } from '@/common/model/event_category';
+import { escapeRegExp } from '@/server/common/helper/regexp';
 
 /**
  * FEP-8a8e event category vocabulary and Pavillion mapping helpers.
@@ -158,10 +159,6 @@ const COMPILED_KEYWORDS: ReadonlyArray<readonly [FepCategory, RegExp]> = CATEGOR
     ),
   ] as const,
 );
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Maps a single category name onto a FEP-8a8e enum value using the keyword
