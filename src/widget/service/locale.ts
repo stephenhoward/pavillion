@@ -1,8 +1,10 @@
 import i18next from 'i18next';
 import { createI18nConfig } from '@/common/i18n/config';
 
-// Import English translation resources (widget shares system translations with site)
+// Import translation resources (widget shares system translations with site)
 import enSystem from '@/site/locales/en/system.json';
+import esSystem from '@/site/locales/es/system.json';
+import frSystem from '@/site/locales/fr/system.json';
 
 /**
  * Initializes the i18next internationalization framework for the widget app.
@@ -22,6 +24,12 @@ export const initI18Next = (language?: string) => {
       resources: {
         en: {
           system: enSystem,
+        },
+        es: {
+          system: esSystem,
+        },
+        fr: {
+          system: frSystem,
         },
       },
     }));
