@@ -161,7 +161,7 @@ beforeAll(async () => {
   const resources = {
     back: 'Back',
     back_to_calendar: 'Back to {{name}}',
-    loading_event: 'Loading event...',
+    loading_events: 'Loading event...',
     url_prompt: {
       tickets: 'Tickets',
       rsvp: 'RSVP',

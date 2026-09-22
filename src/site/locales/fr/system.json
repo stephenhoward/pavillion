@@ -32,6 +32,7 @@
   "no_events_in_date_range_hint": "Aucun événement n'est prévu dans cette plage de dates.",
   "no_events_available": "Aucun événement trouvé",
   "no_events_available_hint": "Aucun événement à venir n'est prévu pour ce calendrier.",
+  "no_events_this_month": "Aucun événement ce mois-ci",
   "clear_all_filters": "Effacer tous les filtres",
   "loading_events": "Chargement des événements...",
   "loading_categories": "Chargement des catégories d'événements...",

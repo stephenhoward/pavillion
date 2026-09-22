@@ -32,6 +32,7 @@
   "no_events_for_search": "No events found for \"{{term}}\"",
   "no_events_available": "No Events Found",
   "no_events_available_hint": "There are no upcoming events scheduled for this calendar.",
+  "no_events_this_month": "No events this month",
   "clear_all_filters": "Clear All Filters",
   "loading_events": "Loading Events...",
   "loading_categories": "Loading Event Categories...",
