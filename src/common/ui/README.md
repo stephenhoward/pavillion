@@ -2,7 +2,7 @@
 
 Browser-side Vue components, composables, and styling that more than one frontend app consumes.
 
-Today that means the public site (`src/site`) and the embeddable widget (`src/widget`), which share the `$public-*` design system. The authenticated client (`src/client`) is not a consumer yet — not because it is excluded on principle, but because the two apps declare different design tokens. The client's styling is built on `--pav-*` custom properties that the public stylesheet does not define, so a component moved here would render unstyled in one app or the other. Reconciling those two token systems is the open question on **pv-z1in**; until it is answered, a component that both the client and a public app need has no home here.
+Today that means the public site (`src/site`) and the embeddable widget (`src/widget`), which share the `$public-*` design system. The authenticated client (`src/client`) is not a consumer yet — not because it is excluded on principle, but because the two apps declare different design tokens. The client's styling is built on a broad set of `--pav-*` custom properties; the public stylesheet declares only four of them (`public-accent-tokens` emits `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` as a bridge for the widget's owner-configurable accent colour). Everything else the client's components read is undeclared here, so a component moved into this module would render unstyled in one app or the other. Reconciling those two token systems is the open question on **pv-z1in**; until it is answered, a component that both the client and a public app need has no home here.
 
 ## Boundary rule
 
@@ -18,7 +18,9 @@ It may **never** import from `@/client`, `@/site`, `@/widget`, or `@/server` —
 
 ## Styling stance
 
-Shared components style themselves with the public design system only: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`. No `--pav-*` custom property, and no app-local token.
+Shared components style themselves with the public design system only: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`. No app-local token, and no `--pav-*` custom property beyond the four accent variables `public-accent-tokens` declares above.
+
+`assets/mixins.scss` also carries a block of unprefixed aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming. Those are compatibility surface, not the design system — do not reach for them in a new shared component.
 
 `assets/mixins.scss` is the canonical copy; `src/site/assets/mixins.scss` is a one-line `@forward` shim kept for the existing call sites. New call sites should `@use '@/common/ui/assets/mixins'` directly.
 
