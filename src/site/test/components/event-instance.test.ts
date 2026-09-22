@@ -37,7 +37,7 @@ import i18next from 'i18next';
 const mockCurrentLocale = ref('en');
 const mockLocalizedPath = vi.fn((path: string) => path);
 
-vi.mock('@/site/composables/useLocale', () => ({
+vi.mock('@/common/ui/composables/useLocale', () => ({
   useLocale: () => ({
     currentLocale: mockCurrentLocale,
     switchLocale: vi.fn(),

@@ -34,7 +34,7 @@ import { EventCategoryContent } from '@/common/model/event_category_content';
 
 // Mock useLocale so useLocalizedContent doesn't reach for vue-router; the
 // component is presentational and never builds URLs itself.
-vi.mock('@/site/composables/useLocale', () => ({
+vi.mock('@/common/ui/composables/useLocale', () => ({
   useLocale: () => ({
     currentLocale: { value: 'en' },
     switchLocale: vi.fn(),

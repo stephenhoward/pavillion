@@ -25,7 +25,7 @@ const mockSwitchLocale = vi.fn();
 // Use a real Vue ref so the component's template auto-unwrapping works correctly
 const mockCurrentLocale = ref('en');
 
-vi.mock('@/site/composables/useLocale', () => ({
+vi.mock('@/common/ui/composables/useLocale', () => ({
   useLocale: () => ({
     currentLocale: mockCurrentLocale,
     switchLocale: mockSwitchLocale,
