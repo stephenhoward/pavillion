@@ -757,7 +757,7 @@ form {
               >
                 <div class="form-field">
                   <label :for="`event-name-${currentLanguage}`" class="field-label">
-                    Event Title
+                    {{ t('field_title') }}
                     <span class="form-required" aria-hidden="true">*</span>
                   </label>
                   <input

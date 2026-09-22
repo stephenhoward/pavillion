@@ -168,7 +168,7 @@ describe('Editor Behavior - Route-Based', () => {
     expect(pageContainer.exists()).toBe(true);
   });
 
-  it('renders the description field label in the interface language', async () => {
+  it('renders the event content field labels in the interface language', async () => {
     const calendar = new Calendar('testId', 'testName');
     calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
@@ -180,6 +180,11 @@ describe('Editor Behavior - Route-Based', () => {
     await i18next.changeLanguage('es');
     try {
       await nextTick();
+
+      const titleLabel = wrapper.find('label[for^="event-name-"]');
+      expect(titleLabel.exists()).toBe(true);
+      // The label also carries the required-field asterisk
+      expect(titleLabel.text()).toContain('Título del evento');
 
       const label = wrapper.find('label[for^="event-description-"]');
       expect(label.exists()).toBe(true);

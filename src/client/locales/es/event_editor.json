@@ -40,6 +40,7 @@
     "unsaved_changes_confirm": "Salir",
     "unsaved_changes_cancel": "Quedarse",
     "series_section": "Serie",
+    "field_title": "Título del evento",
     "field_description": "Descripción",
     "field_accessibility_info": "Información de accesibilidad",
     "field_accessibility_tooltip": "Información sobre las características de accesibilidad"
