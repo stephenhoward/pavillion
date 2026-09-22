@@ -51,9 +51,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // Ensure JSON imports work properly for i18next translation files
-      '@/client/locale': fileURLToPath(new URL('./src/client/locale', import.meta.url)),
-      '@/site/locale': fileURLToPath(new URL('./src/site/locale', import.meta.url)),
       // Fix iso-639-1-dir package exports issue
       'iso-639-1-dir': '/node_modules/iso-639-1-dir/dist/index.mjs',
     },
