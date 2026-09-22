@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { isCalendarViewMode } from '@/common/model/calendar_view';
 import {
   WidgetConfig,
   WIDGET_CONFIG_DEFAULTS,
-  WIDGET_CONFIG_ALLOWED_VIEWS,
   WIDGET_CONFIG_ALLOWED_COLOR_MODES,
-  isValidWidgetView,
   isValidWidgetColorMode,
   isValidWidgetAccentColor,
 } from '@/common/model/widget_config';
@@ -25,8 +24,8 @@ describe('WidgetConfig', () => {
       expect(config.colorMode).toBe('auto');
     });
 
-    it('enumerates allowed view values', () => {
-      expect(WIDGET_CONFIG_ALLOWED_VIEWS).toEqual(['list', 'week', 'month']);
+    it('defaults the view to a canonical calendar view mode', () => {
+      expect(isCalendarViewMode(WIDGET_CONFIG_DEFAULTS.view)).toBe(true);
     });
 
     it('enumerates allowed color mode values', () => {
@@ -95,26 +94,9 @@ describe('WidgetConfig', () => {
     });
   });
 
-  describe('isValidWidgetView', () => {
-    it('accepts allowed values', () => {
-      expect(isValidWidgetView('list')).toBe(true);
-      expect(isValidWidgetView('week')).toBe(true);
-      expect(isValidWidgetView('month')).toBe(true);
-    });
-
-    it('rejects values outside the allowed set', () => {
-      expect(isValidWidgetView('day')).toBe(false);
-      expect(isValidWidgetView('')).toBe(false);
-      expect(isValidWidgetView('LIST')).toBe(false);
-      expect(isValidWidgetView('grid')).toBe(false);
-    });
-
-    it('rejects non-string values', () => {
-      expect(isValidWidgetView(undefined)).toBe(false);
-      expect(isValidWidgetView(null)).toBe(false);
-      expect(isValidWidgetView(42)).toBe(false);
-    });
-  });
+  // The `view` field's allowed values are no longer widget-specific:
+  // `isCalendarViewMode` owns them, and src/common/test/model/calendar_view.test.ts
+  // covers that guard.
 
   describe('isValidWidgetColorMode', () => {
     it('accepts allowed values', () => {

@@ -1,19 +1,10 @@
+import { type CalendarViewMode } from '@/common/model/calendar_view';
 import { Model } from '@/common/model/model';
-
-/**
- * Allowed values for the widget `view` field.
- */
-export type WidgetView = 'list' | 'week' | 'month';
 
 /**
  * Allowed values for the widget `colorMode` field.
  */
 export type WidgetColorMode = 'auto' | 'light' | 'dark';
-
-/**
- * Allowed view values (readonly, enumerated for validation + UI).
- */
-export const WIDGET_CONFIG_ALLOWED_VIEWS: readonly WidgetView[] = ['list', 'week', 'month'];
 
 /**
  * Allowed color mode values (readonly, enumerated for validation + UI).
@@ -30,7 +21,7 @@ const WIDGET_ACCENT_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
  * Used when no stored config exists and as fallbacks for missing/invalid fields.
  */
 export const WIDGET_CONFIG_DEFAULTS: {
-  view: WidgetView;
+  view: CalendarViewMode;
   accentColor: string;
   colorMode: WidgetColorMode;
 } = {
@@ -38,17 +29,6 @@ export const WIDGET_CONFIG_DEFAULTS: {
   accentColor: '#ff9131',
   colorMode: 'auto',
 };
-
-/**
- * Checks whether a value is an allowed widget view.
- *
- * @param value - The value to check
- * @returns True if the value is one of 'list', 'week', or 'month'
- */
-export function isValidWidgetView(value: unknown): value is WidgetView {
-  return typeof value === 'string'
-    && (WIDGET_CONFIG_ALLOWED_VIEWS as readonly string[]).includes(value);
-}
 
 /**
  * Checks whether a value is an allowed widget color mode.
@@ -83,7 +63,7 @@ export function isValidWidgetAccentColor(value: unknown): value is string {
  * Usable from both frontend (admin UI, widget app) and backend (service layer).
  */
 export class WidgetConfig extends Model {
-  view: WidgetView;
+  view: CalendarViewMode;
   accentColor: string;
   colorMode: WidgetColorMode;
 
@@ -95,7 +75,7 @@ export class WidgetConfig extends Model {
    * @param colorMode - The color mode preference
    */
   constructor(
-    view: WidgetView = WIDGET_CONFIG_DEFAULTS.view,
+    view: CalendarViewMode = WIDGET_CONFIG_DEFAULTS.view,
     accentColor: string = WIDGET_CONFIG_DEFAULTS.accentColor,
     colorMode: WidgetColorMode = WIDGET_CONFIG_DEFAULTS.colorMode,
   ) {
