@@ -43,12 +43,27 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-/** Every module specifier a file imports, whatever the syntax it uses. */
+/**
+ * Every module specifier a file imports, whatever the syntax it uses.
+ *
+ * A `.vue` file is scanned with both patterns rather than one: its `<script>`
+ * block imports the TS way and its `<style lang="scss">` block imports the Sass
+ * way, and the style block is where this codebase does most of its `@use`. A
+ * single pattern chosen by extension would read the script and go blind to the
+ * style, which is the half a shared component is most likely to reach an app
+ * through.
+ */
 function specifiers(filePath: string): string[] {
   const source = readFileSync(filePath, 'utf-8');
-  const pattern = path.extname(filePath) === '.scss' ? STYLE_SPECIFIER : SCRIPT_SPECIFIER;
+  const extension = path.extname(filePath);
 
-  return [...source.matchAll(pattern)].map(match => match[1]);
+  const patterns = extension === '.scss'
+    ? [STYLE_SPECIFIER]
+    : extension === '.vue'
+      ? [SCRIPT_SPECIFIER, STYLE_SPECIFIER]
+      : [SCRIPT_SPECIFIER];
+
+  return patterns.flatMap(pattern => [...source.matchAll(pattern)].map(match => match[1]));
 }
 
 /**
