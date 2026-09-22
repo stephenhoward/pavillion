@@ -117,7 +117,7 @@ onBeforeMount(async () => {
   <div class="event-detail-overlay">
     <!-- Loading State -->
     <div v-if="state.isLoading" role="status" class="loading">
-      {{ t('loading_event') }}
+      {{ t('loading_events') }}
     </div>
 
     <!-- Not Found State -->
