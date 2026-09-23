@@ -75,33 +75,8 @@ onBeforeMount(async () => {
       return;
     }
 
-    // Fetch widget display config from the widget-facing calendar endpoint.
-    // This endpoint returns calendar metadata merged with a `widgetConfig`
-    // property containing the authoritative server-stored view/accentColor/colorMode.
-    try {
-      const widgetApiResponse = await fetch(`/api/widget/v1/calendars/${encodeURIComponent(calendarUrlName)}`, {
-        credentials: 'omit',
-        headers: { 'Accept': 'application/json' },
-      });
-      if (widgetApiResponse.ok) {
-        const data = await widgetApiResponse.json();
-        widgetStore.applyServerConfig(data.widgetConfig);
-      }
-      else {
-        // Fall back to defaults if the widget endpoint is unavailable.
-        widgetStore.applyServerConfig(null);
-      }
-    }
-    catch (err) {
-      console.warn('[widget-container] Failed to load widget config from server, using defaults.', err);
-      widgetStore.applyServerConfig(null);
-    }
-
-    // Admin-preview override path: after the authoritative server config has
-    // been applied, any URL params present (view/accentColor/colorMode) take
-    // precedence. See `widgetStore.parseConfig` for the accepted-risk comment.
-    const urlParams = new URLSearchParams(window.location.search);
-    widgetStore.parseConfig(urlParams);
+    // Widget display config (view/accentColor/colorMode) is already in the
+    // store: the router guard loads it before any widget route renders.
 
     // Set server-level default date range from site config before loading calendar
     if (siteConfig) {

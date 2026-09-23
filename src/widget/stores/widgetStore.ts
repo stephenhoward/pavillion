@@ -18,6 +18,9 @@ export interface WidgetState {
   accentColor: string;
   colorMode: ColorMode;
   calendarUrlName: string | null;
+  // Calendar whose server config has been applied; the router guard skips
+  // the fetch while navigation stays within this calendar.
+  configLoadedForUrlName: string | null;
 
   // View state persistence
   currentWeekStart: string | null; // ISO date string
@@ -37,6 +40,7 @@ export const useWidgetStore = defineStore('widget', {
     accentColor: WIDGET_CONFIG_DEFAULTS.accentColor,
     colorMode: WIDGET_CONFIG_DEFAULTS.colorMode,
     calendarUrlName: null,
+    configLoadedForUrlName: null,
     currentWeekStart: null,
     currentMonthStart: null,
   }),
@@ -149,6 +153,16 @@ export const useWidgetStore = defineStore('widget', {
      */
     setCalendarUrlName(urlName: string) {
       this.calendarUrlName = urlName;
+    },
+
+    /**
+     * Record that server config has been applied for a calendar, so the
+     * router guard does not re-fetch it on every in-calendar navigation.
+     *
+     * @param urlName - Calendar URL name whose config is now in the store
+     */
+    setConfigLoadedForUrlName(urlName: string) {
+      this.configLoadedForUrlName = urlName;
     },
 
     /**
