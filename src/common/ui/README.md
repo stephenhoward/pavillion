@@ -2,19 +2,21 @@
 
 Browser-side Vue components, composables, and styling that more than one frontend app consumes.
 
-The module is named `ui`, not `public-ui`, because the intent is that it eventually serves every frontend app. Today its consumers are the public site (`src/site`) and the embeddable widget (`src/widget`); the authenticated client (`src/client`) is absent from that list as a consequence of one open question, not as a principle.
+The module is named `ui`, not `public-ui`, because the intent is that it eventually serves every frontend app. Today its consumers are the public site (`src/site`) and the embeddable widget (`src/widget`); the authenticated client (`src/client`) is absent from that list because of an unfinished migration, not because of a principle or an open question.
 
 ## Which tenants the client may consume
 
-The restriction is per tenant, not per module.
+The restriction is per tenant, not per module, and it is temporary.
 
-**A tenant that styles itself with `$public-*` is public-surface-only until pv-z1in.** The two app families declare different design tokens. The client's styling is built on a broad set of `--pav-*` custom properties; the public stylesheet declares only four of them (`public-accent-tokens` emits `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` as a bridge for the widget's owner-configurable accent colour). Everything else the client's components read is undeclared here, so a styled component moved into this module would render unstyled in one app or the other. Reconciling those two token systems is the open question on **pv-z1in**; until it is answered, a *styled* component that both the client and a public app need has no home here.
+**A tenant that styles itself with `$public-*` cannot be consumed by the client yet.** Not because the client is the wrong kind of app, but because `$public-*` values are SCSS variables resolved at build time: a component compiled against `$public-text-primary-light` carries that hex in its output and cannot take on a different app's theme. Site and widget share such a component only because both compile the same values. Declaring the missing names in the client would not help — SCSS variables are not read at runtime.
 
-**A tenant that carries no styling has no such restriction, and the client may consume it today.** No token dependency means the token question decides nothing about it.
+**A tenant that carries no styling has no such restriction, and the client may consume it today.** No token dependency means the styling migration decides nothing about it.
 
 Of the four source files here, exactly one is styled — `assets/mixins.scss`. The other three — `assets/breakpoints.ts`, `composables/useLocale.ts`, `composables/useLocalizedContent.ts` — carry no styling at all and would work in the client unchanged. The split, not the module, is what the client rule follows.
 
-This rule is stated, not enforced: it is a claim about what a component *renders like*, which an import scan is the wrong instrument for. `test/boundary.test.ts` deliberately carries no "the client imports nothing from here" assertion — such an assertion would be wrong for three of the four files today.
+The direction is settled: site and widget converge on the client's `--pav-*` custom-property system and its dual-selector dark mode, tracked on **pv-l3my**. Once that bead's token layer lands, a styled shared component reads `var(--pav-*)`, resolves against whichever app mounts it, and this section goes away. This is a sequencing constraint with a known end, not a standing rule.
+
+This rule is stated, not enforced: it is a claim about what a component *renders like*, which an import scan is the wrong instrument for. `test/boundary.test.ts` deliberately carries no "the client imports nothing from here" assertion — such an assertion would be wrong for three of the four files today, and wrong for all of them once pv-l3my lands.
 
 ## Boundary rule
 
@@ -36,7 +38,9 @@ Scope is this module only; the existing widget → site and site → client impo
 
 ## Styling stance
 
-Shared components style themselves with the public design system only: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`. No app-local token, and no `--pav-*` custom property beyond the four accent variables `public-accent-tokens` declares above.
+The target contract is the client's: a shared component reads `--pav-*` CSS custom properties that each app declares and themes, so one compiled component renders correctly wherever it is mounted. Reaching that is pv-l3my.
+
+Until its token layer lands, shared components style themselves with the public design system: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`, plus the four accent custom properties `public-accent-tokens` declares. Prefer `--pav-accent-*` over `$public-accent-*` wherever both exist — a widget's accent is configured at runtime, so the compile-time variable is already the wrong one to reach for (pv-nskn).
 
 `assets/mixins.scss` also carries a block of unprefixed aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming. Those are compatibility surface, not the design system — do not reach for them in a new shared component.
 
