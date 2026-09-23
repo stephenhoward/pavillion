@@ -236,6 +236,7 @@ import axios from 'axios';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { validateAndEncodeId } from '@/client/service/utils';
 import { WIDGET_CONFIG_DEFAULTS } from '@/common/model/widget_config';
+import { VIEW_QUERY_KEY } from '@/common/routing/calendar-view-query';
 
 // Props
 const props = defineProps({
@@ -290,7 +291,7 @@ const isDirty = computed(() => {
 const previewUrl = computed(() => {
   const baseUrl = window.location.origin;
   const params = new URLSearchParams({
-    view: state.viewMode,
+    [VIEW_QUERY_KEY]: state.viewMode,
     accentColor: state.accentColor,
     colorMode: state.colorMode,
   });

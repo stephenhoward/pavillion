@@ -2,13 +2,12 @@ import { v4 as uuidv4 } from 'uuid';
 import pino from 'pino';
 
 import { Account } from '@/common/model/account';
+import { CalendarViewMode, isCalendarViewMode } from '@/common/model/calendar_view';
 import {
   WidgetConfig,
   WIDGET_CONFIG_DEFAULTS,
-  isValidWidgetView,
   isValidWidgetAccentColor,
   isValidWidgetColorMode,
-  WidgetView,
   WidgetColorMode,
 } from '@/common/model/widget_config';
 import { ValidationError } from '@/common/exceptions/base';
@@ -120,7 +119,7 @@ class WidgetConfigService {
 
     const fieldErrors: Record<string, string[]> = {};
 
-    if (!isValidWidgetView(view)) {
+    if (!isCalendarViewMode(view)) {
       fieldErrors.view = ['Invalid widget view'];
     }
     if (!isValidWidgetAccentColor(accentColor)) {
@@ -135,7 +134,7 @@ class WidgetConfigService {
     }
 
     const validConfig = new WidgetConfig(
-      view as WidgetView,
+      view as CalendarViewMode,
       accentColor,
       colorMode as WidgetColorMode,
     );
@@ -168,8 +167,8 @@ class WidgetConfigService {
   private toSafeModel(entity: CalendarWidgetConfigEntity, calendarId: string): WidgetConfig {
     const warnings: Record<string, unknown> = {};
 
-    let view: WidgetView = WIDGET_CONFIG_DEFAULTS.view;
-    if (isValidWidgetView(entity.view)) {
+    let view: CalendarViewMode = WIDGET_CONFIG_DEFAULTS.view;
+    if (isCalendarViewMode(entity.view)) {
       view = entity.view;
     }
     else {

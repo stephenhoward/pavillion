@@ -10,7 +10,8 @@ import {
   UpdatedAt,
 } from 'sequelize-typescript';
 
-import { WidgetConfig, WidgetView, WidgetColorMode } from '@/common/model/widget_config';
+import { CalendarViewMode } from '@/common/model/calendar_view';
+import { WidgetConfig, WidgetColorMode } from '@/common/model/widget_config';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
 
@@ -64,7 +65,7 @@ class CalendarWidgetConfigEntity extends Model {
    */
   toModel(): WidgetConfig {
     return new WidgetConfig(
-      this.view as WidgetView,
+      this.view as CalendarViewMode,
       this.accent_color,
       this.color_mode as WidgetColorMode,
     );
