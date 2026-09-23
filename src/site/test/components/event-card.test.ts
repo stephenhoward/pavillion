@@ -146,9 +146,10 @@ function makeCategory(id: string, name: string): EventCategory {
 }
 
 /**
- * Mount EventCard with the required plugins.
+ * Mount EventCard with the required plugins, returning the router it was
+ * mounted under alongside the wrapper so navigation can be asserted.
  */
-async function mountEventCard(
+async function mountEventCardWithRouter(
   instance: CalendarEventInstance,
   calendarUrlName = 'test-calendar',
   extraProps: Record<string, any> = {},
@@ -181,7 +182,43 @@ async function mountEventCard(
   });
 
   await flushPromises();
+  return { wrapper, router };
+}
+
+/**
+ * Mount EventCard with the required plugins.
+ */
+async function mountEventCard(
+  instance: CalendarEventInstance,
+  calendarUrlName = 'test-calendar',
+  extraProps: Record<string, any> = {},
+) {
+  const { wrapper } = await mountEventCardWithRouter(instance, calendarUrlName, extraProps);
   return wrapper;
+}
+
+/**
+ * Dispatch a cancelable click on an element and report whether the component
+ * suppressed the browser's native navigation for it.
+ *
+ * A listener added after the component's own runs after it, so it can read the
+ * component's decision and then cancel the click itself — otherwise happy-dom
+ * performs the anchor navigation the component deliberately let through.
+ */
+function clickAndReportPrevented(el: Element, init: MouseEventInit = {}): boolean {
+  let preventedByComponent = false;
+  const recordAndStopNavigation = (e: Event) => {
+    preventedByComponent = e.defaultPrevented;
+    e.preventDefault();
+  };
+  el.addEventListener('click', recordAndStopNavigation);
+  try {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init }));
+  }
+  finally {
+    el.removeEventListener('click', recordAndStopNavigation);
+  }
+  return preventedByComponent;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +312,59 @@ describe('EventCard', () => {
       expect(link.exists()).toBe(true);
       // detailHref short-circuits the localizedPath computation.
       expect(link.attributes('href')).toBe('/widget/some/path?event=evt-widget');
+      wrapper.unmount();
+    });
+  });
+
+  describe('title link click routing', () => {
+    it('should route a plain left-click through the router instead of a document navigation', async () => {
+      const event = makeEvent();
+      (event as any).id = 'evt-spa';
+      const instance = makeInstance(event, '2026-06-10T12:00:00.000Z');
+      const { wrapper, router } = await mountEventCardWithRouter(instance, 'site-cal');
+
+      const prevented = clickAndReportPrevented(wrapper.find('.event-title-link').element);
+      await flushPromises();
+
+      expect(prevented).toBe(true);
+      expect(router.currentRoute.value.fullPath).toBe('/site-cal/events/evt-spa/20260610-1200');
+      wrapper.unmount();
+    });
+
+    it('should route to the detailHref prop when one is supplied', async () => {
+      const event = makeEvent();
+      (event as any).id = 'evt-widget';
+      const instance = makeInstance(event, '2026-06-10T12:00:00.000Z');
+      const { wrapper, router } = await mountEventCardWithRouter(instance, 'site-cal', {
+        detailHref: '/other-cal/events/evt-widget/20260610-1200',
+      });
+
+      const prevented = clickAndReportPrevented(wrapper.find('.event-title-link').element);
+      await flushPromises();
+
+      expect(prevented).toBe(true);
+      expect(router.currentRoute.value.fullPath).toBe('/other-cal/events/evt-widget/20260610-1200');
+      wrapper.unmount();
+    });
+
+    it.each([
+      ['ctrl', { ctrlKey: true }],
+      ['meta', { metaKey: true }],
+      ['shift', { shiftKey: true }],
+      ['alt', { altKey: true }],
+      ['middle-button', { button: 1 }],
+    ])('should leave a %s click to the native anchor', async (_label, init) => {
+      const event = makeEvent();
+      const instance = makeInstance(event, '2026-06-10T12:00:00.000Z');
+      const { wrapper, router } = await mountEventCardWithRouter(instance, 'site-cal');
+      const pushSpy = vi.spyOn(router, 'push');
+
+      const prevented = clickAndReportPrevented(wrapper.find('.event-title-link').element, init);
+      await flushPromises();
+
+      expect(prevented).toBe(false);
+      expect(pushSpy).not.toHaveBeenCalled();
+      expect(router.currentRoute.value.fullPath).toBe('/test-calendar');
       wrapper.unmount();
     });
   });

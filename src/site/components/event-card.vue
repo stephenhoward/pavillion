@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 import { CalendarX, MapPin, Repeat } from 'lucide-vue-next';
 import EventImage from './event-image.vue';
@@ -29,6 +30,7 @@ const props = defineProps<{
 const { t } = useTranslation('system');
 const { localizedContent, resolveImageAlt, spaceDisplayName } = useLocalizedContent();
 const { localizedPath } = useLocale();
+const router = useRouter();
 
 /**
  * Returns the localized event title.
@@ -155,6 +157,38 @@ const detailPath = computed(() => {
     eventPath(props.calendarUrlName, eventId, slug),
   );
 });
+
+/**
+ * Routes a plain left-click on the title link through vue-router rather than
+ * letting the browser navigate the document.
+ *
+ * `useRouter()` resolves to whichever router hosts this card — the widget's
+ * inside the widget iframe, the site's on the public site — so one handler
+ * serves both. Inside the widget a document navigation reloads the whole
+ * iframe and drops its store state; on the site it needlessly re-boots the SPA.
+ *
+ * Modified clicks (ctrl/cmd/shift/alt), non-primary buttons, and clicks some
+ * other handler already cancelled fall through to the native anchor, the same
+ * guard `<RouterLink>` applies, so open-in-new-tab keeps working. The anchor
+ * keeps its `href` for the same reason.
+ *
+ * @param event - The click on the title link
+ */
+function navigateToDetail(event: MouseEvent): void {
+  if (
+    event.defaultPrevented
+    || event.button !== 0
+    || event.metaKey
+    || event.ctrlKey
+    || event.shiftKey
+    || event.altKey
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  router.push(detailPath.value);
+}
 </script>
 
 <template>
@@ -242,6 +276,7 @@ const detailPath = computed(() => {
         <a
           :href="detailPath"
           class="event-title-link"
+          @click="navigateToDetail"
         >{{ title }}</a>
       </h3>
       <p

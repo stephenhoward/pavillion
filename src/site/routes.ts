@@ -1,4 +1,4 @@
-import { RouteRecordRaw } from 'vue-router';
+import { RouteRecordRaw, RouterScrollBehavior } from 'vue-router';
 
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { DISCOVER_PATH } from '@/common/routing/public-paths';
@@ -78,3 +78,34 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
 
   return routes;
 }
+
+/**
+ * Where the site's window scroll lands after an in-SPA navigation.
+ *
+ * Without this, vue-router leaves the window scrolled where it was, so a card
+ * clicked halfway down a calendar would open its event page halfway down too —
+ * unlike the full-document navigation those links used to perform, which
+ * always started at the top. The rule reproduces that without disturbing
+ * navigations that only re-parameterise the page already on screen:
+ *
+ * - Back/forward restores the position the browser saved for that entry.
+ * - Arriving at a different view (calendar → event, discovery → calendar)
+ *   starts at the top, as a fresh page load would.
+ * - Staying on the same view (filter changes rewriting the query, a locale
+ *   switch swapping the prefix) keeps the reader's place.
+ *
+ * @returns The saved position, the top of the page, or false to leave scroll alone
+ */
+export const siteScrollBehavior: RouterScrollBehavior = (to, from, savedPosition) => {
+  if (savedPosition) {
+    return savedPosition;
+  }
+
+  const toView = to.matched[0]?.components?.default;
+  const fromView = from.matched[0]?.components?.default;
+  if (toView !== fromView) {
+    return { top: 0 };
+  }
+
+  return false;
+};

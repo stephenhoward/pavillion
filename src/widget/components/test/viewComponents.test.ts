@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import i18next from 'i18next';
@@ -426,6 +426,35 @@ describe('Widget View Components', () => {
       expect(detailHref).toContain(fixedSlug);
       expect(detailHref).toContain('mycal');
       expect(detailHref).toContain('evt-1');
+    });
+
+    it('ListView EventCard title click navigates in the widget router, not the document', async () => {
+      const publicStore = usePublicCalendarStore();
+      const widgetStore = useWidgetStore();
+      widgetStore.setCalendarUrlName('mycal');
+
+      publicStore.allEvents = [buildInstance(fixedStart)] as any;
+
+      await router.push('/widget/mycal');
+      await router.isReady();
+
+      const wrapper = mount(ListView, {
+        global: {
+          plugins: [[I18NextVue, { i18next }], router],
+        },
+      });
+
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+      wrapper.find('.event-title-link').element.dispatchEvent(click);
+      await flushPromises();
+
+      expect(click.defaultPrevented).toBe(true);
+      expect(router.currentRoute.value.name).toBe('widget-event-detail');
+      expect(router.currentRoute.value.params).toEqual({
+        urlName: 'mycal',
+        eventId: 'evt-1',
+        startTime: fixedSlug,
+      });
     });
   });
 

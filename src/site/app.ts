@@ -14,7 +14,7 @@ import SeriesView from '@/site/components/series-view.vue';
 import Discovery from '@/site/components/discovery.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
-import { buildSiteRoutes } from '@/site/routes';
+import { buildSiteRoutes, siteScrollBehavior } from '@/site/routes';
 
 Config.init().then( async (config) => {
 
@@ -36,6 +36,7 @@ Config.init().then( async (config) => {
       instance: EventInstanceView,
       series: SeriesView,
     }),
+    scrollBehavior: siteScrollBehavior,
   });
 
   router.beforeEach((to) => {
