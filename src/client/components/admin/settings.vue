@@ -5,6 +5,7 @@ import { inject, onMounted, reactive, ref } from 'vue';
 import Config from '../../service/config';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 import HousekeepingStatus from './housekeeping-status.vue';
 import LanguageSettings from './language-settings.vue';
 import LanguageTabSelector from '../common/language-tab-selector.vue';
@@ -47,11 +48,10 @@ const registrationModes = [
 ];
 
 // Default date range options
-const dateRangeOptions = [
-  { value: '1week', label: t('date_range_1week') },
-  { value: '2weeks', label: t('date_range_2weeks') },
-  { value: '1month', label: t('date_range_1month') },
-];
+const dateRangeOptions = DEFAULT_DATE_RANGES.map(value => ({
+  value,
+  label: t(`date_range_${value}`),
+}));
 
 onMounted(async () => {
   try {
