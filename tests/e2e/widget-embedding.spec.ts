@@ -166,6 +166,16 @@ test.describe('Widget Embedding', () => {
   });
 
   test('event detail click-through and back navigation', async ({ page }) => {
+    // The widget document fetches the site config exactly once as it boots, so
+    // a second request means the click reloaded the iframe document instead of
+    // routing inside the widget SPA.
+    let siteConfigRequests = 0;
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/config/v1/site') {
+        siteConfigRequests++;
+      }
+    });
+
     await page.goto(embeddingUrl());
 
     await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
@@ -173,20 +183,58 @@ test.describe('Widget Embedding', () => {
 
     // Wait for events to render in list view (EventCard articles)
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    expect(siteConfigRequests).toBe(1);
+
+    // The resolved theme is a class on .widget-root; capture it on the list so
+    // the detail view can be held to the same one.
+    const themeClass = async () => iframe.locator('.widget-root').evaluate(
+      (el) => Array.from(el.classList).find(c => c.startsWith('widget-theme-')) ?? null,
+    );
+    const listTheme = await themeClass();
+    expect(listTheme).toMatch(/^widget-theme-(light|dark)$/);
 
     // Click the first event title link to navigate to the detail overlay.
-    // EventCard navigates via the anchor href computed by the widget router.
+    // EventCard intercepts the plain click and pushes the href through the
+    // widget router, so the iframe document is never reloaded.
     await iframe.locator('article.event-card .event-title-link').first().click();
 
     // Verify event detail overlay appears with event name
     await expect(iframe.locator('.event-detail-overlay')).toBeVisible({ timeout: 10000 });
     await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible();
 
+    expect(siteConfigRequests).toBe(1);
+    expect(await themeClass()).toBe(listTheme);
+
     // Click back button to return to list view
     await iframe.locator('.back-link').first().click();
 
     // Verify list view is restored
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('modifier-click on an event title opens the detail in a new tab', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+
+    const titleLink = iframe.locator('article.event-card .event-title-link').first();
+    const href = await titleLink.getAttribute('href');
+    expect(href).toContain('/widget/test_calendar/events/');
+
+    // EventCard leaves modified clicks to the native anchor, so the browser
+    // opens the href in a new tab and the widget stays on its list.
+    const [newTab] = await Promise.all([
+      page.context().waitForEvent('page'),
+      titleLink.click({ modifiers: ['ControlOrMeta'] }),
+    ]);
+    await newTab.waitForLoadState();
+    expect(new URL(newTab.url()).pathname).toBe(href);
+    await newTab.close();
+
+    await expect(iframe.locator('.event-detail-overlay')).toHaveCount(0);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible();
   });
 
   test('default server config drives accent color CSS variable', async ({ page }) => {
