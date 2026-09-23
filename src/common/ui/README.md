@@ -12,11 +12,11 @@ The restriction is per tenant, not per module, and it is temporary.
 
 **A tenant that carries no styling has no such restriction, and the client may consume it today.** No token dependency means the styling migration decides nothing about it.
 
-Of the four source files here, exactly one is styled — `assets/mixins.scss`. The other three — `assets/breakpoints.ts`, `composables/useLocale.ts`, `composables/useLocalizedContent.ts` — carry no styling at all and would work in the client unchanged. The split, not the module, is what the client rule follows.
+Of the source files here, exactly one is styled — `assets/mixins.scss`. The others — `assets/breakpoints.ts`, `calendar-views/calendar-grid.ts`, `composables/useLocale.ts`, `composables/useLocalizedContent.ts` — carry no styling at all and would work in the client unchanged. The split, not the module, is what the client rule follows.
 
 The direction is settled: site and widget converge on the client's `--pav-*` custom-property system and its dual-selector dark mode, tracked on **pv-l3my**. Once that bead's token layer lands, a styled shared component reads `var(--pav-*)`, resolves against whichever app mounts it, and this section goes away. This is a sequencing constraint with a known end, not a standing rule.
 
-This rule is stated, not enforced: it is a claim about what a component *renders like*, which an import scan is the wrong instrument for. `test/boundary.test.ts` deliberately carries no "the client imports nothing from here" assertion — such an assertion would be wrong for three of the four files today, and wrong for all of them once pv-l3my lands.
+This rule is stated, not enforced: it is a claim about what a component *renders like*, which an import scan is the wrong instrument for. `test/boundary.test.ts` deliberately carries no "the client imports nothing from here" assertion — such an assertion would be wrong for every unstyled file here today, and wrong for all of them once pv-l3my lands.
 
 ## Boundary rule
 
@@ -28,7 +28,7 @@ A module under `src/common/ui/` may import:
 
 Files under `src/common/ui/test/` may additionally import `vitest`, `@vue/test-utils`, and the node builtins `fs` and `path`. They get their own list rather than an exemption, so a test still cannot reach for an app store or an HTTP client to stand a fixture up.
 
-`luxon` and `i18next-vue` are on the allowlist but unimported today. They are listed in advance of the calendar-window math and the `ui` i18n bundle that will need them, so arriving at those does not mean reopening this list.
+`luxon` is imported by `calendar-views/calendar-grid.ts`, the week and month grid date math. `i18next-vue` is on the allowlist but unimported today, listed in advance of the `ui` i18n bundle that will need it, so arriving at that does not mean reopening this list.
 
 The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/server` — by alias or by a relative path that escapes into them — and may never reach outside `src/` by a relative path at all. In the other direction, nothing under `src/server/` may import `src/common/ui`: this module assumes a browser.
 

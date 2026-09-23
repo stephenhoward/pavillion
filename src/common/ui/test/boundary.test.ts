@@ -37,9 +37,9 @@ const FORBIDDEN_ROOTS = ['client', 'site', 'widget', 'server'];
  * A closed list rather than a denylist, because the breach a shared
  * presentational module is likely to suffer is not `@/site/...` — a reviewer
  * catches that by eye — but pinia, axios, or an app store reached through one
- * of them. `luxon` and `i18next-vue` are unused today and stay listed: the
- * calendar-window math and the `ui` i18n namespace arrive in the same epic, and
- * pruning them here would only make this file the cause of that failure.
+ * of them. `i18next-vue` is unused today and stays listed: the `ui` i18n
+ * namespace arrives in the same epic, and pruning it here would only make this
+ * file the cause of that failure.
  */
 const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18next-vue'];
 
