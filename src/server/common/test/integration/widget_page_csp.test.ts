@@ -1,36 +1,69 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import main from '@/server/app';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 
 /**
- * Integration test to verify that widget HTML pages have the correct CSP headers
- * to allow embedding in iframes.
+ * Integration test for the widget HTML shell's framing policy.
  *
- * This fixes pv-zdao: Widget page blocked by CSP frame-ancestors
+ * The shell's frame-ancestors follows each calendar's Allowed Domain
+ * (DEC-019): a configured domain permits it and its www twin; with none
+ * configured only the instance itself ('self') and localhost may frame it.
  *
  * Note: These tests may return 503 status in setup mode (when no admin exists),
  * but the CSP headers should still be set correctly.
  */
 describe('Widget Page CSP Headers', () => {
   let app: express.Application;
+  const configuredUrlName = `csp_configured_${uuidv4().slice(0, 8)}`;
+  const unconfiguredUrlName = `csp_open_${uuidv4().slice(0, 8)}`;
 
   beforeAll(async () => {
     app = await main();
+
+    await CalendarEntity.bulkCreate([
+      { id: uuidv4(), url_name: configuredUrlName, languages: 'en', widget_allowed_domain: 'example.com' },
+      { id: uuidv4(), url_name: unconfiguredUrlName, languages: 'en', widget_allowed_domain: null },
+    ]);
   });
 
-  it('should allow widget pages to be framed with frame-ancestors *', async () => {
-    const response = await request(app)
-      .get('/widget/admin');
+  /**
+   * The space-separated sources of a frame-ancestors header value.
+   */
+  function frameSources(cspHeader: string): string[] {
+    expect(cspHeader.startsWith('frame-ancestors ')).toBe(true);
+    return cspHeader.slice('frame-ancestors '.length).split(' ');
+  }
 
-    // Widget page should return successfully (200) now that /widget is exempt from setup mode
+  it('should permit a configured domain and its www twin', async () => {
+    const response = await request(app).get(`/widget/${configuredUrlName}`);
+
     expect(response.status).toBe(200);
+    const sources = frameSources(response.headers['content-security-policy']);
+    expect(sources).toContain("'self'");
+    expect(sources).toContain('https://example.com:*');
+    expect(sources).toContain('https://www.example.com:*');
+    expect(sources).not.toContain('*');
+  });
 
-    // frame-ancestors * is intentional for the widget HTML shell.
-    // See security rationale in app_routes.ts (pv-tlal).
-    const cspHeader = response.headers['content-security-policy'];
-    expect(cspHeader).toBeDefined();
-    expect(cspHeader).toBe('frame-ancestors *');
+  it('should permit only self and localhost for a calendar with no domain', async () => {
+    const response = await request(app).get(`/widget/${unconfiguredUrlName}`);
+
+    expect(response.status).toBe(200);
+    const sources = frameSources(response.headers['content-security-policy']);
+    expect(sources[0]).toBe("'self'");
+    expect(sources.filter(s => !s.startsWith('http://localhost') && !s.startsWith('http://127.0.0.1') && !s.startsWith('http://*.localhost')))
+      .toEqual(["'self'"]);
+  });
+
+  it('should answer an unknown calendar exactly as an unconfigured one', async () => {
+    const unknown = await request(app).get('/widget/no_such_calendar');
+    const unconfigured = await request(app).get(`/widget/${unconfiguredUrlName}`);
+
+    expect(unknown.headers['content-security-policy'])
+      .toBe(unconfigured.headers['content-security-policy']);
   });
 
   it('should not affect non-widget pages CSP', async () => {
