@@ -40,7 +40,7 @@ import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/lo
 // Mocks — declared before component import
 // ---------------------------------------------------------------------------
 
-vi.mock('@/site/composables/useLocale', () => ({
+vi.mock('@/common/ui/composables/useLocale', () => ({
   useLocale: () => ({
     currentLocale: { value: 'en' },
     switchLocale: vi.fn(),

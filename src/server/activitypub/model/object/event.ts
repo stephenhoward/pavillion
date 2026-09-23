@@ -323,7 +323,7 @@ class EventObject extends ActivityPubObject {
       // would be a claim that the description is missing.
       //
       // Emptiness is tested with `.trim()`, matching `localizedField` in
-      // src/site/composables/useLocalizedContent.ts. The decorative state is
+      // src/common/ui/composables/useLocalizedContent.ts. The decorative state is
       // derived independently on the site, in the widget and here, and the
       // three must agree; a bare `!== ''` would make a whitespace-only alt
       // decorative on the site while it carried a `name` on the wire. Both of
