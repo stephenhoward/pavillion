@@ -563,7 +563,7 @@ export function createRouter(
   // Serve the widget JavaScript file (must come before catch-all widget route)
   router.get('/widget/pavillion-widget.js', handlers.widget_javascript);
 
-  // Widget HTML shell: framing follows the calendar's Allowed Domain (DEC-019).
+  // Widget HTML shell: framing follows the calendar's Allowed Domain (DEC-020).
   //
   // The policy exists so an owner controls where their calendar appears, not
   // to defend against clickjacking: the widget's own data calls are

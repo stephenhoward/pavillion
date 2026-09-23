@@ -97,7 +97,7 @@ test.describe('Widget Page CSP Headers', () => {
 
 /**
  * The widget shell's frame-ancestors follows each calendar's Allowed Domain
- * (DEC-019). test_calendar is given `example.com`; testuser_calendar keeps no
+ * (DEC-020). test_calendar is given `example.com`; testuser_calendar keeps no
  * domain, so it may be framed only by the instance itself and localhost.
  */
 test.describe('Widget Allowed Domain enforcement', () => {

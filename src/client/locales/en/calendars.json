@@ -541,7 +541,7 @@
       "added_on": "Added on",
       "change_button": "Change Domain",
       "add_domain_label": "Allowed Domain",
-      "add_domain_help": "Enter the domain where you want to embed your calendar, without protocol (e.g., example.com or blog.example.org:8080). You can only specify one domain.",
+      "add_domain_help": "Enter the domain of the website where you'll embed your calendar, without https:// or a path (e.g., example.com, or blog.example.org:8080 if your site uses a specific port). Entering example.com also covers www.example.com, but any other subdomain, like blog.example.com, counts as a different domain, and each calendar can allow only one. This is enforced, not just a label: your calendar's widget page sends a Content-Security-Policy header telling visitors' browsers to refuse to show it inside any other site. The site must be served over https.",
       "add_button": "Add Domain",
       "update_button": "Update",
       "adding": "Adding...",
@@ -550,7 +550,7 @@
       "remove_button": "Remove",
       "removing": "Removing...",
       "confirm_remove": "Are you sure you want to change your allowed domain? This will remove {{domain}} and allow you to add a different domain.",
-      "add_success": "Domain added successfully",
+      "add_success": "Domain saved. It can take up to a minute for the change to reach every page that embeds your calendar.",
       "remove_success": "Domain removed successfully. You can now add a different domain.",
       "error_loading": "Failed to load allowed domain",
       "error_adding": "Failed to add domain",
@@ -594,7 +594,8 @@
       "copy_button": "Copy Code",
       "copied": "Copied!",
       "copy_success": "Embed code copied to clipboard",
-      "copy_error": "Failed to copy to clipboard. Please copy manually."
+      "copy_error": "Failed to copy to clipboard. Please copy manually.",
+      "domain_required_notice": "This code only works on the website set under Allowed Domain above. Until you set one, visitors' browsers will refuse to show your calendar on any site you paste it into. The preview on this page works either way."
     }
   }
 }

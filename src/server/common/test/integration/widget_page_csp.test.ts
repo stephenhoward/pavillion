@@ -9,7 +9,7 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
  * Integration test for the widget HTML shell's framing policy.
  *
  * The shell's frame-ancestors follows each calendar's Allowed Domain
- * (DEC-019): a configured domain permits it and its www twin; with none
+ * (DEC-020): a configured domain permits it and its www twin; with none
  * configured only the instance itself ('self') and localhost may frame it.
  *
  * Note: These tests may return 503 status in setup mode (when no admin exists),

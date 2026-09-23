@@ -526,7 +526,7 @@
       "added_on": "Ajouté le",
       "change_button": "Changer de domaine",
       "add_domain_label": "Domaine autorisé",
-      "add_domain_help": "Saisissez le domaine sur lequel vous souhaitez intégrer votre calendrier, sans protocole (par exemple, exemple.com ou blog.exemple.org:8080). Vous ne pouvez indiquer qu'un seul domaine.",
+      "add_domain_help": "Saisissez le domaine du site web sur lequel vous allez intégrer votre calendrier, sans https:// ni chemin (par exemple, exemple.com, ou blog.exemple.org:8080 si votre site utilise un port particulier). Saisir exemple.com couvre aussi www.exemple.com, mais tout autre sous-domaine, comme blog.exemple.com, compte comme un domaine différent, et chaque calendrier ne peut en autoriser qu'un seul. Cette restriction est réellement appliquée, ce n'est pas une simple indication : la page du widget de votre calendrier envoie un en-tête Content-Security-Policy qui demande aux navigateurs des visiteurs de refuser de l'afficher dans tout autre site. Le site doit être servi en https.",
       "add_button": "Ajouter le domaine",
       "update_button": "Mettre à jour",
       "adding": "Ajout en cours...",
@@ -535,7 +535,7 @@
       "remove_button": "Supprimer",
       "removing": "Suppression...",
       "confirm_remove": "Êtes-vous sûr de vouloir changer votre domaine autorisé ? Cela supprimera {{domain}} et vous permettra d'ajouter un autre domaine.",
-      "add_success": "Domaine ajouté avec succès",
+      "add_success": "Domaine enregistré. La modification peut prendre jusqu'à une minute pour atteindre toutes les pages qui intègrent votre calendrier.",
       "remove_success": "Domaine supprimé avec succès. Vous pouvez maintenant ajouter un autre domaine.",
       "error_loading": "Échec du chargement du domaine autorisé",
       "error_adding": "Échec de l'ajout du domaine",
@@ -579,7 +579,8 @@
       "copy_button": "Copier le code",
       "copied": "Copié !",
       "copy_success": "Code d'intégration copié dans le presse-papiers",
-      "copy_error": "Échec de la copie dans le presse-papiers. Veuillez copier manuellement."
+      "copy_error": "Échec de la copie dans le presse-papiers. Veuillez copier manuellement.",
+      "domain_required_notice": "Ce code ne fonctionne que sur le site web indiqué dans Domaine autorisé, plus haut. Tant que vous n'en avez pas indiqué, les navigateurs des visiteurs refuseront d'afficher votre calendrier sur tout site où vous le collez. L'aperçu de cette page fonctionne dans tous les cas."
     }
   }
 }

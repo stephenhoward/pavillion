@@ -95,6 +95,7 @@ describe('Widget Admin UI Components', () => {
                 copied: 'Copied!',
                 copy_success: 'Copied to clipboard',
                 copy_error: 'Failed to copy',
+                domain_required_notice: 'Only shows on your allowed domain',
               },
             },
           },
@@ -421,6 +422,20 @@ describe('Widget Admin UI Components', () => {
       expect(codeText).not.toContain('view');
       expect(codeText).not.toContain('accentColor');
       expect(codeText).not.toContain('colorMode');
+    });
+
+    it('should explain the allowed-domain requirement without hiding the snippet', async () => {
+      const wrapper = mount(WidgetEmbed, {
+        props: {
+          calendarUrlName: 'my-calendar',
+        },
+        global: {
+          plugins: [[I18NextVue, { i18next }]],
+        },
+      });
+
+      expect(wrapper.find('.embed-notice').text()).toBe('Only shows on your allowed domain');
+      expect(wrapper.find('.embed-code').text()).toContain('my-calendar');
     });
 
     it('should copy embed code to clipboard', async () => {
