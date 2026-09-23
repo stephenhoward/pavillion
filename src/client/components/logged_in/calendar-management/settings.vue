@@ -92,9 +92,9 @@
             :disabled="state.isSaving"
             @change="saveSettings"
           >
-            <option value="1week">{{ t('date_range_1week') }}</option>
-            <option value="2weeks">{{ t('date_range_2weeks') }}</option>
-            <option value="1month">{{ t('date_range_1month') }}</option>
+            <option v-for="range in DEFAULT_DATE_RANGES" :key="range" :value="range">
+              {{ t(`date_range_${range}`) }}
+            </option>
           </select>
         </div>
 
@@ -255,7 +255,7 @@ import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
-import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { Calendar, CalendarContent, DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 import type { DefaultDateRange } from '@/common/model/calendar';
 import type { Media } from '@/common/model/media';
 import type { FundingGatedFeature } from '@/common/model/funding-plan';

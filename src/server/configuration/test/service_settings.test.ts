@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import ServiceSettings from '@/server/configuration/service/settings';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
 import SettingsContentEntity from '@/server/configuration/entity/settings_content';
+import { DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 
 describe('ServiceSettings', () => {
   const sandbox = sinon.createSandbox();
@@ -187,6 +188,26 @@ describe('ServiceSettings', () => {
       expect(result).toBe(true);
       expect(settings.get('defaultDateRange')).toBe('1month');
       expect(mockSettingEntity.save.calledOnce).toBe(true);
+    });
+
+    it('should accept every supported default date range', async () => {
+      for (const range of DEFAULT_DATE_RANGES) {
+        const mockSettingEntity = { parameter: 'defaultDateRange', value: '2weeks', save: sandbox.stub().resolves() };
+        const findOrCreate = sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          false,
+        ]);
+        const findAll = sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('defaultDateRange', range);
+
+        expect(result, `${range} should be accepted`).toBe(true);
+        expect(settings.get('defaultDateRange')).toBe(range);
+
+        findOrCreate.restore();
+        findAll.restore();
+      }
     });
 
     it('should reject invalid default date range values', async () => {

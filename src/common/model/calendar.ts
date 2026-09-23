@@ -2,9 +2,29 @@ import { Model, TranslatedContentModel, TranslatedModel } from '@/common/model/m
 import { Media } from '@/common/model/media';
 
 /**
- * Valid options for default date range on public calendar views.
+ * Valid options for default date range on public calendar views, in the order
+ * they are offered to the user. This is the single source of truth: server
+ * validation, the date-range calculation and the settings dropdowns all derive
+ * from it.
  */
-export type DefaultDateRange = '1week' | '2weeks' | '1month';
+export const DEFAULT_DATE_RANGES = [
+  '1week',
+  '2weeks',
+  '1month',
+  '3months',
+  '6months',
+  '9months',
+  '12months',
+] as const;
+
+export type DefaultDateRange = typeof DEFAULT_DATE_RANGES[number];
+
+/**
+ * Type guard for values arriving from the API, the database or a form.
+ */
+export function isDefaultDateRange(value: unknown): value is DefaultDateRange {
+  return DEFAULT_DATE_RANGES.includes(value as DefaultDateRange);
+}
 
 /**
  * Represents a calendar with multilingual content support.
