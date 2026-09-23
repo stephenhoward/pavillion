@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,6 +27,13 @@ describe('Widget Page CSP Headers', () => {
       { id: uuidv4(), url_name: configuredUrlName, languages: 'en', widget_allowed_domain: 'example.com' },
       { id: uuidv4(), url_name: unconfiguredUrlName, languages: 'en', widget_allowed_domain: null },
     ]);
+  });
+
+  afterAll(async () => {
+    await CalendarEntity.destroy({
+      where: { url_name: [configuredUrlName, unconfiguredUrlName] },
+      force: true,
+    });
   });
 
   /**
