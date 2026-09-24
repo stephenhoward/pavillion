@@ -73,4 +73,16 @@ router.beforeEach(async (to) => {
   await loadWidgetConfig(to.params.urlName);
 });
 
+// Remember the list's query whenever the visitor leaves it for event detail,
+// so the detail's Back button can restore the same filters and date range.
+// Done here rather than in each view's click handler because the list, week
+// and month views all reach detail by different means (the list through the
+// shared site event card), and this is the one place all of them pass.
+router.afterEach((to, from, failure) => {
+  if (failure || from.name !== 'widget-calendar' || to.name !== 'widget-event-detail') {
+    return;
+  }
+  useWidgetStore().setLastListQuery(from.query);
+});
+
 export default router;

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { DateTime } from 'luxon';
+import type { LocationQuery } from 'vue-router';
 import { type CalendarViewMode, isCalendarViewMode } from '@/common/model/calendar_view';
 import {
   WIDGET_CONFIG_DEFAULTS,
@@ -20,6 +21,10 @@ export interface WidgetState {
   // Calendar whose server config has been applied; the router guard skips
   // the fetch while navigation stays within this calendar.
   configLoadedForUrlName: string | null;
+  // Query (filters, date range, lang) of the calendar list the visitor last
+  // left for event detail; the detail's Back button restores it when it
+  // cannot simply step back to the list's own history entry.
+  lastListQuery: LocationQuery | null;
 
   // View state persistence
   currentWeekStart: string | null; // ISO date string
@@ -40,6 +45,7 @@ export const useWidgetStore = defineStore('widget', {
     colorMode: WIDGET_CONFIG_DEFAULTS.colorMode,
     calendarUrlName: null,
     configLoadedForUrlName: null,
+    lastListQuery: null,
     currentWeekStart: null,
     currentMonthStart: null,
   }),
@@ -162,6 +168,16 @@ export const useWidgetStore = defineStore('widget', {
      */
     setConfigLoadedForUrlName(urlName: string) {
       this.configLoadedForUrlName = urlName;
+    },
+
+    /**
+     * Record the calendar list's query at the moment the visitor leaves the
+     * list for event detail.
+     *
+     * @param query - The list route's query (filters, date range, lang)
+     */
+    setLastListQuery(query: LocationQuery) {
+      this.lastListQuery = { ...query };
     },
 
     /**

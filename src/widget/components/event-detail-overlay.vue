@@ -30,10 +30,38 @@ const state = reactive({
 
 const calendarService = new CalendarService();
 
+/**
+ * True when the history entry before this one is this calendar's list, so
+ * stepping back lands on it with its own query (filters, date range, lang).
+ * Read from the router's history state, which records the previous location
+ * as `back`; it is absent on direct entry to detail.
+ */
+function previousEntryIsCalendarList(): boolean {
+  const previous = router.options.history.state.back;
+  if (typeof previous !== 'string') {
+    return false;
+  }
+  const resolved = router.resolve(previous);
+  return resolved.name === 'widget-calendar' && resolved.params.urlName === calendarId;
+}
+
+/**
+ * Returns to the calendar list without losing its filters. Steps back through
+ * history when the list is the previous entry, so browser and in-widget back
+ * behave alike; otherwise pushes the list with the query recorded when the
+ * visitor left it, or — on direct entry to detail — at least keeps `lang`.
+ */
 const goBack = () => {
+  if (previousEntryIsCalendarList()) {
+    router.back();
+    return;
+  }
+
+  const lang = route.query.lang;
   router.push({
     name: 'widget-calendar',
-    params: { urlName: widgetStore.calendarUrlName! },
+    params: { urlName: calendarId as string },
+    query: widgetStore.lastListQuery ?? (typeof lang === 'string' ? { lang } : {}),
   });
 };
 

@@ -64,6 +64,14 @@ const handleMessage = (event: MessageEvent) => {
 };
 
 onBeforeMount(async () => {
+  // Point the store at this calendar before anything can yield. The first
+  // call for a calendar clears every filter, and SearchFilterPublic reads
+  // the date range from the URL as soon as it mounts (once state.calendar is
+  // set); the clear must land before that read, never after it, or a deep
+  // link / history back to a filtered list loses its range. Calling it ahead
+  // of every await keeps that true however many awaits come to precede it.
+  publicCalendarStore.setCurrentCalendar(calendarUrlName);
+
   try {
     state.isLoading = true;
 
@@ -85,9 +93,6 @@ onBeforeMount(async () => {
         publicCalendarStore.setServerDefaultDateRange(serverDefault);
       }
     }
-
-    // Set current calendar in store
-    publicCalendarStore.setCurrentCalendar(calendarUrlName);
 
     // Load calendar settings (including defaultDateRange) before loading events
     await publicCalendarStore.loadCalendar(calendarUrlName);

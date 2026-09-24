@@ -12,7 +12,9 @@
  * AddToCalendar) lives in src/site/test/components/EventDetailBody.test.ts.
  *
  * Validates:
- *   - Back button renders and navigates to the widget calendar route.
+ *   - Back button renders and returns to the widget calendar list with the
+ *     list's query intact (history back when the list is the previous entry,
+ *     otherwise a push carrying the recorded list query or at least `lang`).
  *   - <EventDetailBody> is composed inside <main> with the correct props
  *     (categoryHrefBuilder is omitted, so categories render as <span>).
  *   - Slug routing: parseInstanceSlug + service-call selection between
@@ -22,8 +24,8 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
-import { createMemoryHistory, createRouter, Router, RouteRecordRaw } from 'vue-router';
-import { createPinia } from 'pinia';
+import { createMemoryHistory, createRouter, createWebHistory, Router, RouteRecordRaw } from 'vue-router';
+import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 
@@ -107,6 +109,7 @@ vi.mock('@/site/components/EventDetailBody.vue', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import EventDetailOverlay from '@/widget/components/event-detail-overlay.vue';
+import { useWidgetStore } from '@/widget/stores/widgetStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,19 +128,35 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
-async function buildRouter(initialPath: string): Promise<Router> {
+/**
+ * @param path - Final location; the overlay renders for this one
+ * @param history - Web history is needed where a test depends on what the
+ *   previous history entry was: memory history records no `back` state.
+ * @param previousPath - Location pushed before `path`, if any
+ */
+async function buildRouter(
+  path: string,
+  history: 'memory' | 'web' = 'memory',
+  previousPath?: string,
+): Promise<Router> {
   const router = createRouter({
-    history: createMemoryHistory(),
+    history: history === 'web' ? createWebHistory() : createMemoryHistory(),
     routes,
   });
-  await router.push(initialPath);
+  if (previousPath) {
+    await router.push(previousPath);
+  }
+  await router.push(path);
   await router.isReady();
   return router;
 }
 
-async function mountOverlay(initialPath: string): Promise<{ wrapper: VueWrapper; router: Router }> {
-  const router = await buildRouter(initialPath);
-  const pinia = createPinia();
+async function mountOverlay(
+  initialPath: string,
+  options: { history?: 'memory' | 'web'; previousPath?: string; pinia?: Pinia } = {},
+): Promise<{ wrapper: VueWrapper; router: Router }> {
+  const router = await buildRouter(initialPath, options.history, options.previousPath);
+  const pinia = options.pinia ?? createPinia();
 
   const wrapper = mount(EventDetailOverlay, {
     global: {
@@ -223,6 +242,65 @@ describe('widget event-detail-overlay shell', () => {
     expect(pushSpy).toHaveBeenCalledTimes(1);
     const arg = pushSpy.mock.calls[0][0];
     expect(arg).toMatchObject({ name: 'widget-calendar' });
+    wrapper.unmount();
+  });
+
+  it('back-button click returns to the previous history entry when that entry is this calendar\'s list', async () => {
+    const listPath = '/widget/test_calendar?startDate=2026-11-01&endDate=2026-11-30&lang=fr';
+    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1', {
+      history: 'web',
+      previousPath: listPath,
+    });
+    const backSpy = vi.spyOn(router, 'back').mockImplementation(() => {});
+    const pushSpy = vi.spyOn(router, 'push');
+
+    await wrapper.find('.instance-back-header .back-link').trigger('click');
+
+    // Going back reuses the list's own history entry, query and all, rather
+    // than stacking a fresh list entry on top of the detail entry.
+    expect(backSpy).toHaveBeenCalledTimes(1);
+    expect(pushSpy).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('back-button click pushes the list with its recorded query when the previous entry is not the list', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const listQuery = {
+      startDate: '2026-11-01',
+      endDate: '2026-11-30',
+      search: 'climate',
+      categories: ['cat-1', 'cat-2'],
+      lang: 'fr',
+    };
+    useWidgetStore().setLastListQuery(listQuery);
+
+    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1', { pinia });
+    const backSpy = vi.spyOn(router, 'back');
+    const pushSpy = vi.spyOn(router, 'push');
+
+    await wrapper.find('.instance-back-header .back-link').trigger('click');
+
+    expect(backSpy).not.toHaveBeenCalled();
+    expect(pushSpy).toHaveBeenCalledWith({
+      name: 'widget-calendar',
+      params: { urlName: 'test_calendar' },
+      query: listQuery,
+    });
+    wrapper.unmount();
+  });
+
+  it('back-button click keeps lang when no list query was recorded (direct entry to detail)', async () => {
+    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1?lang=fr');
+    const pushSpy = vi.spyOn(router, 'push');
+
+    await wrapper.find('.instance-back-header .back-link').trigger('click');
+
+    expect(pushSpy).toHaveBeenCalledWith({
+      name: 'widget-calendar',
+      params: { urlName: 'test_calendar' },
+      query: { lang: 'fr' },
+    });
     wrapper.unmount();
   });
 
