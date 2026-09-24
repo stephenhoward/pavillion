@@ -25,7 +25,9 @@ import ExpressHelper from '@/server/common/helper/express';
  * Dropped from the calendar root:
  *   - `listed` — owner-discovery flag; knowing whether a calendar is hidden
  *     from the /discover index is not the public's business.
- *   - `widgetAllowedDomain` — operator-internal embed-policy config.
+ *   - `widgetAllowedDomain` — embed-policy config. The widget HTML shell's
+ *     frame-ancestors header necessarily carries it (DEC-020); that bounded
+ *     exception does not license adding it to any JSON projection.
  *   - `defaultEventImageId` — internal FK; the projected
  *     `defaultEventImage.id` already carries the identifier callers need.
  *

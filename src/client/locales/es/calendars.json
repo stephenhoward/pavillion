@@ -526,17 +526,17 @@
       "added_on": "Añadido el",
       "change_button": "Cambiar dominio",
       "add_domain_label": "Dominio permitido",
-      "add_domain_help": "Introduce el dominio donde quieres incrustar tu calendario, sin protocolo (p. ej., ejemplo.com o blog.ejemplo.org:8080). Solo puedes especificar un dominio.",
+      "add_domain_help": "Introduce el dominio del sitio web donde vas a incrustar tu calendario, sin https:// ni ruta (p. ej., ejemplo.com, o blog.ejemplo.org:8080 si tu sitio usa un puerto específico). Al introducir ejemplo.com también se incluye www.ejemplo.com, pero cualquier otro subdominio, como blog.ejemplo.com, cuenta como un dominio diferente, y cada calendario solo puede permitir uno. Esta restricción se aplica de verdad, no es solo una etiqueta: la página del widget de tu calendario envía un encabezado Content-Security-Policy que indica a los navegadores de los visitantes que se nieguen a mostrarlo dentro de cualquier otro sitio. El sitio debe servirse mediante https.",
       "add_button": "Añadir dominio",
       "update_button": "Actualizar",
       "adding": "Añadiendo...",
       "allowed_domains_title": "Dominios permitidos actuales",
-      "no_domains": "Aún no se ha añadido ningún dominio. Añade dominios para permitir que incrusten tu widget de calendario.",
+      "no_domains": "Aún no se ha añadido ningún dominio. Hasta que añadas uno, tu calendario no podrá incrustarse en otros sitios.",
       "remove_button": "Eliminar",
       "removing": "Eliminando...",
-      "confirm_remove": "¿Estás seguro de que quieres cambiar tu dominio permitido? Esto eliminará {{domain}} y te permitirá añadir un dominio diferente.",
-      "add_success": "Dominio añadido con éxito",
-      "remove_success": "Dominio eliminado con éxito. Ahora puedes añadir un dominio diferente.",
+      "confirm_remove": "¿Estás seguro de que quieres eliminar {{domain}}? Tu calendario dejará de aparecer en {{domain}} y no podrá incrustarse en ningún otro sitio hasta que añadas un nuevo dominio permitido.",
+      "add_success": "Dominio guardado. El cambio puede tardar hasta un minuto en llegar a todas las páginas que incrustan tu calendario.",
+      "remove_success": "Dominio eliminado. Tu calendario puede tardar hasta un minuto en dejar de aparecer en otros sitios. Añade un dominio para volver a incrustarlo.",
       "error_loading": "Error al cargar el dominio permitido",
       "error_adding": "Error al añadir el dominio",
       "error_removing": "Error al eliminar el dominio",
@@ -579,7 +579,8 @@
       "copy_button": "Copiar código",
       "copied": "¡Copiado!",
       "copy_success": "Código de incrustación copiado al portapapeles",
-      "copy_error": "Error al copiar al portapapeles. Por favor, copia manualmente."
+      "copy_error": "Error al copiar al portapapeles. Por favor, copia manualmente.",
+      "domain_required_notice": "Este código solo funciona en el sitio web indicado en Dominio permitido, más arriba. Hasta que indiques uno, los navegadores de los visitantes se negarán a mostrar tu calendario en cualquier sitio donde lo pegues. La vista previa de esta página funciona en cualquier caso."
     }
   }
 }

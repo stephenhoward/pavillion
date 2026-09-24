@@ -1,5 +1,7 @@
 <template>
   <div class="widget-embed">
+    <p class="embed-notice">{{ t('domain_required_notice') }}</p>
+
     <div class="embed-header">
       <CopyButton
         :text="embedCode"
@@ -95,6 +97,13 @@ const onCopyError = (err) => {
 .widget-embed {
   max-width: 800px;
   margin: 0 auto;
+
+  .embed-notice {
+    margin: 0 0 var(--pav-space-3);
+    color: var(--pav-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
 
   .embed-header {
     display: flex;

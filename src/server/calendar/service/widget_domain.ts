@@ -220,8 +220,9 @@ class WidgetDomainService {
    * Resolve the widget shell's frame-ancestors policy for a calendar by URL
    * name, cached for FRAME_ANCESTORS_CACHE_TTL_MS.
    *
-   * An unknown calendar gets the same policy as an unconfigured one, so the
-   * header reveals nothing about which calendars exist.
+   * An unknown calendar gets the same policy as an unconfigured one. That is
+   * uniformity, not a privacy property (DEC-020 rule 3): calendar existence is
+   * already public elsewhere, and a configured calendar's header differs anyway.
    *
    * @param calendarUrlName - The calendar URL name from the widget path
    * @returns A complete Content-Security-Policy header value
