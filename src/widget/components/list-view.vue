@@ -8,6 +8,7 @@ import { useWidgetStore } from '../stores/widgetStore';
 import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
+import EmptyState from '@/common/ui/components/EmptyState.vue';
 
 const { t } = useTranslation('system');
 const router = useRouter();
@@ -73,7 +74,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
     </div>
 
     <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-    <div
+    <EmptyState
       v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending"
       class="empty-state"
     >
@@ -83,7 +84,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
       <p v-else>
         {{ t('no_events_available') }}
       </p>
-    </div>
+    </EmptyState>
 
     <!-- Loading State -->
     <div
@@ -158,9 +159,5 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 // Loading and error states
 .loading {
   @include public-loading-state;
-}
-
-.empty-state {
-  @include public-empty-state;
 }
 </style>

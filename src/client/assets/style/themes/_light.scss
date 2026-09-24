@@ -65,4 +65,19 @@
   /* Hairline ring layered into box-shadow for cards/surfaces. Resolves through
      --pav-border-subtle so it adapts automatically to the active theme. */
   --pav-shadow-ring: 0 0 0 1px color-mix(in srgb, var(--pav-border-subtle) 50%, transparent);
+
+  /* Shared-component tokens. Names the site and widget declare that the
+     client's own components do not use; declared here so a component from
+     src/common/ui renders in the client too. Each maps onto an existing client
+     value — see "Where the client declares them" in src/common/ui/TOKENS.md.
+     Dark variants in _dark.scss. */
+  --pav-accent: var(--pav-color-interactive-primary);
+  --pav-accent-hover: var(--pav-color-interactive-primary-hover);
+  --pav-border-medium: var(--pav-color-stone-300);
+  --pav-border-strong: var(--pav-color-stone-400);
+  --pav-success: var(--pav-color-success);
+  --pav-success-bg: var(--pav-color-alert-success-bg);
+  --pav-source-pill-bg: var(--pav-color-sky-50);
+  --pav-source-pill-color: var(--pav-color-sky-700);
+  --pav-source-pill-hover-bg: var(--pav-color-sky-100);
 }

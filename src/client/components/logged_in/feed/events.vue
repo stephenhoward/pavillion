@@ -7,7 +7,8 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
 import { useFeedEvents } from '@/client/composables/useFeedEvents';
 import { useFeedRepost, type PendingRepost } from '@/client/composables/useFeedRepost';
-import EmptyLayout from '@/client/components/common/empty_state.vue';
+import DocLink from '@/client/components/common/doc-link.vue';
+import EmptyState from '@/common/ui/components/EmptyState.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
 import FeedEventDetailModal from '@/client/components/logged_in/feed/feed-event-detail-modal.vue';
@@ -391,28 +392,33 @@ onUnmounted(() => {
     </div>
 
     <!-- Empty state: user follows calendars but no events yet -->
-    <EmptyLayout
+    <EmptyState
       v-else-if="hasFollows"
-      :title="t('no_events')"
+      :heading="t('no_events')"
+      region
     >
       <p class="empty-waiting-message">{{ t('no_events_yet') }}</p>
-    </EmptyLayout>
+    </EmptyState>
 
     <!-- Empty state: user follows no calendars -->
-    <EmptyLayout
+    <EmptyState
       v-else
-      :title="t('no_events')"
-      :guide="{ slug: 'guides/calendar-owners/follow-and-repost', key: 'follow_repost' }"
-      :guide-label="t('guide_link')"
+      :heading="t('no_events')"
+      region
     >
       <button
         type="button"
-        class="btn btn--cta btn--lg"
+        class="btn btn--cta btn--lg empty-follow-button"
         @click="handleFollowCalendar($event)"
       >
         {{ t("follow_button") }}
       </button>
-    </EmptyLayout>
+      <div class="empty-doc-link">
+        <DocLink :guide="{ slug: 'guides/calendar-owners/follow-and-repost', key: 'follow_repost' }">
+          {{ t('guide_link') }}
+        </DocLink>
+      </div>
+    </EmptyState>
 
     <!-- Repost categories modal — shown when pendingRepost is set -->
     <RepostCategoriesModal
@@ -664,6 +670,14 @@ div.events-container {
     font-size: var(--pav-font-size-sm);
     color: var(--pav-color-text-secondary);
     text-align: center;
+  }
+
+  button.empty-follow-button {
+    margin-block-start: var(--pav-space-3);
+  }
+
+  div.empty-doc-link {
+    margin-block-start: var(--pav-space-4);
   }
 }
 </style>
