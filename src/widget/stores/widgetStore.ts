@@ -31,13 +31,6 @@ export interface WidgetState {
   currentMonthStart: string | null; // ISO date string
 }
 
-// Module-scope singletons for the auto-mode matchMedia listener.
-// Stored at module scope (not as Pinia state) so we never re-bind on top of
-// an existing listener; explicit teardown before each re-evaluation prevents
-// stacked listeners across `auto → light → auto` toggles.
-let mediaQueryList: MediaQueryList | null = null;
-let mediaQueryListener: ((e: MediaQueryListEvent) => void) | null = null;
-
 export const useWidgetStore = defineStore('widget', {
   state: (): WidgetState => ({
     viewMode: WIDGET_CONFIG_DEFAULTS.view,
@@ -205,42 +198,24 @@ export const useWidgetStore = defineStore('widget', {
     },
 
     /**
-     * Apply color mode class to root element.
+     * Apply the color mode as `data-theme` on the widget document's root.
      *
-     * Resolves `auto` to `light` or `dark` via
-     * `window.matchMedia('(prefers-color-scheme: dark)')` so widget content
-     * always carries exactly one explicit theme class. This lets the
-     * `public-light-mode-override` mixin win over the dark-mode media query
-     * branch via specificity when the user picks "Light" on a dark-OS system.
+     * `light` and `dark` set `<html data-theme="…">`, which the self-guarding
+     * `public-dark-mode` mixin reads: `[data-theme="dark"]` forces the dark
+     * branch, and `[data-theme="light"]` suppresses its OS media-query branch.
+     * `auto` removes the attribute so that media query follows the visitor's
+     * OS preference live, with no JavaScript listener involved.
      *
-     * For `auto` mode, registers a single `change` listener on the
-     * MediaQueryList. The listener is stored at module scope and torn down
-     * unconditionally on every invocation, preventing stacked listeners
-     * across `auto → light → auto` toggles.
-     *
-     * @param rootElement - DOM element to apply class to
+     * The widget is a same-origin iframe with its own document, so this never
+     * reads or writes the host page's `<html>`.
      */
-    applyColorMode(rootElement: HTMLElement) {
-      // Always tear down any prior listener before re-evaluating.
-      if (mediaQueryList && mediaQueryListener) {
-        mediaQueryList.removeEventListener('change', mediaQueryListener);
-        mediaQueryList = null;
-        mediaQueryListener = null;
-      }
-
-      // Always remove both theme classes, then add exactly one.
-      rootElement.classList.remove('widget-theme-light', 'widget-theme-dark');
-
-      const resolved = this.colorMode === 'auto'
-        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-        : this.colorMode;
-      rootElement.classList.add(resolved === 'dark' ? 'widget-theme-dark' : 'widget-theme-light');
-
-      // For auto mode, listen for OS theme changes and re-apply.
+    applyColorMode() {
+      const root = document.documentElement;
       if (this.colorMode === 'auto') {
-        mediaQueryList = window.matchMedia('(prefers-color-scheme: dark)');
-        mediaQueryListener = () => this.applyColorMode(rootElement);
-        mediaQueryList.addEventListener('change', mediaQueryListener);
+        delete root.dataset.theme;
+      }
+      else {
+        root.dataset.theme = this.colorMode;
       }
     },
 
