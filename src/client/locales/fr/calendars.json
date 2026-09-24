@@ -531,7 +531,7 @@
       "update_button": "Mettre à jour",
       "adding": "Ajout en cours...",
       "allowed_domains_title": "Domaines autorisés actuels",
-      "no_domains": "Aucun domaine n'a encore été ajouté. Ajoutez des domaines pour les autoriser à intégrer votre widget de calendrier.",
+      "no_domains": "Aucun domaine n'a encore été ajouté. Tant que vous n'en aurez pas ajouté un, votre calendrier ne pourra pas être intégré sur d'autres sites.",
       "remove_button": "Supprimer",
       "removing": "Suppression...",
       "confirm_remove": "Êtes-vous sûr de vouloir supprimer {{domain}} ? Votre calendrier cessera d'apparaître sur {{domain}} et ne pourra être intégré sur aucun autre site tant que vous n'aurez pas ajouté un nouveau domaine autorisé.",

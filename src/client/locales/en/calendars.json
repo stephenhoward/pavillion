@@ -546,7 +546,7 @@
       "update_button": "Update",
       "adding": "Adding...",
       "allowed_domains_title": "Current Allowed Domains",
-      "no_domains": "No domains have been added yet. Add domains to allow them to embed your calendar widget.",
+      "no_domains": "No domain has been added yet. Until you add one, your calendar can't be embedded on other sites.",
       "remove_button": "Remove",
       "removing": "Removing...",
       "confirm_remove": "Are you sure you want to remove {{domain}}? Your calendar will stop appearing on {{domain}} and cannot be embedded on any other site until you add a new allowed domain.",

@@ -531,7 +531,7 @@
       "update_button": "Actualizar",
       "adding": "Añadiendo...",
       "allowed_domains_title": "Dominios permitidos actuales",
-      "no_domains": "Aún no se ha añadido ningún dominio. Añade dominios para permitir que incrusten tu widget de calendario.",
+      "no_domains": "Aún no se ha añadido ningún dominio. Hasta que añadas uno, tu calendario no podrá incrustarse en otros sitios.",
       "remove_button": "Eliminar",
       "removing": "Eliminando...",
       "confirm_remove": "¿Estás seguro de que quieres eliminar {{domain}}? Tu calendario dejará de aparecer en {{domain}} y no podrá incrustarse en ningún otro sitio hasta que añadas un nuevo dominio permitido.",
