@@ -179,7 +179,7 @@ export const useWidgetStore = defineStore('widget', {
      * Writes `--pav-accent-light` and `--pav-accent-dark` from the user-chosen
      * value. Hover variants (`--pav-accent-light-hover` / `--pav-accent-dark-hover`)
      * are intentionally NOT written here — they remain at the SCSS-compiled
-     * defaults emitted by the `public-accent-tokens` mixin on the root.
+     * defaults emitted by the `public-theme-tokens` mixin on the root.
      *
      * SECURITY: The accent color MUST reach the DOM only via
      * `element.style.setProperty(...)`. Never interpolate the value into a
