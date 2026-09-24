@@ -225,13 +225,38 @@ test.describe('Widget Embedding', () => {
 
     // EventCard leaves modified clicks to the native anchor, so the browser
     // opens the href in a new tab and the widget stays on its list.
-    const [newTab] = await Promise.all([
-      page.context().waitForEvent('page'),
-      titleLink.click({ modifiers: ['ControlOrMeta'] }),
-    ]);
-    await newTab.waitForLoadState();
-    expect(new URL(newTab.url()).pathname).toBe(href);
-    await newTab.close();
+    //
+    // The tab is observed through CDP target discovery rather than
+    // context.waitForEvent('page'): Chromium reliably opens a modifier-click
+    // tab in this context and navigates it to the href, but Playwright
+    // intermittently never surfaces that tab as a Page. A tab that lands
+    // anywhere other than the detail URL, or never opens, fails the wait.
+    const detailUrl = new URL(href!, env.baseURL).href;
+    const pageSession = await page.context().newCDPSession(page);
+    const { targetInfo: opener } = await pageSession.send('Target.getTargetInfo');
+    const browserSession = await page.context().browser()!.newBrowserCDPSession();
+    const newTabAtDetail = new Promise<string>((resolve) => {
+      const onTarget = ({ targetInfo }: { targetInfo: typeof opener }) => {
+        if (
+          targetInfo.type === 'page'
+          && targetInfo.browserContextId === opener.browserContextId
+          && targetInfo.targetId !== opener.targetId
+          && targetInfo.url === detailUrl
+        ) {
+          resolve(targetInfo.targetId);
+        }
+      };
+      browserSession.on('Target.targetCreated', onTarget);
+      browserSession.on('Target.targetInfoChanged', onTarget);
+    });
+    await browserSession.send('Target.setDiscoverTargets', { discover: true });
+
+    await titleLink.click({ modifiers: ['ControlOrMeta'] });
+
+    const newTabId = await newTabAtDetail;
+    await browserSession.send('Target.closeTarget', { targetId: newTabId });
+    await browserSession.detach();
+    await pageSession.detach();
 
     await expect(iframe.locator('.event-detail-overlay')).toHaveCount(0);
     await expect(iframe.locator('article.event-card').first()).toBeVisible();
