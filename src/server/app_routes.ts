@@ -575,8 +575,9 @@ export function createRouter(
   // the per-load lookup on this public route.
   //
   // Fails closed to 'self' before the public interface is bound or if the
-  // lookup errors. An unknown calendar gets the unconfigured policy, so the
-  // header does not reveal which calendars exist.
+  // lookup errors. An unknown calendar gets the unconfigured policy. That is
+  // uniformity, not a privacy property (DEC-020 rule 3): calendar existence is
+  // already public elsewhere, and a configured calendar's header differs anyway.
   //
   // X-Frame-Options: DENY (set globally by helmet) is removed because it would
   // override frame-ancestors in legacy browsers and block every embed.
