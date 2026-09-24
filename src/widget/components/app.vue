@@ -19,7 +19,7 @@ onMounted(() => {
   if (rootRef.value) {
     // Apply initial configuration
     widgetStore.injectAccentColor(rootRef.value);
-    widgetStore.applyColorMode(rootRef.value);
+    widgetStore.applyColorMode();
 
     // Set up resize observer with debouncing
     resizeObserver = new ResizeObserver((entries) => {
@@ -42,9 +42,7 @@ onMounted(() => {
 
 // Watch for theme changes from postMessage updates
 watch(() => widgetStore.colorMode, () => {
-  if (rootRef.value) {
-    widgetStore.applyColorMode(rootRef.value);
-  }
+  widgetStore.applyColorMode();
 });
 
 // Watch for accent color changes from postMessage updates
@@ -147,20 +145,17 @@ onMounted(() => {
   }
 }
 
-// Auto color mode (uses system preference)
-@media (prefers-color-scheme: dark) {
-  .widget-root:not(.widget-theme-light) {
-    // Dark mode styles will be inherited from parent SCSS
+// Native controls follow the widget's color mode: the OS preference under
+// `auto` (no data-theme), the forced mode otherwise.
+.widget-root {
+  color-scheme: light dark;
+
+  [data-theme="light"] & {
+    color-scheme: light;
   }
-}
 
-// Forced light theme
-.widget-root.widget-theme-light {
-  color-scheme: light;
-}
-
-// Forced dark theme
-.widget-root.widget-theme-dark {
-  color-scheme: dark;
+  [data-theme="dark"] & {
+    color-scheme: dark;
+  }
 }
 </style>

@@ -760,7 +760,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   color: $public-text-secondary-light;
   margin-bottom: $public-space-sm;
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     color: $public-text-secondary-dark;
   }
 }
@@ -795,38 +795,29 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 }
 
-@mixin public-dark-mode {
-  // Apply dark mode when system preference is dark
-  @media (prefers-color-scheme: dark) {
-    & {
-      @content;
-    }
-  }
-
-  // Apply dark mode when widget is explicitly set to dark mode
-  .widget-theme-dark & {
-    @content;
-  }
-}
-
-// Light mode override mixin — pairs with every `public-dark-mode` block
-// in widget components.
+// Dark mode mixin — self-guarding against a forced light theme.
 //
-// Pairing contract: every `@include public-dark-mode { ... }` block in a
-// widget component MUST be paired with an `@include public-light-mode-override`
-// block that re-states the LIGHT values explicitly. This is required because
-// `public-dark-mode` activates via `@media (prefers-color-scheme: dark)`,
-// which would otherwise win over the widget's explicit light theme on a user
-// agent that prefers dark. By stating the light values inside a
-// `.widget-theme-light &` selector, this override beats the media
-// query branch on specificity when the widget root carries the
-// `.widget-theme-light` class.
+// Emits the dark values under two selectors:
 //
-// NOTE: Do NOT use `:global(.widget-theme-light) &` — Vue's scoped-style
-// compiler drops the descendant selector when `:global()` is followed by `&`,
-// producing bare `.widget-theme-light{...}` rules with no descendant. The
-// plain `.widget-theme-light &` form correctly emits
-// `.widget-theme-light .my-component[data-v-xxx]` because the ancestor is
+//   1. `[data-theme="dark"] &` — a forced dark theme. The widget sets
+//      `data-theme` on its own iframe document's `<html>` for an explicit
+//      Light/Dark color mode (`widgetStore.applyColorMode()`).
+//   2. `:where(:root:not([data-theme="light"])) &` inside
+//      `@media (prefers-color-scheme: dark)` — the OS preference, unless a
+//      light theme was forced. The public site never sets `data-theme`, so
+//      there this always matches and the site follows the OS as before.
+//
+// Because the guard lives here, a component states its light values once as
+// its base style and its dark values once in this block; a forced light
+// theme on a dark OS needs no per-component override. `:where()` keeps the
+// guard at zero specificity, so the media-query branch weighs exactly what a
+// bare `&` did and existing cascades are unchanged.
+//
+// NOTE: Do NOT wrap either selector in `:global(...)`. Vue's scoped-style
+// compiler drops the descendant combinator when `:global()` is followed by
+// `&`, producing a bare `[data-theme="dark"]{...}` rule with no descendant
+// (the pv-ezc7 bug class). The plain form correctly emits
+// `[data-theme="dark"] .my-component[data-v-xxx]`, because the ancestor is
 // not the scoped target.
 //
 // Usage:
@@ -836,13 +827,28 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 //     @include public-dark-mode {
 //       color: $public-text-primary-dark;
 //     }
-//
-//     @include public-light-mode-override {
-//       color: $public-text-primary-light;
-//     }
 //   }
+@mixin public-dark-mode {
+  [data-theme="dark"] & {
+    @content;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :where(:root:not([data-theme="light"])) & {
+      @content;
+    }
+  }
+}
+
+// Compatibility shim: emits nothing. `public-dark-mode` now stands down on
+// its own under a forced light theme, so the light values re-stated here were
+// redundant with each component's base style. Existing call sites still
+// compile and are deleted as each caller migrates to --pav-* tokens; the
+// remainder go when the mixin is retired. Do not add new call sites.
 @mixin public-light-mode-override {
-  .widget-theme-light & {
+  // Sass only accepts a caller's content block when the mixin mentions
+  // `@content`; this branch never emits it.
+  @if false {
     @content;
   }
 }

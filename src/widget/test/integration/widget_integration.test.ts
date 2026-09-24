@@ -369,76 +369,42 @@ describe('Widget Integration Tests', () => {
   });
 
   describe('Color mode switching (auto/light/dark)', () => {
+    // Each explicit mode is asserted against the opposite system preference,
+    // which applyColorMode must not consult; `auto` is left to the stylesheet.
     afterEach(() => {
+      delete document.documentElement.dataset.theme;
       vi.unstubAllGlobals();
     });
 
-    it('should apply light theme class when colorMode=light (even on dark system)', () => {
-      mockMatchMedia(true); // dark system
-      const mockRoot = document.createElement('div');
-      document.body.appendChild(mockRoot);
-
-      const widgetStore = useWidgetStore();
-      const urlParams = new URLSearchParams('colorMode=light');
-      widgetStore.parseConfig(urlParams);
-
-      widgetStore.applyColorMode(mockRoot);
-
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(true);
-      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(false);
-
-      document.body.removeChild(mockRoot);
-    });
-
-    it('should apply dark theme class when colorMode=dark (even on light system)', () => {
-      mockMatchMedia(false); // light system
-      const mockRoot = document.createElement('div');
-      document.body.appendChild(mockRoot);
-
-      const widgetStore = useWidgetStore();
-      const urlParams = new URLSearchParams('colorMode=dark');
-      widgetStore.parseConfig(urlParams);
-
-      widgetStore.applyColorMode(mockRoot);
-
-      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(true);
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
-
-      document.body.removeChild(mockRoot);
-    });
-
-    it('auto mode resolves to widget-theme-light on a light system', () => {
-      mockMatchMedia(false);
-      const mockRoot = document.createElement('div');
-      document.body.appendChild(mockRoot);
-
-      const widgetStore = useWidgetStore();
-      const urlParams = new URLSearchParams('colorMode=auto');
-      widgetStore.parseConfig(urlParams);
-
-      widgetStore.applyColorMode(mockRoot);
-
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(true);
-      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(false);
-
-      document.body.removeChild(mockRoot);
-    });
-
-    it('auto mode resolves to widget-theme-dark on a dark system', () => {
+    it('colorMode=light sets data-theme="light" on the document root (even on a dark system)', () => {
       mockMatchMedia(true);
-      const mockRoot = document.createElement('div');
-      document.body.appendChild(mockRoot);
-
       const widgetStore = useWidgetStore();
-      const urlParams = new URLSearchParams('colorMode=auto');
-      widgetStore.parseConfig(urlParams);
+      widgetStore.parseConfig(new URLSearchParams('colorMode=light'));
 
-      widgetStore.applyColorMode(mockRoot);
+      widgetStore.applyColorMode();
 
-      expect(mockRoot.classList.contains('widget-theme-dark')).toBe(true);
-      expect(mockRoot.classList.contains('widget-theme-light')).toBe(false);
+      expect(document.documentElement.dataset.theme).toBe('light');
+    });
 
-      document.body.removeChild(mockRoot);
+    it('colorMode=dark sets data-theme="dark" on the document root (even on a light system)', () => {
+      mockMatchMedia(false);
+      const widgetStore = useWidgetStore();
+      widgetStore.parseConfig(new URLSearchParams('colorMode=dark'));
+
+      widgetStore.applyColorMode();
+
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    });
+
+    it('colorMode=auto clears data-theme so the OS preference decides', () => {
+      mockMatchMedia(true);
+      document.documentElement.dataset.theme = 'dark';
+      const widgetStore = useWidgetStore();
+      widgetStore.parseConfig(new URLSearchParams('colorMode=auto'));
+
+      widgetStore.applyColorMode();
+
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
     });
   });
 

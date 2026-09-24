@@ -158,22 +158,9 @@ onUnmounted(() => {
   min-height: 0;
   width: 100%;
   background: $public-bg-primary-light;
+  color: $public-text-primary-light;
 
   @include public-dark-mode {
-    background: $public-bg-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-  }
-
-  // Widget theme overrides (forced light/dark mode)
-  .widget-theme-light & {
-    background: $public-bg-primary-light;
-    color: $public-text-primary-light;
-  }
-
-  .widget-theme-dark & {
     background: $public-bg-primary-dark;
     color: $public-text-primary-dark;
   }
@@ -187,10 +174,6 @@ header {
     border-bottom-color: $public-border-subtle-dark;
   }
 
-  @include public-light-mode-override {
-    border-bottom-color: $public-border-subtle-light;
-  }
-
   .calendar-title {
     font-size: $public-font-size-lg;
     font-weight: $public-font-weight-light;
@@ -199,10 +182,6 @@ header {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
-    }
-
-    @include public-light-mode-override {
-      color: $public-text-primary-light;
     }
 
     @include public-mobile-only {
