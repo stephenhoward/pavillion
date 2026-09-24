@@ -212,7 +212,9 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('modifier-click on an event title opens the detail in a new tab', async ({ page }) => {
+  test('modifier-click on an event title opens the detail in a new tab', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'CDP target discovery is Chromium-only');
+
     await page.goto(embeddingUrl());
 
     await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
@@ -233,30 +235,42 @@ test.describe('Widget Embedding', () => {
     // anywhere other than the detail URL, or never opens, fails the wait.
     const detailUrl = new URL(href!, env.baseURL).href;
     const pageSession = await page.context().newCDPSession(page);
-    const { targetInfo: opener } = await pageSession.send('Target.getTargetInfo');
     const browserSession = await page.context().browser()!.newBrowserCDPSession();
-    const newTabAtDetail = new Promise<string>((resolve) => {
-      const onTarget = ({ targetInfo }: { targetInfo: typeof opener }) => {
-        if (
-          targetInfo.type === 'page'
-          && targetInfo.browserContextId === opener.browserContextId
-          && targetInfo.targetId !== opener.targetId
-          && targetInfo.url === detailUrl
-        ) {
-          resolve(targetInfo.targetId);
-        }
-      };
-      browserSession.on('Target.targetCreated', onTarget);
-      browserSession.on('Target.targetInfoChanged', onTarget);
-    });
-    await browserSession.send('Target.setDiscoverTargets', { discover: true });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const { targetInfo: opener } = await pageSession.send('Target.getTargetInfo');
+      const newTabAtDetail = new Promise<string>((resolve) => {
+        const onTarget = ({ targetInfo }: { targetInfo: typeof opener }) => {
+          if (
+            targetInfo.type === 'page'
+            && targetInfo.browserContextId === opener.browserContextId
+            && targetInfo.targetId !== opener.targetId
+            && targetInfo.url === detailUrl
+          ) {
+            resolve(targetInfo.targetId);
+          }
+        };
+        browserSession.on('Target.targetCreated', onTarget);
+        browserSession.on('Target.targetInfoChanged', onTarget);
+      });
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`no page target reached ${detailUrl} within 10s`)),
+          10000,
+        );
+      });
+      await browserSession.send('Target.setDiscoverTargets', { discover: true });
 
-    await titleLink.click({ modifiers: ['ControlOrMeta'] });
+      await titleLink.click({ modifiers: ['ControlOrMeta'] });
 
-    const newTabId = await newTabAtDetail;
-    await browserSession.send('Target.closeTarget', { targetId: newTabId });
-    await browserSession.detach();
-    await pageSession.detach();
+      const newTabId = await Promise.race([newTabAtDetail, timedOut]);
+      await browserSession.send('Target.closeTarget', { targetId: newTabId });
+    }
+    finally {
+      clearTimeout(timer);
+      await browserSession.detach();
+      await pageSession.detach();
+    }
 
     await expect(iframe.locator('.event-detail-overlay')).toHaveCount(0);
     await expect(iframe.locator('article.event-card').first()).toBeVisible();
