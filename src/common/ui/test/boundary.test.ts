@@ -11,6 +11,12 @@
  * Scope is the new module only. Existing widget -> site and site -> client
  * imports elsewhere in the tree are tracked debt on pv-z1in, not failures here.
  *
+ * There is deliberately no "the client imports nothing from here" assertion.
+ * The client is a consumer like the site and widget: a shared component reads
+ * --pav-* custom properties, which every app declares, so it renders in the
+ * client as it does anywhere else. What keeps that true is the styling check
+ * at the bottom of this file, not an import ban.
+ *
  * The scan is textual and does not strip comments, so a comment anywhere under
  * src/common/ui that spells an import with a quoted specifier is read as one.
  * Write such an example without the quotes — a comment cannot silence the
@@ -213,6 +219,61 @@ describe('src/common/ui boundary', () => {
         .filter(reference => !isPermittedOutsideSource(filePath, reference))
         .map(({ specifier }) => `${relativeFile} -> ${specifier}`);
     });
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+/** The text of every `<style>` block in a `.vue` file. */
+function styleBlocks(filePath: string): string {
+  const source = readFileSync(filePath, 'utf-8');
+
+  return [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1]).join('\n');
+}
+
+/** The shared components: every `.vue` file under src/common/ui. */
+function sharedComponents(): string[] {
+  return sourceFiles(UI_ROOT).filter(filePath => path.extname(filePath) === '.vue');
+}
+
+/**
+ * Token names in TOKENS.md's `$public-*` base → token table: rows whose first
+ * cell is a bare base name, which the client table's `--pav-*` first cells are not.
+ */
+function recordedTokens(): Set<string> {
+  const doc = readFileSync(path.join(UI_ROOT, 'TOKENS.md'), 'utf-8');
+
+  return new Set([...doc.matchAll(/^\|\s*`[a-z0-9][a-z0-9-]*`\s*\|\s*`(--pav-[a-z0-9-]+)`\s*\|/gm)].map(match => match[1]));
+}
+
+/**
+ * A shared component is compiled once and mounted by every app, so its styles
+ * may only read values each app supplies at runtime. A `$public-*` variable is
+ * resolved at build time to the site and widget palette and cannot follow the
+ * client's theme; a `--pav-*` name missing from TOKENS.md is one some app does
+ * not declare.
+ */
+describe('src/common/ui styling contract', () => {
+  it('finds the shared components it guards', () => {
+    expect(sharedComponents().length).toBeGreaterThan(0);
+    expect(recordedTokens()).toContain('--pav-text-primary');
+  });
+
+  it('reads no $public-* variable in a shared component style block', () => {
+    const offenders = sharedComponents()
+      .filter(filePath => styleBlocks(filePath).includes('$public-'))
+      .map(filePath => path.relative(SOURCE_ROOT, filePath));
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('reads only --pav-* names recorded in TOKENS.md', () => {
+    const recorded = recordedTokens();
+    const offenders = sharedComponents().flatMap(filePath =>
+      [...styleBlocks(filePath).matchAll(/var\(\s*(--pav-[a-z0-9-]+)/g)]
+        .map(match => match[1])
+        .filter(name => !recorded.has(name))
+        .map(name => `${path.relative(SOURCE_ROOT, filePath)} -> ${name}`));
 
     expect(offenders).toEqual([]);
   });

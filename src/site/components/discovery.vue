@@ -9,6 +9,7 @@ import { useLocale } from '../composables/useLocale';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { calendarPath } from '@/common/routing/public-paths';
+import EmptyState from '@/common/ui/components/EmptyState.vue';
 
 const { t } = useTranslation('system');
 const { currentLocale, localizedPath } = useLocale();
@@ -191,13 +192,14 @@ onBeforeMount(async () => {
         >
           {{ t('discovery.loading_label') }}
         </span>
-        <div
+        <EmptyState
           v-else-if="state === 'empty'"
           class="discovery-empty"
+          :heading="t('discovery.empty_state_heading')"
+          heading-level="h3"
         >
-          <h3 class="discovery-empty-heading">{{ t('discovery.empty_state_heading') }}</h3>
-          <p class="discovery-empty-body">{{ t('discovery.empty_state_body') }}</p>
-        </div>
+          <p>{{ t('discovery.empty_state_body') }}</p>
+        </EmptyState>
       </div>
 
       <div
@@ -437,31 +439,5 @@ onBeforeMount(async () => {
   @include public-error-state;
 
   margin: $public-space-md 0;
-}
-
-.discovery-empty {
-  @include public-empty-state;
-}
-
-.discovery-empty-heading {
-  font-size: $public-font-size-lg;
-  font-weight: $public-font-weight-semibold;
-  margin: 0 0 $public-space-sm 0;
-  // Intentional override: the empty-state mixin sets the container to the
-  // secondary text color so paragraph copy is muted, but the heading should
-  // read as primary text to anchor the empty state visually.
-  color: $public-text-primary-light;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-}
-
-.discovery-empty-body {
-  font-size: $public-font-size-base;
-  margin: 0;
-  line-height: $public-line-height-relaxed;
-  // Color inherited from the public-empty-state mixin on the container
-  // (secondary text, with dark-mode override). No need to re-declare here.
 }
 </style>

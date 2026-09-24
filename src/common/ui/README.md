@@ -2,21 +2,9 @@
 
 Browser-side Vue components, composables, and styling that more than one frontend app consumes.
 
-The module is named `ui`, not `public-ui`, because the intent is that it eventually serves every frontend app. Today its consumers are the public site (`src/site`) and the embeddable widget (`src/widget`); the authenticated client (`src/client`) is absent from that list because of an unfinished migration, not because of a principle or an open question.
+The module is named `ui`, not `public-ui`, because it serves every frontend app. Its consumers are the public site (`src/site`), the embeddable widget (`src/widget`), and the authenticated client (`src/client`). No shared component or composable here is restricted to a subset of them: a shared component styles itself with runtime custom properties that all three apps declare (see [Styling stance](#styling-stance)), so one compiled component renders in each app's own theme. The exception is `assets/mixins.scss`, the site and widget's legacy `$public-*` design system, which is housed here until it is retired and is not for the client or for shared components.
 
-## Which tenants the client may consume
-
-The restriction is per tenant, not per module, and it is temporary.
-
-**A tenant that styles itself with `$public-*` cannot be consumed by the client yet.** Not because the client is the wrong kind of app, but because `$public-*` values are SCSS variables resolved at build time: a component compiled against `$public-text-primary-light` carries that hex in its output and cannot take on a different app's theme. Site and widget share such a component only because both compile the same values. Declaring the missing names in the client would not help — SCSS variables are not read at runtime.
-
-**A tenant that carries no styling has no such restriction, and the client may consume it today.** No token dependency means the styling migration decides nothing about it.
-
-Of the source files here, exactly one is styled — `assets/mixins.scss`. The others — `assets/breakpoints.ts`, `calendar-views/calendar-grid.ts`, `composables/useLocale.ts`, `composables/useLocalizedContent.ts` — carry no styling at all and would work in the client unchanged. The split, not the module, is what the client rule follows.
-
-The direction is settled: site and widget converge on the client's `--pav-*` custom-property system and its dual-selector dark mode, tracked on **pv-l3my**. Once that bead's token layer lands, a styled shared component reads `var(--pav-*)`, resolves against whichever app mounts it, and this section goes away. This is a sequencing constraint with a known end, not a standing rule.
-
-This rule is stated, not enforced: it is a claim about what a component *renders like*, which an import scan is the wrong instrument for. `test/boundary.test.ts` deliberately carries no "the client imports nothing from here" assertion — such an assertion would be wrong for every unstyled file here today, and wrong for all of them once pv-l3my lands.
+`components/EmptyState.vue` is the first styled shared component and the proof of that contract — the site's discovery page, the widget's list view, and the client's feed each mount it. It is landmark-free by default; a caller whose empty state stands in for a page region passes `region`, which renders a `<section>` labelled by the heading.
 
 ## Boundary rule
 
@@ -32,19 +20,28 @@ Files under `src/common/ui/test/` may additionally import `vitest`, `@vue/test-u
 
 The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/server` — by alias or by a relative path that escapes into them — and may never reach outside `src/` by a relative path at all. In the other direction, nothing under `src/server/` may import `src/common/ui`: this module assumes a browser.
 
-`test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary.
+`test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. It deliberately carries no "the client imports nothing from here" assertion: the client is a consumer like the other two apps. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary.
 
 Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-z1in.
 
 ## Styling stance
 
-The target contract is the client's: a shared component reads `--pav-*` CSS custom properties that each app declares and themes, so one compiled component renders correctly wherever it is mounted. Reaching that is pv-l3my.
+**A shared component reads `--pav-*` custom properties, and only the names recorded in [TOKENS.md](TOKENS.md).** It never reads a `$public-*` SCSS variable and never includes a `public-*` mixin that does. A `$public-*` value is resolved at build time: a component compiled against `$public-text-primary-light` carries that value in its CSS and cannot take on another app's theme. A `--pav-*` property is resolved in the browser, against whichever app mounts the component.
 
-Until its token layer lands, shared components style themselves with the public design system: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`, plus the four accent custom properties `public-theme-tokens` declares. Prefer `--pav-accent-*` over `$public-accent-*` wherever both exist — a widget's accent is configured at runtime, so the compile-time variable is already the wrong one to reach for (pv-nskn).
+The rule covers colours and shadows — what TOKENS.md holds. Spacing and type sizes have no shared runtime token yet (the client's `--pav-space-*` and `--pav-font-size-*` scales are not declared by the site or widget), so a shared component writes those as plain `rem` values.
 
-`public-theme-tokens` already declares the full runtime set on the site and widget roots: every `$public-*` light/dark pair as one `--pav-*` property, named after the client's token where the meaning matches. [TOKENS.md](TOKENS.md) maps each `$public-*` base to its token and records that the values are still the public palette.
+A shared component writes no dark-mode rule. Each token already carries its light and dark value and switches under the app's theme selector, so `var(--pav-text-primary)` is correct in both themes as written. A shared component that needs `public-dark-mode`, `[data-theme="dark"]`, or `prefers-color-scheme` is reading the wrong value.
 
-`assets/mixins.scss` also carries a block of unprefixed aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming. Those are compatibility surface, not the design system — do not reach for them in a new shared component.
+Each app supplies the tokens its own way:
+
+- **Site and widget** — the `public-theme-tokens` mixin in `assets/mixins.scss`, included on `#app` in the site and on `.widget-root` in the widget. It emits each `$public-*` light/dark pair as one `--pav-*` property with the public palette's values.
+- **Client** — its theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and `tokens/_shadows.scss`) declares every recorded name natively, most as the client's own tokens and the rest mapped onto existing client values.
+
+TOKENS.md records which names each app declares and from what source. A name shared by all three apps does not mean a shared value: each app keeps its own palette behind the name.
+
+`test/boundary.test.ts` fails if a `.vue` file under this module reads a `$public-*` variable or a `--pav-*` name TOKENS.md does not record. `test/public-theme-tokens.test.ts` fails if a recorded name is missing from the site/widget mixin or from the client theme layer. Adding a name to the shared set therefore means declaring it in both, then recording it.
+
+`assets/mixins.scss` remains the site and widget's own design system — the `$public-*` variables and `public-*` mixins their app components still use while they migrate to `--pav-*`. It also carries a block of unprefixed aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming; those are compatibility surface, not the design system. None of it belongs in a shared component.
 
 `assets/mixins.scss` is the canonical copy; `src/site/assets/mixins.scss` is a one-line `@forward` shim kept for the existing call sites. New call sites should `@use '@/common/ui/assets/mixins'` directly.
 
