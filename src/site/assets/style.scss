@@ -49,14 +49,16 @@ button.primary {
 // ===== APP LAYOUT =====
 
 #app {
-  @include public-accent-tokens;
-
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   min-height: 100vh;
   background: $public-bg-primary-light;
   color: $public-text-primary-light;
+
+  // Last among the declarations: the mixin ends in a nested dark-mode rule,
+  // and a declaration after a nested rule makes Sass split this one.
+  @include public-theme-tokens;
 
   @media (prefers-color-scheme: dark) {
     background: $public-bg-primary-dark;

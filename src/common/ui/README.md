@@ -40,7 +40,9 @@ Scope is this module only; the existing widget → site and site → client impo
 
 The target contract is the client's: a shared component reads `--pav-*` CSS custom properties that each app declares and themes, so one compiled component renders correctly wherever it is mounted. Reaching that is pv-l3my.
 
-Until its token layer lands, shared components style themselves with the public design system: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`, plus the four accent custom properties `public-accent-tokens` declares. Prefer `--pav-accent-*` over `$public-accent-*` wherever both exist — a widget's accent is configured at runtime, so the compile-time variable is already the wrong one to reach for (pv-nskn).
+Until its token layer lands, shared components style themselves with the public design system: the `$public-*` SCSS tokens and `public-*` mixins in `assets/mixins.scss`, plus the four accent custom properties `public-theme-tokens` declares. Prefer `--pav-accent-*` over `$public-accent-*` wherever both exist — a widget's accent is configured at runtime, so the compile-time variable is already the wrong one to reach for (pv-nskn).
+
+`public-theme-tokens` already declares the full runtime set on the site and widget roots: every `$public-*` light/dark pair as one `--pav-*` property, named after the client's token where the meaning matches. [TOKENS.md](TOKENS.md) maps each `$public-*` base to its token and records that the values are still the public palette.
 
 `assets/mixins.scss` also carries a block of unprefixed aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming. Those are compatibility surface, not the design system — do not reach for them in a new shared component.
 
