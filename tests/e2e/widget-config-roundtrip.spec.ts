@@ -264,21 +264,21 @@ test('admin-saved accent color is injected as CSS custom property in rendered wi
 // ============================================================================
 //
 // Each scenario asserts that the user-chosen color mode wins over the system
-// preference reported by `prefers-color-scheme`. The signal is the theme
-// class that `widgetStore.applyColorMode()` writes to the widget root —
-// `widget-theme-light` or `widget-theme-dark`. Components consume that class
-// via the `public-light-mode-override` mixin (and matching dark variants) to
-// override the dark-mode media query through specificity.
+// preference reported by `prefers-color-scheme`. The signal is the
+// `data-theme` attribute that `widgetStore.applyColorMode()` writes to the
+// widget iframe's `<html>` — `light` or `dark` for a forced mode, absent for
+// `auto`. The self-guarding `public-dark-mode` mixin reads it:
+// `[data-theme="dark"]` forces the dark branch, `[data-theme="light"]`
+// suppresses the OS media-query branch.
 //
-// The class on `.widget-root` is the authoritative behavioral observable
-// from `applyColorMode()`. The light/dark override tests also assert the
-// downstream visual background-color cascade on `.widget-container` —
-// without that assertion, a regression in the SCSS theme-override mixins
-// (e.g. Vue's `:global(...) &` compilation bug, see pv-ezc7) could leave
-// the class on the root while the actual cascade was broken.
+// The attribute is the behavioral observable from `applyColorMode()`. Every
+// scenario also asserts the downstream background-color cascade on
+// `.widget-container` — without that, a regression in the mixin (e.g. Vue's
+// `:global(...) &` compilation bug, see pv-ezc7) could leave the attribute
+// set while the actual cascade was broken.
 
-async function getWidgetRootClasses(iframe: ReturnType<Page['frameLocator']>): Promise<string> {
-  return iframe.locator('.widget-root').evaluate((el) => el.className);
+async function getContainerBackground(iframe: ReturnType<Page['frameLocator']>): Promise<string> {
+  return iframe.locator('.widget-container').evaluate((el) => getComputedStyle(el).backgroundColor);
 }
 
 /**
@@ -325,26 +325,16 @@ test('color mode "light" overrides system dark preference', async ({ page, brows
   });
   const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
 
-  // Wait for the widget-root with the explicit light theme class. This is the
-  // contract: applyColorMode() removes both classes and adds exactly one based
-  // on the resolved mode. With the saved colorMode === 'light', the resolved
-  // mode is 'light' regardless of the system preference.
-  await expect(iframe.locator('.widget-root.widget-theme-light')).toBeVisible({ timeout: 20000 });
-  await expect(iframe.locator('.widget-root.widget-theme-dark')).toHaveCount(0);
+  // With the saved colorMode === 'light', the widget document's root carries
+  // data-theme="light" regardless of the system preference.
+  await expect(iframe.locator('html[data-theme="light"]')).toHaveCount(1, { timeout: 20000 });
 
-  // Visual cascade: the `.widget-theme-light &` override mixin must drive the
-  // background-color on `.widget-container` to a light value even though the
-  // OS prefers dark. This guards against Vue's scoped-style compilation bug
-  // (pv-ezc7) where `:global(.widget-theme-light) &` compiles to a bare
-  // `.widget-theme-light{...}` rule with the descendant dropped.
+  // Visual cascade: the guarded dark-mode media query must stand down under
+  // data-theme="light", leaving `.widget-container` light even though the OS
+  // prefers dark.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
   await expect.poll(
-    async () => {
-      const bg = await iframe.locator('.widget-container').evaluate(
-        (el) => getComputedStyle(el).backgroundColor,
-      );
-      return isLightColor(bg);
-    },
+    async () => isLightColor(await getContainerBackground(iframe)),
     { timeout: 15000, intervals: [200, 500, 1000] },
   ).toBe(true);
 
@@ -363,20 +353,13 @@ test('color mode "dark" overrides system light preference', async ({ page, brows
   });
   const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
 
-  await expect(iframe.locator('.widget-root.widget-theme-dark')).toBeVisible({ timeout: 20000 });
-  await expect(iframe.locator('.widget-root.widget-theme-light')).toHaveCount(0);
+  await expect(iframe.locator('html[data-theme="dark"]')).toHaveCount(1, { timeout: 20000 });
 
-  // Visual cascade: the `.widget-theme-dark &` override mixin must drive the
-  // background-color on `.widget-container` to a dark value even though the
-  // OS prefers light.
+  // Visual cascade: `[data-theme="dark"] &` must drive the background-color on
+  // `.widget-container` to a dark value even though the OS prefers light.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
   await expect.poll(
-    async () => {
-      const bg = await iframe.locator('.widget-container').evaluate(
-        (el) => getComputedStyle(el).backgroundColor,
-      );
-      return isDarkColor(bg);
-    },
+    async () => isDarkColor(await getContainerBackground(iframe)),
     { timeout: 15000, intervals: [200, 500, 1000] },
   ).toBe(true);
 
@@ -395,32 +378,32 @@ test('color mode "auto" follows system preference and reacts to changes', async 
   });
   const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
 
-  await expect(iframe.locator('.widget-root')).toBeVisible({ timeout: 20000 });
+  await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
+
+  // Auto leaves data-theme unset, so the stylesheet's media query decides.
+  await expect(iframe.locator('html[data-theme]')).toHaveCount(0);
 
   await expect.poll(
-    () => getWidgetRootClasses(iframe),
+    async () => isDarkColor(await getContainerBackground(iframe)),
     { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toContain('widget-theme-dark');
+  ).toBe(true);
 
-  // Flip the OS preference to light without reloading. The matchMedia
-  // listener registered by applyColorMode() must fire and swap the class.
-  // The poll guards against any small async delay between emulateMedia and
-  // the listener handler dispatching the class update.
+  // Flip the OS preference to light without reloading. The media query
+  // re-evaluates live; no JavaScript listener is involved.
   await embedPage.emulateMedia({ colorScheme: 'light' });
 
   await expect.poll(
-    () => getWidgetRootClasses(iframe),
+    async () => isLightColor(await getContainerBackground(iframe)),
     { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toContain('widget-theme-light');
+  ).toBe(true);
 
-  // Flip back to dark — auto should react again, proving the listener
-  // handles repeated transitions (no stacked / stale listeners).
+  // Flip back to dark — auto should react again.
   await embedPage.emulateMedia({ colorScheme: 'dark' });
 
   await expect.poll(
-    () => getWidgetRootClasses(iframe),
+    async () => isDarkColor(await getContainerBackground(iframe)),
     { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toContain('widget-theme-dark');
+  ).toBe(true);
 
   await cleanup();
 });

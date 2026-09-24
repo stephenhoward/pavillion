@@ -185,13 +185,12 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
     expect(siteConfigRequests).toBe(1);
 
-    // The resolved theme is a class on .widget-root; capture it on the list so
-    // the detail view can be held to the same one.
-    const themeClass = async () => iframe.locator('.widget-root').evaluate(
-      (el) => Array.from(el.classList).find(c => c.startsWith('widget-theme-')) ?? null,
-    );
-    const listTheme = await themeClass();
-    expect(listTheme).toMatch(/^widget-theme-(light|dark)$/);
+    // The color mode is `data-theme` on the widget document's <html> (absent
+    // for auto); capture it on the list so the detail view can be held to the
+    // same one.
+    const themeAttribute = async () => iframe.locator('html').getAttribute('data-theme');
+    const listTheme = await themeAttribute();
+    expect([null, 'light', 'dark']).toContain(listTheme);
 
     // Click the first event title link to navigate to the detail overlay.
     // EventCard intercepts the plain click and pushes the href through the
@@ -203,7 +202,7 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible();
 
     expect(siteConfigRequests).toBe(1);
-    expect(await themeClass()).toBe(listTheme);
+    expect(await themeAttribute()).toBe(listTheme);
 
     // Click back button to return to list view
     await iframe.locator('.back-link').first().click();

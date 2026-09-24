@@ -31,7 +31,7 @@ const { t } = useTranslation('system');
     color: $public-text-primary-light;
     margin: 0 0 $public-space-md 0;
 
-    @media (prefers-color-scheme: dark) {
+    @include public-dark-mode {
       color: $public-text-primary-dark;
     }
   }
@@ -42,7 +42,7 @@ const { t } = useTranslation('system');
     margin: 0 0 $public-space-xl 0;
     line-height: $public-line-height-relaxed;
 
-    @media (prefers-color-scheme: dark) {
+    @include public-dark-mode {
       color: $public-text-secondary-dark;
     }
   }

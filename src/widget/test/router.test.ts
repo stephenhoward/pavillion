@@ -162,6 +162,7 @@ describe('widget router server-config guard', () => {
   afterEach(() => {
     wrapper?.unmount();
     wrapper = null;
+    delete document.documentElement.dataset.theme;
     vi.unstubAllGlobals();
   });
 
@@ -174,8 +175,7 @@ describe('widget router server-config guard', () => {
     expect(widgetConfigCalls(fetchMock)).toEqual(['/api/widget/v1/calendars/direct_cal']);
 
     const root = wrapper.find('.widget-root').element as HTMLElement;
-    expect(root.classList.contains('widget-theme-light')).toBe(true);
-    expect(root.classList.contains('widget-theme-dark')).toBe(false);
+    expect(document.documentElement.dataset.theme).toBe('light');
     expect(root.style.getPropertyValue('--pav-accent-light')).toBe('#669c35');
     expect(wrapper.find('[data-test="event-detail-body"]').exists()).toBe(true);
   });
