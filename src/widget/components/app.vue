@@ -87,12 +87,14 @@ onMounted(() => {
 @use '@/site/assets/mixins' as *;
 
 .widget-root {
-  @include public-accent-tokens;
-
   width: 100%;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+
+  // Last among the declarations: the mixin ends in a nested dark-mode rule,
+  // and a declaration after a nested rule makes Sass split this one.
+  @include public-theme-tokens;
 }
 
 .widget-footer {

@@ -26,21 +26,6 @@ $public-accent-dark: #C86002;
 $public-accent-hover-light: color.adjust(#ff9131, $lightness: -5%);
 $public-accent-hover-dark: color.adjust(#C86002, $lightness: 5%);
 
-// Emit the four accent CSS custom properties on a root selector so
-// widgets and the public site can override them via inline styles
-// (e.g. widget admin custom accent color) without forking SCSS.
-//
-// Apply this mixin once at the root of the widget app and the public
-// site root. Components consume the variables via `var(--pav-accent-light)`,
-// `var(--pav-accent-light-hover)`, `var(--pav-accent-dark)`, and
-// `var(--pav-accent-dark-hover)`.
-@mixin public-accent-tokens {
-  --pav-accent-light: #{$public-accent-light};
-  --pav-accent-light-hover: #{$public-accent-hover-light};
-  --pav-accent-dark: #{$public-accent-dark};
-  --pav-accent-dark-hover: #{$public-accent-hover-dark};
-}
-
 // Background layers (lighter, airier than client)
 $public-bg-primary-light: #ffffff;
 $public-bg-primary-dark: #1a1a1e;
@@ -170,6 +155,100 @@ $public-shadow-sm-dark: 0 1px 3px rgba(0, 0, 0, 0.3);
 $public-shadow-md-dark: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
 $public-shadow-lg-dark: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
 $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.6);
+
+// ===== RUNTIME THEME TOKENS =====
+
+// The one declaration site of the public surfaces' --pav-* custom properties:
+// every $public-*-light / -dark pair above, emitted with its light value here
+// and redeclared with its dark value under `public-dark-mode`'s dual selector.
+// Names follow the client's theme layer where it has a token of the same
+// meaning; ../TOKENS.md is the mapping table, and
+// test/public-theme-tokens.test.ts fails if a pair goes unemitted.
+//
+// Include it once, on the element the app's runtime overrides are written to:
+// `#app` on the site, `.widget-root` in the widget, where
+// `widgetStore.injectAccentColor` sets --pav-accent-light / --pav-accent-dark
+// inline. Declaring the theme-switched --pav-accent tokens on that same
+// element is what lets them resolve through the override; declared on an
+// ancestor they would inherit the compiled default instead. Never include it
+// on `:root` or `html`: the dark branch is an ancestor selector
+// (`[data-theme="dark"] &`), which nothing above the document root can match,
+// so the tokens would silently stay light in both themes.
+@mixin public-theme-tokens {
+  // Fixed-mode accent values — the runtime override surface.
+  --pav-accent-light: #{$public-accent-light};
+  --pav-accent-light-hover: #{$public-accent-hover-light};
+  --pav-accent-dark: #{$public-accent-dark};
+  --pav-accent-dark-hover: #{$public-accent-hover-dark};
+
+  --pav-accent: var(--pav-accent-light);
+  --pav-accent-hover: var(--pav-accent-light-hover);
+
+  --pav-surface-primary: #{$public-bg-primary-light};
+  --pav-surface-secondary: #{$public-bg-secondary-light};
+  --pav-surface-tertiary: #{$public-bg-tertiary-light};
+
+  --pav-text-primary: #{$public-text-primary-light};
+  --pav-text-secondary: #{$public-text-secondary-light};
+  --pav-text-muted: #{$public-text-tertiary-light};
+
+  --pav-border-subtle: #{$public-border-subtle-light};
+  --pav-border-medium: #{$public-border-medium-light};
+  --pav-border-strong: #{$public-border-strong-light};
+
+  --pav-interactive-hover: #{$public-hover-overlay-light};
+  --pav-interactive-active: #{$public-active-overlay-light};
+
+  --pav-text-error: #{$public-error-light};
+  --pav-surface-error: #{$public-error-bg-light};
+  --pav-success: #{$public-success-light};
+  --pav-success-bg: #{$public-success-bg-light};
+
+  --pav-source-pill-bg: #{$public-source-pill-bg-light};
+  --pav-source-pill-color: #{$public-source-pill-color-light};
+  --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-light};
+
+  --pav-shadow-xs: #{$public-shadow-xs-light};
+  --pav-shadow-sm: #{$public-shadow-sm-light};
+  --pav-shadow-md: #{$public-shadow-md-light};
+  --pav-shadow-lg: #{$public-shadow-lg-light};
+  --pav-shadow-xl: #{$public-shadow-xl-light};
+
+  @include public-dark-mode {
+    --pav-accent: var(--pav-accent-dark);
+    --pav-accent-hover: var(--pav-accent-dark-hover);
+
+    --pav-surface-primary: #{$public-bg-primary-dark};
+    --pav-surface-secondary: #{$public-bg-secondary-dark};
+    --pav-surface-tertiary: #{$public-bg-tertiary-dark};
+
+    --pav-text-primary: #{$public-text-primary-dark};
+    --pav-text-secondary: #{$public-text-secondary-dark};
+    --pav-text-muted: #{$public-text-tertiary-dark};
+
+    --pav-border-subtle: #{$public-border-subtle-dark};
+    --pav-border-medium: #{$public-border-medium-dark};
+    --pav-border-strong: #{$public-border-strong-dark};
+
+    --pav-interactive-hover: #{$public-hover-overlay-dark};
+    --pav-interactive-active: #{$public-active-overlay-dark};
+
+    --pav-text-error: #{$public-error-dark};
+    --pav-surface-error: #{$public-error-bg-dark};
+    --pav-success: #{$public-success-dark};
+    --pav-success-bg: #{$public-success-bg-dark};
+
+    --pav-source-pill-bg: #{$public-source-pill-bg-dark};
+    --pav-source-pill-color: #{$public-source-pill-color-dark};
+    --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-dark};
+
+    --pav-shadow-xs: #{$public-shadow-xs-dark};
+    --pav-shadow-sm: #{$public-shadow-sm-dark};
+    --pav-shadow-md: #{$public-shadow-md-dark};
+    --pav-shadow-lg: #{$public-shadow-lg-dark};
+    --pav-shadow-xl: #{$public-shadow-xl-dark};
+  }
+}
 
 // ===== ANIMATION TOKENS =====
 
