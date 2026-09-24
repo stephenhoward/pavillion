@@ -563,29 +563,35 @@ export function createRouter(
   // Serve the widget JavaScript file (must come before catch-all widget route)
   router.get('/widget/pavillion-widget.js', handlers.widget_javascript);
 
-  // Widget HTML shell: allow framing from any origin (frame-ancestors *)
+  // Widget HTML shell: framing follows the calendar's Allowed Domain (DEC-019).
   //
-  // Security rationale (pv-tlal):
-  // The widget iframe contains only public, read-only event data. It has no
-  // authenticated user state, no forms, and no actions that mutate server state
-  // on behalf of a visitor. The clickjacking risk for read-only public content
-  // is negligible — there is nothing for an attacker to hijack a click toward.
+  // The policy exists so an owner controls where their calendar appears, not
+  // to defend against clickjacking: the widget's own data calls are
+  // same-origin, so the per-calendar domain setting is only enforced if it
+  // lands here. A configured domain permits it and its www twin; with none
+  // configured the calendar cannot be embedded elsewhere, only previewed on
+  // this instance ('self'). Localhost stays open for development. The calendar
+  // domain builds the policy and caches it per calendar (short TTL), bounding
+  // the per-load lookup on this public route.
   //
-  // The widget data API (/api/widget/v1/) independently enforces a per-calendar
-  // domain allowlist via Origin header validation, which protects that data
-  // endpoint — it does not gate access to this HTML shell page itself.
+  // Fails closed to 'self' before the public interface is bound or if the
+  // lookup errors. An unknown calendar gets the unconfigured policy, so the
+  // header does not reveal which calendars exist.
   //
-  // A narrowed frame-ancestors header would require a database lookup on every
-  // widget page load and would only marginally reduce an already-low residual
-  // risk. The complexity cost is not justified for public-only content.
-  //
-  // If the widget ever gains authenticated state or user-action buttons, this
-  // decision must be revisited and the per-calendar allowlist applied here too.
-  //
-  // Also remove X-Frame-Options: DENY (set globally by helmet) since it would
-  // override frame-ancestors in legacy browsers and prevent widget embedding.
-  router.use(/^\/widget\/.+/i, (req, res, next) => {
-    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  // X-Frame-Options: DENY (set globally by helmet) is removed because it would
+  // override frame-ancestors in legacy browsers and block every embed.
+  router.use(/^\/widget\/([^/]+)/i, async (req, res, next) => {
+    const calendarUrlName = req.params[0];
+    let policy = "frame-ancestors 'self'";
+    if (publicInterfaceHolder.current) {
+      try {
+        policy = await publicInterfaceHolder.current.getWidgetFrameAncestors(calendarUrlName);
+      }
+      catch (error) {
+        logger.error({ err: error }, 'Failed to resolve widget frame-ancestors policy');
+      }
+    }
+    res.setHeader('Content-Security-Policy', policy);
     res.removeHeader('X-Frame-Options');
     next();
   });

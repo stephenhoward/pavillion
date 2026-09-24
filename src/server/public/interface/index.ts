@@ -30,6 +30,11 @@ export default class PublicCalendarInterface {
     return this.calendarInterface.getCalendarByName(name);
   }
 
+  /** Proxy — see WidgetDomainService.getFrameAncestors for semantics. */
+  async getWidgetFrameAncestors(urlName: string): Promise<string> {
+    return this.calendarInterface.getWidgetFrameAncestors(urlName);
+  }
+
   /** Proxy — see CalendarService.listPublicCalendars for semantics. */
   async listPublicCalendars(): Promise<Array<{ calendar: Calendar; lastEventActivity: Date | null }>> {
     return this.calendarInterface.listPublicCalendars();

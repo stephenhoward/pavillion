@@ -15,6 +15,8 @@ import {
 } from '@/server/app_routes';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import ConfigurationInterface from '@/server/configuration/interface';
+import PublicCalendarInterface from '@/server/public/interface';
+import { PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 
 const RESERVED_MODULE = '@/common/routing/reserved-segments';
 
@@ -57,11 +59,14 @@ function buildMockConfigInterface(defaultLanguage = 'en'): ConfigurationInterfac
  * @param configInterface - Optional ConfigurationInterface stub
  * @param routerFactory - Optional createRouter replacement (used by the test
  *   that re-imports the router with a mocked reserved-segment module)
+ * @param publicInterfaceHolder - Optional public interface holder; omitted,
+ *   the router gets its default `{ current: null }` (the pre-boot state)
  */
 function buildTestApp(
   locale = 'en',
   configInterface?: ConfigurationInterface,
   routerFactory: typeof createRouter = createRouter,
+  publicInterfaceHolder?: PublicInterfaceHolder,
 ): Express {
   const app = express();
 
@@ -81,7 +86,7 @@ function buildTestApp(
   });
 
   const mockConfig = configInterface ?? buildMockConfigInterface(locale);
-  const { router } = routerFactory(mockConfig);
+  const { router } = routerFactory(mockConfig, publicInterfaceHolder);
   app.use('/', router);
 
   return app;
@@ -834,6 +839,72 @@ describe('app_routes', () => {
       const res = await request(app).get(path);
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Widget shell framing policy: per-calendar frame-ancestors
+  // -----------------------------------------------------------------------
+
+  describe('widget shell framing policy', () => {
+    const CONFIGURED_POLICY = "frame-ancestors 'self' https://example.com:* https://www.example.com:*";
+
+    function holderWith(getWidgetFrameAncestors: sinon.SinonStub): PublicInterfaceHolder {
+      return {
+        current: { getWidgetFrameAncestors } as unknown as PublicCalendarInterface,
+      };
+    }
+
+    it('should send the calendar\'s own frame-ancestors policy', async () => {
+      const stub = sinon.stub().resolves(CONFIGURED_POLICY);
+      const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
+
+      const res = await request(app).get('/widget/mycalendar');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-security-policy']).toBe(CONFIGURED_POLICY);
+      expect(res.headers['x-frame-options']).toBeUndefined();
+      expect(stub.calledOnceWith('mycalendar')).toBe(true);
+    });
+
+    it('should key the policy on the first segment of a deeper widget path', async () => {
+      const stub = sinon.stub().resolves(CONFIGURED_POLICY);
+      const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
+
+      const res = await request(app).get('/widget/mycalendar/events/abc/20260923-1900');
+
+      expect(res.status).toBe(200);
+      expect(stub.calledOnceWith('mycalendar')).toBe(true);
+    });
+
+    // The default holder is { current: null } — the state before the domains
+    // initialize. The shell must fail closed, not throw and not open up.
+    it('should permit only self framing before the public interface is bound', async () => {
+      const app = buildTestApp('en');
+
+      const res = await request(app).get('/widget/mycalendar');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-security-policy']).toBe("frame-ancestors 'self'");
+    });
+
+    it('should permit only self framing when the policy lookup fails', async () => {
+      const stub = sinon.stub().rejects(new Error('database unavailable'));
+      const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
+
+      const res = await request(app).get('/widget/mycalendar');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-security-policy']).toBe("frame-ancestors 'self'");
+    });
+
+    it('should leave the widget script unaffected', async () => {
+      const stub = sinon.stub().resolves(CONFIGURED_POLICY);
+      const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
+
+      await request(app).get('/widget/pavillion-widget.js');
+
+      expect(stub.called).toBe(false);
     });
   });
 
