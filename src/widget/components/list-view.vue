@@ -22,9 +22,10 @@ const defaultEventImage = computed(() => publicStore.defaultEventImage);
 
 /**
  * Builds the widget-router-resolved href for an event instance.
- * EventCard receives this via its detailHref prop and renders it
- * as an anchor href, so navigation flows through the widget router
- * (no openEvent click handler needed on the list view).
+ * EventCard receives this via its detailHref prop, renders it as the title
+ * anchor's href, and intercepts a plain click on that anchor to push it
+ * through the router it is mounted under — here, the widget router — so the
+ * list view needs no openEvent handler of its own.
  */
 const buildDetailHref = (instance: CalendarEventInstance): string => {
   return router.resolve({
