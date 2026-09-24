@@ -10,8 +10,8 @@ import WeekView from './week-view.vue';
 import MonthView from './month-view.vue';
 import ListView from './list-view.vue';
 import NotFound from '@/site/components/not-found.vue';
+import { isCalendarViewMode } from '@/common/model/calendar_view';
 import {
-  isValidWidgetView,
   isValidWidgetColorMode,
   isValidWidgetAccentColor,
 } from '@/common/model/widget_config';
@@ -50,7 +50,7 @@ const handleMessage = (event: MessageEvent) => {
     // the CSS custom property the value ultimately reaches.
     // The app.vue component watches these values and will apply them automatically.
     if (config && typeof config === 'object') {
-      if (isValidWidgetView(config.view)) {
+      if (isCalendarViewMode(config.view)) {
         widgetStore.viewMode = config.view;
       }
       if (isValidWidgetAccentColor(config.accentColor)) {

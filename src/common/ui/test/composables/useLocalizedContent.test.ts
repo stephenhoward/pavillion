@@ -46,7 +46,7 @@ vi.mock('@/common/i18n/cookie', () => ({
 // ---------------------------------------------------------------------------
 // Subject under test -- imported after mocks are in place
 // ---------------------------------------------------------------------------
-import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
+import { useLocalizedContent } from '@/common/ui/composables/useLocalizedContent';
 
 // ---------------------------------------------------------------------------
 // Helpers

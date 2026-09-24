@@ -127,21 +127,40 @@ everything under it.
   on the **top** PR to land the entire remaining stack in one atomic
   operation.
 
-`VERIFY:` **The server-side cascade-retarget claim is unverified.** GitHub is
-expected to cascade-rebase the remaining PRs after a bottom-up merge and
-retarget the new lowest PR at trunk, re-triggering CI on each — but this spike
-could not observe it (merging is web-UI-only and no authenticated browser
-session was available to click Merge and watch the result). Until a human
-clicks Merge once on a scratch stack and confirms the sibling PR retargets
-cleanly, treat local build-guardian re-validation of the retargeted level
-after every merge as the conservative default, rather than relying on GitHub
-CI alone as the re-validator.
+**The server-side cascade is confirmed.** Observed 2026-09-23 on stack #629
+(#626 → #628 → #635) after a human clicked Merge on #626, the bottom PR:
+GitHub rebased the two remaining branches on `origin` and re-ran CI on both.
+Each PR stayed open with a clean one-commit diff against its base — the new
+lowest level (#628) on the new trunk, the level above it (#635) still based
+on #628 — with no merged content leaking into either diff. The observation
+is of the post-merge state rather than of the retarget as it happened, so
+the ordering is inferred from the force-updated refs and the clean diffs
+rather than watched live. Local build-guardian re-validation of the
+retargeted level is therefore no longer the required default; GitHub's
+re-triggered CI is a real re-validator. Re-validate locally when the merge
+that landed below you touched files your level depends on — a judgement
+about the change, not a standing rule about the tool.
 
-After merging (and once the cascade-retarget claim is confirmed, purely a
-local catch-up step): `gh stack sync --prune` — fetches, reconciles the
-stack against trunk, and prunes local branches for merged PRs. Run it when
-resuming local work on a stack after one or more PRs merged. The `/restack`
-command wraps this.
+**The cascade does not reach your local checkout, and `gh stack sync` can
+fail against a stale one.** The remote branches move; the local ones do not.
+Running `gh stack sync --prune` with stale locals tries to rebase the
+pre-cascade local commit onto the new trunk — work the server has already
+done — and in the case above it stopped with `Conflict detected rebasing
+<branch> onto main` / `All branches restored to their original state`. Do
+not resolve that conflict: the remote is already correct. Fetch, then reset
+each unmerged stack branch to its `origin` counterpart (`git reset --hard
+origin/<branch>`), and rebase upward from there only if you hold local
+commits the remote does not.
+
+In a worktree, `gh stack sync` additionally reports `Failed to fast-forward
+main: ... cannot force update the branch 'main' used by worktree at <path>`.
+That is benign — `main` is not the branch you are working on, and the stack
+branches are reconciled regardless.
+
+After merging, `gh stack sync --prune` remains the local catch-up step —
+fetches, reconciles the stack against trunk, and prunes local branches for
+merged PRs. Run it when resuming local work on a stack after one or more
+PRs merged. The `/restack` command wraps this.
 
 ## Worktree mode: native gh-stack-in-worktrees (permanent decision)
 

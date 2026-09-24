@@ -6,7 +6,7 @@ import axios from 'axios';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/common/constants';
 
-import { Calendar, DefaultDateRange } from '@/common/model/calendar';
+import { Calendar, DefaultDateRange, DEFAULT_DATE_RANGES, isDefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { MediaEntity } from '@/server/media/entity/media';
@@ -1477,9 +1477,8 @@ class CalendarService {
 
     // Validate defaultDateRange if provided
     if (settings.defaultDateRange) {
-      const validRanges: DefaultDateRange[] = ['1week', '2weeks', '1month'];
-      if (!validRanges.includes(settings.defaultDateRange)) {
-        throw new ValidationError('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month');
+      if (!isDefaultDateRange(settings.defaultDateRange)) {
+        throw new ValidationError(`Invalid defaultDateRange. Must be one of: ${DEFAULT_DATE_RANGES.join(', ')}`);
       }
     }
 

@@ -234,12 +234,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './category-pill-selector.vue';
 import { getThisWeek, getNextWeek, getDefaultDateRange } from '@/common/utils/datePresets';
-import type { ViewMode } from '@/widget/stores/widgetStore';
+import type { CalendarViewMode } from '@/common/model/calendar_view';
 import { Search, CalendarDays } from 'lucide-vue-next';
 
 // Accept optional widget view mode prop
 const props = defineProps<{
-  widgetViewMode?: ViewMode;
+  widgetViewMode?: CalendarViewMode;
 }>();
 
 const { t } = useTranslation('system', {

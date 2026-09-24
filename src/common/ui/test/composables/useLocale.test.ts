@@ -42,7 +42,7 @@ vi.mock('i18next', () => ({
 // ---------------------------------------------------------------------------
 // Subject under test — imported after mocks are in place
 // ---------------------------------------------------------------------------
-import { useLocale } from '@/site/composables/useLocale';
+import { useLocale } from '@/common/ui/composables/useLocale';
 
 // ---------------------------------------------------------------------------
 // Helpers

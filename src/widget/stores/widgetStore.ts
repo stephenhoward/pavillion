@@ -1,21 +1,20 @@
 import { defineStore } from 'pinia';
 import { DateTime } from 'luxon';
 import type { LocationQuery } from 'vue-router';
+import { type CalendarViewMode, isCalendarViewMode } from '@/common/model/calendar_view';
 import {
   WIDGET_CONFIG_DEFAULTS,
-  isValidWidgetView,
   isValidWidgetColorMode,
   isValidWidgetAccentColor,
-  type WidgetView,
   type WidgetColorMode,
 } from '@/common/model/widget_config';
+import { VIEW_QUERY_KEY } from '@/common/routing/calendar-view-query';
 
-export type ViewMode = WidgetView;
 export type ColorMode = WidgetColorMode;
 
 export interface WidgetState {
   // Configuration
-  viewMode: ViewMode;
+  viewMode: CalendarViewMode;
   accentColor: string;
   colorMode: ColorMode;
   calendarUrlName: string | null;
@@ -72,7 +71,7 @@ export const useWidgetStore = defineStore('widget', {
       }
 
       // view
-      if (isValidWidgetView(widgetConfig.view)) {
+      if (isCalendarViewMode(widgetConfig.view)) {
         this.viewMode = widgetConfig.view;
       }
       else {
@@ -134,8 +133,8 @@ export const useWidgetStore = defineStore('widget', {
      */
     parseConfig(urlParams: URLSearchParams) {
       // Parse view mode
-      const view = urlParams.get('view');
-      if (view !== null && isValidWidgetView(view)) {
+      const view = urlParams.get(VIEW_QUERY_KEY);
+      if (view !== null && isCalendarViewMode(view)) {
         this.viewMode = view;
       }
 

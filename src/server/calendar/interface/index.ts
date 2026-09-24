@@ -74,7 +74,7 @@ export default class CalendarInterface {
     // consumers.
     this.eventInstanceService = new EventInstanceService(eventBus, this.eventService);
     this.categoryService = new CategoryService(this.calendarService);
-    this.widgetDomainService = new WidgetDomainService();
+    this.widgetDomainService = new WidgetDomainService(this.calendarService);
     this.widgetConfigService = new WidgetConfigService(this.calendarService);
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
@@ -187,6 +187,19 @@ export default class CalendarInterface {
 
   async getCalendarForWidget(urlName: string): Promise<Calendar> {
     return this.calendarService.getCalendarForWidget(urlName);
+  }
+
+  /**
+   * The frame-ancestors Content-Security-Policy for a calendar's widget HTML
+   * shell, derived from its allowed domain. See
+   * WidgetDomainService.getFrameAncestors for caching and unknown-calendar
+   * behavior.
+   *
+   * @param urlName - Calendar URL name from the widget path
+   * @returns A complete Content-Security-Policy header value
+   */
+  async getWidgetFrameAncestors(urlName: string): Promise<string> {
+    return this.widgetDomainService.getFrameAncestors(urlName);
   }
 
   async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {

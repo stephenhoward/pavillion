@@ -121,8 +121,9 @@ class WidgetRoutes {
   }
 
   /**
-   * Get calendar metadata for widget display.
-   * Returns basic calendar information needed to render the widget.
+   * Get the widget display configuration for a calendar.
+   * Returns the calendar's identity (id, urlName) plus widgetConfig. Calendar
+   * content and display settings come from the public API, not this endpoint.
    *
    * @route GET /api/widget/v1/calendars/:urlName
    */
@@ -142,9 +143,11 @@ class WidgetRoutes {
       res.setHeader('Cache-Control', 'public, max-age=60');
       res.setHeader('Vary', 'Origin');
 
-      // Return calendar data with widget config merged in
+      // Explicit projection: this response is exposed to the embedding
+      // origin, so operator-tier calendar fields must not ride along.
       res.json({
-        ...calendar.toObject(),
+        id: calendar.id,
+        urlName: calendar.urlName,
         widgetConfig: widgetConfig.toObject(),
       });
     }

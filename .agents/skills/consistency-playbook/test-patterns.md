@@ -108,7 +108,12 @@ describe('CategoryService', () => {
 - Nested `describe` blocks: outer = class name, inner = method name
 - `beforeEach` creates sandbox, mocks, and test data
 - `afterEach` calls `sandbox.restore()`
-- Test names use `should {expected behavior}` format
+- Test names are a plain-English statement of the expected outcome, in one of two accepted forms:
+  `should {expected behavior}` ("should throw error for non-existent calendar") or a direct present-tense verb
+  ("rejects when the calendar does not exist"). Both are in wide use across every directory and every kind of
+  test; neither is tied to test type. **The rule is consistency within a file**: pick the dominant form of the
+  file you are editing and use it for every new case; a new file may use either form but must use only one.
+  Reviewers and auditors flag mixing within a file, never a file's choice of form.
 
 ---
 
@@ -246,3 +251,4 @@ describe('CategoryStore', () => {
 - **Assertion style for stubs**: Some tests use `expect(stub.calledOnce).toBe(true)` while others use `expect(stub.calledOnce).toBeTruthy()`. Both work, but `toBeTruthy()` is more common in the codebase.
 - **Test data factories**: There are no shared test data factory functions. Each test file creates its own test data in `beforeEach`. This is acceptable for the current codebase size — a shared factory would be premature abstraction.
 - **Integration vs unit test distinction**: Integration tests (in `vitest.integration.config.ts`) test against a real database. Unit tests mock all DB access with sinon stubs. The two should not be mixed in the same file.
+- **Test-name form**: roughly 60% of cases use `should {behavior}` and 40% use a direct present-tense verb, interleaved across server, client, common and site tests with no structural pattern. About 10% of files mix both forms — those are the drift; an internally consistent file in either form is not.

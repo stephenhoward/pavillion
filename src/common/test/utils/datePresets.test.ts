@@ -170,16 +170,46 @@ describe('Date Preset Utilities', () => {
       expect(end.diff(start, 'days').days).toBe(7);
     });
 
-    it('should span exactly 30 days for 1month range', () => {
+    it('should span one calendar month for 1month range', () => {
       const testDate = DateTime.fromISO('2025-01-15');
       const { startDate, endDate } = getDefaultDateRange('1month', testDate);
 
       expect(startDate).toBe('2025-01-15');
-      expect(endDate).toBe('2025-02-14');
+      expect(endDate).toBe('2025-02-15');
+    });
 
-      const start = DateTime.fromISO(startDate);
-      const end = DateTime.fromISO(endDate);
-      expect(end.diff(start, 'days').days).toBe(30);
+    it('should span whole calendar months for the multi-month ranges', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+
+      expect(getDefaultDateRange('3months', testDate).endDate).toBe('2025-04-15');
+      expect(getDefaultDateRange('6months', testDate).endDate).toBe('2025-07-15');
+      expect(getDefaultDateRange('9months', testDate).endDate).toBe('2025-10-15');
+      expect(getDefaultDateRange('12months', testDate).endDate).toBe('2026-01-15');
+    });
+
+    it('should keep today as the start date for the multi-month ranges', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+
+      for (const range of ['3months', '6months', '9months', '12months'] as const) {
+        expect(getDefaultDateRange(range, testDate).startDate).toBe('2025-01-15');
+      }
+    });
+
+    it('should clamp to the last day of a shorter target month', () => {
+      // 31 January has no 31st three months later (30 April), and February
+      // 2024 is a leap month, so both clamps are exercised here.
+      const testDate = DateTime.fromISO('2024-01-31');
+
+      expect(getDefaultDateRange('1month', testDate).endDate).toBe('2024-02-29');
+      expect(getDefaultDateRange('3months', testDate).endDate).toBe('2024-04-30');
+    });
+
+    it('should cross the year boundary for 12months', () => {
+      const testDate = DateTime.fromISO('2025-11-20');
+      const { startDate, endDate } = getDefaultDateRange('12months', testDate);
+
+      expect(startDate).toBe('2025-11-20');
+      expect(endDate).toBe('2026-11-20');
     });
 
     it('should default to 2weeks if no range type specified', () => {

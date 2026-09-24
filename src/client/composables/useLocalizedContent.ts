@@ -5,9 +5,14 @@ import type { EventLocationSpace } from '@/common/model/location';
  * Client-side composable for resolving localized content from translated models.
  *
  * Uses `i18next.language` directly (the client app's i18n integration), with
- * fallback to the first available language on the model. The site app has its
- * own equivalent at `src/site/composables/useLocalizedContent.ts` that uses
- * Vue's `useI18n` instead — keep them separate.
+ * fallback to the first available language on the model.
+ *
+ * The shared equivalent is `src/common/ui/composables/useLocalizedContent.ts`,
+ * which the public site and the widget both consume. It reads the language
+ * through `useLocale`, which derives the locale from a locale-prefixed route
+ * (`/es/my-calendar`). The client app has no such routes, so it reads
+ * `i18next.language` instead and the two stay separate. Reconciling them is
+ * part of the open client-consumer question on pv-z1in.
  */
 export function useLocalizedContent() {
   /**

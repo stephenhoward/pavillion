@@ -1,89 +1,3 @@
-<template>
-  <ModalLayout
-    :title="localCategory?.id ? t('edit_category_title') : t('add_category_title')"
-    modal-class="category-editor-modal"
-    @close="$emit('close')"
-  >
-    <div class="category-editor">
-      <div
-        v-if="state.error"
-        class="alert alert--error"
-        role="alert"
-      >
-        {{ state.error }}
-      </div>
-
-      <p class="form-helper">{{ t('category_name_help') }}</p>
-
-      <div class="language-fields">
-        <div
-          v-for="lang in localCategory?.getLanguages()"
-          :key="lang"
-          class="language-field"
-        >
-          <label class="language-label">{{ iso6391.getNativeName(lang) }}:</label>
-          <div class="language-input-wrapper">
-            <input
-              type="text"
-              class="language-input"
-              v-model="localCategory.content(lang).name"
-              :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
-              :placeholder="t('category_name_placeholder')"
-              :disabled="state.isSaving"
-              @keyup.enter="saveCategory"
-              ref="categoryNameInput"
-            />
-            <button
-              v-if="localCategory && localCategory.getLanguages().length > 1"
-              type="button"
-              class="remove-language-button"
-              :aria-label="t('remove_language')"
-              @click="removeLanguage(lang)"
-            >
-              <X :size="16" :stroke-width="2" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="add-language-button"
-        @click="openLanguagePicker"
-      >
-        + {{ t('add_language') }}
-      </button>
-
-      <div class="form-actions">
-        <button
-          type="button"
-          class="btn btn--ghost"
-          @click="$emit('close')"
-          :disabled="state.isSaving"
-        >
-          {{ t('cancel_button') }}
-        </button>
-        <PillButton
-          variant="primary"
-          @click="saveCategory"
-          :disabled="state.isSaving || !canSaveCategory()"
-        >
-          {{ state.isSaving ? (localCategory?.id ? t('updating') : t('creating')) : (localCategory?.id ? t('save_button') : t('create_button')) }}
-        </PillButton>
-      </div>
-    </div>
-
-    <!-- Language Picker - Inside dialog for proper z-index layering -->
-    <LanguagePicker
-      v-if="showLanguagePicker"
-      :languages="availableLanguages"
-      :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
-      @select="handleAddLanguage"
-      @close="closeLanguagePicker"
-    />
-  </ModalLayout>
-</template>
-
 <script setup>
 import { reactive, ref, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
@@ -234,6 +148,92 @@ onMounted(() => {
 });
 </script>
 
+<template>
+  <ModalLayout
+    :title="localCategory?.id ? t('edit_category_title') : t('add_category_title')"
+    modal-class="category-editor-modal"
+    @close="$emit('close')"
+  >
+    <div class="category-editor">
+      <div
+        v-if="state.error"
+        class="alert alert--error"
+        role="alert"
+      >
+        {{ state.error }}
+      </div>
+
+      <p class="form-helper">{{ t('category_name_help') }}</p>
+
+      <div class="language-fields">
+        <div
+          v-for="lang in localCategory?.getLanguages()"
+          :key="lang"
+          class="language-field"
+        >
+          <label class="language-label">{{ iso6391.getNativeName(lang) }}:</label>
+          <div class="language-input-wrapper">
+            <input
+              type="text"
+              class="language-input"
+              v-model="localCategory.content(lang).name"
+              :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
+              :placeholder="t('category_name_placeholder')"
+              :disabled="state.isSaving"
+              @keyup.enter="saveCategory"
+              ref="categoryNameInput"
+            />
+            <button
+              v-if="localCategory && localCategory.getLanguages().length > 1"
+              type="button"
+              class="remove-language-button"
+              :aria-label="t('remove_language')"
+              @click="removeLanguage(lang)"
+            >
+              <X :size="16" :stroke-width="2" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="add-language-button"
+        @click="openLanguagePicker"
+      >
+        + {{ t('add_language') }}
+      </button>
+
+      <div class="form-actions">
+        <button
+          type="button"
+          class="btn btn--ghost"
+          @click="$emit('close')"
+          :disabled="state.isSaving"
+        >
+          {{ t('cancel_button') }}
+        </button>
+        <PillButton
+          variant="primary"
+          @click="saveCategory"
+          :disabled="state.isSaving || !canSaveCategory()"
+        >
+          {{ state.isSaving ? (localCategory?.id ? t('updating') : t('creating')) : (localCategory?.id ? t('save_button') : t('create_button')) }}
+        </PillButton>
+      </div>
+    </div>
+
+    <!-- Language Picker - Inside dialog for proper z-index layering -->
+    <LanguagePicker
+      v-if="showLanguagePicker"
+      :languages="availableLanguages"
+      :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
+      @select="handleAddLanguage"
+      @close="closeLanguagePicker"
+    />
+  </ModalLayout>
+</template>
+
 <style lang="scss" scoped>
 @use '../../../assets/style/components/calendar-admin' as *;
 @use '../../../assets/style/mixins/buttons' as *;
@@ -321,23 +321,6 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: var(--pav-space-4);
   padding-top: var(--pav-space-4);
-  border-top: 1px solid var(--pav-border-primary);
-}
-
-.alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: var(--pav-border-radius-lg);
-  font-size: var(--pav-font-size-small);
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
+  border-block-start: var(--pav-border-width-1) solid var(--pav-border-primary);
 }
 </style>

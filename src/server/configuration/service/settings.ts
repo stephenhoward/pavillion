@@ -2,7 +2,7 @@ import config from 'config';
 import { Op } from 'sequelize';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import SettingsContentEntity from "@/server/configuration/entity/settings_content";
-import type { DefaultDateRange } from '@/common/model/calendar';
+import { isDefaultDateRange, type DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import { isPolicySourceSafe } from '@/common/utils/render-markdown';
 import { createLogger } from '@/server/common/helper/logger';
@@ -52,8 +52,8 @@ class ServiceSettings {
         this.config.siteTitle = entity.value;
       }
       if ( entity.parameter == 'defaultDateRange' ) {
-        if ( ['1week', '2weeks', '1month'].includes(entity.value) ) {
-          this.config.defaultDateRange = entity.value as DefaultDateRange;
+        if ( isDefaultDateRange(entity.value) ) {
+          this.config.defaultDateRange = entity.value;
         }
       }
       if ( entity.parameter == 'defaultLanguage' ) {
@@ -373,7 +373,7 @@ class ServiceSettings {
 
     // Validate the defaultDateRange
     if ( parameter == 'defaultDateRange' ) {
-      if (!['1week', '2weeks', '1month'].includes(value as string)) {
+      if (!isDefaultDateRange(value)) {
         logger.error({ value }, 'Invalid default date range');
         return false;
       }
@@ -445,8 +445,8 @@ class ServiceSettings {
         }
         break;
       case 'defaultDateRange':
-        if (['1week', '2weeks', '1month'].includes(value as string)) {
-          this.config.defaultDateRange = value as DefaultDateRange;
+        if (isDefaultDateRange(value)) {
+          this.config.defaultDateRange = value;
         }
         else {
           logger.error({ value }, 'Invalid default date range');

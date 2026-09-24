@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon';
+import { DateTime, type DurationLike } from 'luxon';
 import type { DefaultDateRange } from '@/common/model/calendar';
 
 /**
@@ -10,12 +10,18 @@ export interface DateRange {
 }
 
 /**
- * Map of range type to number of days
+ * Map of range type to the duration it spans. Month ranges are calendar months
+ * rather than a fixed day count, so "6 months" ends on the same day of the
+ * month it started on (clamped when the target month is shorter).
  */
-const rangeDaysMap: Record<DefaultDateRange, number> = {
-  '1week': 7,
-  '2weeks': 14,
-  '1month': 30,
+const rangeDurationMap: Record<DefaultDateRange, DurationLike> = {
+  '1week': { weeks: 1 },
+  '2weeks': { weeks: 2 },
+  '1month': { months: 1 },
+  '3months': { months: 3 },
+  '6months': { months: 6 },
+  '9months': { months: 9 },
+  '12months': { months: 12 },
 };
 
 /**
@@ -92,14 +98,14 @@ export function getNextWeek(referenceDate?: DateTime): DateRange {
  * Get the default date range for public calendar view
  * This is used when no explicit date filter is specified.
  *
- * @param rangeType - The range type ('1week', '2weeks', '1month'), defaults to '2weeks'
+ * @param rangeType - One of DEFAULT_DATE_RANGES, defaults to '2weeks'
  * @param referenceDate - Optional reference date (defaults to now)
  * @returns DateRange with startDate (today) and endDate based on range type
  */
 export function getDefaultDateRange(rangeType: DefaultDateRange = '2weeks', referenceDate?: DateTime): DateRange {
   const today = (referenceDate || DateTime.now()).startOf('day');
-  const days = rangeDaysMap[rangeType] || 14;
-  const endDate = today.plus({ days }).endOf('day');
+  const duration = rangeDurationMap[rangeType] || rangeDurationMap['2weeks'];
+  const endDate = today.plus(duration).endOf('day');
 
   return {
     startDate: today.toISODate() as string,

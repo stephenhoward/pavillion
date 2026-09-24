@@ -4,7 +4,7 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import { InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { Account } from '@/common/model/account';
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 
 describe('CalendarService - Validation', () => {
@@ -112,7 +112,17 @@ describe('CalendarService - Validation', () => {
 
       await expect(
         service.updateCalendarSettings(mockAccount, 'cal-123', { defaultDateRange: 'invalid' as any }),
-      ).rejects.toThrow('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month');
+      ).rejects.toThrow('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month, 3months, 6months, 9months, 12months');
+    });
+
+    it('should accept every supported defaultDateRange', async () => {
+      // Validation runs before the calendar lookup, so a supported range gets
+      // past it and fails later on the missing calendar instead.
+      for (const range of DEFAULT_DATE_RANGES) {
+        await expect(
+          service.updateCalendarSettings(mockAccount, 'cal-123', { defaultDateRange: range }),
+        ).rejects.not.toThrow(ValidationError);
+      }
     });
 
     it('should throw ValidationError when defaultEventImageId is not a valid UUID', async () => {
