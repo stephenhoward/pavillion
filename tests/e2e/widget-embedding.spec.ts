@@ -212,6 +212,56 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('custom date range survives the event-detail round trip', async ({ page }) => {
+    // Loaded at the widget URL directly, the way an iframe reload or a deep
+    // link arrives, with a range the default window would not produce.
+    const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+    const startDate = isoDate(new Date());
+    const endDate = isoDate(new Date(Date.now() + 75 * 24 * 60 * 60 * 1000));
+
+    const nextEventsRequest = () => page.waitForRequest(
+      (request) => new URL(request.url()).pathname === '/api/public/v1/calendar/test_calendar/events',
+    );
+    const expectRange = (request: { url(): string }) => {
+      const params = new URL(request.url()).searchParams;
+      expect(params.get('startDate')).toBe(startDate);
+      expect(params.get('endDate')).toBe(endDate);
+    };
+    const hasListQuery = (url: URL) => url.pathname === '/widget/test_calendar'
+      && url.searchParams.get('startDate') === startDate
+      && url.searchParams.get('endDate') === endDate
+      && url.searchParams.get('lang') === 'en';
+
+    const cards = page.locator('article.event-card');
+    const titleLink = page.locator('article.event-card .event-title-link').first();
+
+    // Direct load: the URL range is what gets fetched, and it stays in the URL.
+    const initialLoad = nextEventsRequest();
+    await page.goto(`${env.baseURL}/widget/test_calendar?startDate=${startDate}&endDate=${endDate}&lang=en`);
+    expectRange(await initialLoad);
+    await expect(cards.first()).toBeVisible({ timeout: 15000 });
+    await expect(page).toHaveURL(hasListQuery);
+    const listCount = await cards.count();
+
+    // In-widget Back button.
+    await titleLink.click();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    const afterBackButton = nextEventsRequest();
+    await page.locator('.back-link').first().click();
+    expectRange(await afterBackButton);
+    await expect(page).toHaveURL(hasListQuery);
+    await expect(cards).toHaveCount(listCount, { timeout: 10000 });
+
+    // Browser back.
+    await titleLink.click();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    const afterHistoryBack = nextEventsRequest();
+    await page.goBack();
+    expectRange(await afterHistoryBack);
+    await expect(page).toHaveURL(hasListQuery);
+    await expect(cards).toHaveCount(listCount, { timeout: 10000 });
+  });
+
   test('modifier-click on an event title opens the detail in a new tab', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'CDP target discovery is Chromium-only');
 

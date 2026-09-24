@@ -261,3 +261,39 @@ describe('widget router server-config guard', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('widget router list-query capture', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    stubFetch({ ok: true, body: { widgetConfig: SERVER_CONFIG } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('records the calendar list query when navigating from the list to event detail', async () => {
+    const store = useWidgetStore();
+
+    await router.push('/widget/list_cal?startDate=2026-11-01&endDate=2026-11-30&search=climate&categories=cat-1&categories=cat-2&lang=fr');
+    await router.push('/widget/list_cal/events/evt-1/20261105-1800');
+
+    expect(store.lastListQuery).toEqual({
+      startDate: '2026-11-01',
+      endDate: '2026-11-30',
+      search: 'climate',
+      categories: ['cat-1', 'cat-2'],
+      lang: 'fr',
+    });
+  });
+
+  it('keeps the recorded list query when navigating onward from a route that is not the list', async () => {
+    const store = useWidgetStore();
+
+    await router.push('/widget/onward_cal?startDate=2026-11-01&endDate=2026-11-30');
+    await router.push('/widget/onward_cal/events/evt-1');
+    await router.push('/widget/onward_cal/events/evt-2');
+
+    expect(store.lastListQuery).toEqual({ startDate: '2026-11-01', endDate: '2026-11-30' });
+  });
+});
