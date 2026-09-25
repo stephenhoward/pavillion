@@ -266,6 +266,82 @@ test('admin-saved accent color is injected as CSS custom property in rendered wi
   await cleanup();
 });
 
+// The injected property is only half the contract: the list view's event
+// time and day-heading marker, and the detail page's accents, must actually
+// paint with it. They used to read compile-time SCSS accents and stayed the
+// default orange whatever the owner configured (pv-nskn). Checked under both
+// OS schemes, since each theme reads its own fixed-mode accent property.
+test('list view and event detail paint with the saved accent', async ({ page, browser }) => {
+  await loginAsAdmin(page, env.baseURL);
+  await openWidgetAdminTab(page, env.baseURL);
+
+  // The mitown-climate repro value: a green far from the default orange.
+  const ACCENT = '#669c35';
+  const ACCENT_RGB = 'rgb(102, 156, 53)';
+  const saved = await saveWidgetConfig(page, { accentColor: ACCENT });
+  expect(saved.accentColor).toBe(ACCENT);
+  expect(saved.colorMode).toBe('auto');
+
+  for (const osScheme of ['light', 'dark'] as const) {
+    await test.step(`${osScheme} OS`, async () => {
+      const { embedPage, cleanup } = await openWidgetEmbed(browser, env.baseURL, { colorScheme: osScheme });
+      const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
+      await expect(iframe.locator('.widget-root')).toBeVisible({ timeout: 20000 });
+      // An earlier test saved the week view; `?view=list` overrides it.
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await expect(iframe.locator('.list-view article.event-card').first()).toBeVisible({ timeout: 20000 });
+
+      await expect.poll(
+        async () => ({
+          eventTime: await iframe.locator('.list-view .event-time').first()
+            .evaluate(el => getComputedStyle(el).color),
+          dayMarker: await iframe.locator('.list-view .day-heading').first()
+            .evaluate(el => getComputedStyle(el, '::before').backgroundColor),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ eventTime: ACCENT_RGB, dayMarker: ACCENT_RGB });
+
+      // The event detail page renders the shared EventDetailBody, whose date
+      // icon and Add to Calendar button carry the accent too.
+      await iframe.locator('.list-view .event-title-link').first().click();
+      await expect(iframe.locator('.add-to-calendar-btn')).toBeVisible({ timeout: 20000 });
+      await expect.poll(
+        async () => ({
+          dateIcon: await iframe.locator('.datetime-icon--date').first()
+            .evaluate(el => getComputedStyle(el).color),
+          addToCalendar: await iframe.locator('.add-to-calendar-btn')
+            .evaluate(el => getComputedStyle(el).color),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ dateIcon: ACCENT_RGB, addToCalendar: ACCENT_RGB });
+
+      // Hover reads --pav-accent-hover, which injectAccentColor derives from
+      // the accent (towards black in light, towards white in dark). The seed
+      // has no event with an external link, so the linked category badge —
+      // which reads the same token as the More Information button — stands in.
+      // The expected colour is resolved by the browser from the same mix, so
+      // the comparison does not depend on how color-mix() serialises.
+      const mixTarget = osScheme === 'light' ? 'black' : 'white';
+      const expectedHover = await iframe.locator('.widget-root').evaluate((root, mix) => {
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = mix;
+        root.appendChild(probe);
+        const value = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return value;
+      }, `color-mix(in srgb, ${ACCENT} 90%, ${mixTarget})`);
+      const badge = iframe.locator('a.event-category-badge').first();
+      await badge.hover();
+      await expect.poll(
+        () => badge.evaluate(el => getComputedStyle(el).backgroundColor),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toBe(expectedHover);
+
+      await cleanup();
+    });
+  }
+});
+
 // ============================================================================
 // Color mode override scenarios (pv-16wd.3.2 scenarios 2–4)
 // ============================================================================

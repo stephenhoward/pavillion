@@ -351,19 +351,14 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   padding: $public-space-xs $public-space-md;
   border-radius: $public-radius-full;
   background-color: rgba(255, 255, 255, 0.9);
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-medium;
   margin-bottom: $public-space-md;
 
+  // The translucent badge fill has no token.
   @include public-dark-mode {
     background-color: rgba(30, 30, 35, 0.85);
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background-color: rgba(255, 255, 255, 0.9);
-    color: $public-text-primary-light;
   }
 }
 
@@ -377,24 +372,16 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   gap: $public-space-sm;
   padding: $public-space-xs $public-space-md;
   border-radius: $public-radius-full;
-  background-color: $public-error-light;
-  color: #fff;
+  background-color: var(--pav-text-error);
+  // The page surface as ink: white on the light error red, near-black on
+  // the dark theme's lighter red.
+  color: var(--pav-surface-primary);
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-semibold;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
   margin-bottom: $public-space-md;
   margin-right: $public-space-sm;
-
-  @include public-dark-mode {
-    background-color: $public-error-dark;
-    color: $public-bg-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-error-light;
-    color: #fff;
-  }
 }
 
 // ================================================================
@@ -415,7 +402,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   font-weight: $public-font-weight-bold;
   letter-spacing: $public-letter-spacing-tight;
   line-height: $public-line-height-tight;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-lg 0;
 
   @include public-tablet-up {
@@ -424,14 +411,6 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 
   @include public-desktop-up {
     font-size: 48px;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
   }
 }
 
@@ -453,42 +432,18 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   gap: $public-space-sm;
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-medium;
-  color: $public-text-secondary-light;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
+  color: var(--pav-text-secondary);
 }
 
 .datetime-icon {
   flex-shrink: 0;
 
   &--date {
-    color: var(--pav-accent-light);
-
-    @include public-dark-mode {
-      color: var(--pav-accent-dark);
-    }
-
-    @include public-light-mode-override {
-      color: var(--pav-accent-light);
-    }
+    color: var(--pav-accent);
   }
 
   &--time {
-    color: $public-text-secondary-light;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-    }
-
-    @include public-light-mode-override {
-      color: $public-text-secondary-light;
-    }
+    color: var(--pav-text-secondary);
   }
 }
 
@@ -512,32 +467,16 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 .about-heading {
   font-size: $public-font-size-md;
   font-weight: $public-font-weight-semibold;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-md 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 .event-description {
   font-size: $public-font-size-md;
   line-height: $public-line-height-relaxed;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-xl 0;
   white-space: pre-line;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-  }
 }
 
 .categories-section {
@@ -549,16 +488,8 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   font-weight: $public-font-weight-semibold;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-sm 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 .category-badges {
@@ -576,16 +507,8 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   // When rendered as <a> (categoryHrefBuilder provided), enable hover affordances.
   // When rendered as <span> (no builder), hover styles still apply but cursor stays default.
   &:is(a):hover {
-    background-color: $public-accent-hover-light;
+    background-color: var(--pav-accent-hover);
     transform: translateY(-1px);
-
-    @include public-dark-mode {
-      background-color: $public-accent-hover-dark;
-    }
-
-    @include public-light-mode-override {
-      background-color: $public-accent-hover-light;
-    }
   }
 
   &:is(span) {
@@ -619,16 +542,8 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 }
 
 .card-icon {
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   flex-shrink: 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 .card-heading {
@@ -636,47 +551,23 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   font-weight: $public-font-weight-semibold;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 // Location card
 .location-name {
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-medium;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-xs 0;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-  }
 }
 
 .location-address {
   font-size: $public-font-size-sm;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 // Accessibility card — layered Venue (Place) + Space subsections.
@@ -690,47 +581,23 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 .accessibility-subheading {
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-semibold;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-xs 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 .accessibility-info {
   font-size: $public-font-size-base;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0;
   white-space: pre-line;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-  }
 }
 
 // Recurrence card
 .recurrence-text {
   font-size: $public-font-size-base;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-  }
 }
 
 // ================================================================
