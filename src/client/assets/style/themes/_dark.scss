@@ -61,6 +61,17 @@
   --pav-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 30%), 0 1px 2px -1px rgb(0 0 0 / 30%);
   --pav-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 30%), 0 2px 4px -2px rgb(0 0 0 / 30%);
   --pav-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 30%), 0 4px 6px -4px rgb(0 0 0 / 30%);
+
+  /* Shared-component tokens (light values and rationale in _light.scss) */
+  --pav-accent: var(--pav-color-interactive-primary);
+  --pav-accent-hover: var(--pav-color-interactive-primary-hover);
+  --pav-border-medium: var(--pav-color-stone-600);
+  --pav-border-strong: var(--pav-color-stone-500);
+  --pav-success: var(--pav-color-success);
+  --pav-success-bg: var(--pav-color-alert-success-bg);
+  --pav-source-pill-bg: oklch(0.725 0.143 232.661 / 0.15);
+  --pav-source-pill-color: var(--pav-color-sky-300);
+  --pav-source-pill-hover-bg: oklch(0.725 0.143 232.661 / 0.25);
 }
 
 /* Dark mode via system preference */
@@ -123,5 +134,16 @@
     --pav-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 30%), 0 1px 2px -1px rgb(0 0 0 / 30%);
     --pav-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 30%), 0 2px 4px -2px rgb(0 0 0 / 30%);
     --pav-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 30%), 0 4px 6px -4px rgb(0 0 0 / 30%);
+
+    /* Shared-component tokens (light values and rationale in _light.scss) */
+    --pav-accent: var(--pav-color-interactive-primary);
+    --pav-accent-hover: var(--pav-color-interactive-primary-hover);
+    --pav-border-medium: var(--pav-color-stone-600);
+    --pav-border-strong: var(--pav-color-stone-500);
+    --pav-success: var(--pav-color-success);
+    --pav-success-bg: var(--pav-color-alert-success-bg);
+    --pav-source-pill-bg: oklch(0.725 0.143 232.661 / 0.15);
+    --pav-source-pill-color: var(--pav-color-sky-300);
+    --pav-source-pill-hover-bg: oklch(0.725 0.143 232.661 / 0.25);
   }
 }

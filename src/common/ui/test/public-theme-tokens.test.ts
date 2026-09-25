@@ -20,6 +20,11 @@ import path from 'path';
 const MIXINS_PATH = path.join(process.cwd(), 'src/common/ui/assets/mixins.scss');
 const TOKENS_DOC_PATH = path.join(process.cwd(), 'src/common/ui/TOKENS.md');
 const APP_STYLE_DIRS = ['src/site', 'src/widget'].map(dir => path.join(process.cwd(), dir));
+const CLIENT_THEME_FILES = [
+  'src/client/assets/style/themes/_light.scss',
+  'src/client/assets/style/themes/_dark.scss',
+  'src/client/assets/style/tokens/_shadows.scss',
+].map(file => path.join(process.cwd(), file));
 
 type Declarations = Map<string, string>;
 
@@ -151,6 +156,21 @@ describe('public-theme-tokens', () => {
       .filter(({ base, token }) => !new RegExp(`^\\|\\s*\`${base}\`\\s*\\|\\s*\`${token}\`\\s*\\|`, 'm').test(doc))
       .map(({ base, token }) => `${base} -> ${token}`);
     expect(unrecorded).toEqual([]);
+  });
+
+  /**
+   * A shared component may read any token TOKENS.md records — the same set this
+   * mixin emits, which the test above holds it to — so the client, which
+   * declares its tokens natively rather than through this mixin, has to declare
+   * every one of them too, or the component renders unstyled there.
+   */
+  it('has every recorded token declared by the client theme layer', () => {
+    const recorded = bases.map(tokenFor);
+    const clientDeclared = new Set(CLIENT_THEME_FILES.flatMap(file =>
+      [...customProperties(readFileSync(file, 'utf-8')).keys()]));
+
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(recorded.filter(token => !token || !clientDeclared.has(token))).toEqual([]);
   });
 
   it('is included only below the document root, where its dark branch can match', () => {

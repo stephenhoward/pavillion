@@ -6,6 +6,7 @@ import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import FollowedEventsView from '@/client/components/logged_in/feed/events.vue';
+import EmptyState from '@/common/ui/components/EmptyState.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
@@ -90,6 +91,8 @@ describe('FollowedEventsView', () => {
               name: 'Events',
               description: 'Events from calendars you follow',
               no_events: 'No events',
+              no_events_yet: 'Events from calendars you follow will appear here.',
+              guide_link: 'How following and reposting work',
               follow_button: 'Follow a Calendar',
               untitled_event: 'Untitled Event',
               report_button: 'Report',
@@ -116,10 +119,54 @@ describe('FollowedEventsView', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('No events');
-    const button = wrapper.find('button.btn--cta');
+    const empty = wrapper.findComponent(EmptyState);
+    expect(empty.exists()).toBe(true);
+    expect(empty.find('h2').text()).toBe('No events');
+
+    const button = empty.find('button.btn--cta');
     expect(button.exists()).toBe(true);
     expect(button.text()).toContain('Follow a Calendar');
+    expect(empty.find('button.doc-link').text()).toBe('How following and reposting work');
+  });
+
+  it('shows the shared empty state while followed calendars have no events yet', () => {
+    const feedStore = useFeedStore();
+    feedStore.events = [];
+    feedStore.follows = [{ id: 'follow-1' } as unknown as typeof feedStore.follows[number]];
+
+    const wrapper = mount(FollowedEventsView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    const empty = wrapper.findComponent(EmptyState);
+    expect(empty.exists()).toBe(true);
+    expect(empty.find('h2').text()).toBe('No events');
+    expect(empty.find('p.empty-waiting-message').text())
+      .toBe('Events from calendars you follow will appear here.');
+    expect(wrapper.find('button.btn--cta').exists()).toBe(false);
+  });
+
+  it.each([
+    ['following no calendars', [] as unknown[]],
+    ['following calendars with no events yet', [{ id: 'follow-1' }]],
+  ])('keeps the empty state a region labelled by its heading when %s', (_label, follows) => {
+    const feedStore = useFeedStore();
+    feedStore.events = [];
+    feedStore.follows = follows as typeof feedStore.follows;
+
+    const wrapper = mount(FollowedEventsView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    const region = wrapper.find('section.ui-empty-state');
+    const headingId = region.find('h2').attributes('id');
+    expect(region.exists()).toBe(true);
+    expect(headingId).toBeTruthy();
+    expect(region.attributes('aria-labelledby')).toBe(headingId);
   });
 
   it('renders event list with correct repost status indicators', () => {
