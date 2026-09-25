@@ -273,6 +273,31 @@ describe('widgetStore — server-side config + admin-preview override', () => {
 
       document.body.removeChild(rootElement);
     });
+
+    it('re-validates at the sink: an invalid value assigned directly never reaches the DOM', () => {
+      const store = useWidgetStore();
+      const rootElement = document.createElement('div');
+      document.body.appendChild(rootElement);
+
+      // Bypasses every validating writer, as a future writer that forgot to
+      // validate would.
+      store.accentColor = 'red; } body { background: url(evil) } .x {';
+
+      const setPropertySpy = vi.spyOn(rootElement.style, 'setProperty');
+
+      store.injectAccentColor(rootElement);
+
+      const writtenValues = setPropertySpy.mock.calls.map(call => String(call[1]));
+      expect(writtenValues.some(value => value.includes('evil'))).toBe(false);
+      expect(setPropertySpy).toHaveBeenCalledWith('--pav-accent-light', WIDGET_CONFIG_DEFAULTS.accentColor);
+      expect(setPropertySpy).toHaveBeenCalledWith('--pav-accent-dark', WIDGET_CONFIG_DEFAULTS.accentColor);
+      expect(setPropertySpy).toHaveBeenCalledWith(
+        '--pav-accent-light-hover',
+        `color-mix(in srgb, ${WIDGET_CONFIG_DEFAULTS.accentColor} 90%, black)`,
+      );
+
+      document.body.removeChild(rootElement);
+    });
   });
 
   describe('applyColorMode (data-theme on the widget document root)', () => {

@@ -92,6 +92,11 @@ for (const osScheme of ['light', 'dark'] as const) {
       await expectThemedSurface(page, '#app', osScheme);
       await expectThemedText(page, '.calendar-title', osScheme);
       await expectThemedText(page, '.category-filter-section .filter-label', osScheme);
+      // The search/filter bar: the search icon, and the date-range button's
+      // label and outline.
+      await expectColorSide(page, '.search-section .search-icon', 'color', opposite(osScheme));
+      await expectThemedText(page, '.date-filter-button', osScheme);
+      await expectColorSide(page, '.date-filter-button', 'borderTopColor', opposite(osScheme));
       await expectThemedText(page, 'li.day-event-item h3', osScheme);
       await expectThemedText(page, '#app footer div.logo', osScheme);
       await expectColorSide(page, '#app footer', 'borderTopColor', opposite(osScheme));

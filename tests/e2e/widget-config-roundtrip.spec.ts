@@ -476,10 +476,16 @@ const FORCED_MODE_DIRECTIONS: { colorMode: Theme; osScheme: Theme }[] = [
 
 for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
   test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, empty state and not-found`, async ({ page, browser }) => {
+    // The mitown-climate repro accent, so the date controls' selected fill
+    // can be told apart from the default orange (pv-b7gp).
+    const ACCENT = '#669c35';
+    const ACCENT_RGB = 'rgb(102, 156, 53)';
+
     await loginAsAdmin(page, env.baseURL);
     await openWidgetAdminTab(page, env.baseURL);
-    const saved = await saveWidgetConfig(page, { colorMode });
+    const saved = await saveWidgetConfig(page, { colorMode, accentColor: ACCENT });
     expect(saved.colorMode).toBe(colorMode);
+    expect(saved.accentColor).toBe(ACCENT);
 
     const { embedPage, cleanup } = await openWidgetEmbed(browser, env.baseURL, { colorScheme: osScheme });
     const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
@@ -502,12 +508,17 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
         await expectColorSide(iframe, '.widget-footer .pavillion-logo', 'backgroundColor', opposite(colorMode));
 
         await expectThemedText(iframe, '.category-filter-section .filter-label', colorMode);
+        await expectColorSide(iframe, '.search-section .search-icon', 'color', opposite(colorMode));
       });
     }
 
     await test.step('list view: date popover and custom date inputs', async () => {
       await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
       await expect(iframe.locator('.list-view')).toBeVisible({ timeout: 20000 });
+
+      // The date-range button is list-view only; unselected, it is ink on
+      // the widget surface.
+      await expectThemedText(iframe, '.date-filter-button', colorMode);
 
       await iframe.locator('.date-filter-button').click();
       await expect(iframe.locator('.date-dropdown')).toBeVisible();
@@ -519,6 +530,35 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       await expectThemedText(iframe, '.date-input', colorMode);
       await expectThemedSurface(iframe, '.date-input', colorMode);
       await expectColorSide(iframe, '.date-input', 'borderTopColor', opposite(colorMode));
+
+      // Custom mode is now selected: its pill and the date-range button carry
+      // the configured accent, not the default orange, in either theme. The
+      // pointer is moved off the pill first so its resting fill is read.
+      await iframe.locator('.date-input-label').first().hover();
+      await expect.poll(
+        async () => ({
+          pill: await iframe.locator('.date-pill.calendar-pill.active')
+            .evaluate(el => getComputedStyle(el).backgroundColor),
+          button: await iframe.locator('.date-filter-button.has-filter')
+            .evaluate(el => getComputedStyle(el).backgroundColor),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ pill: ACCENT_RGB, button: ACCENT_RGB });
+
+      // A selected category pill carries the same accent, so the filter bar
+      // shows one accent rather than the configured one beside the default.
+      const categoryPill = iframe.locator('.category-pill:not(.absent)').first();
+      await categoryPill.click();
+      await expect(iframe.locator('.category-pill.selected')).toHaveCount(1);
+      // Clicking outside the date popover closes it; the footer is a stable
+      // place to park the pointer off the pill.
+      await iframe.locator('.widget-footer').hover();
+      await expect.poll(
+        () => iframe.locator('.category-pill.selected')
+          .evaluate(el => getComputedStyle(el).backgroundColor),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toBe(ACCENT_RGB);
+      await categoryPill.click();
     });
 
     await test.step('list view: shared EmptyState when there are no events', async () => {

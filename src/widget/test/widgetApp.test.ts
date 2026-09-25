@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { useWidgetStore } from '../stores/widgetStore';
+import { WIDGET_CONFIG_DEFAULTS } from '@/common/model/widget_config';
 
 /**
  * Build a fake MediaQueryList whose `matches` value is fixed and whose
@@ -135,18 +136,19 @@ describe('Widget App Infrastructure', () => {
       document.body.removeChild(mockRoot);
     });
 
-    it('should not set CSS properties when accent color is empty', () => {
+    it('writes the default accent when the accent color is empty', () => {
       const mockRoot = document.createElement('div');
       mockRoot.id = 'widget-root';
       document.body.appendChild(mockRoot);
 
       const store = useWidgetStore(pinia);
-      // Explicitly clear the default to simulate the empty case.
+      // Explicitly clear the default to simulate the empty case: the sink
+      // re-validates and falls back to the default rather than writing ''.
       store.accentColor = '';
       store.injectAccentColor(mockRoot);
 
-      expect(mockRoot.style.getPropertyValue('--pav-accent-light')).toBe('');
-      expect(mockRoot.style.getPropertyValue('--pav-accent-dark')).toBe('');
+      expect(mockRoot.style.getPropertyValue('--pav-accent-light')).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
+      expect(mockRoot.style.getPropertyValue('--pav-accent-dark')).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
 
       document.body.removeChild(mockRoot);
     });
