@@ -733,8 +733,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-@use 'sass:color';
 @use '../assets/mixins' as *;
+
+// Colours come from the --pav-* tokens, which switch with the theme on their
+// own. The public-dark-mode blocks that remain hold this component's own
+// translucent literals, which no token carries. The accent restated inside
+// the .active / .has-filter dark blocks is different: it is there only so
+// those states outrank the generic dark block that follows them.
 
 .search-filter-public {
   @include filter-container;
@@ -781,14 +786,10 @@ onUnmounted(() => {
   .search-icon {
     position: absolute;
     left: $public-space-md;
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
     pointer-events: none;
     flex-shrink: 0;
     z-index: 1;
-
-    @include dark-mode {
-      color: $public-text-tertiary-dark;
-    }
   }
 
   .search-input {
@@ -804,11 +805,7 @@ onUnmounted(() => {
   .search-helper-text {
     margin-top: $spacing-xs;
     font-size: 12px;
-    color: $light-mode-secondary-text;
-
-    @include dark-mode {
-      color: $dark-mode-secondary-text;
-    }
+    color: var(--pav-text-secondary);
   }
 }
 
@@ -883,7 +880,7 @@ onUnmounted(() => {
     }
 
     &:focus-visible {
-      outline: 2px solid $light-mode-button-background;
+      outline: 2px solid var(--pav-accent);
       outline-offset: 1px;
     }
 
@@ -895,17 +892,13 @@ onUnmounted(() => {
       display: block;
     }
 
-    @include dark-mode {
+    @include public-dark-mode {
       background: rgba(255, 255, 255, 0.1);
       color: rgba(255, 255, 255, 0.5);
 
       &:hover {
         background: rgba(255, 255, 255, 0.2);
         color: rgba(255, 255, 255, 0.8);
-      }
-
-      &:focus-visible {
-        outline-color: $dark-mode-button-background;
       }
     }
   }
@@ -936,43 +929,47 @@ onUnmounted(() => {
     }
 
     &:focus-visible {
-      outline: 2px solid $light-mode-button-background;
+      outline: 2px solid var(--pav-accent);
       outline-offset: 1px;
       box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
     }
 
+    // The accent is restated in the dark block below because the generic
+    // dark block later in this rule would otherwise outrank the base state.
     &.active {
-      border-color: $light-mode-button-background;
+      border-color: var(--pav-accent);
       background: rgba(0, 0, 0, 0.02);
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 
-      @include dark-mode {
-        border-color: $dark-mode-button-background;
+      @include public-dark-mode {
+        border-color: var(--pav-accent);
         background: rgba(255, 255, 255, 0.05);
       }
     }
 
     // Active filter state - match category pill styling
+    // As with .active, the accent is restated in the dark block to outrank
+    // the generic dark block below.
     &.has-filter {
-      background-color: $light-mode-button-background;
+      background-color: var(--pav-accent);
       color: white;
       font-weight: $font-medium;
-      border-color: $light-mode-button-background;
+      border-color: var(--pav-accent);
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 
       &:hover {
-        background-color: color.adjust($light-mode-button-background, $lightness: -5%);
-        border-color: color.adjust($light-mode-button-background, $lightness: -5%);
+        background-color: var(--pav-accent-hover);
+        border-color: var(--pav-accent-hover);
       }
 
-      @include dark-mode {
-        background-color: $dark-mode-button-background;
-        border-color: $dark-mode-button-background;
+      @include public-dark-mode {
+        background-color: var(--pav-accent);
+        border-color: var(--pav-accent);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
         &:hover {
-          background-color: color.adjust($dark-mode-button-background, $lightness: 5%);
-          border-color: color.adjust($dark-mode-button-background, $lightness: 5%);
+          background-color: var(--pav-accent-hover);
+          border-color: var(--pav-accent-hover);
         }
       }
 
@@ -981,7 +978,7 @@ onUnmounted(() => {
       }
     }
 
-    @include dark-mode {
+    @include public-dark-mode {
       background: rgba(255, 255, 255, 0.06);
       border-color: rgba(255, 255, 255, 0.15);
       color: rgba(255, 255, 255, 0.9);
@@ -994,7 +991,6 @@ onUnmounted(() => {
       }
 
       &:focus-visible {
-        outline-color: $dark-mode-button-background;
         box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
       }
     }
@@ -1039,7 +1035,7 @@ onUnmounted(() => {
       0 10px 24px rgba(0, 0, 0, 0.1),
       0 0 0 1px rgba(0, 0, 0, 0.04);
 
-    @include dark-mode {
+    @include public-dark-mode {
       background: rgba(30, 30, 35, 0.98);
       box-shadow:
         0 4px 6px rgba(0, 0, 0, 0.3),
@@ -1107,30 +1103,31 @@ onUnmounted(() => {
         transform: scale(0.97);
       }
 
-      // Selected state - uses design system tokens
+      // Selected state. The accent is restated in the dark block because
+      // the unselected dark block below would otherwise outrank it.
       &.active {
-        background-color: $light-mode-button-background;
+        background-color: var(--pav-accent);
         color: white;
         font-weight: $font-medium;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 
         &:hover {
-          background-color: color.adjust($light-mode-button-background, $lightness: -5%);
+          background-color: var(--pav-accent-hover);
         }
 
-        @include dark-mode {
-          background-color: $dark-mode-button-background;
+        @include public-dark-mode {
+          background-color: var(--pav-accent);
           color: white;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
           &:hover {
-            background-color: color.adjust($dark-mode-button-background, $lightness: 5%);
+            background-color: var(--pav-accent-hover);
           }
         }
       }
 
       // Dark mode unselected state
-      @include dark-mode {
+      @include public-dark-mode {
         background-color: rgba(255, 255, 255, 0.06);
         color: rgba(255, 255, 255, 0.6);
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -1176,7 +1173,7 @@ onUnmounted(() => {
     padding-top: $spacing-md;
     border-top: 1px solid rgba(0, 0, 0, 0.08);
 
-    @include dark-mode {
+    @include public-dark-mode {
       border-top-color: rgba(255, 255, 255, 0.1);
     }
 
@@ -1202,7 +1199,7 @@ onUnmounted(() => {
           letter-spacing: 0.05em;
           color: rgba(0, 0, 0, 0.5);
 
-          @include dark-mode {
+          @include public-dark-mode {
             color: rgba(255, 255, 255, 0.5);
           }
         }
@@ -1228,13 +1225,13 @@ onUnmounted(() => {
           }
 
           &:focus {
-            outline: 2px solid $light-mode-button-background;
+            outline: 2px solid var(--pav-accent);
             outline-offset: 0;
             border-color: transparent;
             background-color: white;
           }
 
-          @include dark-mode {
+          @include public-dark-mode {
             border-color: rgba(255, 255, 255, 0.15);
             background-color: rgba(255, 255, 255, 0.05);
             color: rgba(255, 255, 255, 0.9);
@@ -1245,7 +1242,6 @@ onUnmounted(() => {
             }
 
             &:focus {
-              outline-color: $dark-mode-button-background;
               background-color: rgba(255, 255, 255, 0.1);
             }
           }
@@ -1260,7 +1256,7 @@ onUnmounted(() => {
               opacity: 0.8;
             }
 
-            @include dark-mode {
+            @include public-dark-mode {
               filter: invert(1);
             }
           }
@@ -1271,7 +1267,7 @@ onUnmounted(() => {
           color: rgba(0, 0, 0, 0.4);
           letter-spacing: 0.02em;
 
-          @include dark-mode {
+          @include public-dark-mode {
             color: rgba(255, 255, 255, 0.4);
           }
         }

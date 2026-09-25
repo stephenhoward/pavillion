@@ -187,19 +187,25 @@ export const useWidgetStore = defineStore('widget', {
      * SECURITY: The accent color MUST reach the DOM only via
      * `element.style.setProperty(...)`. Never interpolate the value into a
      * raw `<style>` block, `innerHTML`, or string-concatenated stylesheet —
-     * those paths enable CSS/HTML injection. Combined with the strict hex
-     * regex validation in `isValidWidgetAccentColor` and the re-validation in
-     * `applyServerConfig()`/`parseConfig()`, this closes the injection vector.
+     * those paths enable CSS/HTML injection. `accentColor` has three writers,
+     * each of which validates with the strict hex regex in
+     * `isValidWidgetAccentColor`: `applyServerConfig()`, `parseConfig()`, and
+     * the same-origin postMessage handler in `widget-container.vue`. This
+     * method validates again at the sink, falling back to the default, so a
+     * future writer that skips validation still cannot reach the DOM or the
+     * interpolated `color-mix(...)` hover strings.
      *
      * @param rootElement - DOM element to inject CSS properties on
      */
     injectAccentColor(rootElement: HTMLElement) {
-      if (this.accentColor) {
-        rootElement.style.setProperty('--pav-accent-light', this.accentColor);
-        rootElement.style.setProperty('--pav-accent-dark', this.accentColor);
-        rootElement.style.setProperty('--pav-accent-light-hover', `color-mix(in srgb, ${this.accentColor} 90%, black)`);
-        rootElement.style.setProperty('--pav-accent-dark-hover', `color-mix(in srgb, ${this.accentColor} 90%, white)`);
-      }
+      const accent = isValidWidgetAccentColor(this.accentColor)
+        ? this.accentColor
+        : WIDGET_CONFIG_DEFAULTS.accentColor;
+
+      rootElement.style.setProperty('--pav-accent-light', accent);
+      rootElement.style.setProperty('--pav-accent-dark', accent);
+      rootElement.style.setProperty('--pav-accent-light-hover', `color-mix(in srgb, ${accent} 90%, black)`);
+      rootElement.style.setProperty('--pav-accent-dark-hover', `color-mix(in srgb, ${accent} 90%, white)`);
     },
 
     /**

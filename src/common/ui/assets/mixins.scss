@@ -350,14 +350,14 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   user-select: none;
 
   // Unselected state
-  background-color: $public-bg-tertiary-light;
-  color: $public-text-secondary-light;
-  box-shadow: $public-shadow-xs-light;
+  background-color: var(--pav-surface-tertiary);
+  color: var(--pav-text-secondary);
+  box-shadow: var(--pav-shadow-xs);
 
   &:hover {
     background-color: rgba(0, 0, 0, 0.08);
     color: rgba(0, 0, 0, 0.75);
-    box-shadow: $public-shadow-sm-light;
+    box-shadow: var(--pav-shadow-sm);
   }
 
   &:active {
@@ -370,13 +370,13 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   &.absent {
     opacity: 0.4;
     cursor: not-allowed;
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
 
     &:hover,
     &:focus {
-      background-color: $public-bg-tertiary-light;
-      color: $public-text-tertiary-light;
-      box-shadow: $public-shadow-xs-light;
+      background-color: var(--pav-surface-tertiary);
+      color: var(--pav-text-muted);
+      box-shadow: var(--pav-shadow-xs);
     }
 
     &:active {
@@ -385,90 +385,35 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 
   &.selected {
-    background-color: $public-accent-light;
+    background-color: var(--pav-accent);
     color: white;
     font-weight: $public-font-weight-medium;
-    box-shadow: $public-shadow-md-light;
+    box-shadow: var(--pav-shadow-md);
 
     &:hover {
-      background-color: $public-accent-hover-light;
+      background-color: var(--pav-accent-hover);
     }
   }
 
+  // The hover fill and ink are the pill's own translucent literals, which no
+  // token carries. Because this block outranks the states above, the absent
+  // and selected rules it would otherwise override are restated after it.
   @include public-dark-mode {
-    background-color: $public-bg-tertiary-dark;
-    color: $public-text-secondary-dark;
-    box-shadow: $public-shadow-xs-dark;
-
     &:hover {
       background-color: rgba(255, 255, 255, 0.1);
       color: rgba(255, 255, 255, 0.8);
-      box-shadow: $public-shadow-sm-dark;
     }
 
     &.absent {
-      opacity: 0.4;
-      cursor: not-allowed;
-      color: $public-text-tertiary-dark;
-
       &:hover,
       &:focus {
-        background-color: $public-bg-tertiary-dark;
-        color: $public-text-tertiary-dark;
-        box-shadow: $public-shadow-xs-dark;
-      }
-
-      &:active {
-        transform: none;
+        background-color: var(--pav-surface-tertiary);
+        color: var(--pav-text-muted);
       }
     }
 
-    &.selected {
-      background-color: $public-accent-dark;
-      box-shadow: $public-shadow-md-dark;
-
-      &:hover {
-        background-color: $public-accent-hover-dark;
-      }
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-bg-tertiary-light;
-    color: $public-text-secondary-light;
-    box-shadow: $public-shadow-xs-light;
-
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.08);
-      color: rgba(0, 0, 0, 0.75);
-      box-shadow: $public-shadow-sm-light;
-    }
-
-    &.absent {
-      opacity: 0.4;
-      cursor: not-allowed;
-      color: $public-text-tertiary-light;
-
-      &:hover,
-      &:focus {
-        background-color: $public-bg-tertiary-light;
-        color: $public-text-tertiary-light;
-        box-shadow: $public-shadow-xs-light;
-      }
-
-      &:active {
-        transform: none;
-      }
-    }
-
-    &.selected {
-      background-color: $public-accent-light;
-      color: white;
-      box-shadow: $public-shadow-md-light;
-
-      &:hover {
-        background-color: $public-accent-hover-light;
-      }
+    &.selected:hover {
+      background-color: var(--pav-accent-hover);
     }
   }
 }
@@ -529,65 +474,43 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-family: $public-font-family;
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-regular;
-  color: $public-text-primary-light;
-  background: $public-bg-primary-light;
-  border: 1px solid $public-border-subtle-light;
+  color: var(--pav-text-primary);
+  background: var(--pav-surface-primary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: $public-radius-xl;
   transition: $public-transition-fast;
 
   &::placeholder {
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
   }
 
   &:hover {
-    border-color: $public-border-medium-light;
-    background: $public-bg-secondary-light;
+    border-color: var(--pav-border-medium);
+    background: var(--pav-surface-secondary);
   }
 
   &:focus {
-    outline: 2px solid $public-accent-light;
+    outline: 2px solid var(--pav-accent);
     outline-offset: 0;
     border-color: transparent;
-    background: $public-bg-primary-light;
+    background: var(--pav-surface-primary);
   }
 
+  // The dark theme lifts the field one surface tier above the page, where
+  // the light theme sets it on the page surface itself — a shift the
+  // light/dark token pairs cannot express on their own.
   @include public-dark-mode {
-    color: $public-text-primary-dark;
-    background: $public-bg-secondary-dark;
-    border-color: $public-border-subtle-dark;
+    background: var(--pav-surface-secondary);
 
-    &::placeholder {
-      color: $public-text-tertiary-dark;
-    }
-
+    // The border is restated because this rule outranks `&:focus`: a hovered
+    // field keeps its hover border while focused in the dark theme.
     &:hover {
-      border-color: $public-border-medium-dark;
-      background: $public-bg-tertiary-dark;
+      border-color: var(--pav-border-medium);
+      background: var(--pav-surface-tertiary);
     }
 
     &:focus {
-      outline-color: $public-accent-dark;
       background: rgba(255, 255, 255, 0.1);
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-    background: $public-bg-primary-light;
-    border-color: $public-border-subtle-light;
-
-    &::placeholder {
-      color: $public-text-tertiary-light;
-    }
-
-    &:hover {
-      border-color: $public-border-medium-light;
-      background: $public-bg-secondary-light;
-    }
-
-    &:focus {
-      outline-color: $public-accent-light;
-      background: $public-bg-primary-light;
     }
   }
 }
@@ -605,28 +528,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border: none;
   cursor: pointer;
   padding: $public-space-1;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   font-size: $public-font-size-base;
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-text-primary-light;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-
-    &:hover {
-      color: $public-text-primary-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-
-    &:hover {
-      color: $public-text-primary-light;
-    }
+    color: var(--pav-text-primary);
   }
 }
 
@@ -675,32 +582,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   @include public-button-base;
 
   background-color: transparent;
-  color: $public-text-primary-light;
-  border: 1px solid $public-border-medium-light;
+  color: var(--pav-text-primary);
+  border: 1px solid var(--pav-border-medium);
 
   &:hover:not(:disabled) {
-    background-color: $public-hover-overlay-light;
-    border-color: $public-border-strong-light;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-    border-color: $public-border-medium-dark;
-
-    &:hover:not(:disabled) {
-      background-color: $public-hover-overlay-dark;
-      border-color: $public-border-strong-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-    border-color: $public-border-medium-light;
-
-    &:hover:not(:disabled) {
-      background-color: $public-hover-overlay-light;
-      border-color: $public-border-strong-light;
-    }
+    background-color: var(--pav-interactive-hover);
+    border-color: var(--pav-border-strong);
   }
 }
 
@@ -808,12 +695,8 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-weight: $public-font-weight-medium;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin-bottom: $public-space-sm;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 // ===== RESPONSIVE BREAKPOINTS =====
@@ -1023,20 +906,6 @@ $spacing-3xl: 32px;
     @content;
   }
 }
-
-@mixin dark-mode {
-  @include public-dark-mode {
-    @content;
-  }
-}
-
-// Import button background colors from public design tokens
-$light-mode-button-background: $public-accent-light;
-$dark-mode-button-background: $public-accent-dark;
-
-// Secondary text color tokens
-$light-mode-secondary-text: $public-text-secondary-light;
-$dark-mode-secondary-text: $public-text-secondary-dark;
 
 // Font weight tokens
 $font-regular: $public-font-weight-regular;
