@@ -661,33 +661,13 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 @mixin public-button-primary {
   @include public-button-base;
 
-  background-color: $public-accent-light;
+  background-color: var(--pav-accent);
   color: white;
-  box-shadow: $public-shadow-sm-light;
+  box-shadow: var(--pav-shadow-sm);
 
   &:hover:not(:disabled) {
-    background-color: $public-accent-hover-light;
-    box-shadow: $public-shadow-md-light;
-  }
-
-  @include public-dark-mode {
-    background-color: $public-accent-dark;
-    box-shadow: $public-shadow-sm-dark;
-
-    &:hover:not(:disabled) {
-      background-color: $public-accent-hover-dark;
-      box-shadow: $public-shadow-md-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-accent-light;
-    box-shadow: $public-shadow-sm-light;
-
-    &:hover:not(:disabled) {
-      background-color: $public-accent-hover-light;
-      box-shadow: $public-shadow-md-light;
-    }
+    background-color: var(--pav-accent-hover);
+    box-shadow: var(--pav-shadow-md);
   }
 }
 
@@ -731,17 +711,9 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   align-items: center;
   justify-content: center;
   padding: $public-space-2xl $public-space-xl;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   font-size: $public-font-size-base;
   font-style: italic;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 @mixin public-error-state {
@@ -965,36 +937,18 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border-radius: $public-radius-full;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
-  background-color: $public-source-pill-bg-light;
-  color: $public-source-pill-color-light;
+  background-color: var(--pav-source-pill-bg);
+  color: var(--pav-source-pill-color);
   text-decoration: none;
   white-space: nowrap;
   transition: background-color $public-duration-fast $public-ease-out;
 
   &:hover {
-    background-color: $public-source-pill-hover-bg-light;
+    background-color: var(--pav-source-pill-hover-bg);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    background-color: $public-source-pill-bg-dark;
-    color: $public-source-pill-color-dark;
-
-    &:hover {
-      background-color: $public-source-pill-hover-bg-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-source-pill-bg-light;
-    color: $public-source-pill-color-light;
-
-    &:hover {
-      background-color: $public-source-pill-hover-bg-light;
-    }
   }
 }
 
@@ -1105,16 +1059,8 @@ $font-medium: $public-font-weight-medium;
 }
 
 @mixin public-focus-visible {
-  outline: 2px solid $public-accent-light;
+  outline: 2px solid var(--pav-accent);
   outline-offset: 2px;
-
-  @include public-dark-mode {
-    outline-color: $public-accent-dark;
-  }
-
-  @include public-light-mode-override {
-    outline-color: $public-accent-light;
-  }
 }
 
 // ===== RESPONSIVE LAYOUT BREAKPOINT VARIABLES =====
@@ -1157,7 +1103,7 @@ $public-link-color: $public-accent-light;
   }
 
   &:hover {
-    box-shadow: $public-shadow-xl-light;
+    box-shadow: var(--pav-shadow-xl);
     transform: translateY(-0.5px);
 
     .card-image img {
@@ -1186,37 +1132,15 @@ $public-link-color: $public-accent-light;
       width: 16rem;
     }
   }
-
-  @include public-dark-mode {
-    &:hover {
-      box-shadow: $public-shadow-xl-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    &:hover {
-      box-shadow: $public-shadow-xl-light;
-    }
-  }
 }
 
 // ===== SIDEBAR CARD (white bg, bordered, rounded) =====
 
 @mixin public-sidebar-card {
-  background: $public-bg-primary-light;
-  border: 1px solid $public-border-subtle-light;
+  background: var(--pav-surface-primary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: $public-radius-2xl;
   padding: 1.25rem;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    border-color: $public-border-subtle-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-    border-color: $public-border-subtle-light;
-  }
 }
 
 // ===== STICKY DATE HEADING =====
@@ -1228,36 +1152,22 @@ $public-link-color: $public-accent-light;
   display: flex;
   align-items: center;
   gap: $public-space-sm;
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: $public-font-weight-semibold;
   font-size: 0.875rem;
 
+  // The day marker. It reads the runtime accent so a widget owner's
+  // configured accent (injected on .widget-root) reaches it.
   &::before {
     content: '';
     display: inline-block;
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
-    background: $public-link-color;
+    background: var(--pav-accent);
     flex-shrink: 0;
-  }
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-
-    &::before {
-      background: $public-accent-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-
-    &::before {
-      background: $public-link-color;
-    }
   }
 }
 
@@ -1297,8 +1207,8 @@ $public-link-color: $public-accent-light;
   aspect-ratio: 2 / 1;
   background: linear-gradient(
     135deg,
-    $public-bg-secondary-light 0%,
-    $public-bg-tertiary-light 100%
+    var(--pav-surface-secondary) 0%,
+    var(--pav-surface-tertiary) 100%
   );
   display: flex;
   align-items: center;
@@ -1306,21 +1216,5 @@ $public-link-color: $public-accent-light;
 
   @media (min-width: $public-mobile-breakpoint) {
     aspect-ratio: 21 / 9;
-  }
-
-  @include public-dark-mode {
-    background: linear-gradient(
-      135deg,
-      $public-bg-secondary-dark 0%,
-      $public-bg-tertiary-dark 100%
-    );
-  }
-
-  @include public-light-mode-override {
-    background: linear-gradient(
-      135deg,
-      $public-bg-secondary-light 0%,
-      $public-bg-tertiary-light 100%
-    );
   }
 }

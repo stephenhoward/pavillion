@@ -114,7 +114,8 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 // site's EventCard component directly so it shares all card content
 // (image, title, time, location, description, categories,
 // source-calendar pill, recurrence/cancelled badges, no-image
-// fallback) and benefits from the same dark/light pairing audit.
+// fallback) and reads the same --pav-* tokens, which .widget-root
+// declares with the owner's configured accent.
 // ================================================================
 
 .events-container {
@@ -132,15 +133,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 
   padding: $public-space-sm 0;
   margin: 0 0 $public-space-lg 0;
-  color: $public-text-secondary-light;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
+  color: var(--pav-text-secondary);
 }
 
 .day-events {

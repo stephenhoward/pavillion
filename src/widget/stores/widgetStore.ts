@@ -177,9 +177,12 @@ export const useWidgetStore = defineStore('widget', {
      * Inject accent color as CSS custom properties on root element.
      *
      * Writes `--pav-accent-light` and `--pav-accent-dark` from the user-chosen
-     * value. Hover variants (`--pav-accent-light-hover` / `--pav-accent-dark-hover`)
-     * are intentionally NOT written here — they remain at the SCSS-compiled
-     * defaults emitted by the `public-theme-tokens` mixin on the root.
+     * value, and derives `--pav-accent-light-hover` / `--pav-accent-dark-hover`
+     * from it: 10% towards black for the light theme and 10% towards white for
+     * the dark theme, the same direction the compiled defaults take
+     * (`$public-accent-hover-*` shift lightness by 5% each way). Left unwritten,
+     * the hover variants would stay at those compiled defaults, so a hovered
+     * button or link would snap to the default orange.
      *
      * SECURITY: The accent color MUST reach the DOM only via
      * `element.style.setProperty(...)`. Never interpolate the value into a
@@ -194,6 +197,8 @@ export const useWidgetStore = defineStore('widget', {
       if (this.accentColor) {
         rootElement.style.setProperty('--pav-accent-light', this.accentColor);
         rootElement.style.setProperty('--pav-accent-dark', this.accentColor);
+        rootElement.style.setProperty('--pav-accent-light-hover', `color-mix(in srgb, ${this.accentColor} 90%, black)`);
+        rootElement.style.setProperty('--pav-accent-dark-hover', `color-mix(in srgb, ${this.accentColor} 90%, white)`);
       }
     },
 

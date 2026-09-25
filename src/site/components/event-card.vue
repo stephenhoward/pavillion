@@ -314,21 +314,11 @@ function navigateToDetail(event: MouseEvent): void {
   @include public-event-card-stacked;
 
   position: relative;
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-primary);
   border-radius: $public-radius-md;
-  box-shadow: $public-shadow-sm-light;
+  box-shadow: var(--pav-shadow-sm);
   overflow: hidden;
   text-decoration: none;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    box-shadow: $public-shadow-sm-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-    box-shadow: $public-shadow-sm-light;
-  }
 }
 
 // ================================================================
@@ -339,19 +329,11 @@ function navigateToDetail(event: MouseEvent): void {
   position: relative;
   flex-shrink: 0;
   overflow: hidden;
-  background: $public-bg-tertiary-light;
+  background: var(--pav-surface-tertiary);
 
   // Reduce image height on narrow mobile to free up vertical space for content
   @include public-mobile-only {
     height: 9rem;
-  }
-
-  @include public-dark-mode {
-    background: $public-bg-tertiary-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-tertiary-light;
   }
 }
 
@@ -361,29 +343,13 @@ function navigateToDetail(event: MouseEvent): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, $public-bg-secondary-light 0%, $public-bg-tertiary-light 100%);
-
-  @include public-dark-mode {
-    background: linear-gradient(135deg, $public-bg-secondary-dark 0%, $public-bg-tertiary-dark 100%);
-  }
-
-  @include public-light-mode-override {
-    background: linear-gradient(135deg, $public-bg-secondary-light 0%, $public-bg-tertiary-light 100%);
-  }
+  background: linear-gradient(135deg, var(--pav-surface-secondary) 0%, var(--pav-surface-tertiary) 100%);
 }
 
 .fallback-icon {
   width: 2.5rem;
   height: 2.5rem;
-  color: $public-text-tertiary-light;
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-tertiary-light;
-  }
+  color: var(--pav-text-muted);
 }
 
 // ================================================================
@@ -402,18 +368,13 @@ function navigateToDetail(event: MouseEvent): void {
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
   background: rgba(255, 255, 255, 0.9);
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   backdrop-filter: blur(4px);
   white-space: nowrap;
 
+  // The translucent scrim over the image has no token.
   @include public-dark-mode {
     background: rgba(30, 30, 35, 0.85);
-    color: $public-text-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background: rgba(255, 255, 255, 0.9);
-    color: $public-text-primary-light;
   }
 }
 
@@ -432,21 +393,13 @@ function navigateToDetail(event: MouseEvent): void {
   border-radius: $public-radius-full;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-semibold;
-  background: $public-error-light;
-  color: #fff;
+  background: var(--pav-text-error);
+  // The page surface as ink: white on the light error red, near-black on
+  // the dark theme's lighter red.
+  color: var(--pav-surface-primary);
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-
-  @include public-dark-mode {
-    background: $public-error-dark;
-    color: $public-bg-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-error-light;
-    color: #fff;
-  }
 }
 
 // De-emphasis: desaturate content but keep the cancelled badge prominent.
@@ -487,19 +440,12 @@ function navigateToDetail(event: MouseEvent): void {
   }
 }
 
+// Reads the runtime accent so a widget owner's configured accent reaches it.
 .event-time {
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-medium;
-  color: $public-accent-light;
+  color: var(--pav-accent);
   margin: 0;
-
-  @include public-dark-mode {
-    color: $public-accent-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-accent-light;
-  }
 }
 
 h3 {
@@ -515,32 +461,16 @@ h3 {
 }
 
 .event-title-link {
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   text-decoration: none;
   transition: color $public-duration-fast $public-ease-out;
 
   &:hover {
-    color: $public-accent-light;
+    color: var(--pav-accent);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-
-    &:hover {
-      color: $public-accent-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-
-    &:hover {
-      color: $public-accent-light;
-    }
   }
 }
 
@@ -549,24 +479,16 @@ h3 {
   align-items: center;
   gap: $public-space-1;
   font-size: $public-font-size-sm;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 .event-description {
   font-size: $public-font-size-base;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
   line-height: $public-line-height-normal;
   display: -webkit-box;
@@ -574,14 +496,6 @@ h3 {
   -webkit-line-clamp: 2;
   overflow: hidden;
   white-space: pre-wrap;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 // ================================================================

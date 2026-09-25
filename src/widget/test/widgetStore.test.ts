@@ -197,14 +197,14 @@ describe('widgetStore — server-side config + admin-preview override', () => {
       document.body.removeChild(rootElement);
     });
 
-    it('does NOT write hover variants (those remain at SCSS mixin defaults)', () => {
+    it('derives the hover variants from the configured accent: darker in light, lighter in dark', () => {
       const store = useWidgetStore();
       const rootElement = document.createElement('div');
       document.body.appendChild(rootElement);
 
       store.applyServerConfig({
         view: 'list',
-        accentColor: '#ff9131',
+        accentColor: '#669c35',
         colorMode: 'auto',
       });
 
@@ -212,9 +212,40 @@ describe('widgetStore — server-side config + admin-preview override', () => {
 
       store.injectAccentColor(rootElement);
 
-      const writtenProperties = setPropertySpy.mock.calls.map(call => call[0]);
-      expect(writtenProperties).not.toContain('--pav-accent-light-hover');
-      expect(writtenProperties).not.toContain('--pav-accent-dark-hover');
+      // Without these, a hover reading --pav-accent-hover would fall back to
+      // the compiled default orange while the resting state shows the
+      // configured accent.
+      expect(setPropertySpy).toHaveBeenCalledWith(
+        '--pav-accent-light-hover',
+        'color-mix(in srgb, #669c35 90%, black)',
+      );
+      expect(setPropertySpy).toHaveBeenCalledWith(
+        '--pav-accent-dark-hover',
+        'color-mix(in srgb, #669c35 90%, white)',
+      );
+
+      document.body.removeChild(rootElement);
+    });
+
+    it('derives the hover variants only from the validated accent', () => {
+      const store = useWidgetStore();
+      const rootElement = document.createElement('div');
+      document.body.appendChild(rootElement);
+
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      store.applyServerConfig({
+        view: 'list',
+        accentColor: 'red; } body { background: url(evil) } .x {',
+        colorMode: 'auto',
+      });
+
+      store.injectAccentColor(rootElement);
+
+      // The rejected value falls back to the validated default; nothing from
+      // the payload is interpolated into the derived hover strings.
+      const hover = rootElement.style.getPropertyValue('--pav-accent-light-hover');
+      expect(hover).not.toContain('evil');
+      expect(hover).toContain(WIDGET_CONFIG_DEFAULTS.accentColor);
 
       document.body.removeChild(rootElement);
     });
