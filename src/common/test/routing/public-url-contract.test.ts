@@ -30,11 +30,16 @@ import { describe, it, expect } from 'vitest';
 import { Request, Response } from 'express';
 import { createRouter as createSiteRouter, createMemoryHistory, RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
+import { DateTime } from 'luxon';
 
 import { createRouter as createServerPageRouter } from '@/server/app_routes';
 import { buildSiteRoutes } from '@/site/routes';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import { DISCOVER_PATH, calendarPath, eventPath, seriesPath } from '@/common/routing/public-paths';
+import { buildEventMetaTags, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
+import CalendarEventInstance from '@/common/model/event_instance';
 import {
   AVAILABLE_LANGUAGES,
   DEFAULT_LANGUAGE_CODE,
@@ -453,6 +458,62 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       const covered = builderPaths.map(([, path]) => siteRouter.resolve(path).name);
 
       expect([...new Set(covered)].sort()).toEqual([...addressable].sort());
+    });
+  });
+
+  // Direction 5: the one hand-built emitter. DEC-018 rule 5 exempts
+  // src/server/common/helper/meta-tags.ts from the builders: the SSR canonical
+  // and og:url path echoes back segments parseEventPageParams captured from the
+  // raw request path pre-decode, and eventPath would percent-encode them a
+  // second time. So that file spells the event-page shape by hand, and nothing
+  // above joins its copy to the builder — every direction-4 check reads
+  // eventPath's own output, so a change to the builder's shape would pass there
+  // while the canonical URL stamped onto our own pages silently kept the old
+  // one. This block drives the real emitter and asserts its output is the
+  // builder's with the origin prepended. It pins SHAPE AGREEMENT, not adoption:
+  // meta-tags.ts must keep building the path itself, and a failure here is
+  // fixed by updating that hand-built copy, never by routing it through
+  // eventPath.
+  describe('the hand-built SSR canonical path agrees with eventPath', () => {
+    const baseUrl = 'https://example.test';
+    const calendar = new Calendar('cal-uuid-1', SAMPLE_PARAMS.calendar);
+    const event = new CalendarEvent(SAMPLE_PARAMS.event, 'cal-uuid-1');
+    const instance = new CalendarEventInstance('instance-uuid-1', event, DateTime.utc(), DateTime.utc());
+
+    const publicInterface = {
+      current: {
+        getCalendarByName: sinon.stub().resolves(calendar),
+        getEventById: sinon.stub().resolves(event),
+        findOrMaterializeInstanceWithDetails: sinon.stub().resolves(instance),
+      },
+    } as unknown as PublicInterfaceHolder;
+
+    it('stamps the event page canonical URL as eventPath with the origin prepended', async () => {
+      const tags = await buildEventMetaTags(
+        publicInterface,
+        { calendarUrlName: SAMPLE_PARAMS.calendar, eventId: SAMPLE_PARAMS.event },
+        DEFAULT_LANGUAGE_CODE,
+        baseUrl,
+      );
+
+      expect(tags?.url).toBe(`${baseUrl}${eventPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.event)}`);
+    });
+
+    it('stamps the occurrence page canonical URL as the instance eventPath with the origin prepended', async () => {
+      const tags = await buildEventMetaTags(
+        publicInterface,
+        {
+          calendarUrlName: SAMPLE_PARAMS.calendar,
+          eventId: SAMPLE_PARAMS.event,
+          instanceStartTime: SAMPLE_PARAMS.startTime,
+        },
+        DEFAULT_LANGUAGE_CODE,
+        baseUrl,
+      );
+
+      expect(tags?.url).toBe(
+        `${baseUrl}${eventPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.event, SAMPLE_PARAMS.startTime)}`,
+      );
     });
   });
 
