@@ -672,14 +672,14 @@ form {
           class="btn btn--ghost btn--pill"
           @click="handleBackClick"
         >
-          Cancel
+          {{ t('cancel_button') }}
         </button>
         <button
           type="submit"
           form="event-form"
           class="btn-save"
         >
-          Save Changes
+          {{ t('save_changes_button') }}
         </button>
       </div>
     </header>
@@ -692,20 +692,20 @@ form {
       aria-live="polite"
     >
       <span class="loading-spinner" aria-hidden="true">&#8987;</span>
-      <span>Loading...</span>
+      <span>{{ t('loading') }}</span>
     </div>
 
     <!-- Main Content - only render when event is loaded -->
     <main
       v-else-if="editorState.event"
       role="main"
-      aria-label="Event Editor"
+      :aria-label="t('aria_editor')"
       class="editor-main"
     >
       <form
         id="event-form"
         @submit.prevent="handleSaveEvent()"
-        aria-label="Event Information Form"
+        :aria-label="t('aria_event_form')"
         novalidate
       >
 
@@ -717,7 +717,7 @@ form {
           <button
             class="error-dismiss"
             type="button"
-            aria-label="Dismiss error"
+            :aria-label="t('aria_dismiss_error')"
             @click="editorState.err = ''; editorState.errDetail = ''"
           >&times;</button>
           <div v-if="Array.isArray(editorState.err)">
@@ -738,7 +738,7 @@ form {
 
           <!-- EVENT DETAILS Section -->
           <section class="editor-section">
-            <h2 class="section-header">EVENT DETAILS</h2>
+            <h2 class="section-header">{{ t('event_details_section') }}</h2>
 
             <div class="section-card">
               <!-- Language Tabs -->
@@ -822,7 +822,7 @@ form {
 
           <!-- LOCATION Section -->
           <section class="editor-section">
-            <h2 class="section-header">LOCATION</h2>
+            <h2 class="section-header">{{ t('location_section') }}</h2>
 
             <LocationDisplayCard
               :location="editorState.event.location"
@@ -898,7 +898,7 @@ form {
 
           <!-- EVENT IMAGE Section -->
           <section class="editor-section">
-            <h2 class="section-header">EVENT IMAGE</h2>
+            <h2 class="section-header">{{ t('event_image_section') }}</h2>
 
             <div class="section-card">
               <!-- Show workspace when an image is attached, uploader otherwise.
@@ -928,21 +928,21 @@ form {
                 :calendar-id="editorState.event.calendarId || 'default'"
                 :multiple="false"
                 @upload-complete="handleImageUpload"
-                aria-label="Event Image Upload"
+                :aria-label="t('aria_image_upload')"
               />
             </div>
           </section>
 
           <!-- CATEGORIES Section -->
           <section class="editor-section">
-            <h2 class="section-header">CATEGORIES</h2>
+            <h2 class="section-header">{{ t('categories_section') }}</h2>
 
             <div class="section-card">
               <CategorySelector
                 :calendar-id="editorState.event.calendarId"
                 :selected-categories="selectedCategories"
                 @categories-changed="handleCategoriesChanged"
-                aria-label="Select Event Categories"
+                :aria-label="t('aria_select_categories')"
               />
             </div>
           </section>
@@ -963,13 +963,13 @@ form {
 
           <!-- DATE & TIME Section -->
           <section class="editor-section">
-            <h2 class="section-header">DATE & TIME</h2>
+            <h2 class="section-header">{{ t('date_time_section') }}</h2>
 
             <div class="section-card">
               <div
                 class="schedule-list"
                 role="group"
-                aria-label="Event Schedules"
+                :aria-label="t('aria_schedules')"
                 :aria-describedby="fieldErrors.schedule ? 'event-schedule-error' : undefined"
                 :aria-invalid="fieldErrors.schedule ? 'true' : undefined"
               >
@@ -993,11 +993,11 @@ form {
                 @click="editorState.event.addSchedule()"
               >
                 <Plus :size="16" aria-hidden="true" />
-                Add another schedule
+                {{ t('add_schedule_button') }}
               </button>
 
               <p class="schedule-help-text">
-                Add multiple schedules to create events that occur at different times or with different patterns.
+                {{ t('schedule_help_text') }}
               </p>
 
               <div v-if="fieldErrors.schedule" class="translatable-form-fields">
@@ -1051,9 +1051,9 @@ form {
     </main>
 
     <!-- Error state when event failed to load -->
-    <main v-else role="main" aria-label="Event Editor Error">
+    <main v-else role="main" :aria-label="t('aria_editor_error')">
       <div class="error" role="alert">
-        {{ editorState.err || 'Failed to load event' }}
+        {{ editorState.err || t('error_loading_event') }}
       </div>
     </main>
   </div>
