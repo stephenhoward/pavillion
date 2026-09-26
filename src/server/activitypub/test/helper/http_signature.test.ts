@@ -7,6 +7,10 @@ import { Cache } from '@/server/activitypub/helper/cache';
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
 import { MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import crypto from 'crypto';
+import http from 'http';
+import { AddressInfo } from 'net';
+import logger from '@/server/common/helper/logger';
+import { ACTOR_PROFILE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
 
 describe('HTTP Signature Verification', () => {
   let req: Partial<Request>;
@@ -1086,5 +1090,108 @@ describe('extractKeyIdOrigin', () => {
     const result = extractKeyIdOrigin(req);
 
     expect(result).toBeNull();
+  });
+});
+
+describe('Pre-authentication key fetch response-body cap', () => {
+  const sandbox = sinon.createSandbox();
+  // Captured before any stubbing so the transport test can drive axios's real
+  // http adapter, which is where `maxContentLength` is enforced.
+  const realAxiosGet = axios.get;
+
+  let req: Partial<Request>;
+  let res: Partial<Response>;
+  let next: sinon.SinonSpy;
+  let axiosGetStub: sinon.SinonStub;
+  let verifySignatureStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    req = {
+      headers: {
+        'date': new Date().toUTCString(),
+        'host': 'example.com',
+      },
+      body: { actor: 'https://example.com/users/someactor' },
+    };
+    res = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub().returnsThis(),
+    };
+    next = sandbox.spy();
+
+    sandbox.stub(httpSignature, 'parseRequest').returns({
+      params: {
+        keyId: 'https://example.com/users/someactor#main-key',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+    verifySignatureStub = sandbox.stub(httpSignature, 'verifySignature').returns(true);
+    sandbox.stub(Cache.prototype, 'get').returns(undefined);
+    sandbox.stub(Cache.prototype, 'set');
+    axiosGetStub = sandbox.stub(axios, 'get');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('caps the actor fetch and the follow-up key fetch at ACTOR_PROFILE_MAX_BYTES', async () => {
+    axiosGetStub.onFirstCall().resolves({
+      status: 200,
+      data: { publicKey: 'https://example.com/users/someactor/key' },
+    });
+    axiosGetStub.onSecondCall().resolves({
+      status: 200,
+      data: { publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----' },
+    });
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.callCount).toBe(2);
+    for (const call of axiosGetStub.getCalls()) {
+      expect(call.args[1].maxContentLength).toBe(ACTOR_PROFILE_MAX_BYTES);
+    }
+    expect(next.called).toBe(true);
+  });
+
+  it('rejects the request when the actor document exceeds the cap, without parsing it', async () => {
+    // A syntactically valid actor document that would authenticate the
+    // request if it were parsed. Padding pushes it past the cap so the only
+    // way this test passes is if the transport aborts before parsing.
+    const oversizeActor = JSON.stringify({
+      publicKey: { publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----' },
+      summary: 'a'.repeat(ACTOR_PROFILE_MAX_BYTES + 1024),
+    });
+    const server = http.createServer((_incoming, outgoing) => {
+      outgoing.writeHead(200, { 'Content-Type': 'application/activity+json' });
+      outgoing.end(oversizeActor);
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+
+    // Route the fetch to the loopback server while keeping the middleware's
+    // own request config (including the cap) intact. The unit-test
+    // environment would otherwise select axios's XHR adapter; the cap is
+    // enforced by the Node http adapter, which is what production uses.
+    axiosGetStub.callsFake((url: string, config) => {
+      const target = new URL(url);
+      return realAxiosGet(`http://127.0.0.1:${port}${target.pathname}`, { ...config, adapter: 'http' });
+    });
+    const logErrorStub = sandbox.stub(logger, 'error');
+
+    try {
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+    }
+    finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+    expect(verifySignatureStub.called).toBe(false);
+    expect(next.called).toBe(false);
+    expect(logErrorStub.callCount).toBe(1);
+    expect(logErrorStub.firstCall.args[1]).toContain('maxContentLength');
   });
 });
