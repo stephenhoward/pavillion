@@ -35,6 +35,7 @@ import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 
 // ---------------------------------------------------------------------------
 // Mocks — declared before component import
@@ -158,7 +159,7 @@ async function mountEventCardWithRouter(
     history: createMemoryHistory(),
     routes: [
       { path: '/:calendar', component: { template: '<div />' }, name: 'calendar' },
-      { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div />' }, name: 'instance' },
+      { path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: { template: '<div />' }, name: 'instance' },
     ],
   });
   await router.push('/test-calendar');

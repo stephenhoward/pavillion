@@ -474,7 +474,7 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       // The server's page regexes are prefix-shaped ('(?:/.*)?$'), so the server
       // hands the site shell any depth under a non-reserved first segment and
       // lets the SPA decide. Here the SPA decides no: the
-      // ':startTime(\d{8}-\d{4})' constraint rejects the segment. Answering a
+      // ':startTime(INSTANCE_SLUG_PATTERN)' constraint rejects the segment. Answering a
       // 404-shaped public URL is the site SPA's job, not the server's, so this
       // pair is the division of labour working — not a hole to close.
       const path = '/mycalendar/events/event-123/not-a-slug';

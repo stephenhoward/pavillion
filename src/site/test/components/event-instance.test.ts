@@ -172,6 +172,7 @@ vi.mock('@/site/components/event-image.vue', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import EventInstance from '@/site/components/event-instance.vue';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -179,7 +180,7 @@ import EventInstance from '@/site/components/event-instance.vue';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
+    path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`,
     component: EventInstance,
     name: 'instance',
   },
@@ -189,7 +190,7 @@ const routes: RouteRecordRaw[] = [
     name: 'calendar',
   },
   {
-    path: '/es/:calendar/events/:event/:startTime(\\d{8}-\\d{4})',
+    path: `/es/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`,
     component: EventInstance,
   },
   {
@@ -1628,7 +1629,7 @@ describe('eventInstance invalid startTime slug', () => {
   });
 
   it('should render NotFound for an impossible date slug (e.g. Feb 30)', async () => {
-    // Feb 30 is structurally a \d{8}-\d{4} so it clears the router regex,
+    // Feb 30 structurally matches INSTANCE_SLUG_PATTERN so it clears the router regex,
     // but parseInstanceSlug rejects it because Luxon flags the DateTime
     // as invalid. The component must short-circuit to notFound without
     // calling the backend.
