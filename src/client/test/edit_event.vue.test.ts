@@ -189,6 +189,28 @@ describe('Editor Behavior - Route-Based', () => {
       const label = wrapper.find('label[for^="event-description-"]');
       expect(label.exists()).toBe(true);
       expect(label.text()).toBe('Descripción');
+
+      // Section headers follow the interface language too (CSS uppercases them)
+      const sectionHeaders = wrapper.findAll('h2.section-header').map((h) => h.text());
+      expect(sectionHeaders).toEqual([
+        'Detalles del evento',
+        'Ubicación',
+        'Enlace externo',
+        'Imagen del evento',
+        'Categorías',
+        'Serie',
+        'Fecha y hora',
+      ]);
+
+      // Header chrome
+      expect(wrapper.find('.page-header .btn--ghost').text()).toBe('Cancelar');
+      expect(wrapper.find('.page-header .btn-save').text()).toBe('Guardar cambios');
+      expect(wrapper.find('.add-schedule-btn').text()).toBe('Agregar otro horario');
+
+      // Landmark and control names a screen reader announces
+      expect(wrapper.find('main').attributes('aria-label')).toBe('Editor de eventos');
+      expect(wrapper.find('form#event-form').attributes('aria-label')).toBe('Formulario de información del evento');
+      expect(wrapper.find('.schedule-list').attributes('aria-label')).toBe('Horarios del evento');
     }
     finally {
       await i18next.changeLanguage(originalLanguage);
