@@ -1,3 +1,4 @@
+import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
@@ -27,25 +28,26 @@ class EditorInvitationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
+    const domain = config.get('domain');
+    // Absolute: both templates render this as an anchor href, and a mail client
+    // has no origin to resolve a scheme-less value against.
+    const invitationUrl = `https://${domain}/auth/invitation`;
     const calendarName = this.calendar.content(language).name;
+    const templateData = {
+      calendarName,
+      inviterName: this.invitation.invitedBy.username,
+      message: this.invitation.message,
+      inviteCode: this.inviteCode,
+      invitationUrl,
+    };
 
     return {
       emailAddress: this.invitation.email,
       subject: this.renderSubject(language, {
         calendarName,
       }),
-      textMessage: this.renderPlaintext(language, {
-        calendarName,
-        inviterName: this.invitation.invitedBy.username,
-        message: this.invitation.message,
-        inviteCode: this.inviteCode,
-      }),
-      htmlMessage: this.renderHtml(language, {
-        calendarName,
-        inviterName: this.invitation.invitedBy.username,
-        message: this.invitation.message,
-        inviteCode: this.inviteCode,
-      }),
+      textMessage: this.renderPlaintext(language, templateData),
+      htmlMessage: this.renderHtml(language, templateData),
     };
   }
 }
