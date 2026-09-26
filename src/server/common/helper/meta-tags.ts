@@ -373,6 +373,8 @@ async function buildMetaTagsInternal(
 
   // Build canonical URL. DEC-018 addresses a calendar at the domain root, and
   // the canonical form carries no locale prefix regardless of the requested one.
+  // Spelled by hand rather than via eventPath (the segments are pre-decode; see
+  // public-paths.ts); public-url-contract.test.ts pins that the two shapes agree.
   const canonicalPath = params.instanceStartTime
     ? `/${params.calendarUrlName}/events/${params.eventId}/${params.instanceStartTime}`
     : `/${params.calendarUrlName}/events/${params.eventId}`;
