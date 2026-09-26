@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
-import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
+import { fetchRemoteObject, REMOTE_OBJECT_MAX_BYTES } from '@/server/activitypub/helper/remote-fetch';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/common/constants';
 
 describe('fetchRemoteObject', () => {
@@ -190,6 +190,71 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/123');
 
     expect(result).toEqual(complexObject);
+  });
+
+  describe('response-body byte cap', () => {
+    /**
+     * Mimics axios's own enforcement: reject with the ERR_BAD_RESPONSE
+     * AxiosError axios raises when the body exceeds `config.maxContentLength`,
+     * otherwise resolve. Lets the tests assert the cap actually reaches the
+     * client rather than only that a number was put on the config object.
+     */
+    function stubAxiosEnforcingCap(bodyBytes: number) {
+      axiosGetStub.callsFake(async (_uri: string, config: { maxContentLength?: number }) => {
+        if (config.maxContentLength !== undefined && config.maxContentLength !== -1 && bodyBytes > config.maxContentLength) {
+          const err = new Error(`maxContentLength size of ${config.maxContentLength} exceeded`);
+          (err as any).code = 'ERR_BAD_RESPONSE';
+          (err as any).isAxiosError = true;
+          throw err;
+        }
+        return { status: 200, data: { type: 'Event' } };
+      });
+      sandbox.stub(axios, 'isAxiosError').returns(true);
+    }
+
+    it('bounds the response body by default when no option is passed', async () => {
+      stubAxiosEnforcingCap(REMOTE_OBJECT_MAX_BYTES + 1);
+
+      const result = await fetchRemoteObject('https://remote.example/events/huge');
+
+      expect(result).toBeNull();
+      expect(axiosGetStub.firstCall.args[1].maxContentLength).toBe(REMOTE_OBJECT_MAX_BYTES);
+    });
+
+    it('accepts a body within the default cap when no option is passed', async () => {
+      stubAxiosEnforcingCap(REMOTE_OBJECT_MAX_BYTES);
+
+      const result = await fetchRemoteObject('https://remote.example/events/123');
+
+      expect(result).toEqual({ type: 'Event' });
+    });
+
+    it('lets an explicit maxContentLength override the default', async () => {
+      const explicitCap = REMOTE_OBJECT_MAX_BYTES * 4;
+      stubAxiosEnforcingCap(REMOTE_OBJECT_MAX_BYTES + 1);
+
+      const result = await fetchRemoteObject(
+        'https://remote.example/outbox?page=true',
+        undefined,
+        { maxContentLength: explicitCap },
+      );
+
+      expect(result).toEqual({ type: 'Event' });
+      expect(axiosGetStub.firstCall.args[1].maxContentLength).toBe(explicitCap);
+    });
+
+    it('lets an explicit maxContentLength tighten the default', async () => {
+      stubAxiosEnforcingCap(1024);
+
+      const result = await fetchRemoteObject(
+        'https://remote.example/events/123',
+        undefined,
+        { maxContentLength: 512 },
+      );
+
+      expect(result).toBeNull();
+      expect(axiosGetStub.firstCall.args[1].maxContentLength).toBe(512);
+    });
   });
 
   describe('SSRF Protection - Private IP Blocking', () => {
