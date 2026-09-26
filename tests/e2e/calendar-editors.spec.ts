@@ -10,7 +10,7 @@ import axios from 'axios';
  * Tests the complete editor invitation and management lifecycle:
  * - Invite an editor via email from the calendar management UI
  * - Verify invitation email is sent via EmailStore
- * - Accept invitation via admin account invitation API flow
+ * - Accept the invitation using the code from the editor invitation email
  * - Verify the editor appears in the calendar's editor list
  * - Remove the editor and verify removal
  *
@@ -19,7 +19,6 @@ import axios from 'axios';
  */
 
 let env: TestEnvironment;
-let adminJWT: string;
 
 const INVITEE_EMAIL = 'new-editor@example.com';
 const INVITEE_PASSWORD = 'SecurePass123!';
@@ -32,13 +31,6 @@ test.describe('Calendar Editor Collaboration', () => {
     try {
       env = await startTestServer();
       console.log(`[Test] Server started successfully at ${env.baseURL}`);
-
-      // Get admin JWT for API calls
-      const loginResponse = await axios.post(`${env.baseURL}/api/auth/v1/login`, {
-        email: 'admin@pavillion.dev',
-        password: 'admin',
-      });
-      adminJWT = loginResponse.data;
     }
     catch (error) {
       console.error('[Test] Failed to start server:', error);
@@ -119,45 +111,11 @@ test.describe('Calendar Editor Collaboration', () => {
     });
 
     test('should accept invitation and verify editor appears in list', async ({ page }) => {
-      // The editor invitation email template does not include the invitation code URL
-      // (a known template gap), so we use an alternative approach:
-      // 1. Cancel the pending editor invitation
-      // 2. Send a fresh admin invitation (which correctly includes the code URL)
-      // 3. Accept that invitation to create the account
-      // 4. Grant editor access to the now-existing user
+      // Regression guard: the editor invitation email itself must carry a usable
+      // /auth/invitation?code= link. Accepting that code creates the account and
+      // grants editor access without any admin-side workaround.
 
-      // Get calendar info
-      const calendarsResponse = await axios.get(`${env.baseURL}/api/v1/calendars`, {
-        headers: { Authorization: `Bearer ${adminJWT}` },
-      });
-      const calendar = calendarsResponse.data.find((c: any) => c.urlName === 'test_calendar');
-      expect(calendar).toBeTruthy();
-
-      // Get pending invitations
-      const editorsResponse = await axios.get(
-        `${env.baseURL}/api/v1/calendars/${calendar.id}/editors`,
-        { headers: { Authorization: `Bearer ${adminJWT}` } },
-      );
-      const pendingInvitation = editorsResponse.data.pendingInvitations.find(
-        (inv: any) => inv.email === INVITEE_EMAIL,
-      );
-      expect(pendingInvitation).toBeTruthy();
-
-      // Cancel the calendar-editor invitation so we can create a new admin invitation
-      await axios.delete(
-        `${env.baseURL}/api/v1/calendars/${calendar.id}/invitations/${pendingInvitation.id}`,
-        { headers: { Authorization: `Bearer ${adminJWT}` } },
-      );
-
-      // Clear emails and send a proper admin invitation (includes invite code URL)
-      await clearEmails(env.baseURL);
-      await axios.post(
-        `${env.baseURL}/api/v1/admin/invitations`,
-        { email: INVITEE_EMAIL },
-        { headers: { Authorization: `Bearer ${adminJWT}` } },
-      );
-
-      // Get the invitation email with the code URL
+      // Read the editor invitation email sent by the invite test
       const email = await waitForEmail(env.baseURL, INVITEE_EMAIL, { timeout: 10000 });
       expect(email).not.toBeNull();
 
@@ -166,12 +124,12 @@ test.describe('Calendar Editor Collaboration', () => {
       let inviteCode: string | null = null;
 
       if (email.text) {
-        const textMatch = email.text.match(/[?&]code=([a-f0-9]+)/);
+        const textMatch = email.text.match(/\/auth\/invitation\?code=([a-f0-9]+)/);
         if (textMatch) inviteCode = textMatch[1];
       }
 
       if (!inviteCode && email.html) {
-        const htmlMatch = email.html.match(/[?&]code=([a-f0-9]+)/);
+        const htmlMatch = email.html.match(/\/auth\/invitation\?code=([a-f0-9]+)/);
         if (htmlMatch) inviteCode = htmlMatch[1];
       }
 
@@ -184,19 +142,12 @@ test.describe('Calendar Editor Collaboration', () => {
       expect(inviteCode).not.toBeNull();
       console.log(`[Test] Extracted invitation code: ${inviteCode!.substring(0, 8)}...`);
 
-      // Accept the invitation via API
+      // Accept the editor invitation via API: creates the account and grants editor access
       const acceptResponse = await axios.post(
         `${env.baseURL}/api/v1/invitations/${inviteCode}`,
         { password: INVITEE_PASSWORD },
       );
       expect(acceptResponse.status).toBe(200);
-
-      // Grant editor access to the newly created user
-      await axios.post(
-        `${env.baseURL}/api/v1/calendars/${calendar.id}/editors`,
-        { email: INVITEE_EMAIL },
-        { headers: { Authorization: `Bearer ${adminJWT}` } },
-      );
 
       // Navigate to calendar management page and verify editor appears
       await page.goto(env.baseURL + '/calendar/test_calendar/manage');
