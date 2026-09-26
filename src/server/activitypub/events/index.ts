@@ -31,6 +31,7 @@ import {
 } from '@/server/activitypub/service/backfill';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
+import { guardEventHandler } from '@/server/common/helper/guard-event-handler';
 import { Calendar } from '@/common/model/calendar';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -82,17 +83,15 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   /**
    * Adapt a domain-event handler for installation on the (never-awaited) bus.
    *
-   * On every dialect the wrapper catches handler errors so a failed background
-   * dispatch is logged rather than surfacing as a process-killing unhandled
-   * rejection. On SQLite it additionally chains each invocation onto
-   * {@link dispatchQueue} so no two handler transactions overlap; on
-   * PostgreSQL invocations run concurrently as before.
+   * On every dialect the handler runs through the shared
+   * {@link guardEventHandler} so a failed background dispatch is logged rather
+   * than surfacing as a process-killing unhandled rejection. On SQLite it
+   * additionally chains each invocation onto {@link dispatchQueue} so no two
+   * handler transactions overlap; on PostgreSQL invocations run concurrently
+   * as before.
    */
   private serialize<T>(handler: (payload: T) => Promise<void>): (payload: T) => void {
-    const run = (payload: T): Promise<void> =>
-      Promise.resolve()
-        .then(() => handler(payload))
-        .catch((error) => logError(error, '[ActivityPub] Domain-event handler failed'));
+    const run = guardEventHandler(handler, '[ActivityPub] Domain-event handler failed');
 
     if (!this.serializeDispatch) {
       return (payload: T): void => { void run(payload); };

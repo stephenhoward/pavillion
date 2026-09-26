@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import CalendarEventHandlers from '../../events/index';
@@ -6,7 +6,13 @@ import CalendarInterface from '../../interface';
 import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { DateTime } from 'luxon';
-import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
+import { dispatchAndAwait, waitFor } from '@/server/common/test/helpers/emit-and-settle';
+
+const { mockLogError } = vi.hoisted(() => ({ mockLogError: vi.fn() }));
+
+vi.mock('@/server/common/helper/error-logger', () => ({
+  logError: mockLogError,
+}));
 
 /**
  * Handler-level tests under the single-producer model (pv-hr72).
@@ -70,6 +76,7 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
   afterEach(() => {
     sandbox.restore();
+    mockLogError.mockClear();
   });
 
   // Pre-pv-hr72 fan-out helper names whose absence we verify dynamically. The
@@ -277,6 +284,35 @@ describe('CalendarEventHandlers (single-producer model)', () => {
 
       expect(mockService.buildEventInstances.called).toBe(false);
       expect(eventUpdatedSpy.called).toBe(false);
+    });
+  });
+
+  describe('handler failure isolation', () => {
+    it('logs a rejecting handler instead of surfacing an unhandled rejection', async () => {
+      // The bus never awaits a listener, so a bare async handler that rejects
+      // becomes an unhandled rejection and terminates the process on Node 24.
+      // Every registration must go through the failure-catching wrapper.
+      const failure = new Error('buildEventInstances failed');
+      mockService.buildEventInstances.rejects(failure);
+      const event = createTestEvent('event-1', 'calendar-1');
+      const calendar = new Calendar('calendar-1', 'test-calendar');
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        // Real emit (not dispatchAndAwait) so the rejection takes the same
+        // never-awaited path it takes in production.
+        eventBus.emit('eventCreated', { event, calendar });
+        await waitFor(() => mockLogError.mock.calls.length > 0);
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+
+      expect(unhandled).toEqual([]);
+      expect(mockLogError).toHaveBeenCalledWith(failure, expect.stringContaining('[Calendar]'));
     });
   });
 });

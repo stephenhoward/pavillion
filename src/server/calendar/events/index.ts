@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
+import { guardEventHandler } from '@/server/common/helper/guard-event-handler';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '../interface';
@@ -90,6 +91,16 @@ export interface EventUpdatedPayload {
 }
 
 /**
+ * Payload for the eventDeleted event bus emission, emitted by
+ * EventService.deleteEvent after its transaction commits. Mirrors the
+ * `{ calendar, event }` shape of the other event-lifecycle payloads.
+ */
+export interface EventDeletedPayload {
+  calendar: Calendar;
+  event: CalendarEvent;
+}
+
+/**
  * Payload for the activitypub:calendar:unfollowed event bus emission.
  * Emitted by the AP members service after a local calendar unfollows a
  * remote calendar. Mirrors ActivityPubCalendarUnfollowedPayload in the
@@ -109,6 +120,13 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
+    // Every registration goes through the failure-catching wrapper: the bus
+    // never awaits a listener, so a bare rejection would be an unhandled
+    // rejection that terminates the process. The early-return payload guards
+    // inside the handlers are validation, not error handling, and stay.
+    const guard = <T>(handler: (payload: T) => Promise<void> | void) =>
+      guardEventHandler(handler, '[Calendar] Domain-event handler failed');
+
     // Single-producer model (pv-hr72): only the originating calendar
     // materializes instance rows. When `calendar` is present, the create
     // originated locally — rebuild on the owning calendar. When `calendar`
@@ -117,9 +135,9 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // buildEventInstances so the canonical row(s) for the remote event are
     // materialized at receive time. Without this, list views on follower
     // calendars would miss freshly-federated remote events (pv-13xg).
-    eventBus.on('eventCreated', async (e: EventCreatedPayload) => this.service.buildEventInstances(e.event));
+    eventBus.on('eventCreated', guard(async (e: EventCreatedPayload) => this.service.buildEventInstances(e.event)));
 
-    eventBus.on('eventUpdated', async (e: EventUpdatedPayload) => {
+    eventBus.on('eventUpdated', guard(async (e: EventUpdatedPayload) => {
       // Cancel / restore handlers re-emit eventUpdated with skipRebuild:true
       // purely to drive AP outbound propagation. Rebuilding here would
       // race with concurrent cancel↔restore writes against the unique
@@ -138,9 +156,9 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
       // the listing-time union (EventService.listEventIdsForCalendar) and
       // need no per-calendar fan-out.
       await this.service.buildEventInstances(e.event);
-    });
+    }));
 
-    eventBus.on('eventDeleted', async (e) => this.service.removeEventInstances(e.event));
+    eventBus.on('eventDeleted', guard(async (e: EventDeletedPayload) => this.service.removeEventInstances(e.event)));
 
     // No repost/unrepost subscriptions: under the single-producer model
     // (pv-hr72) creating or removing a repost link never touches instance
@@ -154,14 +172,14 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // source's Place/Space updates, so the origin_uri dedup stamps mirrored
     // from it are cleared. The Place/Space rows themselves stay — reposted
     // events still reference them.
-    eventBus.on('activitypub:calendar:unfollowed', async (e: CalendarUnfollowedPayload) => {
+    eventBus.on('activitypub:calendar:unfollowed', guard(async (e: CalendarUnfollowedPayload) => {
       if (!e?.calendarId || !e?.sourceActorUri) {
         return;
       }
       await this.service.clearOriginUrisFromSource(e.calendarId, e.sourceActorUri);
-    });
+    }));
 
-    eventBus.on('eventInstanceCancelled', async (e: EventInstanceCancelledPayload) => {
+    eventBus.on('eventInstanceCancelled', guard(async (e: EventInstanceCancelledPayload) => {
       // Runtime guard: protect against malformed payloads missing the
       // required event/calendar identity before outbound emit.
       if (!e.event?.id || !e.calendar?.id) {
@@ -185,9 +203,9 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
         event: e.event,
         skipRebuild: true,
       });
-    });
+    }));
 
-    eventBus.on('eventInstanceRestored', async (e: EventInstanceRestoredPayload) => {
+    eventBus.on('eventInstanceRestored', guard(async (e: EventInstanceRestoredPayload) => {
       // Runtime guard: mirror the cancellation handler.
       if (!e.event?.id || !e.calendar?.id) {
         return;
@@ -200,6 +218,6 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
         event: e.event,
         skipRebuild: true,
       });
-    });
+    }));
   }
 }

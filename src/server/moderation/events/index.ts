@@ -11,6 +11,7 @@ import AdminReportNotificationEmail from '../model/admin_report_notification_ema
 import EscalationReminderEmail from '../model/escalation_reminder_email';
 import AutoEscalationNotificationEmail from '../model/auto_escalation_notification_email';
 import { logError } from '@/server/common/helper/error-logger';
+import { guardEventHandler } from '@/server/common/helper/guard-event-handler';
 import type {
   ReportCreatedPayload,
   ReportVerifiedPayload,
@@ -47,9 +48,16 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
-    eventBus.on('reportCreated', this.handleReportCreated.bind(this));
-    eventBus.on('reportVerified', this.handleReportVerified.bind(this));
-    eventBus.on('reportEscalationReminder', this.handleEscalationReminder.bind(this));
+    // Every registration goes through the failure-catching wrapper: the bus
+    // never awaits a listener, so a bare rejection (e.g. an SMTP failure on
+    // the anonymous verification email, or getReportById in handleEscalated)
+    // would be an unhandled rejection that terminates the process.
+    const guard = <T>(handler: (payload: T) => Promise<void>) =>
+      guardEventHandler(handler, '[MODERATION] Domain-event handler failed');
+
+    eventBus.on('reportCreated', guard(this.handleReportCreated.bind(this)));
+    eventBus.on('reportVerified', guard(this.handleReportVerified.bind(this)));
+    eventBus.on('reportEscalationReminder', guard(this.handleEscalationReminder.bind(this)));
     // Auto-escalation email pipeline. The scheduler now emits the
     // cross-domain bus event `moderation:report:escalated` (replacing the
     // pre-existing `report.auto_escalated` dot-style name), but admin-
@@ -58,7 +66,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
     // which only sends the auto-escalation-to-admins notification for
     // scheduler-driven escalations — the handler checks the reason
     // payload before sending.
-    eventBus.on(MODERATION_BUS_EVENTS.REPORT_ESCALATED, this.handleEscalated.bind(this));
+    eventBus.on(MODERATION_BUS_EVENTS.REPORT_ESCALATED, guard(this.handleEscalated.bind(this)));
   }
 
   /**
