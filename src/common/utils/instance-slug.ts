@@ -1,5 +1,22 @@
 import { DateTime } from 'luxon';
 
+/**
+ * The instance slug shape as a regex source string, unanchored: `\d{8}-\d{4}`.
+ *
+ * This is the one place the shape is spelled. Route-level consumers embed it
+ * rather than re-typing it: vue-router param constraints in src/site/routes.ts
+ * and src/widget/router.ts interpolate it into a path template
+ * (`:startTime(${INSTANCE_SLUG_PATTERN})`), and meta-tags.ts composes it into
+ * a `new RegExp` with its own anchors. It carries no anchors of its own
+ * because vue-router wraps a param pattern in its own delimiters, and a
+ * stray `^` or `$` inside those would silently match nothing.
+ *
+ * Structural only. parseInstanceSlug applies this shape with anchors and
+ * then checks the calendar semantics (month 13, Feb 30, year bounds); a
+ * router that accepts a slug by this pattern still hands it to the parser.
+ */
+export const INSTANCE_SLUG_PATTERN = '\\d{8}-\\d{4}';
+
 const SLUG_REGEX = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/;
 
 // Defense-in-depth year bounds to prevent distant timestamps from reaching

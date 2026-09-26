@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import { useWidgetStore } from '../stores/widgetStore';
 
 /**
@@ -35,7 +36,7 @@ describe('Widget App Infrastructure', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/widget/:urlName', name: 'widget', component: { template: '<div>Widget</div>' } },
-        { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'event', component: { template: '<div>Event</div>' } },
+        { path: `/widget/:urlName/events/:eventId/:startTime(${INSTANCE_SLUG_PATTERN})?`, name: 'event', component: { template: '<div>Event</div>' } },
       ],
     });
   });

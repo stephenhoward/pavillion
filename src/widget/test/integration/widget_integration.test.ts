@@ -11,6 +11,7 @@ import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import { WidgetConfig as WidgetConfigModel } from '@/common/model/widget_config';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import CalendarInterface from '@/server/calendar/interface';
 import WidgetDomainService from '@/server/calendar/service/widget_domain';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
@@ -235,7 +236,7 @@ describe('Widget Integration Tests', () => {
         history: createMemoryHistory(),
         routes: [
           { path: '/widget/:urlName', name: 'widget-calendar', component: { template: '<div></div>' } },
-          { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'widget-event-detail', component: { template: '<div></div>' } },
+          { path: `/widget/:urlName/events/:eventId/:startTime(${INSTANCE_SLUG_PATTERN})?`, name: 'widget-event-detail', component: { template: '<div></div>' } },
         ],
       });
     };

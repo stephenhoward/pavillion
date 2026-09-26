@@ -11,6 +11,7 @@ import ListView from '../list-view.vue';
 import EventCard from '@/site/components/event-card.vue';
 import EventImage from '@/site/components/event-image.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import { useWidgetStore } from '../../stores/widgetStore';
 
 // Initialize i18next for tests
@@ -38,7 +39,7 @@ const createMockRouter = () => {
     history: createMemoryHistory(),
     routes: [
       { path: '/widget/:urlName', name: 'widget-calendar', component: { template: '<div></div>' } },
-      { path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?', name: 'widget-event-detail', component: { template: '<div></div>' } },
+      { path: `/widget/:urlName/events/:eventId/:startTime(${INSTANCE_SLUG_PATTERN})?`, name: 'widget-event-detail', component: { template: '<div></div>' } },
     ],
   });
 };
