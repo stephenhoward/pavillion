@@ -78,7 +78,7 @@ export class EventSeriesContentEntity extends Model {
     return EventSeriesContentEntity.build({
       language: model.language,
       name: model.name,
-      description: model.description || null,
+      description: model.description,
       image_alt: model.imageAlt,
     });
   }

@@ -96,17 +96,17 @@ class CalendarContentEntity extends Model {
   @Column({ type: DataType.STRING })
   declare language: string;
 
+  /**
+   * name, description and image_alt are all nullable at the database level.
+   * Null and empty string both mean "no value in this language", so the model
+   * normalizes null to '' rather than carrying the distinction upward.
+   */
   @Column({ type: DataType.STRING })
-  declare name: string;
+  declare name: string | null;
 
   @Column({ type: DataType.TEXT })
-  declare description: string;
+  declare description: string | null;
 
-  /**
-   * Alt text for the calendar's default event image, in this row's language.
-   * Nullable: null and empty string both mean "no alt in this language", so the
-   * model normalizes null to '' rather than carrying the distinction upward.
-   */
   @Column({ type: DataType.TEXT })
   declare image_alt: string | null;
 
@@ -115,8 +115,8 @@ class CalendarContentEntity extends Model {
 
   toModel(): CalendarContent {
     let content = new CalendarContent( this.language );
-    content.name = this.name;
-    content.description = this.description;
+    content.name = this.name ?? '';
+    content.description = this.description ?? '';
     content.imageAlt = this.image_alt ?? '';
 
     return content;

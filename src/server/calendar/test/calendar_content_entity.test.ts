@@ -71,6 +71,14 @@ describe('CalendarContentEntity', () => {
     expect(convertedModel.imageAlt).toBe(originalModel.imageAlt);
   });
 
+  test('handles null name and description by converting to empty strings', () => {
+    const entity = CalendarContentEntity.build({ ...sampleData, name: null, description: null });
+    const model = entity.toModel();
+
+    expect(model.name).toBe('');
+    expect(model.description).toBe('');
+  });
+
   test('handles null image_alt by converting to empty string', () => {
     const entity = CalendarContentEntity.build({ ...sampleData, image_alt: null });
     const model = entity.toModel();
