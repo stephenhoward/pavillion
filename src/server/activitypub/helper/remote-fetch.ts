@@ -95,6 +95,28 @@ async function buildSignedGetHeaders(
 }
 
 /**
+ * Default response-body byte cap for a single fetched ActivityPub object
+ * (1 MiB), applied whenever a caller omits `maxContentLength`.
+ *
+ * SECURITY: the fetch is reachable from an inbound `Announce`, whose object
+ * URI is peer-controlled and whose fetched body is normalized into an event
+ * row and rendered on a public calendar page. Without a default, a caller
+ * that omits the option accepts a body of any size, and every new call site
+ * would have to remember to pass one. A default makes an omitted option
+ * bounded rather than unlimited; the explicit option remains an override.
+ *
+ * 1 MiB matches the cap already applied to the other outbound GETs
+ * (`ACTOR_PROFILE_MAX_BYTES` for actor profiles, `MAX_PAGE_BYTES` for
+ * backfill collection pages), so one number governs every peer-facing fetch.
+ * It is an order of magnitude above the 100 KiB express.json default that
+ * bounds an activity POSTed to the inbox — an embedded Event with several
+ * languages of content and a few attachments is a few tens of KiB — while
+ * still preventing a hostile peer from streaming an unbounded body into
+ * memory.
+ */
+export const REMOTE_OBJECT_MAX_BYTES = 1_048_576;
+
+/**
  * Optional fetch tuning for {@link fetchRemoteObject}. Currently exposes only
  * a response-body byte cap; additional knobs may be added without breaking
  * existing callers because the parameter itself is optional.
@@ -103,9 +125,10 @@ export interface FetchRemoteObjectOptions {
   /**
    * Maximum number of bytes the axios client will accept in the response
    * body. When the response exceeds this size axios aborts and the helper
-   * returns null. Defaults to axios's library default (effectively
-   * unbounded) when omitted. The AP follow-backfill worker passes a
-   * 1 MiB cap to stay within the documented page-size budget.
+   * returns null. Defaults to {@link REMOTE_OBJECT_MAX_BYTES} when omitted.
+   * Pass a different value when the fetched resource is legitimately a
+   * different size from a single object — the AP follow-backfill worker
+   * passes its own page-size budget for outbox collection pages.
    */
   maxContentLength?: number;
 }
@@ -134,6 +157,11 @@ export interface FetchRemoteObjectOptions {
  * SECURITY: maxRedirects is set to 0 to prevent redirect-based SSRF attacks
  * where a redirect could lead to a private IP address after the initial URL
  * validation has passed.
+ *
+ * SECURITY: the response body is always capped — at
+ * {@link REMOTE_OBJECT_MAX_BYTES} unless the caller passes its own
+ * `maxContentLength` — so a peer-controlled URI cannot stream an unbounded
+ * body into memory.
  *
  * @param uri - The URI of the remote ActivityPub object to fetch
  * @param signingContext - Optional calendar + bus-wired interface whose actor
@@ -193,13 +221,11 @@ export async function fetchRemoteObject(
       headers,
       timeout: REMOTE_OBJECT_FETCH_TIMEOUT_MS,
       maxRedirects: 0,
-    };
-    if (options?.maxContentLength !== undefined) {
-      axiosConfig.maxContentLength = options.maxContentLength;
       // axios's `maxBodyLength` guards request bodies (irrelevant for GETs)
       // while `maxContentLength` guards response bodies; we set the latter
       // here. Documented for future maintainers who confuse the two.
-    }
+      maxContentLength: options?.maxContentLength ?? REMOTE_OBJECT_MAX_BYTES,
+    };
 
     const response = await axios.get(uri, axiosConfig);
 
