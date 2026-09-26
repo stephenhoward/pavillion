@@ -139,6 +139,26 @@ describe('EventSeriesContent', () => {
     expect(content.imageAlt).toBe('A poster for the series');
   });
 
+  test('fromObject treats null name and description as empty strings', () => {
+    const content = EventSeriesContent.fromObject({
+      language: 'en',
+      name: null,
+      description: null,
+    });
+
+    expect(content.name).toBe('');
+    expect(content.description).toBe('');
+    expect(content.isEmpty()).toBe(true);
+    expect(content.isValid()).toBe(false);
+  });
+
+  test('fromObject handles missing name and description', () => {
+    const content = EventSeriesContent.fromObject({ language: 'en' });
+
+    expect(content.name).toBe('');
+    expect(content.description).toBe('');
+  });
+
   test('fromObject treats null imageAlt as empty string', () => {
     const content = EventSeriesContent.fromObject({
       language: 'en',
