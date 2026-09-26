@@ -55,6 +55,13 @@ describe('EventSeriesContentEntity', () => {
     expect(convertedModel.description).toBe('');
   });
 
+  test('stores an empty description as an empty string rather than null', () => {
+    const model = new EventSeriesContent('en', 'Summer Concert Series', '');
+    const entity = EventSeriesContentEntity.fromModel(model);
+
+    expect(entity.description).toBe('');
+  });
+
   test('handles null description correctly', () => {
     const entityData = { ...sampleData, description: null };
     const entity = EventSeriesContentEntity.build(entityData);
