@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import { Calendar } from '@/common/model/calendar';
@@ -13,6 +14,13 @@ import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import { MailData } from '@/server/common/email/types';
 import { initI18Next } from '@/server/common/test/lib/i18next';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+
+const { mockLogError } = vi.hoisted(() => ({ mockLogError: vi.fn() }));
+
+vi.mock('@/server/common/helper/error-logger', () => ({
+  logError: mockLogError,
+}));
 
 initI18Next();
 
@@ -171,3 +179,63 @@ describe('ModerationEventHandlers getCalendarName urlName precedence', () => {
  * method directly.
  */
 void MODERATION_BUS_EVENTS;
+
+describe('ModerationEventHandlers failure isolation', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    mockLogError.mockClear();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('logs an SMTP failure on the anonymous verification email instead of crashing', async () => {
+    // handleReportCreated awaits emailInterface.sendEmail outside any try, so
+    // an SMTP failure rejects the handler promise. The bus never awaits it;
+    // without the wrapper that rejection is unhandled and fatal on Node 24.
+    const smtpFailure = new Error('SMTP connection refused');
+    const report = Report.fromObject({
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      eventId: 'event-id',
+      calendarId: 'cal-id',
+      category: ReportCategory.SPAM,
+      description: 'Test report',
+      reporterType: 'anonymous',
+      status: ReportStatus.PENDING_VERIFICATION,
+      verificationToken: 'token-123',
+      createdAt: new Date('2026-05-14T12:00:00Z'),
+    });
+    const calendarInterface = {
+      getEventById: sandbox.stub().resolves(new CalendarEvent('event-id', 'cal-id')),
+    } as unknown as CalendarInterface;
+    const emailInterface = {
+      sendEmail: sandbox.stub().rejects(smtpFailure),
+    } as unknown as EmailInterface;
+
+    const eventBus = new EventEmitter();
+    new ModerationEventHandlers(
+      {} as ModerationInterface,
+      calendarInterface,
+      {} as AccountsInterface,
+      emailInterface,
+    ).install(eventBus);
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      eventBus.emit('reportCreated', { report, reporterEmail: 'reporter@example.test' });
+      await waitFor(() => mockLogError.mock.calls.length > 0);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    expect(mockLogError).toHaveBeenCalledWith(smtpFailure, expect.stringContaining('[MODERATION]'));
+  });
+});
