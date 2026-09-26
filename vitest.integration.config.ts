@@ -19,6 +19,13 @@ export default defineConfig({
       },
     },
     teardownTimeout: 15000,
+    // Polling helpers in src/server/common/test/lib/test_polling.ts wait up to
+    // DEFAULT_MAX_WAIT_MS (15000) before throwing a labelled error. Both
+    // timeouts sit comfortably above that so the helper reports first, with its
+    // label, instead of vitest's anonymous "timed out in Nms". hookTimeout
+    // matters too: afterEach drains call the same helpers.
+    testTimeout: 30000,
+    hookTimeout: 30000,
     include: ['**/integration/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
