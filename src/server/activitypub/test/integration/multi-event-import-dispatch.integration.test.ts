@@ -144,7 +144,7 @@ describe('Multi-event file import → ActivityPub dispatch (concurrent-transacti
         const c = await EventObjectEntity.count({ where: { event_id: eventIds } });
         return c === 2 ? c : null;
       },
-      { maxWaitMs: 4000, label: 'both EventObjectEntity rows' },
+      { label: 'both EventObjectEntity rows' },
     );
     expect(objectCount).toBe(2);
 
@@ -153,7 +153,7 @@ describe('Multi-event file import → ActivityPub dispatch (concurrent-transacti
         const c = await ActivityPubOutboxMessageEntity.count({ where: { calendar_id: calendar.id } });
         return c >= 2 ? c : null;
       },
-      { maxWaitMs: 4000, label: 'both outbox messages' },
+      { label: 'both outbox messages' },
     );
     expect(outboxCount).toBeGreaterThanOrEqual(2);
   });

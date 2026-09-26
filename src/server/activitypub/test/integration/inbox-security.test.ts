@@ -109,7 +109,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
   async function settleInbox(): Promise<void> {
     await waitForStableCount(
       async () => ActivityPubInboxMessageEntity.count({ where: { processed_time: null } }),
-      { maxWaitMs: 5000, stableForMs: 150, label: 'inbox drain' },
+      { stableForMs: 150, label: 'inbox drain' },
     ).catch(() => { /* see doc comment: drained-or-not, proceed */ });
   }
 
