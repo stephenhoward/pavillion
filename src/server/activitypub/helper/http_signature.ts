@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import config from 'config';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/common/constants';
+import { ACTOR_PROFILE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { logError } from '@/server/common/helper/error-logger';
@@ -242,6 +243,10 @@ async function getPublicKey(keyId: string): Promise<string | null> {
  * where a redirect could lead to a private IP address after the initial URL
  * validation has passed.
  *
+ * SECURITY: Both fetches carry a response-body cap (ACTOR_PROFILE_MAX_BYTES)
+ * because they run before the signature is verified — nothing about the
+ * sender has been authenticated when the body is read.
+ *
  * @param {string} keyId - The key identifier URL
  * @returns {Promise<string|null>} The public key as a string, or null if fetching fails
  */
@@ -280,6 +285,13 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
       },
       timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
       maxRedirects: 0,
+      // SECURITY: This fetch runs before the signature is verified, so the
+      // URL is chosen by an unauthenticated sender. `maxContentLength` caps
+      // the *response* body; axios's `maxBodyLength` only caps *request*
+      // bodies and is irrelevant to a GET, so it is deliberately not set.
+      // An over-size response rejects with an AxiosError, which the catch
+      // below logs once and turns into a null return.
+      maxContentLength: ACTOR_PROFILE_MAX_BYTES,
     });
 
     if (response.status !== 200) {
@@ -314,6 +326,9 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
         },
         timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
         maxRedirects: 0,
+        // SECURITY: same pre-authentication response cap as the actor fetch
+        // above; the key URL comes from an unverified actor document.
+        maxContentLength: ACTOR_PROFILE_MAX_BYTES,
       });
 
       if (keyResponse.status === 200 && keyResponse.data.publicKeyPem) {
