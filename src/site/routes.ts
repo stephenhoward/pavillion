@@ -2,6 +2,7 @@ import { RouteRecordRaw, RouterScrollBehavior } from 'vue-router';
 
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { DISCOVER_PATH } from '@/common/routing/public-paths';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 
 /**
  * Whatever vue-router accepts as a route's `component`.
@@ -55,7 +56,7 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
     { path: DISCOVER_PATH, component: components.discovery, name: 'discovery' },
     { path: '/:calendar', component: components.calendar, name: 'calendar' },
     { path: '/:calendar/events/:event', component: components.event, name: 'event' },
-    { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: components.instance, name: 'instance' },
+    { path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: components.instance, name: 'instance' },
     { path: '/:calendar/series/:series', component: components.series, name: 'series' },
   ];
 
@@ -71,7 +72,7 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
       { path: `/:locale(${pattern})${DISCOVER_PATH}`, component: components.discovery },
       { path: `/:locale(${pattern})/:calendar`, component: components.calendar },
       { path: `/:locale(${pattern})/:calendar/events/:event`, component: components.event },
-      { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(\\d{8}-\\d{4})`, component: components.instance },
+      { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: components.instance },
       { path: `/:locale(${pattern})/:calendar/series/:series`, component: components.series },
     );
   }

@@ -11,6 +11,7 @@ import ListResult from '@/client/service/list-result';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import { DateTime } from 'luxon';
 
 vi.mock('../../service/calendar');
@@ -607,7 +608,7 @@ describe('calendar.vue - Locale-aware event card links', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/:calendar', name: 'calendar', component: calendar },
-        { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
+        { path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, name: 'instance', component: { template: '<div/>' } },
       ],
     });
 
@@ -650,8 +651,8 @@ describe('calendar.vue - Locale-aware event card links', () => {
       routes: [
         { path: '/:calendar', name: 'calendar', component: calendar },
         { path: '/es/:calendar', component: calendar },
-        { path: '/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', name: 'instance', component: { template: '<div/>' } },
-        { path: '/es/:calendar/events/:event/:startTime(\\d{8}-\\d{4})', component: { template: '<div/>' } },
+        { path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, name: 'instance', component: { template: '<div/>' } },
+        { path: `/es/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: { template: '<div/>' } },
       ],
     });
 

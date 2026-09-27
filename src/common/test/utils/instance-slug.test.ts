@@ -1,6 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import { DateTime } from 'luxon';
-import { formatInstanceSlug, parseInstanceSlug } from '@/common/utils/instance-slug';
+import { INSTANCE_SLUG_PATTERN, formatInstanceSlug, parseInstanceSlug } from '@/common/utils/instance-slug';
+
+describe('INSTANCE_SLUG_PATTERN', () => {
+  // Routers and the SSR page regex embed the source string with their own
+  // anchors; this mirrors that composition rather than testing the bare string.
+  const anchored = new RegExp(`^${INSTANCE_SLUG_PATTERN}$`);
+
+  it('is unanchored so it can sit inside a vue-router param constraint', () => {
+    expect(INSTANCE_SLUG_PATTERN.startsWith('^')).toBe(false);
+    expect(INSTANCE_SLUG_PATTERN.endsWith('$')).toBe(false);
+  });
+
+  it('matches what formatInstanceSlug emits', () => {
+    const dt = DateTime.fromISO('2026-05-01T18:30:00Z', { zone: 'utc' });
+    expect(anchored.test(formatInstanceSlug(dt))).toBe(true);
+  });
+
+  it('rejects malformed slugs', () => {
+    expect(anchored.test('20260501')).toBeFalsy();
+    expect(anchored.test('2026-05-01-18-30')).toBeFalsy();
+    expect(anchored.test('20260501_1830')).toBeFalsy();
+    expect(anchored.test('abcd0501-1830')).toBeFalsy();
+    expect(anchored.test('20260501-18300')).toBeFalsy();
+  });
+});
 
 describe('formatInstanceSlug', () => {
   it('formats a UTC DateTime to yyyymmdd-hhmm', () => {

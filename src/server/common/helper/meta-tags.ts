@@ -14,7 +14,7 @@ import PublicCalendarInterface from '@/server/public/interface/index';
 import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import { stripLocalePrefix } from '@/common/i18n/locale-url';
 import { isReservedRouteSegment } from '@/common/routing/reserved-segments';
-import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import { INSTANCE_SLUG_PATTERN, parseInstanceSlug } from '@/common/utils/instance-slug';
 import { createLogger } from '@/server/common/helper/logger';
 import { looksLikeUuid } from '@/server/common/helper/uuid';
 
@@ -64,8 +64,9 @@ export interface EventPageParams {
  * Segment length caps defend against pathological URLs reaching the lookup
  * layer: calendarUrlName capped at 64 chars (matches calendar.url_name column
  * limit), eventId capped at 36 chars (UUID length, with the shape itself checked
- * in parseEventPageParams). The instance segment, when present, must match the
- * `yyyymmdd-hhmm` slug shape exactly.
+ * in parseEventPageParams). The instance segment, when present, must match
+ * INSTANCE_SLUG_PATTERN exactly, so the SSR parser and the site router agree on
+ * which paths carry an occurrence.
  *
  * A single trailing slash is accepted. The site SPA's router is not in strict
  * mode, so `/cal/events/:id/` renders the event page; rejecting it here would
@@ -73,7 +74,7 @@ export interface EventPageParams {
  * that copy-paste and link builders produce routinely. The canonical URL built
  * downstream is always the slash-free form, so the two spellings converge.
  */
-const EVENT_PAGE_RE = /^\/([^/]{1,64})\/events\/([^/]{1,36})(?:\/(\d{8}-\d{4}))?\/?$/i;
+const EVENT_PAGE_RE = new RegExp(`^/([^/]{1,64})/events/([^/]{1,36})(?:/(${INSTANCE_SLUG_PATTERN}))?/?$`, 'i');
 
 /**
  * Parses a public event page URL path into its component parts.

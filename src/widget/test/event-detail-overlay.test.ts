@@ -110,6 +110,7 @@ vi.mock('@/site/components/EventDetailBody.vue', () => ({
 // ---------------------------------------------------------------------------
 import EventDetailOverlay from '@/widget/components/event-detail-overlay.vue';
 import { useWidgetStore } from '@/widget/stores/widgetStore';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -117,7 +118,7 @@ import { useWidgetStore } from '@/widget/stores/widgetStore';
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?',
+    path: `/widget/:urlName/events/:eventId/:startTime(${INSTANCE_SLUG_PATTERN})?`,
     component: EventDetailOverlay,
     name: 'widget-event',
   },
@@ -406,7 +407,7 @@ describe('widget event-detail-overlay slug routing', () => {
   });
 
   it('renders not-found when startTime is semantically invalid (parseInstanceSlug returns null)', async () => {
-    // The router regex only enforces \d{8}-\d{4}; parseInstanceSlug is the
+    // The router regex only enforces INSTANCE_SLUG_PATTERN; parseInstanceSlug is the
     // semantic gate (month 13, day 32, bad year, etc.).
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20261301-2500');
 

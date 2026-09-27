@@ -1,5 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 
 /**
  * E2E Tests: Public Calendar Browsing & Event Detail Viewing
@@ -192,7 +193,7 @@ test.describe('Public Calendar', () => {
     // The assertion is on the settled destination, so it holds whether the card
     // links straight at the root URL or reaches it through the legacy /view 301.
     await page.waitForURL(
-      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/test_calendar\\/events\\/[^/]+\\/\\d{8}-\\d{4}$`),
+      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/test_calendar\\/events\\/[^/]+\\/${INSTANCE_SLUG_PATTERN}$`),
       { timeout: 10000, waitUntil: 'commit' },
     );
 

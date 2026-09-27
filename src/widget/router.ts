@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import { useWidgetStore } from './stores/widgetStore';
 import WidgetContainer from './components/widget-container.vue';
 import EventDetailOverlay from './components/event-detail-overlay.vue';
@@ -10,7 +11,7 @@ const routes: RouteRecordRaw[] = [
     component: WidgetContainer,
   },
   {
-    path: '/widget/:urlName/events/:eventId/:startTime(\\d{8}-\\d{4})?',
+    path: `/widget/:urlName/events/:eventId/:startTime(${INSTANCE_SLUG_PATTERN})?`,
     name: 'widget-event-detail',
     component: EventDetailOverlay,
   },
