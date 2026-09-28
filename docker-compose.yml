@@ -172,7 +172,7 @@ services:
   # the HAProxy ruleset, not the proxy's uid. Pinned by digest so a tag re-push
   # cannot silently change the binary.
   socket-proxy:
-    image: haproxy:3.2-alpine@sha256:5961c68bc8a81c5124d0a98ab20f81b74717d6afe596e805977d9cf84c126222
+    image: haproxy:3.2-alpine@sha256:1aca32ee932b96d2a75f1882909325839dd23c138ba9c6fd26e4d88179f30f13
     container_name: pavillion-socket-proxy
     user: "0:0"
     volumes:
