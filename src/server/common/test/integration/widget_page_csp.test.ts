@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import main from '@/server/app';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
  * Integration test for the widget HTML shell's framing policy.
@@ -16,12 +16,15 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
  * but the CSP headers should still be set correctly.
  */
 describe('Widget Page CSP Headers', () => {
+  let env: TestEnvironment;
   let app: express.Application;
   const configuredUrlName = `csp_configured_${uuidv4().slice(0, 8)}`;
   const unconfiguredUrlName = `csp_open_${uuidv4().slice(0, 8)}`;
 
   beforeAll(async () => {
-    app = await main();
+    env = new TestEnvironment();
+    await env.init();
+    app = env.app;
 
     await CalendarEntity.bulkCreate([
       { id: uuidv4(), url_name: configuredUrlName, languages: 'en', widget_allowed_domain: 'example.com' },
@@ -34,6 +37,7 @@ describe('Widget Page CSP Headers', () => {
       where: { url_name: [configuredUrlName, unconfiguredUrlName] },
       force: true,
     });
+    await env.cleanup();
   });
 
   /**
