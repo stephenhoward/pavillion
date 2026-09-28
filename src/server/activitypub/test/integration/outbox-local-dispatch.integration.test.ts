@@ -270,7 +270,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => ActivityPubOutboxMessageEntity.count({
         where: { processed_time: null },
       }),
-      { maxWaitMs: 5000, stableForMs: 150, label: 'afterEach outbox drain' },
+      { stableForMs: 150, label: 'afterEach outbox drain' },
     ).catch(() => {
       // Swallow drain timeouts — we still want sandbox.restore to run so
       // subsequent tests get a clean stub set. A lingering cascade will
@@ -298,7 +298,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => SharedEventEntity.findOne({
         where: { event_id: event.id, calendar_id: calendarB.id },
       }),
-      { maxWaitMs: 2000, label: 'SharedEventEntity for B' },
+      { label: 'SharedEventEntity for B' },
     );
 
     // Assertion 1: B has a SharedEventEntity for the event.
@@ -326,7 +326,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
         const announces = messages.filter(m => m.type === 'Announce');
         return announces.length > 0 ? announces : null;
       },
-      { maxWaitMs: 2000, label: 'ActivityPubOutboxMessageEntity Announce for B' },
+      { label: 'ActivityPubOutboxMessageEntity Announce for B' },
     );
 
     // Assertion 2: B has a queued outbox Announce — this is the regression gate.
@@ -365,7 +365,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => axiosPostStub.getCalls().some(
         (call) => call.args[0] === actorD_remote.inbox_url,
       ) || null,
-      { maxWaitMs: 3000, label: 'HTTP delivery to D inbox_url' },
+      { label: 'HTTP delivery to D inbox_url' },
     );
     const deliveredToD = axiosPostStub.getCalls().some(
       (call) => call.args[0] === actorD_remote.inbox_url,
@@ -419,7 +419,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
         );
         return createEvent && createNote ? { createEvent, createNote } : null;
       },
-      { maxWaitMs: 2000, label: 'paired Create(Event) + Create(Note) rows in A outbox' },
+      { label: 'paired Create(Event) + Create(Note) rows in A outbox' },
     );
 
     const aOutboxMessages = await ActivityPubOutboxMessageEntity.findAll({
@@ -491,7 +491,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => SharedEventEntity.findOne({
         where: { event_id: event.id, calendar_id: calendarB.id },
       }),
-      { maxWaitMs: 2000, label: 'single-hop share' },
+      { label: 'single-hop share' },
     );
     expect(share).not.toBeNull();
     expect(share!.auto_posted).toBe(true);
@@ -511,7 +511,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => SharedEventEntity.findOne({
         where: { event_id: event.id, calendar_id: calendarC.id },
       }),
-      { maxWaitMs: 3000, label: 'multi-hop share at C' },
+      { label: 'multi-hop share at C' },
     );
 
     const shareB = await SharedEventEntity.findOne({
@@ -545,7 +545,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       // share; we use waitForStableCount to avoid a brittle fixed wait.
       await waitForStableCount(
         async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-        { maxWaitMs: 1500, stableForMs: 200, label: 'policy-off cascade settlement' },
+        { stableForMs: 200, label: 'policy-off cascade settlement' },
       );
 
       const share = await SharedEventEntity.findOne({
@@ -601,11 +601,11 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
         async () => SharedEventEntity.findOne({
           where: { event_id: event.id, calendar_id: calendarB.id },
         }),
-        { maxWaitMs: 2000, label: '2-cycle B share' },
+        { label: '2-cycle B share' },
       );
       await waitForStableCount(
         async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-        { maxWaitMs: 2000, stableForMs: 200, label: '2-cycle total share count' },
+        { stableForMs: 200, label: '2-cycle total share count' },
       );
 
       // The loop guard assertion: A must NOT have a share for its own event,
@@ -645,19 +645,19 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => CalendarActorEntity.findOne({
         where: { actor_uri: ActivityPubActor.actorUrl(calendarX) },
       }),
-      { maxWaitMs: 2000, label: 'actorX auto-created' },
+      { label: 'actorX auto-created' },
     );
     const actorY = await waitFor(
       async () => CalendarActorEntity.findOne({
         where: { actor_uri: ActivityPubActor.actorUrl(calendarY) },
       }),
-      { maxWaitMs: 2000, label: 'actorY auto-created' },
+      { label: 'actorY auto-created' },
     );
     const actorZ = await waitFor(
       async () => CalendarActorEntity.findOne({
         where: { actor_uri: ActivityPubActor.actorUrl(calendarZ) },
       }),
-      { maxWaitMs: 2000, label: 'actorZ auto-created' },
+      { label: 'actorZ auto-created' },
     );
 
     // Following edges (authorization side consulted by checkAndPerformAutoRepost):
@@ -722,11 +722,11 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => SharedEventEntity.findOne({
         where: { event_id: event.id, calendar_id: calendarZ.id },
       }),
-      { maxWaitMs: 3000, label: '3-cycle Z share' },
+      { label: '3-cycle Z share' },
     );
     await waitForStableCount(
       async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-      { maxWaitMs: 2000, stableForMs: 200, label: '3-cycle total share count' },
+      { stableForMs: 200, label: '3-cycle total share count' },
     );
 
     const shareY = await SharedEventEntity.findOne({
@@ -762,7 +762,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       async () => SharedEventEntity.findOne({
         where: { event_id: event.id, calendar_id: calendarB.id },
       }),
-      { maxWaitMs: 2000, label: 'first dedup share' },
+      { label: 'first dedup share' },
     );
 
     // Second dispatch: synthesize a second Announce from A on the same event
@@ -775,7 +775,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     await apInterface.addToOutbox(calendarA, new AnnounceActivity(actorUrl, eventUrl));
     await waitForStableCount(
       async () => SharedEventEntity.count({ where: { event_id: event.id, calendar_id: calendarB.id } }),
-      { maxWaitMs: 2000, stableForMs: 200, label: 'dedup share count on B' },
+      { stableForMs: 200, label: 'dedup share count on B' },
     );
 
     const count = await SharedEventEntity.count({
