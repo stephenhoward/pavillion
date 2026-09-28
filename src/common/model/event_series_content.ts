@@ -64,13 +64,15 @@ export class EventSeriesContent extends Model implements TranslatedContentModel 
   }
 
   /**
-   * Create from plain object.
+   * Create from plain object. Every text field is guarded with `?? ''`
+   * because the constructor's parameter-property defaults fire on
+   * `undefined` but not on an explicit `null`.
    */
   static fromObject(obj: Record<string, any>): EventSeriesContent {
     return new EventSeriesContent(
       obj.language,
-      obj.name,
-      obj.description,
+      obj.name ?? '',
+      obj.description ?? '',
       obj.imageAlt ?? '',
     );
   }
