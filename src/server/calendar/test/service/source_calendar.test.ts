@@ -61,6 +61,28 @@ describe('resolveSourceCalendars', () => {
     expect(ctx.event.sourceCalendar!.url).toBe('/original-cal');
   });
 
+  /**
+   * The eager-loaded url name is a DB value that is not regex-gated here, and
+   * the result is rendered as an href on anonymous public pages. Interpolated
+   * raw, '//evil.com' would be a scheme-relative link off our origin.
+   */
+  it.each([
+    ['a scheme-relative authority', '//evil.com', '/%2F%2Fevil.com'],
+    ['a traversal', 'a/../admin', '/a%2F..%2Fadmin'],
+    ['a leading backslash', '\\evil.com', '/%5Cevil.com'],
+  ])('percent-encodes %s in a local source calendar url name', async (_label, urlName, expected) => {
+    const ctx = buildContext({
+      eventId: 'evt-hostile',
+      displayCalendarId: 'cal-B',
+      eventCalendarId: 'cal-A',
+      sourceCalendarUrlName: urlName,
+    });
+
+    await resolveSourceCalendars([ctx], new Map());
+
+    expect(ctx.event.sourceCalendar!.url).toBe(expected);
+  });
+
   it('should mark as repost but leave sourceCalendar null when urlName is unavailable', async () => {
     const ctx = buildContext({
       eventId: 'evt-2b',

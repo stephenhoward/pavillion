@@ -93,6 +93,10 @@ describe('A calendar whose url name is a reserved route segment (DEC-018 rule 4)
     expect(response.body.id).toBe(`https://pavillion.dev/calendars/${RESERVED_URL_NAME}`);
     expect(response.body.preferredUsername).toBe(RESERVED_URL_NAME);
     expect(response.body.inbox).toBe(`https://pavillion.dev/calendars/${RESERVED_URL_NAME}/inbox`);
+    // Built from the url name without consulting the reserved list: on our own
+    // origin this resolves to the server-owned segment, not the calendar's
+    // page — misdirection the collision report tells the operator about.
+    expect(response.body.url).toBe(`https://pavillion.dev/${RESERVED_URL_NAME}`);
   });
 
   it('still advertises the signing key peers verify its activities against', async () => {
