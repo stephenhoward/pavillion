@@ -75,6 +75,34 @@ function logBypassWarning(): void {
 }
 
 /**
+ * http-signature error types that mean the *sender's* signature is at fault.
+ *
+ * The library (v1.4.0) does not export its error classes; each one is a
+ * subclass of its internal `HttpSignatureError` that sets `name` to the
+ * constructor name, so the catch in `verifyHttpSignature` keys on `name`:
+ *
+ * - InvalidHeaderError: unparseable header, unsupported scheme (anything but
+ *   `Signature`, including RFC 9421 structured-field headers), or a missing
+ *   keyId/algorithm/signature param
+ * - InvalidParamsError: the algorithm param names an unsupported algorithm
+ * - StrictParsingError: legacy attributes used under strict parsing
+ * - ExpiredRequestError: date/created/expires outside the allowed skew
+ * - InvalidAlgorithmError: raised by verifySignature when the algorithm does
+ *   not fit the key
+ *
+ * MissingHeaderError is handled separately (400). The parser can also throw a
+ * plain `Error('Invalid substate')`, an internal state-machine assertion that
+ * is not reachable from input; it deliberately falls through to 500.
+ */
+const SENDER_SIGNATURE_ERRORS = new Set([
+  'InvalidHeaderError',
+  'InvalidParamsError',
+  'StrictParsingError',
+  'ExpiredRequestError',
+  'InvalidAlgorithmError',
+]);
+
+/**
  * Express middleware for verifying HTTP signatures in ActivityPub requests.
  * Implements the HTTP Signature verification spec for securing ActivityPub interactions.
  *
@@ -170,6 +198,19 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
       return res.status(400).json({ error: 'Missing required signature header' });
     }
 
+    // The sender's signature could not be understood: answer 401 so the peer
+    // does not retry, and log at warn so a new signature scheme arriving
+    // (e.g. RFC 9421 structured-field headers) is visible to operators.
+    if (error instanceof Error && SENDER_SIGNATURE_ERRORS.has(error.name)) {
+      logger.warn(
+        { errorName: error.name, reason: error.message },
+        'Rejected inbound request with an HTTP signature we cannot parse',
+      );
+      return res.status(401).json({ error: 'Unparseable HTTP signature' });
+    }
+
+    // Anything else is this server's failure (e.g. a database or network
+    // error while resolving the key) and stays a 500.
     logError(error, '[ActivityPub] Failed to verify HTTP signature');
     res.status(500).json({error: 'Error verifying HTTP signature'});
   }

@@ -513,6 +513,89 @@ describe('HTTP Signature Verification', () => {
     expect(next.called).toBe(false);
   });
 
+  describe('Error classification', () => {
+    /**
+     * Builds an error shaped like the ones http-signature raises: its error
+     * classes are not exported, so the library identifies them by `name`.
+     */
+    function libraryError(name: string): Error {
+      const error = new Error(`simulated ${name}`);
+      error.name = name;
+      return error;
+    }
+
+    it('answers 400 when the signature names a header the request lacks (MissingHeaderError)', async () => {
+      parseRequestStub.throws(libraryError('MissingHeaderError'));
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(400)).toBe(true);
+      expect(res.json.calledWith({ error: 'Missing required signature header' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it.each([
+      'InvalidHeaderError',
+      'InvalidParamsError',
+      'StrictParsingError',
+      'ExpiredRequestError',
+      'InvalidAlgorithmError',
+    ])('answers 401 and logs a warning, not an error, for a sender-side %s', async (name) => {
+      const warnStub = sandbox.stub(logger, 'warn');
+      const errorStub = sandbox.stub(logger, 'error');
+      parseRequestStub.throws(libraryError(name));
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Unparseable HTTP signature' })).toBe(true);
+      expect(next.called).toBe(false);
+      expect(warnStub.callCount).toBe(1);
+      expect(warnStub.firstCall.args[0]).toMatchObject({ errorName: name });
+      expect(errorStub.called).toBe(false);
+    });
+
+    it('answers 401 with a single log line for an RFC 9421 structured-field Signature header', async () => {
+      // Use the real parser so the test pins what http-signature actually
+      // raises for a signature scheme it does not understand.
+      parseRequestStub.restore();
+      const warnStub = sandbox.stub(logger, 'warn');
+      const errorStub = sandbox.stub(logger, 'error');
+      Object.assign(req, { method: 'POST', url: '/inbox', httpVersionMajor: 1, httpVersionMinor: 1 });
+      req.headers = {
+        ...req.headers,
+        'signature-input': 'sig1=("@method" "@target-uri" "content-digest");created=1618884473;keyid="https://example.com/users/someactor#main-key"',
+        'signature': 'sig1=:dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ==:',
+      };
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.status.calledWith(500)).toBe(false);
+      expect(next.called).toBe(false);
+      expect(warnStub.callCount).toBe(1);
+      expect(warnStub.firstCall.args[0]).toMatchObject({ errorName: 'InvalidHeaderError' });
+      expect(errorStub.called).toBe(false);
+    });
+
+    it('answers 500 when resolving the key fails on this server', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'https://example.com/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+      cacheGetStub.throws(new Error('connection refused'));
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(500)).toBe(true);
+      expect(res.json.calledWith({ error: 'Error verifying HTTP signature' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+  });
+
   describe('Production Environment Security Checks', () => {
     it('should throw error when SKIP_SIGNATURES is true in production', async () => {
       // Set production environment
