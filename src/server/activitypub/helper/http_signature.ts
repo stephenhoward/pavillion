@@ -15,8 +15,29 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
 
+const KEY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour expiration
+
+/**
+ * Upper bound on cached public keys. The cache is keyed by the keyId of any
+ * inbound signed request, i.e. by remote input, and Cache only frees expired
+ * entries lazily on read — so without a bound, keyIds that are never seen
+ * again accumulate for the life of the process. 5,000 PEM keys is a few
+ * megabytes at most, comfortably above the number of remote actors an
+ * instance hears from within one TTL; overflow evicts least-recently-used
+ * keys, and an evicted key costs only a refetch on its next request.
+ */
+export const KEY_CACHE_MAX_SIZE = 5000;
+
+/**
+ * Builds the public-key cache with its TTL and size bound.
+ * Exported so the bound can be tested against the real configuration.
+ */
+export function createKeyCache(): Cache<string> {
+  return new Cache<string>(KEY_CACHE_TTL_MS, KEY_CACHE_MAX_SIZE);
+}
+
 // A key cache to prevent frequent key fetching
-const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
+const keyCache = createKeyCache();
 
 // Flag to track if we've already logged the bypass warning
 let bypassWarningLogged = false;
@@ -222,6 +243,13 @@ async function getPublicKey(keyId: string): Promise<string | null> {
   try {
     const publicKey = await fetchPublicKey(keyId);
     if (publicKey) {
+      // Cached before verifyActorPermission runs, deliberately: the cached
+      // value is what the keyId URL resolved to, which is true regardless of
+      // which actor presents the key. The permission check is a per-request
+      // question (does this request's actor own this key?) and is re-asked on
+      // every request, cache hit or not — so caching here never lets a key
+      // authorize a request it would not otherwise authorize. Growth from
+      // keys that fail that check is bounded by KEY_CACHE_MAX_SIZE.
       keyCache.set(keyId, publicKey);
     }
     return publicKey;
