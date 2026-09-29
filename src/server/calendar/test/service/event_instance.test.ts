@@ -688,6 +688,61 @@ describe('EventInstanceService.generateInstances', () => {
         expect(inst.isCancelled).toBe(false);
       }
     });
+
+    // Public read paths drop instances matching a hidden cancellation: the
+    // materialized row survives cancellation (no rebuild), so it must be
+    // filtered in memory from the already-loaded schedules.
+    describe('dropHiddenCancellations', () => {
+      function buildInstances(exclusions: Array<{ start: DateTime; hideFromPublic: boolean }>, starts: DateTime[]) {
+        const event = createEvent([
+          createSchedule({
+            startDate: DateTime.fromISO('2026-03-01T09:00:00', { zone: 'utc' }),
+            frequency: EventFrequency.WEEKLY,
+            interval: 1,
+            count: 4,
+          }),
+          ...exclusions.map(e => createSchedule({
+            startDate: e.start,
+            isExclusion: true,
+            hideFromPublic: e.hideFromPublic,
+          })),
+        ]);
+        return starts.map((start) => {
+          const instance = new CalendarEventInstance(uuidv4(), event, start, null);
+          instance.event.schedules = event.schedules;
+          return instance;
+        });
+      }
+
+      it('removes an instance matching a hidden cancellation', () => {
+        const hidden = DateTime.fromISO('2026-03-08T09:00:00', { zone: 'utc' });
+        const kept = DateTime.fromISO('2026-03-15T09:00:00', { zone: 'utc' });
+        const instances = buildInstances([{ start: hidden, hideFromPublic: true }], [hidden, kept]);
+
+        const result = (service as any).dropHiddenCancellations(instances);
+
+        expect(result.map((i: CalendarEventInstance) => i.start.toMillis())).toEqual([kept.toMillis()]);
+      });
+
+      it('keeps an instance matching a shown cancellation', () => {
+        const shown = DateTime.fromISO('2026-03-08T09:00:00', { zone: 'utc' });
+        const instances = buildInstances([{ start: shown, hideFromPublic: false }], [shown]);
+
+        const result = (service as any).dropHiddenCancellations(instances);
+
+        expect(result).toHaveLength(1);
+      });
+
+      it('matches a hidden cancellation expressed in a different zone', () => {
+        const denverCancel = DateTime.fromISO('2026-03-15T09:00:00', { zone: 'America/Denver' });
+        const utcStart = DateTime.fromISO('2026-03-15T15:00:00', { zone: 'utc' });
+        const instances = buildInstances([{ start: denverCancel, hideFromPublic: true }], [utcStart]);
+
+        const result = (service as any).dropHiddenCancellations(instances);
+
+        expect(result).toHaveLength(0);
+      });
+    });
   });
 });
 
