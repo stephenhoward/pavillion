@@ -532,4 +532,54 @@ test.describe('Widget Embedding', () => {
       });
     }
   });
+
+  test('long unbreakable event text wraps inside the event detail', async ({ page }) => {
+    // Seeded events hold no long tokens, so rewrite the detail response: a
+    // URL-like run with no break opportunity in every free-text field the
+    // detail renders.
+    const longToken = 'https://example.com/' + 'unbreakable'.repeat(20);
+    await page.route('**/api/public/v1/events/*/instances/*', async (route) => {
+      const response = await route.fetch();
+      const instance = await response.json();
+      const event = instance.event;
+      for (const content of Object.values(event.content) as Record<string, string>[]) {
+        content.name = longToken;
+        content.description = longToken;
+        content.accessibilityInfo = longToken;
+      }
+      event.location = {
+        ...(event.location ?? {}),
+        name: longToken,
+        address: longToken,
+        city: longToken,
+      };
+      await route.fulfill({ response, json: instance });
+    });
+
+    // Loaded directly, the page viewport is the widget's viewport, as the
+    // iframe's width is for an embed (whose `scrolling="no"` would clip it).
+    await page.goto(`${env.baseURL}/widget/test_calendar`);
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await page.locator('article.event-card .event-title-link').first().click();
+    await expect(page.locator('.event-detail-overlay h1')).toHaveText(longToken, { timeout: 10000 });
+
+    // Each text block must neither overflow itself nor push past the detail
+    // view's content box (as it would by widening a grid track).
+    const selectors = ['.instance-title', '.event-description', '.location-name', '.location-address', '.accessibility-info'];
+    for (const width of [320, 375, 768, 1024, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      for (const selector of selectors) {
+        await expect.poll(
+          () => page.locator(selector).first().evaluate((el) => {
+            const main = el.closest('.instance-main')!;
+            const contentRight = main.getBoundingClientRect().right
+              - parseFloat(getComputedStyle(main).paddingRight)
+              - parseFloat(getComputedStyle(main).borderRightWidth);
+            return Math.max(el.scrollWidth - el.clientWidth, el.getBoundingClientRect().right - contentRight);
+          }),
+          { message: `${selector} overflows at ${width}px by` },
+        ).toBeLessThanOrEqual(0.5);
+      }
+    }
+  });
 });
