@@ -370,4 +370,84 @@ test.describe('Widget Embedding', () => {
     expect(resizeMessages[0]).toHaveProperty('height');
     expect(typeof resizeMessages[0].height).toBe('number');
   });
+
+  test('iframe height matches the widget document and shrinks with its content', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    const frameElement = page.locator('iframe[src*="/widget/"]');
+    await frameElement.waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+
+    const iframeHeight = () => frameElement.evaluate((el) => el.getBoundingClientRect().height);
+    // The SDK sets `scrolling="no"`, so anything past the frame's bottom edge
+    // is cut off: the document must fit exactly, footer included.
+    const frameGeometry = () => iframe.locator('html').evaluate((html) => ({
+      documentHeight: html.scrollHeight,
+      viewportHeight: html.clientHeight,
+      footerBottom: document.querySelector('.widget-footer')!.getBoundingClientRect().bottom,
+    }));
+    const expectDocumentFitsFrame = async () => {
+      await expect.poll(async () => {
+        const { documentHeight, viewportHeight, footerBottom } = await frameGeometry();
+        return documentHeight - viewportHeight <= 1 && Math.abs(footerBottom - viewportHeight) <= 1;
+      }, { timeout: 10000 }).toBe(true);
+    };
+
+    await expectDocumentFitsFrame();
+    const fullHeight = await iframeHeight();
+
+    // A search with no matches empties the list; the frame must follow the
+    // content down rather than hold its previous height.
+    await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
+    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect.poll(iframeHeight, { timeout: 10000 }).toBeLessThan(fullHeight - 100);
+    await expectDocumentFitsFrame();
+  });
+
+  test('widget document never overflows horizontally, list or event detail', async ({ page }) => {
+    const widths = [320, 375, 480, 600, 768, 1024, 1128, 1280];
+    const expectNoHorizontalOverflow = async (label: string) => {
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 800 });
+        await expect.poll(
+          () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+          { message: `${label} at ${width}px: scrollWidth exceeds clientWidth by` },
+        ).toBeLessThanOrEqual(0);
+      }
+    };
+
+    // Loaded directly, the page viewport is the widget's viewport, as the
+    // iframe's width is for an embed.
+    await page.goto(`${env.baseURL}/widget/test_calendar`);
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectNoHorizontalOverflow('list view');
+
+    await page.locator('article.event-card .event-title-link').first().click();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expectNoHorizontalOverflow('event detail');
+  });
+
+  test('custom date inputs fit inside the date popover', async ({ page }) => {
+    // A desktop width, and one below the 600px breakpoint where the inputs stack.
+    for (const width of [1128, 400]) {
+      await test.step(`${width}px`, async () => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${env.baseURL}/widget/test_calendar`);
+        await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+
+        await page.locator('.date-filter-button').click();
+        await expect(page.locator('.date-dropdown')).toBeVisible();
+        await page.locator('.date-pill.calendar-pill').click();
+        await expect(page.locator('.date-input')).toHaveCount(2);
+
+        const popover = (await page.locator('.date-dropdown').boundingBox())!;
+        for (const input of await page.locator('.date-input').all()) {
+          const box = (await input.boundingBox())!;
+          expect(box.x).toBeGreaterThanOrEqual(popover.x);
+          expect(box.x + box.width).toBeLessThanOrEqual(popover.x + popover.width);
+        }
+      });
+    }
+  });
 });

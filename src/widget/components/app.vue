@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useWidgetStore } from '../stores/widgetStore';
@@ -10,33 +10,42 @@ const route = useRoute();
 const rootRef = ref<HTMLElement | null>(null);
 
 /**
- * Set up ResizeObserver to notify parent of height changes
+ * Report the widget's height to the embedding page whenever it changes.
+ *
+ * The SDK sizes the iframe to the reported height, so it must be the height
+ * of the content alone: .widget-root is the whole document (no body margin,
+ * no viewport-relative height), and its border box is what the frame has to
+ * hold. Anything tied to the viewport would feed the iframe's current height
+ * back into the report, and the frame could then grow but never shrink.
  */
 let resizeObserver: ResizeObserver | null = null;
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
 onMounted(() => {
-  if (rootRef.value) {
+  const root = rootRef.value;
+  if (root) {
     // Apply initial configuration
-    widgetStore.injectAccentColor(rootRef.value);
+    widgetStore.injectAccentColor(root);
     widgetStore.applyColorMode();
 
-    // Set up resize observer with debouncing
-    resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        // Debounce resize notifications
-        if (resizeTimeout) {
-          clearTimeout(resizeTimeout);
-        }
-
-        resizeTimeout = setTimeout(() => {
-          const height = entry.contentRect.height;
-          widgetStore.notifyResize(height);
-        }, 100); // 100ms debounce
+    resizeObserver = new ResizeObserver(() => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
       }
+      // Debounced; measured when the timer fires, so the latest size is sent.
+      resizeTimeout = setTimeout(() => {
+        widgetStore.notifyResize(root.getBoundingClientRect().height);
+      }, 100);
     });
 
-    resizeObserver.observe(rootRef.value);
+    resizeObserver.observe(root);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  if (resizeTimeout) {
+    clearTimeout(resizeTimeout);
   }
 });
 
@@ -56,18 +65,6 @@ watch(() => widgetStore.accentColor, () => {
 watch(() => route.fullPath, (newPath) => {
   widgetStore.notifyNavigation(newPath);
 });
-
-// Cleanup on unmount
-onMounted(() => {
-  return () => {
-    if (resizeObserver) {
-      resizeObserver.disconnect();
-    }
-    if (resizeTimeout) {
-      clearTimeout(resizeTimeout);
-    }
-  };
-});
 </script>
 
 <template>
@@ -86,9 +83,10 @@ onMounted(() => {
 <style scoped lang="scss">
 @use '@/site/assets/mixins' as *;
 
+// No viewport-relative height: the root's height is the height reported to
+// the embedding page (see the ResizeObserver above).
 .widget-root {
   width: 100%;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 

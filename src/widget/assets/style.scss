@@ -1,0 +1,25 @@
+// ================================================================
+// PAVILLION WIDGET GLOBAL RESET
+// ================================================================
+//
+// The widget renders the public site's shared components, which are
+// written for the site's global reset (src/site/assets/style.scss).
+// This file carries the two parts of it they depend on for layout:
+// border-box sizing and a margin-free document.
+//
+// Layout only. The iframe's canvas stays transparent, and the --pav-*
+// tokens live on .widget-root, so nothing here may set a colour.
+// Nothing here may tie html or body to the viewport height either:
+// the widget reports its content height to the embedding page, and
+// inside an iframe the viewport is that last reported height.
+// ================================================================
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}

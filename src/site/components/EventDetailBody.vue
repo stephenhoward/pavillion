@@ -525,6 +525,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 // ================================================================
 
 .detail-sidebar {
+  min-width: 0; // Prevent grid blowout from long unbreakable location text
   display: flex;
   flex-direction: column;
   gap: $public-space-lg;

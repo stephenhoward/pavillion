@@ -4,6 +4,7 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 
 import { initI18Next } from '@/widget/service/locale';
+import '@/widget/assets/style.scss';
 import router from '@/widget/router';
 import AppVue from '@/widget/components/app.vue';
 import Config from '@/client/service/config';
