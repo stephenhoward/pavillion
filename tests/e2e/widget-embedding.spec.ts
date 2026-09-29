@@ -405,6 +405,35 @@ test.describe('Widget Embedding', () => {
     await expectDocumentFitsFrame();
   });
 
+  test('custom date popover stays inside a frame shrunk to an empty list', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    const frameElement = page.locator('iframe[src*="/widget/"]');
+    await frameElement.waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    const fullHeight = await frameElement.evaluate((el) => el.getBoundingClientRect().height);
+
+    // The popover is absolutely positioned, so it adds nothing to the height
+    // the widget reports; with the frame at its shortest it must still fit.
+    await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
+    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect.poll(
+      () => frameElement.evaluate((el) => el.getBoundingClientRect().height),
+      { timeout: 10000 },
+    ).toBeLessThan(fullHeight - 100);
+
+    await iframe.locator('.date-filter-button').click();
+    await iframe.locator('.date-pill.calendar-pill').click();
+    await expect(iframe.locator('.date-input')).toHaveCount(2);
+
+    const { popoverBottom, viewportHeight } = await iframe.locator('html').evaluate((html) => ({
+      popoverBottom: document.querySelector('.date-dropdown')!.getBoundingClientRect().bottom,
+      viewportHeight: html.clientHeight,
+    }));
+    expect(popoverBottom).toBeLessThanOrEqual(viewportHeight);
+  });
+
   test('widget document never overflows horizontally, list or event detail', async ({ page }) => {
     const widths = [320, 375, 480, 600, 768, 1024, 1128, 1280];
     const expectNoHorizontalOverflow = async (label: string) => {
