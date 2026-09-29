@@ -77,6 +77,27 @@ afterEach(() => {
   }
 });
 
+describe('widget-container loading state', () => {
+  it('marks its main region data-loading while the calendar loads', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/widget/:urlName', component: WidgetContainer }],
+    });
+    await router.push('/widget/test_calendar');
+    await router.isReady();
+
+    // Inspected before the calendar lookup resolves.
+    const wrapper = mount(WidgetContainer, {
+      global: {
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
+        provide: { site_config: { settings: () => ({}) } },
+      },
+    });
+    mounted.push(wrapper);
+    expect(wrapper.get('.widget-main').attributes('data-loading')).toBeDefined();
+  });
+});
+
 describe('widget-container postMessage config handler', () => {
   it('applies a valid accent from the same origin', async () => {
     const store = await mountContainer();

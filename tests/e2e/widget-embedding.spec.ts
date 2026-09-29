@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -27,6 +27,29 @@ let env: TestEnvironment;
 
 function embeddingUrl(): string {
   return `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
+}
+
+const WIDGET_FRAME = 'iframe[src*="/widget/"]';
+
+/** The embedded widget iframe's height on the host page, as the SDK last set it. */
+function frameHeight(page: Page): Promise<number> {
+  return page.locator(WIDGET_FRAME).evaluate((el) => el.getBoundingClientRect().height);
+}
+
+/**
+ * The SDK sets `scrolling="no"`, so anything past the frame's bottom edge is
+ * cut off: the widget document must fit the frame exactly, footer included.
+ */
+async function expectDocumentFitsFrame(page: Page): Promise<void> {
+  const html = page.frameLocator(WIDGET_FRAME).locator('html');
+  await expect.poll(async () => {
+    const { documentHeight, viewportHeight, footerBottom } = await html.evaluate((el) => ({
+      documentHeight: el.scrollHeight,
+      viewportHeight: el.clientHeight,
+      footerBottom: document.querySelector('.widget-footer')!.getBoundingClientRect().bottom,
+    }));
+    return documentHeight - viewportHeight <= 1 && Math.abs(footerBottom - viewportHeight) <= 1;
+  }, { timeout: 10000 }).toBe(true);
 }
 
 // Configure tests to run serially since they share a test server
@@ -369,5 +392,144 @@ test.describe('Widget Embedding', () => {
     expect(resizeMessages.length).toBeGreaterThanOrEqual(1);
     expect(resizeMessages[0]).toHaveProperty('height');
     expect(typeof resizeMessages[0].height).toBe('number');
+  });
+
+  test('iframe height matches the widget document and shrinks with its content', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.locator(WIDGET_FRAME).waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+
+    await expectDocumentFitsFrame(page);
+    const fullHeight = await frameHeight(page);
+
+    // A search with no matches empties the list; the frame must follow the
+    // content down rather than hold its previous height.
+    await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
+    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => frameHeight(page), { timeout: 10000 }).toBeLessThan(fullHeight - 100);
+    await expectDocumentFitsFrame(page);
+  });
+
+  test('frame keeps its height while a routed view loads, list to detail and back', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.locator(WIDGET_FRAME).waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectDocumentFitsFrame(page);
+    const listHeight = await frameHeight(page);
+
+    // Slow the widget's API well past the resize debounce, so each view sits
+    // in its loading state long enough for a collapse to be reported.
+    await page.route(`${env.baseURL}/api/**`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.continue();
+    });
+
+    // Every height the host page gives the frame, in order.
+    await page.evaluate((selector) => {
+      const frame = document.querySelector(selector) as HTMLIFrameElement;
+      const heights: number[] = [];
+      (window as any).__frameHeights = heights;
+      new ResizeObserver(() => heights.push(frame.getBoundingClientRect().height)).observe(frame);
+    }, WIDGET_FRAME);
+    const takeHeights = () => page.evaluate(() => (window as any).__frameHeights.splice(0) as number[]);
+
+    await iframe.locator('article.event-card .event-title-link').first().click();
+    await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expectDocumentFitsFrame(page);
+    const detailHeight = await frameHeight(page);
+    // The detail is shorter than the list, so the hold was released and the
+    // frame still shrinks once the view settles.
+    expect(detailHeight).toBeLessThan(listHeight);
+    // Never below where it started or where it settled: no loading-state dip.
+    const toDetail = await takeHeights();
+    expect(toDetail.length).toBeGreaterThan(0);
+    expect(Math.min(...toDetail)).toBeGreaterThanOrEqual(Math.min(listHeight, detailHeight) - 1);
+
+    await iframe.locator('.back-link').first().click();
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
+    await expectDocumentFitsFrame(page);
+    const backHeight = await frameHeight(page);
+    const toList = await takeHeights();
+    expect(toList.length).toBeGreaterThan(0);
+    expect(Math.min(...toList)).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
+  });
+
+  test('custom date popover stays inside a frame shrunk to an empty list', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    const frameElement = page.locator('iframe[src*="/widget/"]');
+    await frameElement.waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    const fullHeight = await frameElement.evaluate((el) => el.getBoundingClientRect().height);
+
+    // The popover is absolutely positioned, so it adds nothing to the height
+    // the widget reports; with the frame at its shortest it must still fit.
+    await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
+    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect.poll(
+      () => frameElement.evaluate((el) => el.getBoundingClientRect().height),
+      { timeout: 10000 },
+    ).toBeLessThan(fullHeight - 100);
+
+    await iframe.locator('.date-filter-button').click();
+    await iframe.locator('.date-pill.calendar-pill').click();
+    await expect(iframe.locator('.date-input')).toHaveCount(2);
+
+    const { popoverBottom, viewportHeight } = await iframe.locator('html').evaluate((html) => ({
+      popoverBottom: document.querySelector('.date-dropdown')!.getBoundingClientRect().bottom,
+      viewportHeight: html.clientHeight,
+    }));
+    expect(popoverBottom).toBeLessThanOrEqual(viewportHeight);
+  });
+
+  test('widget document never overflows horizontally, list or event detail', async ({ page }) => {
+    const widths = [320, 375, 480, 600, 768, 1024, 1128, 1280];
+    const expectNoHorizontalOverflow = async (label: string) => {
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 800 });
+        await expect.poll(
+          () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+          { message: `${label} at ${width}px: scrollWidth exceeds clientWidth by` },
+        ).toBeLessThanOrEqual(0);
+      }
+    };
+
+    // Loaded directly, the page viewport is the widget's viewport, as the
+    // iframe's width is for an embed.
+    await page.goto(`${env.baseURL}/widget/test_calendar`);
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectNoHorizontalOverflow('list view');
+
+    await page.locator('article.event-card .event-title-link').first().click();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expectNoHorizontalOverflow('event detail');
+  });
+
+  test('custom date inputs fit inside the date popover', async ({ page }) => {
+    // A desktop width, and one below the 600px breakpoint where the inputs stack.
+    for (const width of [1128, 400]) {
+      await test.step(`${width}px`, async () => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${env.baseURL}/widget/test_calendar`);
+        await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+
+        await page.locator('.date-filter-button').click();
+        await expect(page.locator('.date-dropdown')).toBeVisible();
+        await page.locator('.date-pill.calendar-pill').click();
+        await expect(page.locator('.date-input')).toHaveCount(2);
+
+        const popover = (await page.locator('.date-dropdown').boundingBox())!;
+        for (const input of await page.locator('.date-input').all()) {
+          const box = (await input.boundingBox())!;
+          expect(box.x).toBeGreaterThanOrEqual(popover.x);
+          expect(box.x + box.width).toBeLessThanOrEqual(popover.x + popover.width);
+        }
+      });
+    }
   });
 });
