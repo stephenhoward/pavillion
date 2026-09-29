@@ -18,10 +18,15 @@ import { ActivityPubActivity } from '@/server/activitypub/model/base';
  */
 class IgnoreActivity extends ActivityPubActivity {
 
-  constructor(actorUrl: string, objectActivity: Record<string, any> | any) {
+  /**
+   * The embedded activity is reduced here, not by callers, so every
+   * construction path — the outbound reply built from a raw inbound Join as
+   * well as `fromObject` — stores only the identity reference.
+   */
+  constructor(actorUrl: string, objectActivity: unknown) {
     super(actorUrl);
     this.type = 'Ignore';
-    this.object = objectActivity;
+    this.object = IgnoreActivity.reduceObject(objectActivity);
     this.id = actorUrl + '/ignores/' + uuidv4();
   }
 
@@ -38,7 +43,7 @@ class IgnoreActivity extends ActivityPubActivity {
       return null;
     }
 
-    const activity = new IgnoreActivity(object.actor, IgnoreActivity.reduceObject(object.object));
+    const activity = new IgnoreActivity(object.actor, object.object);
     if (object.id) {
       activity.id = object.id;
     }
@@ -57,11 +62,17 @@ class IgnoreActivity extends ActivityPubActivity {
   }
 
   /**
-   * Reduces an embedded ignored activity to its identity. An Ignore is
-   * informational, so nothing reads more of the embedded activity than its
-   * `id`/`type` and — for outbox delivery of Pavillion's own reply — its
-   * `actor`. Persisting the peer's full payload into `ap_inbox.message` would
-   * make an inbound Ignore an unbounded durable write for no consumer.
+   * Reduces an embedded ignored activity to its identity. The retained fields
+   * and why each is needed:
+   *   - `id`: FEP-8a8e correlation — the Join sender matches the reply to the
+   *     Join it sent by the embedded activity's id.
+   *   - `type`: tells the receiver which kind of activity was ignored without
+   *     dereferencing `id` (and `ignoreActivitySchema` validates it).
+   *   - `actor`: the outbox resolves delivery of Pavillion's own reply to
+   *     `object.actor` — the Join sender.
+   * Nothing else is read by any consumer. Keeping the peer's full payload would
+   * make every inbound Join an unbounded durable write into `ap_outbox` (echoed
+   * back to the peer), and every inbound Ignore one into `ap_inbox`.
    */
   private static reduceObject(object: unknown): string | Record<string, string> {
     if (typeof object !== 'object' || object === null) {

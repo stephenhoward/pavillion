@@ -486,13 +486,23 @@ describe('Activity Model fromObject Null Checks', () => {
       })).toBeNull();
     });
 
-    it('constructs an Ignore embedding the object with a deterministic id and Ignore type', () => {
-      const join = { type: 'Join', actor: 'https://remote.example/users/bob', object: 'https://example.com/calendars/mycal/events/e1' };
+    it('constructs an Ignore embedding the reduced object with a deterministic id and Ignore type', () => {
+      const join = {
+        id: 'https://remote.example/activities/join/1',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+        object: 'https://example.com/calendars/mycal/events/e1',
+        content: 'peer-supplied payload',
+      };
       const ignore = new IgnoreActivity('https://example.com/calendars/mycal', join);
 
       expect(ignore.type).toBe('Ignore');
       expect(ignore.actor).toBe('https://example.com/calendars/mycal');
-      expect(ignore.object).toBe(join);
+      expect(ignore.object).toEqual({
+        id: 'https://remote.example/activities/join/1',
+        type: 'Join',
+        actor: 'https://remote.example/users/bob',
+      });
       expect(ignore.id).toMatch(/^https:\/\/example\.com\/calendars\/mycal\/ignores\/[0-9a-f-]+$/);
     });
 

@@ -323,8 +323,13 @@ describe('processInboxMessage', () => {
     expect(emittedActivity.to).not.toContain('https://www.w3.org/ns/activitystreams#Public');
     expect(emittedActivity.cc).not.toContain('https://www.w3.org/ns/activitystreams#Public');
 
-    // The Ignore embeds the original Join so the sender can correlate it.
-    expect(emittedActivity.object).toEqual(joinActivity);
+    // The Ignore embeds the Join reduced to the reference the sender needs to
+    // correlate it — not the peer's full payload.
+    expect(emittedActivity.object).toEqual({
+      id: joinActivity.id,
+      type: 'Join',
+      actor: joinActivity.actor,
+    });
 
     // No state was mutated.
     expect(addRemoteEventStub.called).toBe(false);
