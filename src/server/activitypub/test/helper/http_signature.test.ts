@@ -4,7 +4,7 @@ import httpSignature from 'http-signature';
 import axios from 'axios';
 import sinon from 'sinon';
 import { Cache } from '@/server/activitypub/helper/cache';
-import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
+import { verifyHttpSignature, extractKeyIdOrigin, createKeyCache, KEY_CACHE_MAX_SIZE } from '@/server/activitypub/helper/http_signature';
 import { MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import crypto from 'crypto';
 import http from 'http';
@@ -1193,5 +1193,27 @@ describe('Pre-authentication key fetch response-body cap', () => {
     expect(next.called).toBe(false);
     expect(logErrorStub.callCount).toBe(1);
     expect(logErrorStub.firstCall.args[1]).toContain('maxContentLength');
+  });
+});
+
+describe('Public-key cache bound', () => {
+  it('has an explicit, positive maximum size', () => {
+    expect(KEY_CACHE_MAX_SIZE).toBeGreaterThan(0);
+    expect(createKeyCache().getStats().maxSize).toBe(KEY_CACHE_MAX_SIZE);
+  });
+
+  it('does not grow past its maximum when more distinct keys are inserted', () => {
+    const cache = createKeyCache();
+    const overflow = 25;
+
+    for (let i = 0; i < KEY_CACHE_MAX_SIZE + overflow; i++) {
+      cache.set(`https://remote${i}.example.com/users/actor#main-key`, `pem-${i}`);
+    }
+
+    expect(cache.size).toBe(KEY_CACHE_MAX_SIZE);
+    // The oldest entries are the ones evicted; the newest survive.
+    expect(cache.get('https://remote0.example.com/users/actor#main-key')).toBeUndefined();
+    const last = KEY_CACHE_MAX_SIZE + overflow - 1;
+    expect(cache.get(`https://remote${last}.example.com/users/actor#main-key`)).toBe(`pem-${last}`);
   });
 });
