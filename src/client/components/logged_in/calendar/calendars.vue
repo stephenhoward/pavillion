@@ -141,9 +141,12 @@ async function loadCalendars() {
                     templated here, for the same reason as the calendar page's
                     header link. A plain href, not the RouterLink below it: the
                     public page is served by the site SPA, so following it is a
-                    full-page navigation out of this app.
+                    full-page navigation out of this app. Omitted when
+                    `publicUrl` is unstamped (''), since an empty href is a
+                    dead link to this page.
                   -->
                   <a
+                    v-if="info.calendar.publicUrl"
                     :href="info.calendar.publicUrl"
                     target="_blank"
                     rel="noopener noreferrer"

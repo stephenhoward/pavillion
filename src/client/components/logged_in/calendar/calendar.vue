@@ -193,10 +193,12 @@ const handleLoadEvents = async (filters) => {
                 link used to template its own href, which is how it kept sending
                 people to `/view/...` after DEC-018 moved the page to the root.
                 A plain href, not a RouterLink: the public page belongs to the
-                site SPA, so this has to be a full-page navigation.
+                site SPA, so this has to be a full-page navigation. Guarded on
+                the address itself: an unstamped `publicUrl` is '', and an empty
+                href is a dead link to this page, so render nothing instead.
               -->
               <a
-                v-if="state.calendar"
+                v-if="state.calendar?.publicUrl"
                 :href="state.calendar.publicUrl"
                 target="_blank"
                 rel="noopener noreferrer"
