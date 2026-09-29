@@ -594,6 +594,28 @@ describe('Activity Model fromObject Null Checks', () => {
     });
   });
 
+  describe('UndoActivity.targetIdOf', () => {
+    it('returns a URI string unchanged', () => {
+      expect(UndoActivity.targetIdOf('https://example.com/activities/follow/1'))
+        .toBe('https://example.com/activities/follow/1');
+    });
+
+    it('returns the id of an embedded activity', () => {
+      expect(UndoActivity.targetIdOf({ id: 'https://example.com/activities/follow/1', type: 'Follow' }))
+        .toBe('https://example.com/activities/follow/1');
+    });
+
+    it('returns null when neither shape yields a string id', () => {
+      expect(UndoActivity.targetIdOf(undefined)).toBeNull();
+      expect(UndoActivity.targetIdOf(null)).toBeNull();
+      expect(UndoActivity.targetIdOf('')).toBeNull();
+      expect(UndoActivity.targetIdOf(123)).toBeNull();
+      expect(UndoActivity.targetIdOf({ type: 'Follow' })).toBeNull();
+      expect(UndoActivity.targetIdOf({ id: { nested: true } })).toBeNull();
+      expect(UndoActivity.targetIdOf({ id: '' })).toBeNull();
+    });
+  });
+
   describe('UndoActivity', () => {
     it('should return null for null input', () => {
       const result = UndoActivity.fromObject(null as any);
@@ -632,12 +654,34 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when object is not a string', () => {
+    it('should normalize an embedded activity object to its id', () => {
+      // Mastodon inlines the activity being undone rather than referencing it.
       const result = UndoActivity.fromObject({
         actor: 'https://example.com/users/1',
-        object: { id: 'https://example.com/activities/follow/1' },
+        object: {
+          id: 'https://example.com/activities/follow/1',
+          type: 'Follow',
+          actor: 'https://example.com/users/1',
+          object: 'https://other.example/calendars/cal',
+        },
       });
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result?.object).toBe('https://example.com/activities/follow/1');
+    });
+
+    it('should return null when an embedded object carries no string id', () => {
+      expect(UndoActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: { type: 'Follow' },
+      })).toBeNull();
+      expect(UndoActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: { id: 42, type: 'Follow' },
+      })).toBeNull();
+      expect(UndoActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: 123,
+      })).toBeNull();
     });
 
     it('should create activity with valid input', () => {
