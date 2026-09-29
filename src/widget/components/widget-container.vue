@@ -132,7 +132,7 @@ onUnmounted(() => {
 
     <main
       class="widget-main"
-      :aria-busy="state.isLoading || publicCalendarStore.isLoadingEvents"
+      :data-loading="state.isLoading || publicCalendarStore.isLoadingEvents || undefined"
     >
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <div v-if="publicCalendarStore.eventError" class="error">{{ publicCalendarStore.eventError }}</div>

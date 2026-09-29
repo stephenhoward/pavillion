@@ -23,7 +23,8 @@ let resizeObserver: ResizeObserver | null = null;
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 // Route-change height hold; see holdHeight below.
 let navigationCount = 0;
-let busyObserver: MutationObserver | null = null;
+const navigationTokens = new WeakMap<object, number>();
+let loadingObserver: MutationObserver | null = null;
 let removeRouterHooks: Array<() => void> = [];
 
 onMounted(() => {
@@ -47,15 +48,32 @@ onMounted(() => {
     resizeObserver.observe(root);
 
     removeRouterHooks = [
-      router.beforeEach(() => {
-        navigationCount++;
+      router.beforeEach((to) => {
+        navigationTokens.set(to, ++navigationCount);
         holdHeight(root);
       }),
-      router.afterEach(() => releaseWhenSettled(root)),
+      // Only a completed navigation settles its hold. A cancelled or
+      // duplicate one reports a failure here, and a duplicate never ran
+      // beforeEach, so neither may release a hold another navigation owns.
+      router.afterEach((to, _from, failure) => {
+        const token = navigationTokens.get(to);
+        if (!failure && token !== undefined) {
+          releaseWhenSettled(root, token);
+        }
+      }),
+      // A guard that throws skips afterEach, so this is the only release
+      // for that navigation.
       router.onError(() => releaseHeight(root)),
     ];
   }
 });
+
+const isLoading = (root: HTMLElement) => root.querySelector('[data-loading]') !== null;
+
+function stopWatchingLoading() {
+  loadingObserver?.disconnect();
+  loadingObserver = null;
+}
 
 /**
  * Hold the frame's height across a route change.
@@ -64,55 +82,50 @@ onMounted(() => {
  * reporting that would collapse the iframe until the data arrives. From
  * the start of a navigation the root keeps its current height as an inline
  * min-height; it is released once the new view has settled, which is when
- * nothing under the root is marked `aria-busy="true"`. A view that never
- * goes busy (rendered from cached data) is released on the first check
- * after it renders. Released, the root is back to its content height, so
- * the frame can still shrink to a shorter view.
+ * nothing under the root carries `data-loading`. A view that never loads
+ * (rendered from cached data) is released on the first check after it
+ * renders. Released, the root is back to its content height, so the frame
+ * can still shrink to a shorter view.
  */
-const isBusy = (root: HTMLElement) => root.querySelector('[aria-busy="true"]') !== null;
-
 function holdHeight(root: HTMLElement) {
-  busyObserver?.disconnect();
-  busyObserver = null;
+  stopWatchingLoading();
   root.style.minHeight = `${Math.ceil(root.getBoundingClientRect().height)}px`;
 }
 
 function releaseHeight(root: HTMLElement) {
-  busyObserver?.disconnect();
-  busyObserver = null;
+  stopWatchingLoading();
   root.style.minHeight = '';
 }
 
-async function releaseWhenSettled(root: HTMLElement) {
-  const navigation = navigationCount;
+async function releaseWhenSettled(root: HTMLElement, token: number) {
   // afterEach runs before the new route renders; the views set their
   // loading state before their first render, so one tick shows it.
   await nextTick();
-  if (navigation !== navigationCount) {
+  if (token !== navigationCount) {
     return; // A later navigation owns the hold now.
   }
-  if (!isBusy(root)) {
+  if (!isLoading(root)) {
     releaseHeight(root);
     return;
   }
-  busyObserver = new MutationObserver(() => {
-    if (!isBusy(root)) {
+  stopWatchingLoading();
+  loadingObserver = new MutationObserver(() => {
+    if (!isLoading(root)) {
       releaseHeight(root);
     }
   });
-  busyObserver.observe(root, {
+  loadingObserver.observe(root, {
     subtree: true,
     childList: true,
     attributes: true,
-    attributeFilter: ['aria-busy'],
+    attributeFilter: ['data-loading'],
   });
 }
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
-  busyObserver?.disconnect();
+  stopWatchingLoading();
   removeRouterHooks.forEach((remove) => remove());
-  removeRouterHooks = [];
   if (resizeTimeout) {
     clearTimeout(resizeTimeout);
   }

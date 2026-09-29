@@ -5,14 +5,14 @@
  * embedding page, which sizes the iframe from it. Notifications are
  * debounced, the height is measured when the debounce fires (so the latest
  * size wins), and the observer is torn down on unmount. Across a route
- * change the root holds its height until the new view is no longer
- * `aria-busy`, so a loading state never collapses the frame.
+ * change the root holds its height until the new view no longer carries
+ * `data-loading`, so a loading state never collapses the frame.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
-import { h, nextTick, ref } from 'vue';
+import { h, nextTick, reactive } from 'vue';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { createMemoryHistory, createRouter, useRoute } from 'vue-router';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 
@@ -31,10 +31,20 @@ let observers: ObserverStub<ResizeObserverCallback>[];
 // e2e navigation test.
 let mutationObservers: ObserverStub<MutationCallback>[];
 
-/** Busy state of the routed view, as a widget view binds `aria-busy` to its loading state. */
-const busy = ref(false);
+const LIST = '/widget/test_calendar';
+const DETAIL = '/widget/test_calendar/events/evt-1';
+const OTHER_DETAIL = '/widget/test_calendar/events/evt-2';
+
+/** Paths whose view is loading; the view carries `data-loading` as the widget views do. */
+const loadingPaths = reactive(new Set<string>());
 const RoutedView = {
-  setup: () => () => h('div', { class: 'routed-view', 'aria-busy': String(busy.value) }),
+  setup() {
+    const route = useRoute();
+    return () => h('div', {
+      class: 'routed-view',
+      'data-loading': loadingPaths.has(route.path) || undefined,
+    });
+  },
 };
 
 beforeAll(async () => {
@@ -57,7 +67,7 @@ describe('widget app height reporting', () => {
       history: createMemoryHistory(),
       routes: [{ path: '/:pathMatch(.*)*', component: RoutedView }],
     });
-    await router.push('/widget/test_calendar');
+    await router.push(LIST);
     await router.isReady();
 
     wrapper = mount(AppVue, {
@@ -81,7 +91,7 @@ describe('widget app height reporting', () => {
   }
 
   beforeEach(() => {
-    busy.value = false;
+    loadingPaths.clear();
     setActivePinia(createPinia());
     notifyResize = vi.spyOn(useWidgetStore(), 'notifyResize').mockImplementation(() => {});
 
@@ -152,48 +162,106 @@ describe('widget app height reporting', () => {
       return heldDuringNavigation;
     }
 
-    it('holds the height while the new view is busy and releases it when it settles', async () => {
+    /** Deliver a mutation record batch to a stubbed MutationObserver. */
+    const notify = (observer: ObserverStub<MutationCallback>) =>
+      observer.callback([], observer as unknown as MutationObserver);
+
+    it('holds the height while the new view loads and releases it when it settles', async () => {
       const { root, router, setHeight } = await mountApp();
       setHeight(900.2);
 
-      busy.value = true;
-      expect(await navigate(router, root, '/widget/test_calendar/events/evt-1')).toBe('901px');
+      loadingPaths.add(DETAIL);
+      expect(await navigate(router, root, DETAIL)).toBe('901px');
       expect(root.style.minHeight).toBe('901px');
 
       expect(mutationObservers).toHaveLength(1);
-      const busyObserver = mutationObservers[0];
-      expect(busyObserver.observe).toHaveBeenCalledWith(root, expect.objectContaining({
+      const loadingObserver = mutationObservers[0];
+      expect(loadingObserver.observe).toHaveBeenCalledWith(root, expect.objectContaining({
         subtree: true,
-        attributeFilter: ['aria-busy'],
+        attributeFilter: ['data-loading'],
       }));
-      const notify = () => busyObserver.callback([], busyObserver as unknown as MutationObserver);
 
-      // A mutation while the view is still busy keeps the hold.
-      notify();
+      // A mutation while the view is still loading keeps the hold.
+      notify(loadingObserver);
       expect(root.style.minHeight).toBe('901px');
 
-      busy.value = false;
+      loadingPaths.delete(DETAIL);
       await nextTick();
-      notify();
+      notify(loadingObserver);
       expect(root.style.minHeight).toBe('');
-      expect(busyObserver.disconnect).toHaveBeenCalled();
+      expect(loadingObserver.disconnect).toHaveBeenCalled();
     });
 
-    it('releases on the first check when the new view never goes busy', async () => {
+    it('releases on the first check when the new view never loads', async () => {
       const { root, router, setHeight } = await mountApp();
       setHeight(900);
 
-      expect(await navigate(router, root, '/widget/test_calendar/events/evt-1')).toBe('900px');
+      expect(await navigate(router, root, DETAIL)).toBe('900px');
       expect(root.style.minHeight).toBe('');
       expect(mutationObservers).toHaveLength(0);
+    });
+
+    it('releases the hold when a guard throws', async () => {
+      const { root, router, setHeight } = await mountApp();
+      setHeight(900);
+
+      // Registered after the shell's hooks, so it runs once the hold is set.
+      let heldWhenThrown = '';
+      router.beforeEach((to) => {
+        if (to.path === DETAIL) {
+          heldWhenThrown = root.style.minHeight;
+          throw new Error('guard failed');
+        }
+      });
+      await expect(router.push(DETAIL)).rejects.toThrow('guard failed');
+      await flushPromises();
+
+      expect(heldWhenThrown).toBe('900px');
+      expect(root.style.minHeight).toBe('');
+    });
+
+    it('keeps the hold through a superseded navigation until the last view settles', async () => {
+      const { root, router, setHeight } = await mountApp();
+      setHeight(900);
+
+      // The first navigation is cancelled by the second; only the second
+      // view loads, and only its settling may release the hold.
+      loadingPaths.add(OTHER_DETAIL);
+      await Promise.all([router.push(DETAIL), router.push(OTHER_DETAIL)]);
+      await flushPromises();
+
+      expect(router.currentRoute.value.path).toBe(OTHER_DETAIL);
+      expect(root.style.minHeight).toBe('900px');
+      expect(mutationObservers).toHaveLength(1);
+
+      loadingPaths.delete(OTHER_DETAIL);
+      await nextTick();
+      notify(mutationObservers[0]);
+      expect(root.style.minHeight).toBe('');
+    });
+
+    it('keeps the hold when a duplicate navigation lands while the view loads', async () => {
+      const { root, router, setHeight } = await mountApp();
+      setHeight(900);
+
+      loadingPaths.add(DETAIL);
+      await navigate(router, root, DETAIL);
+      expect(mutationObservers).toHaveLength(1);
+
+      await router.push(DETAIL);
+      await flushPromises();
+
+      expect(root.style.minHeight).toBe('900px');
+      expect(mutationObservers).toHaveLength(1);
+      expect(mutationObservers[0].disconnect).not.toHaveBeenCalled();
     });
 
     it('stops observing and holding after unmount', async () => {
       const { root, router, setHeight } = await mountApp();
       setHeight(900);
 
-      busy.value = true;
-      await navigate(router, root, '/widget/test_calendar/events/evt-1');
+      loadingPaths.add(DETAIL);
+      await navigate(router, root, DETAIL);
       expect(root.style.minHeight).toBe('900px');
       expect(mutationObservers).toHaveLength(1);
 
@@ -203,7 +271,7 @@ describe('widget app height reporting', () => {
 
       // The router outlives the shell; its hooks must not.
       root.style.minHeight = '';
-      await router.push('/widget/test_calendar');
+      await router.push(LIST);
       await flushPromises();
       expect(root.style.minHeight).toBe('');
     });

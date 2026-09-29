@@ -224,6 +224,20 @@ describe('widget event-detail-overlay shell', () => {
     vi.clearAllMocks();
   });
 
+  it('carries data-loading while the event loads, and drops it once loaded', async () => {
+    let resolveEvents!: (events: unknown[]) => void;
+    loadCalendarEventsMock.mockImplementation(() => new Promise((resolve) => {
+      resolveEvents = resolve;
+    }));
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
+    expect(wrapper.get('.event-detail-overlay').attributes('data-loading')).toBeDefined();
+
+    resolveEvents([buildFallbackInstanceMock()]);
+    await flushPromises();
+    expect(wrapper.get('.event-detail-overlay').attributes('data-loading')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('renders the back button when an instance is loaded', async () => {
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
