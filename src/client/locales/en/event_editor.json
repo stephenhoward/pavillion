@@ -55,6 +55,7 @@
     "add_schedule_button": "Add another schedule",
     "schedule_help_text": "Add multiple schedules to create events that occur at different times or with different patterns.",
     "error_loading_event": "Failed to load event",
+    "error_event_not_found": "Event not found",
     "aria_editor": "Event Editor",
     "aria_event_form": "Event Information Form",
     "aria_editor_error": "Event Editor Error",

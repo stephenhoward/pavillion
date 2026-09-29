@@ -55,6 +55,7 @@
     "add_schedule_button": "Agregar otro horario",
     "schedule_help_text": "Agrega varios horarios para crear eventos que ocurren en distintos momentos o con distintos patrones.",
     "error_loading_event": "Error al cargar el evento",
+    "error_event_not_found": "Evento no encontrado",
     "aria_editor": "Editor de eventos",
     "aria_event_form": "Formulario de información del evento",
     "aria_editor_error": "Error del editor de eventos",

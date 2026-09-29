@@ -13,6 +13,7 @@ import { Calendar } from '@/common/model/calendar';
 import { mountComponent } from '@/client/test/lib/vue';
 import EditEvent from '@/client/components/logged_in/calendar/edit_event.vue';
 import CalendarService from '@/client/service/calendar';
+import ModelService from '@/client/service/models';
 
 // Mock useCalendarStore
 vi.mock('@/client/stores/calendarStore', () => ({
@@ -215,6 +216,41 @@ describe('Editor Behavior - Route-Based', () => {
     finally {
       await i18next.changeLanguage(originalLanguage);
     }
+  });
+
+  describe('load-failure message follows the interface language', () => {
+    const calendar = new Calendar('testId', 'testName');
+
+    const expectLoadErrorText = async (english: string, spanish: string) => {
+      const { wrapper } = await mountedEditorOnRoute('/event/event-123', [calendar]);
+      currentWrapper = wrapper;
+
+      const errorMessage = wrapper.find('main[role="main"] .error');
+      expect(errorMessage.text()).toBe(english);
+
+      // mountComponent re-initializes i18next, so switch language after mounting
+      const originalLanguage = i18next.language;
+      await i18next.changeLanguage('es');
+      try {
+        await nextTick();
+        expect(wrapper.find('main[role="main"] .error').text()).toBe(spanish);
+      }
+      finally {
+        await i18next.changeLanguage(originalLanguage);
+      }
+    };
+
+    it('renders the not-found message through the translation layer', async () => {
+      sandbox.stub(ModelService, 'getModel').resolves(null);
+
+      await expectLoadErrorText('Event not found', 'Evento no encontrado');
+    });
+
+    it('renders the load-failure message through the translation layer', async () => {
+      sandbox.stub(ModelService, 'getModel').rejects(new Error('Network error'));
+
+      await expectLoadErrorText('Failed to load event', 'Error al cargar el evento');
+    });
   });
 
   it('create mode displays correct title', async () => {
