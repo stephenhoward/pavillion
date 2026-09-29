@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -27,6 +27,29 @@ let env: TestEnvironment;
 
 function embeddingUrl(): string {
   return `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
+}
+
+const WIDGET_FRAME = 'iframe[src*="/widget/"]';
+
+/** The embedded widget iframe's height on the host page, as the SDK last set it. */
+function frameHeight(page: Page): Promise<number> {
+  return page.locator(WIDGET_FRAME).evaluate((el) => el.getBoundingClientRect().height);
+}
+
+/**
+ * The SDK sets `scrolling="no"`, so anything past the frame's bottom edge is
+ * cut off: the widget document must fit the frame exactly, footer included.
+ */
+async function expectDocumentFitsFrame(page: Page): Promise<void> {
+  const html = page.frameLocator(WIDGET_FRAME).locator('html');
+  await expect.poll(async () => {
+    const { documentHeight, viewportHeight, footerBottom } = await html.evaluate((el) => ({
+      documentHeight: el.scrollHeight,
+      viewportHeight: el.clientHeight,
+      footerBottom: document.querySelector('.widget-footer')!.getBoundingClientRect().bottom,
+    }));
+    return documentHeight - viewportHeight <= 1 && Math.abs(footerBottom - viewportHeight) <= 1;
+  }, { timeout: 10000 }).toBe(true);
 }
 
 // Configure tests to run serially since they share a test server
@@ -374,35 +397,58 @@ test.describe('Widget Embedding', () => {
   test('iframe height matches the widget document and shrinks with its content', async ({ page }) => {
     await page.goto(embeddingUrl());
 
-    const frameElement = page.locator('iframe[src*="/widget/"]');
-    await frameElement.waitFor({ timeout: 15000 });
-    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await page.locator(WIDGET_FRAME).waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator(WIDGET_FRAME);
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
 
-    const iframeHeight = () => frameElement.evaluate((el) => el.getBoundingClientRect().height);
-    // The SDK sets `scrolling="no"`, so anything past the frame's bottom edge
-    // is cut off: the document must fit exactly, footer included.
-    const frameGeometry = () => iframe.locator('html').evaluate((html) => ({
-      documentHeight: html.scrollHeight,
-      viewportHeight: html.clientHeight,
-      footerBottom: document.querySelector('.widget-footer')!.getBoundingClientRect().bottom,
-    }));
-    const expectDocumentFitsFrame = async () => {
-      await expect.poll(async () => {
-        const { documentHeight, viewportHeight, footerBottom } = await frameGeometry();
-        return documentHeight - viewportHeight <= 1 && Math.abs(footerBottom - viewportHeight) <= 1;
-      }, { timeout: 10000 }).toBe(true);
-    };
-
-    await expectDocumentFitsFrame();
-    const fullHeight = await iframeHeight();
+    await expectDocumentFitsFrame(page);
+    const fullHeight = await frameHeight(page);
 
     // A search with no matches empties the list; the frame must follow the
     // content down rather than hold its previous height.
     await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
     await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
-    await expect.poll(iframeHeight, { timeout: 10000 }).toBeLessThan(fullHeight - 100);
-    await expectDocumentFitsFrame();
+    await expect.poll(() => frameHeight(page), { timeout: 10000 }).toBeLessThan(fullHeight - 100);
+    await expectDocumentFitsFrame(page);
+  });
+
+  test('frame keeps its height while a routed view loads, list to detail and back', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.locator(WIDGET_FRAME).waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectDocumentFitsFrame(page);
+    const listHeight = await frameHeight(page);
+
+    // Slow the widget's API well past the resize debounce, so each view sits
+    // in its loading state long enough for a collapse to be reported.
+    await page.route(`${env.baseURL}/api/**`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.continue();
+    });
+
+    // Every height the host page gives the frame, in order.
+    await page.evaluate((selector) => {
+      const frame = document.querySelector(selector) as HTMLIFrameElement;
+      const heights: number[] = [];
+      (window as any).__frameHeights = heights;
+      new ResizeObserver(() => heights.push(frame.getBoundingClientRect().height)).observe(frame);
+    }, WIDGET_FRAME);
+    const takeHeights = () => page.evaluate(() => (window as any).__frameHeights.splice(0) as number[]);
+
+    await iframe.locator('article.event-card .event-title-link').first().click();
+    await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expectDocumentFitsFrame(page);
+    const detailHeight = await frameHeight(page);
+    // Never below where it started or where it settled: no loading-state dip.
+    expect(Math.min(...await takeHeights())).toBeGreaterThanOrEqual(Math.min(listHeight, detailHeight) - 1);
+
+    await iframe.locator('.back-link').first().click();
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
+    await expectDocumentFitsFrame(page);
+    const backHeight = await frameHeight(page);
+    expect(Math.min(...await takeHeights())).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
   });
 
   test('custom date popover stays inside a frame shrunk to an empty list', async ({ page }) => {
