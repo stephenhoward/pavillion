@@ -65,6 +65,13 @@ A "place" in Pavillion is its own thing — separate from the events that refere
 
 **Event image** (optional). Upload one if you have it. If you don't, skip — the calendar's default event image will fill in.
 
+Once an image is uploaded, a set of choices labelled **Image description for screen readers** appears under it. A screen reader reads the description aloud in place of the image, so it's how a visitor who can't see the picture learns what it shows. Pick one:
+
+- **Skip description** — the image is hidden from screen readers. This is the right choice when the image adds nothing beyond the text already on the page: a generic photo of a stage on a concert listing, your logo on a meeting notice.
+- **Add a description** — an **Image description** box appears for the language you're currently editing. Write what the image shows; there's no need to start with "image of". *Volunteers planting tomato seedlings in raised beds* tells a listener something. *Event photo* doesn't.
+
+The description is written once per language, like the title and description: switch the language tab to write the next one. Replacing or removing the image clears its descriptions, since they described a different picture. Switching back to **Skip description** also removes anything you'd written once you save — switch back to **Add a description** before saving to get it back.
+
 **Categories.** Pick at least one. If your calendar is brand new, no categories exist yet — you'll need to create one. From the category section, add a category like "Community gathering" or "Music" or whatever fits. You can add more later.
 
 ::: tip <Lightbulb /> A note on categories

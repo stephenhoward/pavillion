@@ -77,6 +77,8 @@ The default event image is an image that fills in for any event you publish with
 
 The Settings tab lets you upload one image. Uploading replaces it; removing it leaves events without their own image to show no image at all.
 
+Once the default is uploaded, the same **Image description for screen readers** choice the event editor offers appears beneath it: **Skip description** hides the image from screen readers, **Add a description** gives you an **Image description** box for the language tab you're on. A screen reader reads the description in place of the image, and wherever the default stands in for an event's own image, it reads the default's description. Write it once per calendar language, and write it about the image — *The Maplewood Community Garden logo* — rather than about any one event, because it will sit beside all of them. If the default is purely decorative, skip it. Removing the image clears its descriptions, so a new default starts undescribed. The description saves when you click or tab away from it, like the rest of the Settings tab.
+
 **Use a default that reads as your calendar, not as a specific event.** A neighborhood-association calendar's default might be the association's logo on a plain background, or a wide shot of the park where most events happen, or a piece of identifying community artwork. Avoid using a default that looks like it belongs to one particular event.
 
 **The default is a fallback, not a requirement.** For any specific event that deserves its own image, upload one in the event editor and it'll override the default for that event. For routine events without strong visual identity — the monthly meeting, the weekly volunteer day — the default can stand in as a fallback visual.
