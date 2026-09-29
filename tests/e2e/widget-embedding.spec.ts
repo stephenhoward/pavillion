@@ -441,14 +441,21 @@ test.describe('Widget Embedding', () => {
     await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
     await expectDocumentFitsFrame(page);
     const detailHeight = await frameHeight(page);
+    // The detail is shorter than the list, so the hold was released and the
+    // frame still shrinks once the view settles.
+    expect(detailHeight).toBeLessThan(listHeight);
     // Never below where it started or where it settled: no loading-state dip.
-    expect(Math.min(...await takeHeights())).toBeGreaterThanOrEqual(Math.min(listHeight, detailHeight) - 1);
+    const toDetail = await takeHeights();
+    expect(toDetail.length).toBeGreaterThan(0);
+    expect(Math.min(...toDetail)).toBeGreaterThanOrEqual(Math.min(listHeight, detailHeight) - 1);
 
     await iframe.locator('.back-link').first().click();
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
     await expectDocumentFitsFrame(page);
     const backHeight = await frameHeight(page);
-    expect(Math.min(...await takeHeights())).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
+    const toList = await takeHeights();
+    expect(toList.length).toBeGreaterThan(0);
+    expect(Math.min(...toList)).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
   });
 
   test('custom date popover stays inside a frame shrunk to an empty list', async ({ page }) => {
