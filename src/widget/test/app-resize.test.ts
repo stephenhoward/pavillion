@@ -87,13 +87,13 @@ describe('widget app height reporting', () => {
     delete document.documentElement.dataset.theme;
   });
 
-  it('debounces resizes and reports the latest border-box height once', async () => {
+  it('debounces resizes and reports the latest border-box height once, rounded up', async () => {
     const { setHeight, fire } = await mountApp();
     vi.useFakeTimers();
 
     setHeight(1200);
     fire();
-    setHeight(640);
+    setHeight(640.4);
     fire();
 
     vi.advanceTimersByTime(99);
@@ -101,7 +101,7 @@ describe('widget app height reporting', () => {
 
     vi.advanceTimersByTime(1);
     expect(notifyResize).toHaveBeenCalledTimes(1);
-    expect(notifyResize).toHaveBeenCalledWith(640);
+    expect(notifyResize).toHaveBeenCalledWith(641);
   });
 
   it('disconnects on unmount and drops a pending notification', async () => {

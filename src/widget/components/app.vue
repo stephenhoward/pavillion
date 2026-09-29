@@ -33,8 +33,9 @@ onMounted(() => {
         clearTimeout(resizeTimeout);
       }
       // Debounced; measured when the timer fires, so the latest size is sent.
+      // Rounded up so a fractional height can't clip the footer by a sub-pixel.
       resizeTimeout = setTimeout(() => {
-        widgetStore.notifyResize(root.getBoundingClientRect().height);
+        widgetStore.notifyResize(Math.ceil(root.getBoundingClientRect().height));
       }, 100);
     });
 
@@ -115,6 +116,10 @@ watch(() => route.fullPath, (newPath) => {
 
     &:hover {
       color: var(--pav-accent-hover);
+    }
+
+    &:focus-visible {
+      @include public-focus-visible;
     }
   }
 
