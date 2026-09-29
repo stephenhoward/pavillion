@@ -22,6 +22,11 @@ export type EditorMode = 'create' | 'edit' | 'duplicate';
  */
 export interface EventEditorState {
   isLoading: boolean;
+  /**
+   * Save errors hold translated text. Load failures (event never loaded) hold
+   * an `event_editor.editor` translation key, which edit_event.vue resolves
+   * so the message follows the interface language.
+   */
   err: string;
   errDetail: string;
   event: CalendarEvent | null;
@@ -190,7 +195,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
 
       if (!eventData) {
         // Event not found
-        state.err = 'Event not found';
+        state.err = 'error_event_not_found';
         router.push({ name: 'calendars' });
         return null;
       }
@@ -208,7 +213,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         return null;
       }
 
-      state.err = 'Failed to load event';
+      state.err = 'error_loading_event';
       return null;
     }
   };

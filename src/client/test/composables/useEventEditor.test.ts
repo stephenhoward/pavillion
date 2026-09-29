@@ -325,7 +325,8 @@ describe('useEventEditor', () => {
 
       await initializeEvent('nonexistent');
 
-      expect(state.err).toBe('Event not found');
+      // The composable stores a translation key; edit_event.vue resolves it
+      expect(state.err).toBe('error_event_not_found');
       expect(mockRouter.push).toHaveBeenCalledWith({ name: 'calendars' });
     });
   });
@@ -464,7 +465,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent('event-123');
 
-      expect(state.err).toBe('Failed to load event');
+      expect(state.err).toBe('error_loading_event');
     });
   });
 

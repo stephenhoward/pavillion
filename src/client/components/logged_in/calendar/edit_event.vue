@@ -1053,7 +1053,7 @@ form {
     <!-- Error state when event failed to load -->
     <main v-else role="main" :aria-label="t('aria_editor_error')">
       <div class="error" role="alert">
-        {{ editorState.err || t('error_loading_event') }}
+        {{ t(editorState.err || 'error_loading_event') }}
       </div>
     </main>
   </div>
