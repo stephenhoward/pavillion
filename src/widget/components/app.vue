@@ -87,29 +87,26 @@ onMounted(() => {
 @use '@/site/assets/mixins' as *;
 
 .widget-root {
-  @include public-accent-tokens;
-
   width: 100%;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+
+  // Last among the declarations: the mixin ends in a nested dark-mode rule,
+  // and a declaration after a nested rule makes Sass split this one.
+  @include public-theme-tokens;
 }
 
 .widget-footer {
   flex: 0 0 auto;
   padding: $public-space-sm $public-space-md;
-  border-top: 1px solid $public-border-subtle-light;
+  border-top: 1px solid var(--pav-border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: $public-font-size-xs;
   text-align: center;
-  color: $public-text-secondary-light;
-
-  @include public-dark-mode {
-    border-top-color: $public-border-subtle-dark;
-    color: $public-text-secondary-dark;
-  }
+  color: var(--pav-text-secondary);
 
   a {
     color: inherit;
@@ -119,17 +116,13 @@ onMounted(() => {
     text-decoration: none;
 
     &:hover {
-      color: $public-accent-hover-light;
-
-      @include public-dark-mode {
-        color: $public-accent-hover-dark;
-      }
+      color: var(--pav-accent-hover);
     }
   }
 
   .pavillion-logo {
     display: inline-block;
-    background-color: $public-text-primary-light;
+    background-color: var(--pav-text-primary);
     mask-size: contain;
     mask-repeat: no-repeat;
     mask-image: url('@/client/assets/pavillion-logo.svg');
@@ -138,10 +131,6 @@ onMounted(() => {
     -webkit-mask-image: url('@/client/assets/pavillion-logo.svg');
     width: 16px;
     height: 16px;
-
-    @include public-dark-mode {
-      background-color: $public-text-primary-dark;
-    }
   }
 }
 

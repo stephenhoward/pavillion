@@ -26,21 +26,6 @@ $public-accent-dark: #C86002;
 $public-accent-hover-light: color.adjust(#ff9131, $lightness: -5%);
 $public-accent-hover-dark: color.adjust(#C86002, $lightness: 5%);
 
-// Emit the four accent CSS custom properties on a root selector so
-// widgets and the public site can override them via inline styles
-// (e.g. widget admin custom accent color) without forking SCSS.
-//
-// Apply this mixin once at the root of the widget app and the public
-// site root. Components consume the variables via `var(--pav-accent-light)`,
-// `var(--pav-accent-light-hover)`, `var(--pav-accent-dark)`, and
-// `var(--pav-accent-dark-hover)`.
-@mixin public-accent-tokens {
-  --pav-accent-light: #{$public-accent-light};
-  --pav-accent-light-hover: #{$public-accent-hover-light};
-  --pav-accent-dark: #{$public-accent-dark};
-  --pav-accent-dark-hover: #{$public-accent-hover-dark};
-}
-
 // Background layers (lighter, airier than client)
 $public-bg-primary-light: #ffffff;
 $public-bg-primary-dark: #1a1a1e;
@@ -171,6 +156,100 @@ $public-shadow-md-dark: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.
 $public-shadow-lg-dark: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
 $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.6);
 
+// ===== RUNTIME THEME TOKENS =====
+
+// The one declaration site of the public surfaces' --pav-* custom properties:
+// every $public-*-light / -dark pair above, emitted with its light value here
+// and redeclared with its dark value under `public-dark-mode`'s dual selector.
+// Names follow the client's theme layer where it has a token of the same
+// meaning; ../TOKENS.md is the mapping table, and
+// test/public-theme-tokens.test.ts fails if a pair goes unemitted.
+//
+// Include it once, on the element the app's runtime overrides are written to:
+// `#app` on the site, `.widget-root` in the widget, where
+// `widgetStore.injectAccentColor` sets --pav-accent-light / --pav-accent-dark
+// inline. Declaring the theme-switched --pav-accent tokens on that same
+// element is what lets them resolve through the override; declared on an
+// ancestor they would inherit the compiled default instead. Never include it
+// on `:root` or `html`: the dark branch is an ancestor selector
+// (`[data-theme="dark"] &`), which nothing above the document root can match,
+// so the tokens would silently stay light in both themes.
+@mixin public-theme-tokens {
+  // Fixed-mode accent values — the runtime override surface.
+  --pav-accent-light: #{$public-accent-light};
+  --pav-accent-light-hover: #{$public-accent-hover-light};
+  --pav-accent-dark: #{$public-accent-dark};
+  --pav-accent-dark-hover: #{$public-accent-hover-dark};
+
+  --pav-accent: var(--pav-accent-light);
+  --pav-accent-hover: var(--pav-accent-light-hover);
+
+  --pav-surface-primary: #{$public-bg-primary-light};
+  --pav-surface-secondary: #{$public-bg-secondary-light};
+  --pav-surface-tertiary: #{$public-bg-tertiary-light};
+
+  --pav-text-primary: #{$public-text-primary-light};
+  --pav-text-secondary: #{$public-text-secondary-light};
+  --pav-text-muted: #{$public-text-tertiary-light};
+
+  --pav-border-subtle: #{$public-border-subtle-light};
+  --pav-border-medium: #{$public-border-medium-light};
+  --pav-border-strong: #{$public-border-strong-light};
+
+  --pav-interactive-hover: #{$public-hover-overlay-light};
+  --pav-interactive-active: #{$public-active-overlay-light};
+
+  --pav-text-error: #{$public-error-light};
+  --pav-surface-error: #{$public-error-bg-light};
+  --pav-success: #{$public-success-light};
+  --pav-success-bg: #{$public-success-bg-light};
+
+  --pav-source-pill-bg: #{$public-source-pill-bg-light};
+  --pav-source-pill-color: #{$public-source-pill-color-light};
+  --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-light};
+
+  --pav-shadow-xs: #{$public-shadow-xs-light};
+  --pav-shadow-sm: #{$public-shadow-sm-light};
+  --pav-shadow-md: #{$public-shadow-md-light};
+  --pav-shadow-lg: #{$public-shadow-lg-light};
+  --pav-shadow-xl: #{$public-shadow-xl-light};
+
+  @include public-dark-mode {
+    --pav-accent: var(--pav-accent-dark);
+    --pav-accent-hover: var(--pav-accent-dark-hover);
+
+    --pav-surface-primary: #{$public-bg-primary-dark};
+    --pav-surface-secondary: #{$public-bg-secondary-dark};
+    --pav-surface-tertiary: #{$public-bg-tertiary-dark};
+
+    --pav-text-primary: #{$public-text-primary-dark};
+    --pav-text-secondary: #{$public-text-secondary-dark};
+    --pav-text-muted: #{$public-text-tertiary-dark};
+
+    --pav-border-subtle: #{$public-border-subtle-dark};
+    --pav-border-medium: #{$public-border-medium-dark};
+    --pav-border-strong: #{$public-border-strong-dark};
+
+    --pav-interactive-hover: #{$public-hover-overlay-dark};
+    --pav-interactive-active: #{$public-active-overlay-dark};
+
+    --pav-text-error: #{$public-error-dark};
+    --pav-surface-error: #{$public-error-bg-dark};
+    --pav-success: #{$public-success-dark};
+    --pav-success-bg: #{$public-success-bg-dark};
+
+    --pav-source-pill-bg: #{$public-source-pill-bg-dark};
+    --pav-source-pill-color: #{$public-source-pill-color-dark};
+    --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-dark};
+
+    --pav-shadow-xs: #{$public-shadow-xs-dark};
+    --pav-shadow-sm: #{$public-shadow-sm-dark};
+    --pav-shadow-md: #{$public-shadow-md-dark};
+    --pav-shadow-lg: #{$public-shadow-lg-dark};
+    --pav-shadow-xl: #{$public-shadow-xl-dark};
+  }
+}
+
 // ===== ANIMATION TOKENS =====
 
 // Durations
@@ -271,14 +350,14 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   user-select: none;
 
   // Unselected state
-  background-color: $public-bg-tertiary-light;
-  color: $public-text-secondary-light;
-  box-shadow: $public-shadow-xs-light;
+  background-color: var(--pav-surface-tertiary);
+  color: var(--pav-text-secondary);
+  box-shadow: var(--pav-shadow-xs);
 
   &:hover {
     background-color: rgba(0, 0, 0, 0.08);
     color: rgba(0, 0, 0, 0.75);
-    box-shadow: $public-shadow-sm-light;
+    box-shadow: var(--pav-shadow-sm);
   }
 
   &:active {
@@ -291,13 +370,13 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   &.absent {
     opacity: 0.4;
     cursor: not-allowed;
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
 
     &:hover,
     &:focus {
-      background-color: $public-bg-tertiary-light;
-      color: $public-text-tertiary-light;
-      box-shadow: $public-shadow-xs-light;
+      background-color: var(--pav-surface-tertiary);
+      color: var(--pav-text-muted);
+      box-shadow: var(--pav-shadow-xs);
     }
 
     &:active {
@@ -306,90 +385,35 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 
   &.selected {
-    background-color: $public-accent-light;
+    background-color: var(--pav-accent);
     color: white;
     font-weight: $public-font-weight-medium;
-    box-shadow: $public-shadow-md-light;
+    box-shadow: var(--pav-shadow-md);
 
     &:hover {
-      background-color: $public-accent-hover-light;
+      background-color: var(--pav-accent-hover);
     }
   }
 
+  // The hover fill and ink are the pill's own translucent literals, which no
+  // token carries. Because this block outranks the states above, the absent
+  // and selected rules it would otherwise override are restated after it.
   @include public-dark-mode {
-    background-color: $public-bg-tertiary-dark;
-    color: $public-text-secondary-dark;
-    box-shadow: $public-shadow-xs-dark;
-
     &:hover {
       background-color: rgba(255, 255, 255, 0.1);
       color: rgba(255, 255, 255, 0.8);
-      box-shadow: $public-shadow-sm-dark;
     }
 
     &.absent {
-      opacity: 0.4;
-      cursor: not-allowed;
-      color: $public-text-tertiary-dark;
-
       &:hover,
       &:focus {
-        background-color: $public-bg-tertiary-dark;
-        color: $public-text-tertiary-dark;
-        box-shadow: $public-shadow-xs-dark;
-      }
-
-      &:active {
-        transform: none;
+        background-color: var(--pav-surface-tertiary);
+        color: var(--pav-text-muted);
       }
     }
 
-    &.selected {
-      background-color: $public-accent-dark;
-      box-shadow: $public-shadow-md-dark;
-
-      &:hover {
-        background-color: $public-accent-hover-dark;
-      }
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-bg-tertiary-light;
-    color: $public-text-secondary-light;
-    box-shadow: $public-shadow-xs-light;
-
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.08);
-      color: rgba(0, 0, 0, 0.75);
-      box-shadow: $public-shadow-sm-light;
-    }
-
-    &.absent {
-      opacity: 0.4;
-      cursor: not-allowed;
-      color: $public-text-tertiary-light;
-
-      &:hover,
-      &:focus {
-        background-color: $public-bg-tertiary-light;
-        color: $public-text-tertiary-light;
-        box-shadow: $public-shadow-xs-light;
-      }
-
-      &:active {
-        transform: none;
-      }
-    }
-
-    &.selected {
-      background-color: $public-accent-light;
-      color: white;
-      box-shadow: $public-shadow-md-light;
-
-      &:hover {
-        background-color: $public-accent-hover-light;
-      }
+    &.selected:hover {
+      background-color: var(--pav-accent-hover);
     }
   }
 }
@@ -450,65 +474,43 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-family: $public-font-family;
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-regular;
-  color: $public-text-primary-light;
-  background: $public-bg-primary-light;
-  border: 1px solid $public-border-subtle-light;
+  color: var(--pav-text-primary);
+  background: var(--pav-surface-primary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: $public-radius-xl;
   transition: $public-transition-fast;
 
   &::placeholder {
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
   }
 
   &:hover {
-    border-color: $public-border-medium-light;
-    background: $public-bg-secondary-light;
+    border-color: var(--pav-border-medium);
+    background: var(--pav-surface-secondary);
   }
 
   &:focus {
-    outline: 2px solid $public-accent-light;
+    outline: 2px solid var(--pav-accent);
     outline-offset: 0;
     border-color: transparent;
-    background: $public-bg-primary-light;
+    background: var(--pav-surface-primary);
   }
 
+  // The dark theme lifts the field one surface tier above the page, where
+  // the light theme sets it on the page surface itself — a shift the
+  // light/dark token pairs cannot express on their own.
   @include public-dark-mode {
-    color: $public-text-primary-dark;
-    background: $public-bg-secondary-dark;
-    border-color: $public-border-subtle-dark;
+    background: var(--pav-surface-secondary);
 
-    &::placeholder {
-      color: $public-text-tertiary-dark;
-    }
-
+    // The border is restated because this rule outranks `&:focus`: a hovered
+    // field keeps its hover border while focused in the dark theme.
     &:hover {
-      border-color: $public-border-medium-dark;
-      background: $public-bg-tertiary-dark;
+      border-color: var(--pav-border-medium);
+      background: var(--pav-surface-tertiary);
     }
 
     &:focus {
-      outline-color: $public-accent-dark;
       background: rgba(255, 255, 255, 0.1);
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-    background: $public-bg-primary-light;
-    border-color: $public-border-subtle-light;
-
-    &::placeholder {
-      color: $public-text-tertiary-light;
-    }
-
-    &:hover {
-      border-color: $public-border-medium-light;
-      background: $public-bg-secondary-light;
-    }
-
-    &:focus {
-      outline-color: $public-accent-light;
-      background: $public-bg-primary-light;
     }
   }
 }
@@ -526,28 +528,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border: none;
   cursor: pointer;
   padding: $public-space-1;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   font-size: $public-font-size-base;
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-text-primary-light;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-
-    &:hover {
-      color: $public-text-primary-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-
-    &:hover {
-      color: $public-text-primary-light;
-    }
+    color: var(--pav-text-primary);
   }
 }
 
@@ -582,33 +568,13 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 @mixin public-button-primary {
   @include public-button-base;
 
-  background-color: $public-accent-light;
+  background-color: var(--pav-accent);
   color: white;
-  box-shadow: $public-shadow-sm-light;
+  box-shadow: var(--pav-shadow-sm);
 
   &:hover:not(:disabled) {
-    background-color: $public-accent-hover-light;
-    box-shadow: $public-shadow-md-light;
-  }
-
-  @include public-dark-mode {
-    background-color: $public-accent-dark;
-    box-shadow: $public-shadow-sm-dark;
-
-    &:hover:not(:disabled) {
-      background-color: $public-accent-hover-dark;
-      box-shadow: $public-shadow-md-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-accent-light;
-    box-shadow: $public-shadow-sm-light;
-
-    &:hover:not(:disabled) {
-      background-color: $public-accent-hover-light;
-      box-shadow: $public-shadow-md-light;
-    }
+    background-color: var(--pav-accent-hover);
+    box-shadow: var(--pav-shadow-md);
   }
 }
 
@@ -616,32 +582,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   @include public-button-base;
 
   background-color: transparent;
-  color: $public-text-primary-light;
-  border: 1px solid $public-border-medium-light;
+  color: var(--pav-text-primary);
+  border: 1px solid var(--pav-border-medium);
 
   &:hover:not(:disabled) {
-    background-color: $public-hover-overlay-light;
-    border-color: $public-border-strong-light;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-    border-color: $public-border-medium-dark;
-
-    &:hover:not(:disabled) {
-      background-color: $public-hover-overlay-dark;
-      border-color: $public-border-strong-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-primary-light;
-    border-color: $public-border-medium-light;
-
-    &:hover:not(:disabled) {
-      background-color: $public-hover-overlay-light;
-      border-color: $public-border-strong-light;
-    }
+    background-color: var(--pav-interactive-hover);
+    border-color: var(--pav-border-strong);
   }
 }
 
@@ -652,17 +598,9 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   align-items: center;
   justify-content: center;
   padding: $public-space-2xl $public-space-xl;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   font-size: $public-font-size-base;
   font-style: italic;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
 }
 
 @mixin public-error-state {
@@ -757,12 +695,8 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-weight: $public-font-weight-medium;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin-bottom: $public-space-sm;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 // ===== RESPONSIVE BREAKPOINTS =====
@@ -886,36 +820,18 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border-radius: $public-radius-full;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
-  background-color: $public-source-pill-bg-light;
-  color: $public-source-pill-color-light;
+  background-color: var(--pav-source-pill-bg);
+  color: var(--pav-source-pill-color);
   text-decoration: none;
   white-space: nowrap;
   transition: background-color $public-duration-fast $public-ease-out;
 
   &:hover {
-    background-color: $public-source-pill-hover-bg-light;
+    background-color: var(--pav-source-pill-hover-bg);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    background-color: $public-source-pill-bg-dark;
-    color: $public-source-pill-color-dark;
-
-    &:hover {
-      background-color: $public-source-pill-hover-bg-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background-color: $public-source-pill-bg-light;
-    color: $public-source-pill-color-light;
-
-    &:hover {
-      background-color: $public-source-pill-hover-bg-light;
-    }
   }
 }
 
@@ -991,20 +907,6 @@ $spacing-3xl: 32px;
   }
 }
 
-@mixin dark-mode {
-  @include public-dark-mode {
-    @content;
-  }
-}
-
-// Import button background colors from public design tokens
-$light-mode-button-background: $public-accent-light;
-$dark-mode-button-background: $public-accent-dark;
-
-// Secondary text color tokens
-$light-mode-secondary-text: $public-text-secondary-light;
-$dark-mode-secondary-text: $public-text-secondary-dark;
-
 // Font weight tokens
 $font-regular: $public-font-weight-regular;
 $font-medium: $public-font-weight-medium;
@@ -1026,16 +928,8 @@ $font-medium: $public-font-weight-medium;
 }
 
 @mixin public-focus-visible {
-  outline: 2px solid $public-accent-light;
+  outline: 2px solid var(--pav-accent);
   outline-offset: 2px;
-
-  @include public-dark-mode {
-    outline-color: $public-accent-dark;
-  }
-
-  @include public-light-mode-override {
-    outline-color: $public-accent-light;
-  }
 }
 
 // ===== RESPONSIVE LAYOUT BREAKPOINT VARIABLES =====
@@ -1078,7 +972,7 @@ $public-link-color: $public-accent-light;
   }
 
   &:hover {
-    box-shadow: $public-shadow-xl-light;
+    box-shadow: var(--pav-shadow-xl);
     transform: translateY(-0.5px);
 
     .card-image img {
@@ -1107,37 +1001,15 @@ $public-link-color: $public-accent-light;
       width: 16rem;
     }
   }
-
-  @include public-dark-mode {
-    &:hover {
-      box-shadow: $public-shadow-xl-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    &:hover {
-      box-shadow: $public-shadow-xl-light;
-    }
-  }
 }
 
 // ===== SIDEBAR CARD (white bg, bordered, rounded) =====
 
 @mixin public-sidebar-card {
-  background: $public-bg-primary-light;
-  border: 1px solid $public-border-subtle-light;
+  background: var(--pav-surface-primary);
+  border: 1px solid var(--pav-border-subtle);
   border-radius: $public-radius-2xl;
   padding: 1.25rem;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    border-color: $public-border-subtle-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-    border-color: $public-border-subtle-light;
-  }
 }
 
 // ===== STICKY DATE HEADING =====
@@ -1149,36 +1021,22 @@ $public-link-color: $public-accent-light;
   display: flex;
   align-items: center;
   gap: $public-space-sm;
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: $public-font-weight-semibold;
   font-size: 0.875rem;
 
+  // The day marker. It reads the runtime accent so a widget owner's
+  // configured accent (injected on .widget-root) reaches it.
   &::before {
     content: '';
     display: inline-block;
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
-    background: $public-link-color;
+    background: var(--pav-accent);
     flex-shrink: 0;
-  }
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-
-    &::before {
-      background: $public-accent-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-
-    &::before {
-      background: $public-link-color;
-    }
   }
 }
 
@@ -1218,8 +1076,8 @@ $public-link-color: $public-accent-light;
   aspect-ratio: 2 / 1;
   background: linear-gradient(
     135deg,
-    $public-bg-secondary-light 0%,
-    $public-bg-tertiary-light 100%
+    var(--pav-surface-secondary) 0%,
+    var(--pav-surface-tertiary) 100%
   );
   display: flex;
   align-items: center;
@@ -1227,21 +1085,5 @@ $public-link-color: $public-accent-light;
 
   @media (min-width: $public-mobile-breakpoint) {
     aspect-ratio: 21 / 9;
-  }
-
-  @include public-dark-mode {
-    background: linear-gradient(
-      135deg,
-      $public-bg-secondary-dark 0%,
-      $public-bg-tertiary-dark 100%
-    );
-  }
-
-  @include public-light-mode-override {
-    background: linear-gradient(
-      135deg,
-      $public-bg-secondary-light 0%,
-      $public-bg-tertiary-light 100%
-    );
   }
 }

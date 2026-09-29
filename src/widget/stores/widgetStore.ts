@@ -177,24 +177,35 @@ export const useWidgetStore = defineStore('widget', {
      * Inject accent color as CSS custom properties on root element.
      *
      * Writes `--pav-accent-light` and `--pav-accent-dark` from the user-chosen
-     * value. Hover variants (`--pav-accent-light-hover` / `--pav-accent-dark-hover`)
-     * are intentionally NOT written here — they remain at the SCSS-compiled
-     * defaults emitted by the `public-accent-tokens` mixin on the root.
+     * value, and derives `--pav-accent-light-hover` / `--pav-accent-dark-hover`
+     * from it: 10% towards black for the light theme and 10% towards white for
+     * the dark theme, the same direction the compiled defaults take
+     * (`$public-accent-hover-*` shift lightness by 5% each way). Left unwritten,
+     * the hover variants would stay at those compiled defaults, so a hovered
+     * button or link would snap to the default orange.
      *
      * SECURITY: The accent color MUST reach the DOM only via
      * `element.style.setProperty(...)`. Never interpolate the value into a
      * raw `<style>` block, `innerHTML`, or string-concatenated stylesheet —
-     * those paths enable CSS/HTML injection. Combined with the strict hex
-     * regex validation in `isValidWidgetAccentColor` and the re-validation in
-     * `applyServerConfig()`/`parseConfig()`, this closes the injection vector.
+     * those paths enable CSS/HTML injection. `accentColor` has three writers,
+     * each of which validates with the strict hex regex in
+     * `isValidWidgetAccentColor`: `applyServerConfig()`, `parseConfig()`, and
+     * the same-origin postMessage handler in `widget-container.vue`. This
+     * method validates again at the sink, falling back to the default, so a
+     * future writer that skips validation still cannot reach the DOM or the
+     * interpolated `color-mix(...)` hover strings.
      *
      * @param rootElement - DOM element to inject CSS properties on
      */
     injectAccentColor(rootElement: HTMLElement) {
-      if (this.accentColor) {
-        rootElement.style.setProperty('--pav-accent-light', this.accentColor);
-        rootElement.style.setProperty('--pav-accent-dark', this.accentColor);
-      }
+      const accent = isValidWidgetAccentColor(this.accentColor)
+        ? this.accentColor
+        : WIDGET_CONFIG_DEFAULTS.accentColor;
+
+      rootElement.style.setProperty('--pav-accent-light', accent);
+      rootElement.style.setProperty('--pav-accent-dark', accent);
+      rootElement.style.setProperty('--pav-accent-light-hover', `color-mix(in srgb, ${accent} 90%, black)`);
+      rootElement.style.setProperty('--pav-accent-dark-hover', `color-mix(in srgb, ${accent} 90%, white)`);
     },
 
     /**

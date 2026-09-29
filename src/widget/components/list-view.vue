@@ -8,6 +8,7 @@ import { useWidgetStore } from '../stores/widgetStore';
 import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
+import EmptyState from '@/common/ui/components/EmptyState.vue';
 
 const { t } = useTranslation('system');
 const router = useRouter();
@@ -73,7 +74,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
     </div>
 
     <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-    <div
+    <EmptyState
       v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending"
       class="empty-state"
     >
@@ -83,7 +84,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
       <p v-else>
         {{ t('no_events_available') }}
       </p>
-    </div>
+    </EmptyState>
 
     <!-- Loading State -->
     <div
@@ -113,7 +114,8 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 // site's EventCard component directly so it shares all card content
 // (image, title, time, location, description, categories,
 // source-calendar pill, recurrence/cancelled badges, no-image
-// fallback) and benefits from the same dark/light pairing audit.
+// fallback) and reads the same --pav-* tokens, which .widget-root
+// declares with the owner's configured accent.
 // ================================================================
 
 .events-container {
@@ -131,15 +133,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 
   padding: $public-space-sm 0;
   margin: 0 0 $public-space-lg 0;
-  color: $public-text-secondary-light;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
-  }
+  color: var(--pav-text-secondary);
 }
 
 .day-events {
@@ -158,9 +152,5 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 // Loading and error states
 .loading {
   @include public-loading-state;
-}
-
-.empty-state {
-  @include public-empty-state;
 }
 </style>

@@ -1,6 +1,13 @@
 import { test, expect, Browser, Page } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
+import {
+  Theme,
+  opposite,
+  expectThemedText,
+  expectColorSide,
+  expectThemedSurface,
+} from './helpers/color-mode';
 
 /**
  * E2E Tests: Widget Configuration Roundtrip
@@ -259,6 +266,82 @@ test('admin-saved accent color is injected as CSS custom property in rendered wi
   await cleanup();
 });
 
+// The injected property is only half the contract: the list view's event
+// time and day-heading marker, and the detail page's accents, must actually
+// paint with it. They used to read compile-time SCSS accents and stayed the
+// default orange whatever the owner configured (pv-nskn). Checked under both
+// OS schemes, since each theme reads its own fixed-mode accent property.
+test('list view and event detail paint with the saved accent', async ({ page, browser }) => {
+  await loginAsAdmin(page, env.baseURL);
+  await openWidgetAdminTab(page, env.baseURL);
+
+  // The mitown-climate repro value: a green far from the default orange.
+  const ACCENT = '#669c35';
+  const ACCENT_RGB = 'rgb(102, 156, 53)';
+  const saved = await saveWidgetConfig(page, { accentColor: ACCENT });
+  expect(saved.accentColor).toBe(ACCENT);
+  expect(saved.colorMode).toBe('auto');
+
+  for (const osScheme of ['light', 'dark'] as const) {
+    await test.step(`${osScheme} OS`, async () => {
+      const { embedPage, cleanup } = await openWidgetEmbed(browser, env.baseURL, { colorScheme: osScheme });
+      const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
+      await expect(iframe.locator('.widget-root')).toBeVisible({ timeout: 20000 });
+      // An earlier test saved the week view; `?view=list` overrides it.
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await expect(iframe.locator('.list-view article.event-card').first()).toBeVisible({ timeout: 20000 });
+
+      await expect.poll(
+        async () => ({
+          eventTime: await iframe.locator('.list-view .event-time').first()
+            .evaluate(el => getComputedStyle(el).color),
+          dayMarker: await iframe.locator('.list-view .day-heading').first()
+            .evaluate(el => getComputedStyle(el, '::before').backgroundColor),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ eventTime: ACCENT_RGB, dayMarker: ACCENT_RGB });
+
+      // The event detail page renders the shared EventDetailBody, whose date
+      // icon and Add to Calendar button carry the accent too.
+      await iframe.locator('.list-view .event-title-link').first().click();
+      await expect(iframe.locator('.add-to-calendar-btn')).toBeVisible({ timeout: 20000 });
+      await expect.poll(
+        async () => ({
+          dateIcon: await iframe.locator('.datetime-icon--date').first()
+            .evaluate(el => getComputedStyle(el).color),
+          addToCalendar: await iframe.locator('.add-to-calendar-btn')
+            .evaluate(el => getComputedStyle(el).color),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ dateIcon: ACCENT_RGB, addToCalendar: ACCENT_RGB });
+
+      // Hover reads --pav-accent-hover, which injectAccentColor derives from
+      // the accent (towards black in light, towards white in dark). The seed
+      // has no event with an external link, so the linked category badge —
+      // which reads the same token as the More Information button — stands in.
+      // The expected colour is resolved by the browser from the same mix, so
+      // the comparison does not depend on how color-mix() serialises.
+      const mixTarget = osScheme === 'light' ? 'black' : 'white';
+      const expectedHover = await iframe.locator('.widget-root').evaluate((root, mix) => {
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = mix;
+        root.appendChild(probe);
+        const value = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return value;
+      }, `color-mix(in srgb, ${ACCENT} 90%, ${mixTarget})`);
+      const badge = iframe.locator('a.event-category-badge').first();
+      await badge.hover();
+      await expect.poll(
+        () => badge.evaluate(el => getComputedStyle(el).backgroundColor),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toBe(expectedHover);
+
+      await cleanup();
+    });
+  }
+});
+
 // ============================================================================
 // Color mode override scenarios (pv-16wd.3.2 scenarios 2–4)
 // ============================================================================
@@ -275,43 +358,8 @@ test('admin-saved accent color is injected as CSS custom property in rendered wi
 // scenario also asserts the downstream background-color cascade on
 // `.widget-container` — without that, a regression in the mixin (e.g. Vue's
 // `:global(...) &` compilation bug, see pv-ezc7) could leave the attribute
-// set while the actual cascade was broken.
-
-async function getContainerBackground(iframe: ReturnType<Page['frameLocator']>): Promise<string> {
-  return iframe.locator('.widget-container').evaluate((el) => getComputedStyle(el).backgroundColor);
-}
-
-/**
- * Parse a CSS rgb()/rgba() color string into a normalized `{r,g,b}` triple.
- * Returns null if the string is not a recognizable rgb() or rgba().
- */
-function parseRgb(color: string): { r: number; g: number; b: number } | null {
-  const match = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (!match) return null;
-  return {
-    r: parseInt(match[1], 10),
-    g: parseInt(match[2], 10),
-    b: parseInt(match[3], 10),
-  };
-}
-
-/**
- * Heuristic luminance check. The widget's light background is white-ish
- * (#ffffff) and the dark background is near-black (#1a1a1e). We check the
- * average channel value on each side of 128 to avoid coupling to exact
- * SCSS token values, which is more resilient to design-system tweaks.
- */
-function isLightColor(color: string): boolean {
-  const rgb = parseRgb(color);
-  if (!rgb) return false;
-  return (rgb.r + rgb.g + rgb.b) / 3 > 128;
-}
-
-function isDarkColor(color: string): boolean {
-  const rgb = parseRgb(color);
-  if (!rgb) return false;
-  return (rgb.r + rgb.g + rgb.b) / 3 < 128;
-}
+// set while the actual cascade was broken. The background is classified by
+// the shared `expectColorSide` helper rather than matched to a token value.
 
 test('color mode "light" overrides system dark preference', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
@@ -333,10 +381,7 @@ test('color mode "light" overrides system dark preference', async ({ page, brows
   // data-theme="light", leaving `.widget-container` light even though the OS
   // prefers dark.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
-  await expect.poll(
-    async () => isLightColor(await getContainerBackground(iframe)),
-    { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toBe(true);
+  await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'light');
 
   await cleanup();
 });
@@ -358,10 +403,7 @@ test('color mode "dark" overrides system light preference', async ({ page, brows
   // Visual cascade: `[data-theme="dark"] &` must drive the background-color on
   // `.widget-container` to a dark value even though the OS prefers light.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
-  await expect.poll(
-    async () => isDarkColor(await getContainerBackground(iframe)),
-    { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toBe(true);
+  await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
 
   await cleanup();
 });
@@ -383,27 +425,167 @@ test('color mode "auto" follows system preference and reacts to changes', async 
   // Auto leaves data-theme unset, so the stylesheet's media query decides.
   await expect(iframe.locator('html[data-theme]')).toHaveCount(0);
 
-  await expect.poll(
-    async () => isDarkColor(await getContainerBackground(iframe)),
-    { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toBe(true);
+  await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
 
   // Flip the OS preference to light without reloading. The media query
   // re-evaluates live; no JavaScript listener is involved.
   await embedPage.emulateMedia({ colorScheme: 'light' });
 
-  await expect.poll(
-    async () => isLightColor(await getContainerBackground(iframe)),
-    { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toBe(true);
+  await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'light');
 
   // Flip back to dark — auto should react again.
   await embedPage.emulateMedia({ colorScheme: 'dark' });
 
-  await expect.poll(
-    async () => isDarkColor(await getContainerBackground(iframe)),
-    { timeout: 15000, intervals: [200, 500, 1000] },
-  ).toBe(true);
+  await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
 
   await cleanup();
 });
+
+// ============================================================================
+// Forced color mode on every widget surface (pv-l3my.4)
+// ============================================================================
+//
+// The scenarios above only prove the forced mode reaches `.widget-container`.
+// The surfaces that actually broke under a forced mode were the ones whose
+// dark rule had no hand-paired light override: the footer and its logo, the
+// shared filter label, the date popover, and the not-found page. Each one is
+// asserted here in both mismatched directions (forced light on a dark OS,
+// forced dark on a light OS), so a regression in the `public-dark-mode` guard
+// fails CI rather than surfacing as a support report.
+//
+// The colour classification (ink vs surface side, 3:1 text contrast floor)
+// lives in helpers/color-mode.ts, shared with the site colour-mode spec.
+
+/**
+ * Load a widget path inside the embed page's existing iframe, so the page's
+ * emulated OS colour scheme carries over. A fresh document load re-runs the
+ * router guard, which applies the server-saved colour mode.
+ */
+async function gotoInWidgetFrame(embedPage: Page, baseURL: string, path: string): Promise<void> {
+  const frame = embedPage.frames().find(f => f.url().includes('/widget/'));
+  if (!frame) {
+    throw new Error('Widget iframe not found on the embed page');
+  }
+  await frame.goto(baseURL + path);
+}
+
+const FORCED_MODE_DIRECTIONS: { colorMode: Theme; osScheme: Theme }[] = [
+  { colorMode: 'light', osScheme: 'dark' },
+  { colorMode: 'dark', osScheme: 'light' },
+];
+
+for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
+  test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, empty state and not-found`, async ({ page, browser }) => {
+    // The mitown-climate repro accent, so the date controls' selected fill
+    // can be told apart from the default orange (pv-b7gp).
+    const ACCENT = '#669c35';
+    const ACCENT_RGB = 'rgb(102, 156, 53)';
+
+    await loginAsAdmin(page, env.baseURL);
+    await openWidgetAdminTab(page, env.baseURL);
+    const saved = await saveWidgetConfig(page, { colorMode, accentColor: ACCENT });
+    expect(saved.colorMode).toBe(colorMode);
+    expect(saved.accentColor).toBe(ACCENT);
+
+    const { embedPage, cleanup } = await openWidgetEmbed(browser, env.baseURL, { colorScheme: osScheme });
+    const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1, { timeout: 20000 });
+
+    // The footer and the shared filter label are on every view. `?view=` is
+    // the admin-preview override, applied after the saved config, so it
+    // switches the view without touching the saved colour mode.
+    for (const view of ['list', 'week', 'month'] as const) {
+      await test.step(`${view} view: footer, logo and filter label`, async () => {
+        await gotoInWidgetFrame(embedPage, env.baseURL, `/widget/test_calendar?view=${view}`);
+        await expect(iframe.locator(`.${view}-view`)).toBeVisible({ timeout: 20000 });
+        await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1);
+
+        // The footer sits outside the themed container, on the iframe's
+        // transparent canvas, so its colours are classified on their own.
+        await expectColorSide(iframe, '.widget-footer', 'color', opposite(colorMode));
+        await expectColorSide(iframe, '.widget-footer', 'borderTopColor', opposite(colorMode));
+        // The logo is a masked <span>; its visible colour is its background.
+        await expectColorSide(iframe, '.widget-footer .pavillion-logo', 'backgroundColor', opposite(colorMode));
+
+        await expectThemedText(iframe, '.category-filter-section .filter-label', colorMode);
+        await expectColorSide(iframe, '.search-section .search-icon', 'color', opposite(colorMode));
+      });
+    }
+
+    await test.step('list view: date popover and custom date inputs', async () => {
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await expect(iframe.locator('.list-view')).toBeVisible({ timeout: 20000 });
+
+      // The date-range button is list-view only; unselected, it is ink on
+      // the widget surface.
+      await expectThemedText(iframe, '.date-filter-button', colorMode);
+
+      await iframe.locator('.date-filter-button').click();
+      await expect(iframe.locator('.date-dropdown')).toBeVisible();
+      await expectThemedSurface(iframe, '.date-dropdown', colorMode);
+
+      await iframe.locator('.date-pill.calendar-pill').click();
+      await expect(iframe.locator('.date-input').first()).toBeVisible();
+      await expectThemedText(iframe, '.date-input-label', colorMode);
+      await expectThemedText(iframe, '.date-input', colorMode);
+      await expectThemedSurface(iframe, '.date-input', colorMode);
+      await expectColorSide(iframe, '.date-input', 'borderTopColor', opposite(colorMode));
+
+      // Custom mode is now selected: its pill and the date-range button carry
+      // the configured accent, not the default orange, in either theme. The
+      // pointer is moved off the pill first so its resting fill is read.
+      await iframe.locator('.date-input-label').first().hover();
+      await expect.poll(
+        async () => ({
+          pill: await iframe.locator('.date-pill.calendar-pill.active')
+            .evaluate(el => getComputedStyle(el).backgroundColor),
+          button: await iframe.locator('.date-filter-button.has-filter')
+            .evaluate(el => getComputedStyle(el).backgroundColor),
+        }),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toEqual({ pill: ACCENT_RGB, button: ACCENT_RGB });
+
+      // A selected category pill carries the same accent, so the filter bar
+      // shows one accent rather than the configured one beside the default.
+      const categoryPill = iframe.locator('.category-pill:not(.absent)').first();
+      await categoryPill.click();
+      await expect(iframe.locator('.category-pill.selected')).toHaveCount(1);
+      // Clicking outside the date popover closes it; the footer is a stable
+      // place to park the pointer off the pill.
+      await iframe.locator('.widget-footer').hover();
+      await expect.poll(
+        () => iframe.locator('.category-pill.selected')
+          .evaluate(el => getComputedStyle(el).backgroundColor),
+        { timeout: 15000, intervals: [200, 500, 1000] },
+      ).toBe(ACCENT_RGB);
+      await categoryPill.click();
+    });
+
+    await test.step('list view: shared EmptyState when there are no events', async () => {
+      // An empty event list is forced by stubbing the events endpoint; the
+      // route applies to the iframe's requests too.
+      const eventsRoute = '**/api/public/v1/calendar/test_calendar/events**';
+      await embedPage.route(eventsRoute, route => route.fulfill({ json: [] }));
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await expect(iframe.locator('.ui-empty-state')).toBeVisible({ timeout: 20000 });
+      await expectThemedText(iframe, '.ui-empty-state p', colorMode);
+      await embedPage.unroute(eventsRoute);
+    });
+
+    await test.step('not-found page', async () => {
+      // A well-formed occurrence slug for an event that does not exist: the
+      // calendar (and so its saved colour mode) loads, the instance does not.
+      await gotoInWidgetFrame(
+        embedPage,
+        env.baseURL,
+        '/widget/test_calendar/events/00000000-0000-4000-8000-000000000000/20260101-1200',
+      );
+      await expect(iframe.locator('.not-found h1')).toBeVisible({ timeout: 20000 });
+      await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1);
+      await expectThemedText(iframe, '.not-found h1', colorMode);
+      await expectThemedText(iframe, '.not-found p', colorMode);
+    });
+
+    await cleanup();
+  });
+}

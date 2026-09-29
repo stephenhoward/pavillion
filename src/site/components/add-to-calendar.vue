@@ -59,10 +59,10 @@ function handleDownload() {
   width: 100%;
   padding: $public-space-md $public-space-lg;
   min-height: 44px;
-  border: 1px solid $public-accent-light;
+  border: 1px solid var(--pav-accent);
   border-radius: $public-radius-md;
   background: transparent;
-  color: $public-accent-light;
+  color: var(--pav-accent);
   font-family: $public-font-family;
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-medium;
@@ -70,22 +70,12 @@ function handleDownload() {
   transition: $public-transition-fast;
 
   &:hover {
-    background-color: $public-accent-light;
+    background-color: var(--pav-accent);
     color: #fff;
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    border-color: $public-accent-dark;
-    color: $public-accent-dark;
-
-    &:hover {
-      background-color: $public-accent-dark;
-      color: #fff;
-    }
   }
 }
 </style>
