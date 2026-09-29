@@ -34,6 +34,8 @@ A few programs sit between the two — a weekly meditation group where the leade
 
 ## Create a series
 
+There are two ways to create a series: from the **Series** tab in calendar management, described here, or from inside the event editor while you're writing an event (see [Add events to a series](#add-events-to-a-series)). The Series tab is the one to use when you want to set everything up front, including the image.
+
 Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Series** tab. The first time you visit, the list is empty.
 
 Click <Btn>Add Series</Btn>. A full-page editor opens with the following fields:
@@ -58,10 +60,14 @@ The URL name is the only field that can't be changed after creation, because cha
 
 A series is empty until you put events in it. In the event editor — whether you're creating a new event or editing an existing one — find the **Series** section. There's a single dropdown labeled *Series*; the default is *No series*. Pick the series this event belongs to and save. To remove an event from a series, set the dropdown back to *No series*.
 
+If the series doesn't exist yet, you don't have to leave the editor to make it. Click <Btn>+ New series</Btn> under the dropdown and a small *Add a Series* dialog opens with the URL name, series name, and description fields from the Series tab. Click <Btn>Create Series</Btn> and the series is created on the spot and selected in the dropdown. The series is saved as soon as you create it, but the event joins it only when you save the event — if you abandon the event, you're left with an empty series you can delete from the Series tab.
+
+The dialog has no image field. That makes it the quick path — handy when you're writing the first concert of a new season and the program doesn't have a banner yet. When you want the series page to arrive fully dressed, with its image in place before visitors see it, create it from the Series tab instead; you can also add the image there later by clicking the pencil icon on the series' row.
+
 An event can belong to *one* series at a time, not several. If a single event genuinely fits more than one program — say, a panel discussion that's both part of a *Climate Resilience Week* and a *Speakers Series* — you'll have to pick one. Categories can do the cross-tagging; series are the primary affiliation.
 
 ::: tip <Lightbulb /> A note on populating a brand-new series.
-Newly-created series don't have any events yet, and the series doesn't show up on your public calendar until at least one event is assigned. If your series page looks empty in the management list, that's expected — go assign events to it and refresh.
+A series doesn't show up on your public calendar until at least one saved event is assigned to it. One created from the Series tab starts with an event count of zero — that's expected; go assign events to it. One created from the event editor gets its first event when you save that event, so it's live as soon as the event is.
 :::
 
 ## What a series looks like to visitors
