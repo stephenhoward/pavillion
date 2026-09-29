@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useWidgetStore } from '../stores/widgetStore';
 
 const { t } = useTranslation('system');
 const widgetStore = useWidgetStore();
 const route = useRoute();
+const router = useRouter();
 const rootRef = ref<HTMLElement | null>(null);
 
 /**
@@ -20,6 +21,10 @@ const rootRef = ref<HTMLElement | null>(null);
  */
 let resizeObserver: ResizeObserver | null = null;
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+// Route-change height hold; see holdHeight below.
+let navigationCount = 0;
+let busyObserver: MutationObserver | null = null;
+let removeRouterHooks: Array<() => void> = [];
 
 onMounted(() => {
   const root = rootRef.value;
@@ -40,11 +45,74 @@ onMounted(() => {
     });
 
     resizeObserver.observe(root);
+
+    removeRouterHooks = [
+      router.beforeEach(() => {
+        navigationCount++;
+        holdHeight(root);
+      }),
+      router.afterEach(() => releaseWhenSettled(root)),
+      router.onError(() => releaseHeight(root)),
+    ];
   }
 });
 
+/**
+ * Hold the frame's height across a route change.
+ *
+ * A routed view renders a short loading state while it fetches, and
+ * reporting that would collapse the iframe until the data arrives. From
+ * the start of a navigation the root keeps its current height as an inline
+ * min-height; it is released once the new view has settled, which is when
+ * nothing under the root is marked `aria-busy="true"`. A view that never
+ * goes busy (rendered from cached data) is released on the first check
+ * after it renders. Released, the root is back to its content height, so
+ * the frame can still shrink to a shorter view.
+ */
+const isBusy = (root: HTMLElement) => root.querySelector('[aria-busy="true"]') !== null;
+
+function holdHeight(root: HTMLElement) {
+  busyObserver?.disconnect();
+  busyObserver = null;
+  root.style.minHeight = `${Math.ceil(root.getBoundingClientRect().height)}px`;
+}
+
+function releaseHeight(root: HTMLElement) {
+  busyObserver?.disconnect();
+  busyObserver = null;
+  root.style.minHeight = '';
+}
+
+async function releaseWhenSettled(root: HTMLElement) {
+  const navigation = navigationCount;
+  // afterEach runs before the new route renders; the views set their
+  // loading state before their first render, so one tick shows it.
+  await nextTick();
+  if (navigation !== navigationCount) {
+    return; // A later navigation owns the hold now.
+  }
+  if (!isBusy(root)) {
+    releaseHeight(root);
+    return;
+  }
+  busyObserver = new MutationObserver(() => {
+    if (!isBusy(root)) {
+      releaseHeight(root);
+    }
+  });
+  busyObserver.observe(root, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['aria-busy'],
+  });
+}
+
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
+  busyObserver?.disconnect();
+  removeRouterHooks.forEach((remove) => remove());
+  removeRouterHooks = [];
   if (resizeTimeout) {
     clearTimeout(resizeTimeout);
   }

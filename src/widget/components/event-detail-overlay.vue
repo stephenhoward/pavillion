@@ -142,7 +142,7 @@ onBeforeMount(async () => {
 </script>
 
 <template>
-  <div class="event-detail-overlay">
+  <div class="event-detail-overlay" :aria-busy="state.isLoading">
     <!-- Loading State -->
     <div v-if="state.isLoading" role="status" class="loading">
       {{ t('loading_events') }}

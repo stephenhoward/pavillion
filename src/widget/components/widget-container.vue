@@ -130,7 +130,10 @@ onUnmounted(() => {
       <SearchFilterPublic :widget-view-mode="widgetStore.viewMode" />
     </header>
 
-    <main class="widget-main">
+    <main
+      class="widget-main"
+      :aria-busy="state.isLoading || publicCalendarStore.isLoadingEvents"
+    >
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <div v-if="publicCalendarStore.eventError" class="error">{{ publicCalendarStore.eventError }}</div>
       <div v-if="publicCalendarStore.categoryError" class="error">{{ publicCalendarStore.categoryError }}</div>
