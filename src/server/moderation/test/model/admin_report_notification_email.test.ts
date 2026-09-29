@@ -92,7 +92,7 @@ describe('AdminReportNotificationEmail', () => {
     expect(mailData.emailAddress).toBe('owner@example.com');
   });
 
-  it('should include priority indicator in subject line', () => {
+  it('should pass the uppercased priority to the subject translation', () => {
     const email = new AdminReportNotificationEmail(
       'owner@example.com',
       'Test Event',
@@ -104,12 +104,12 @@ describe('AdminReportNotificationEmail', () => {
       'cal-123',
     );
 
-    const mailData = email.buildMessage('en');
+    email.buildMessage('en');
 
-    expect(mailData.subject).toContain('[HIGH]');
+    expect(i18nextTStub.calledWith('subject', sinon.match({ priority: 'HIGH' }))).toBe(true);
   });
 
-  it('should include medium priority indicator in subject line', () => {
+  it('should pass the uppercased medium priority to the subject translation', () => {
     const email = new AdminReportNotificationEmail(
       'owner@example.com',
       'Test Event',
@@ -121,9 +121,9 @@ describe('AdminReportNotificationEmail', () => {
       'cal-123',
     );
 
-    const mailData = email.buildMessage('en');
+    email.buildMessage('en');
 
-    expect(mailData.subject).toContain('[MEDIUM]');
+    expect(i18nextTStub.calledWith('subject', sinon.match({ priority: 'MEDIUM' }))).toBe(true);
   });
 
   it('should render the subject via i18n with priority prefix', () => {
@@ -141,7 +141,8 @@ describe('AdminReportNotificationEmail', () => {
     const mailData = email.buildMessage('en');
 
     expect(i18nextSetDefaultNamespaceStub.calledWith('admin_report_notification_email')).toBe(true);
-    expect(mailData.subject).toBe('[LOW] Translated Subject');
+    expect(i18nextTStub.calledWith('subject', sinon.match({ priority: 'LOW', lng: 'en' }))).toBe(true);
+    expect(mailData.subject).toBe('Translated Subject');
   });
 
   it('should include text and html messages', () => {

@@ -74,7 +74,7 @@ class AdminReportNotificationEmail extends EmailMessage {
 
     return {
       emailAddress: this.recipientEmail,
-      subject: `[${priorityLabel}] ` + this.renderSubject(language, {}),
+      subject: this.renderSubject(language, { priority: priorityLabel }),
       textMessage: this.renderPlaintext(language, templateData),
       htmlMessage: this.renderHtml(language, templateData),
     };

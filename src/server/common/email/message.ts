@@ -62,14 +62,23 @@ export abstract class EmailMessage {
   /**
    * Renders the email subject using i18n translations.
    *
+   * The subject's {{placeholders}} are filled by i18next interpolation from
+   * `data`. Escaping is disabled explicitly: a subject is a plain-text mail
+   * header, so a value like "Arts & Crafts" must not become "Arts &amp; Crafts"
+   * whatever the global i18next configuration says.
+   *
    * @param language - Language code for translation
-   * @param data - Data object (language is added to it)
+   * @param data - Interpolation values for the subject (language is added to it)
    * @returns Translated subject string
    */
   renderSubject(language: string, data: any): string {
     data.lng = language;
     i18next.setDefaultNamespace(this.namespace);
-    return i18next.t('subject', { lng: language });
+    return i18next.t('subject', {
+      ...data,
+      lng: language,
+      interpolation: { escapeValue: false },
+    });
   }
 
   /**

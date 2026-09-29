@@ -81,7 +81,7 @@ describe('EmailMessage', () => {
     expect(i18nextLoadNamespacesStub.called).toBe(false);
   });
 
-  it('should call i18next.t when rendering subject', () => {
+  it('should call i18next.t with the data as interpolation values when rendering subject', () => {
     const namespace = 'test_email';
     const language = 'fr';
     const testMessage = new TestEmailMessage(namespace, textTemplateMock, htmlTemplateMock);
@@ -89,7 +89,7 @@ describe('EmailMessage', () => {
     const result = testMessage.renderSubject(language, { name: 'Test User' });
 
     expect(i18nextSetDefaultNamespaceStub.calledWith(namespace)).toBe(true);
-    expect(i18nextTStub.calledWith('subject', { lng: language })).toBe(true);
+    expect(i18nextTStub.calledWith('subject', sinon.match({ name: 'Test User', lng: language }))).toBe(true);
     expect(result).toBe('Translated Subject');
   });
 
