@@ -188,6 +188,17 @@ describe('stackCreate', () => {
       expect(calls[0]).toBe('gh stack init --base main feat.add-search');
     });
 
+    it('treats origin/main as trunk for a chain head (gh stack init --base main)', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('');
+      };
+      const result = stackCreate('feat.add-search', 'origin/main', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(['gh stack init --base main feat.add-search']);
+    });
+
     it('runs gh stack add (no --base) when parent is a stack level, not trunk', () => {
       const calls: string[] = [];
       const spawn = (cmd: string, args: string[], _opts: unknown) => {
@@ -226,16 +237,48 @@ describe('stackCreate', () => {
   });
 
   describe('single path (chained=false)', () => {
-    it('runs plain git checkout -b off trunk, never touching gh-stack', () => {
+    function recordCalls() {
       const calls: string[] = [];
       const spawn = (cmd: string, args: string[], _opts: unknown) => {
         calls.push([cmd, ...(args as string[])].join(' '));
         return fakeSpawn('');
       };
+      return { calls, spawn };
+    }
+
+    it('cuts from origin/<trunk> with no upstream when parent is main, never touching gh-stack', () => {
+      const { calls, spawn } = recordCalls();
       const result = stackCreate('chore.fix-widget', 'main', false, { spawnFn: spawn as never });
       expect(result.ok).toBe(true);
-      expect(calls).toEqual(['git checkout -b chore.fix-widget main']);
-      expect(calls.some(c => c.includes('gh stack'))).toBe(false);
+      expect(calls).toEqual(['git checkout --no-track -b chore.fix-widget origin/main']);
+    });
+
+    it('treats origin/main as the trunk parent and never runs gh stack (regression)', () => {
+      const { calls, spawn } = recordCalls();
+      const result = stackCreate('chore.fix-widget', 'origin/main', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(['git checkout --no-track -b chore.fix-widget origin/main']);
+    });
+
+    it('uses plain git from the given parent when parent is not trunk', () => {
+      const { calls, spawn } = recordCalls();
+      const result = stackCreate('chore.fix-widget', 'feat.other-branch', false, { spawnFn: spawn as never });
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(['git checkout --no-track -b chore.fix-widget feat.other-branch']);
+    });
+
+    it('honors GIT_SAFE_MAIN_BRANCH for the trunk base', () => {
+      const prev = process.env.GIT_SAFE_MAIN_BRANCH;
+      process.env.GIT_SAFE_MAIN_BRANCH = 'trunk';
+      try {
+        const { calls, spawn } = recordCalls();
+        stackCreate('chore.fix-widget', 'origin/trunk', false, { spawnFn: spawn as never });
+        expect(calls).toEqual(['git checkout --no-track -b chore.fix-widget origin/trunk']);
+      }
+      finally {
+        if (prev === undefined) delete process.env.GIT_SAFE_MAIN_BRANCH;
+        else process.env.GIT_SAFE_MAIN_BRANCH = prev;
+      }
     });
 
     it('returns ok=false with stderr when git checkout -b fails', () => {
