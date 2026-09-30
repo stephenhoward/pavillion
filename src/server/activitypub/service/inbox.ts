@@ -17,6 +17,7 @@ import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import IgnoreActivity from "@/server/activitypub/model/action/ignore";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
+import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
@@ -536,7 +537,13 @@ class ProcessInboxService {
         break;
       case 'Undo':
         {
-          if (!message.message || typeof message.message !== 'object' || !(message.message as any).object) {
+          // The target may arrive as a URI or as the undone activity embedded
+          // inline; only its id is used, and the stored row it names is what
+          // gets undone.
+          const undoTargetId = message.message && typeof message.message === 'object'
+            ? UndoActivity.targetIdOf((message.message as any).object)
+            : null;
+          if (!undoTargetId) {
             const actorUri = (message.message as any)?.actor || 'unknown';
             logActivityRejection({
               rejection_type: 'invalid_object',
@@ -545,13 +552,12 @@ class ProcessInboxService {
               actor_domain: this.extractDomain(actorUri),
               calendar_id: calendar.id,
               calendar_url_name: calendar.urlName,
-              reason: 'Invalid Undo activity: missing message object',
+              reason: 'Invalid Undo activity: missing target id',
               message_id: message.id,
             });
-            throw new Error('Invalid Undo activity: missing message object');
+            throw new Error('Invalid Undo activity: missing target id');
           }
 
-          const undoTargetId = (message.message as any).object;
           const undoActor = (message.message as any).actor as string | undefined;
           const targetEntity = await ActivityPubInboxMessageEntity.findOne({
             where: { calendar_id: message.calendar_id, id: undoTargetId },

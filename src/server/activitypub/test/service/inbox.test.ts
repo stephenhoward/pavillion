@@ -447,6 +447,10 @@ describe('processInboxMessage', () => {
 
     await service.processInboxMessage(message);
 
+    // The embedded Follow is resolved to its id before the row lookup.
+    expect(targetStub.firstCall.args[0]).toEqual({
+      where: { calendar_id: TEST_CALENDAR_ID, id: originalFollow.id },
+    });
     expect(processStub.called).toBe(true);
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
@@ -474,6 +478,9 @@ describe('processInboxMessage', () => {
 
     await service.processInboxMessage(message);
 
+    expect(targetStub.firstCall.args[0]).toEqual({
+      where: { calendar_id: TEST_CALENDAR_ID, id: originalAnnounce.id },
+    });
     expect(processStub.called).toBe(true);
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
