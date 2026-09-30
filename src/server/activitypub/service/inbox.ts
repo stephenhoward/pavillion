@@ -587,8 +587,9 @@ class ProcessInboxService {
    * therefore performs NO state mutation — it only queues an Ignore addressed
    * directly to the sender (never as:Public).
    *
-   * The Ignore embeds the original Join as its `object` (mirroring how Accept
-   * embeds the Follow it answers), so the sender can correlate the reply. The
+   * The Ignore embeds the Join as its `object` (mirroring how Accept embeds
+   * the Follow it answers), reduced by IgnoreActivity to the id/type/actor the
+   * sender needs to correlate the reply — never the peer's full payload. The
    * outbox resolves delivery to `object.actor` — the Join sender — and the
    * explicit single-recipient `to` keeps the reply off the public timeline.
    *
