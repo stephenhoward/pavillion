@@ -325,6 +325,22 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 // ================================================================
 
 // ================================================================
+// AUTHORED TEXT WRAPPING
+// ================================================================
+// Organizer-authored text can hold a long URL, compound word or address
+// line with no break opportunity. `anywhere` (unlike `break-word`) also
+// shrinks the min-content width, so the grid tracks and the widget's
+// `scrolling="no"` iframe never have to widen to fit it (WCAG 1.4.10).
+
+.instance-title,
+.event-description,
+.location-name,
+.location-address,
+.accessibility-info {
+  overflow-wrap: anywhere;
+}
+
+// ================================================================
 // HERO IMAGE
 // ================================================================
 
