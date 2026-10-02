@@ -130,17 +130,22 @@ export function gitSafeToStart(
 /**
  * Create a branch for one stack level (or a plain single-bead branch).
  *
- * Routing:
- *   - `parent` is a previously-created stack level (never trunk) → mid-chain:
- *     `gh stack add <branch>`. `gh stack add` has no `--base` flag (spike
- *     divergence #4) — it always adds on top of whatever is currently
- *     checked out.
- *   - `parent === trunk && chained` → chain head: `gh stack init --base
- *     <parent> <branch>` starts a new stack. `--base` is passed explicitly
+ * Routing is decided by `chained` first; "trunk" means either `<main>` or
+ * `origin/<main>` (`GIT_SAFE_MAIN_BRANCH`, default `main`):
+ *   - `!chained` → single, unstacked bead: plain `git checkout --no-track
+ *     -b <branch> <base>`, never gh-stack. A trunk parent is based on
+ *     `origin/<main>` — the ref gitSafeToStart checks HEAD against — rather
+ *     than a possibly-stale local `<main>`; `--no-track` keeps
+ *     `origin/<main>` from becoming the upstream (a bare `git push` would
+ *     otherwise target main). A non-trunk parent is used as given.
+ *   - `chained` and trunk parent → chain head: `gh stack init --base
+ *     <main> <branch>` starts a new stack. `--base` is passed explicitly
  *     (rather than relying on gh-stack's own default) so a non-default
  *     `GIT_SAFE_MAIN_BRANCH` is honored, matching gitSafeToStart.
- *   - `parent === trunk && !chained` → single, unstacked bead: plain
- *     `git checkout -b <branch> <parent>`, no gh-stack involvement.
+ *   - `chained` and non-trunk parent (a previously-created stack level) →
+ *     mid-chain: `gh stack add <branch>`. `gh stack add` has no `--base`
+ *     flag (spike divergence #4) — it always adds on top of whatever is
+ *     currently checked out.
  *
  * PRECONDITIONS (not validated at runtime, asserted in tests):
  *   - `branch` follows git-workflow/branches.md naming.
@@ -157,18 +162,19 @@ export function stackCreate(
 ): StackOpResult {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
   const mainBranch = process.env.GIT_SAFE_MAIN_BRANCH ?? 'main';
+  const isTrunk = parent === mainBranch || parent === `origin/${mainBranch}`;
 
-  if (parent !== mainBranch) {
-    const result = run('gh', ['stack', 'add', branch], spawn, { cwd: deps.cwd });
-    return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
+  let result: ReturnType<typeof run>;
+  if (!chained) {
+    const base = isTrunk ? `origin/${mainBranch}` : parent;
+    result = run('git', ['checkout', '--no-track', '-b', branch, base], spawn, { cwd: deps.cwd });
   }
-
-  if (chained) {
-    const result = run('gh', ['stack', 'init', '--base', parent, branch], spawn, { cwd: deps.cwd });
-    return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
+  else if (isTrunk) {
+    result = run('gh', ['stack', 'init', '--base', mainBranch, branch], spawn, { cwd: deps.cwd });
   }
-
-  const result = run('git', ['checkout', '-b', branch, parent], spawn, { cwd: deps.cwd });
+  else {
+    result = run('gh', ['stack', 'add', branch], spawn, { cwd: deps.cwd });
+  }
   return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
 }
 

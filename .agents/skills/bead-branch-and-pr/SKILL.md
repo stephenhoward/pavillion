@@ -71,9 +71,12 @@ plan with warnings. Independent beads are singleton chains.
 ### `stack.ts create <branch> <parent> --chained|--single`
 
 Create a branch for one stack level (or a plain single-bead branch).
-Routing: mid-chain (`parent` is a stack level) → `gh stack add`; chain head
-(`parent` = trunk, `--chained`) → `gh stack init --base`; single (`--single`)
-→ plain `git checkout -b`. Precondition: `branch` follows
+Routing is decided by the flag first; trunk means `main` or `origin/main`
+(per `GIT_SAFE_MAIN_BRANCH`). Single (`--single`) → plain `git checkout
+--no-track -b`, never `gh stack`; a trunk parent is based on `origin/main`
+with no upstream set, any other parent is used as given. Chain head
+(`--chained`, trunk parent) → `gh stack init --base main`; mid-chain
+(`--chained`, `parent` is a stack level) → `gh stack add`. Precondition: `branch` follows
 `git-workflow/branches.md`; for the mid-chain case the parent must be the
 current stack top and checked out.
 
