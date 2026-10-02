@@ -78,4 +78,25 @@ describe('Calendar list public links', () => {
 
     wrapper.unmount();
   });
+
+  /**
+   * `publicUrl` defaults to '' when the server has not stamped it, and an
+   * empty href resolves to the current page. A card without an address must
+   * render no link rather than a dead one, without affecting its neighbours.
+   */
+  it('renders no link on a card whose publicUrl is empty', async () => {
+    const unstamped = buildCalendarInfo('unstamped-calendar');
+    unstamped.calendar.publicUrl = '';
+    sandbox.stub(CalendarService.prototype, 'loadCalendarsWithRelationship')
+      .resolves([calendarInfos[0], unstamped]);
+
+    const wrapper = await createWrapper();
+
+    const links = wrapper.findAll('a.calendar-card__public-link');
+    expect(links.length).toBe(1);
+    expect(links[0].attributes('href')).toBe('https://pavillion.dev/first-calendar');
+    expect(wrapper.find('a[href=""]').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
 });

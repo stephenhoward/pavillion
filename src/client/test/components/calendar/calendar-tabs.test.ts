@@ -180,6 +180,21 @@ describe('Calendar View Tabs', () => {
       expect(publicLink.attributes('href')).toBe(mockCalendar.publicUrl);
       expect(publicLink.text()).toContain(mockCalendar.publicUrl);
     });
+
+    /**
+     * `publicUrl` defaults to '' when the server has not stamped it, and an
+     * empty href resolves to the current page: a link that looks shareable but
+     * goes nowhere. A missing address must render no link at all.
+     */
+    it('should render no public link when publicUrl is empty', async () => {
+      (CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub)
+        .resolves({ ...mockCalendar, publicUrl: '' });
+
+      const { wrapper } = await createWrapper();
+
+      expect(wrapper.find('a.calendar-public-link').exists()).toBe(false);
+      expect(wrapper.find('a[href=""]').exists()).toBe(false);
+    });
   });
 
   describe('Default Tab State', () => {
