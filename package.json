@@ -115,7 +115,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.26.0",
     "@fedify/fedify": "^1.10.0",
-    "@guidepup/virtual-screen-reader": "^0.32.1",
+    "@guidepup/virtual-screen-reader": "^0.33.0",
     "@playwright/test": "^1.55.1",
     "@stylistic/eslint-plugin": "^4.2.0",
     "@stylistic/stylelint-plugin": "^3.1.3",
