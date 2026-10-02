@@ -6,7 +6,12 @@ description: Migrate events into Pavillion from Google Calendar, Nextcloud, Word
 
 Many new calendar owners arrive with events already living somewhere — a Google Calendar, a Nextcloud instance, a WordPress events plugin, a Gancio or Mobilizon calendar. This guide is about moving that history onto Pavillion using ICS, the standard calendar-data format that almost every calendar tool can export.
 
-The steps of ICS import are deliberately simple: you point Pavillion at an ICS feed published by your source, prove you control the source, and pull events on demand. That's enough for the migration case it's designed for: getting the events you already have onto your new calendar, with the edits you make on Pavillion sticking.
+There are two ways in, and which one you use depends on what your old calendar can give you:
+
+- **Upload an exported file.** Export an `.ics` file from your old calendar and upload it. Pavillion imports the events right away — no verification, no DNS, no website to edit. This is the path for most people, including anyone coming from Google Calendar, Outlook, or iCloud.
+- **Connect a feed URL.** Point Pavillion at an ICS feed your source publishes, prove you control the domain it's published on, and pull updates on demand with <Btn>Sync now</Btn>. This suits a self-hosted source you'll keep editing for a while during the switch-over.
+
+Either way, the goal is the migration case the tool is designed for: getting the events you already have onto your new calendar, with the edits you make on Pavillion sticking.
 
 ## What ICS import is for
 
@@ -14,9 +19,9 @@ A bit of background on what this import process is for, before you set anything 
 
 **Fits:** moving the events from a calendar you already run somewhere else onto your new Pavillion calendar. A community center switching from a self-hosted Nextcloud calendar. A venue migrating off a WordPress plugin. An arts group consolidating a Gancio install. In all of these you have access to the source, and the goal is one-time migration plus the option to keep nudging Pavillion to pick up edits while you wind the old system down.
 
-**Doesn't fit:** aggregating events *from a third party you don't control* — a neighboring calendar, a regional partner, a Facebook page. ICS import requires you to prove ownership of the source domain, which only works if the source is yours. For pulling events from other people's calendars, see [follow-and-repost](./follow-and-repost).
+**Also fits:** a calendar kept on a hosted provider like Google Calendar, Outlook/M365, or iCloud. You can't prove you own `calendar.google.com`, so a live feed from one of those won't verify — but you don't need it to. Export an `.ics` file from the provider and upload it; see [Upload an exported file](#upload-an-exported-file) below.
 
-**Also doesn't fit:** direct connections to hosted providers like Google Calendar, Outlook/M365, or iCloud. ICS import only covers feeds you can publish at a stable public URL on a domain you control. If your source is one of those hosted providers, the workable path is to export an ICS file and host it somewhere on your own domain.
+**Doesn't fit:** aggregating events *from a third party you don't control* — a neighboring calendar, a regional partner, a Facebook page. Import is for moving your own events: a feed URL only syncs once you've proved you own the domain it's published on, and an uploaded file is a one-time snapshot, not a way to keep up with someone else's schedule. For pulling events from other people's calendars, see [follow-and-repost](./follow-and-repost).
 
 ## What gets imported, and what doesn't
 
@@ -35,13 +40,31 @@ It's worth knowing what data imports smoothly and what will take a bit of work o
 - **Categories or tags.** The ICS file may have categories on each event, but Pavillion's category system depends on your calendar's category list, and reading a category name off a feed isn't the same as picking which bucket of yours it belongs to. After import, tag events from your own category list — see [the categories guide](./categories).
 - **Attendees, organizers, attachments.** ICS files in the wild often carry personal data (email addresses on `ORGANIZER` and `ATTENDEE`, files on `ATTACH`) that has no business being on a public events page. Pavillion drops these fields on import by design.
 
-Because of these technical decisions, an event that imports correctly will still be missing its place and its categories. Plan to take a pass through the events after the first sync to categorize them and re-attach places.
+Because of these technical decisions, an event that imports correctly will still be missing its place and its categories. Plan to take a pass through the events after the first import to categorize them and re-attach places.
 
 ## Add an import source
 
 Open your calendar's management page and find the **Import** tab.
 
-If you haven't added an import source yet, the panel shows an empty state with one button. Click <Btn>Add Import Source</Btn> — a modal opens with a single field: **Calendar URL**. Paste the public address of the ICS feed you're importing from (the placeholder is `https://example.com/calendar.ics`, as an example).
+If you haven't added an import source yet, the panel shows an empty state with one button. Click <Btn>Add Import Source</Btn>. The modal that opens has two tabs, one for each path: **From URL** and **Upload file**.
+
+## Upload an exported file
+
+Use the **Upload file** tab when you have an `.ics` file on your computer — the usual result of an "Export" button in Google Calendar, Outlook, iCloud, or a calendar plugin. Choose the file in the **Calendar file** field and click <Btn>Add source</Btn>.
+
+The events import immediately. There's no ownership step: you're putting your own file into a calendar you already manage, so there's no domain to prove. When the import finishes, a notification reports the result — for example, *Import complete: 47 added, 0 updated.* The file then appears in the **Import Sources** list under its filename with a **File** badge and the time it was imported.
+
+The limits on a file:
+
+- **10 MiB or smaller**, with an `.ics` extension (or a file your browser identifies as a calendar file).
+- **Up to 10,000 events.** A larger file is rejected outright rather than half-imported; split the export by date range and upload the pieces.
+- **At least one event.** A calendar file with no events in it is rejected, and nothing is added to your list.
+
+A file is a snapshot, not a connection. It has no <Btn>Sync now</Btn> button, because there's nothing for Pavillion to go back and check. If the old calendar changes while you're still winding it down, export it again and upload the new file — see [What happens when you re-import](#what-happens-when-you-re-import) for how that lands.
+
+## Connect a feed URL
+
+Use the **From URL** tab when your source publishes a live ICS feed on a domain you control, and you want to pull its changes into Pavillion more than once. The tab has a single field: **Calendar URL**. Paste the public address of the ICS feed you're importing from (the placeholder is `https://example.com/calendar.ics`, as an example).
 
 A few notes on the URL itself:
 
@@ -49,15 +72,15 @@ A few notes on the URL itself:
 - **Pick the feed URL, not the calendar page URL.** Most calendar tools have a separate "Subscribe (ICS)" or "iCal feed" link that points at the `.ics` file. That's what goes in this field.
 - **`https://` is strongly preferred.** Pavillion can fetch over `http://` but doing so means anyone on the network path can read your feed and tamper with imports. If your source can serve over `https://`, use that URL.
 
-Click <Btn>Add source</Btn>. The new source appears in the list, and the verify-ownership wizard opens automatically — you can't sync until you've proved the source is yours.
+Click <Btn>Add source</Btn>. The new source appears in the list, and the verify-ownership wizard opens automatically — you can't sync a feed until you've proved the source is yours.
 
 ::: tip <Lightbulb /> A note on the calendar URL field.
 The URL you paste here is the URL of the ICS *feed* — the dynamic file your source generates with all the events in it — not the URL of the source's web page. They're usually different. If you paste a page URL by accident, the first sync will fail with a parse error; just open the row and re-create the source with the right URL.
 :::
 
-## Verify ownership of the source
+## Verify ownership of a feed
 
-Pavillion won't fetch events from a feed until you've proved you control the domain that publishes it. The verification is what tells Pavillion that you, the calendar owner, are also the owner of `example.com`.
+This step applies to feed URLs only — uploaded files skip it. Pavillion won't fetch events from a feed until you've proved you control the domain that publishes it. The verification is what tells Pavillion that you, the calendar owner, are also the owner of `example.com`.
 
 The wizard offers two methods. Pick whichever you can publish on the source domain.
 
@@ -75,7 +98,7 @@ DNS changes are usually quick but not instant — most providers propagate in un
 
 ## Run a "Sync now" pull
 
-Once a source is verified, its row in the **Import Sources** list shows a <Btn>Sync now</Btn> button. Click it to pull events from the feed.
+Once a feed source is verified, its row in the **Import Sources** list shows a <Btn>Sync now</Btn> button. Click it to pull events from the feed.
 
 A sync runs in one shot: Pavillion fetches the ICS file, parses each event in it, and either creates new events on your calendar, updates events that have changed at the source, or leaves them alone if nothing's changed. When it's done, a notification at the bottom of the screen tells you the result — for example, *Sync complete: 47 added, 0 updated.*
 
@@ -85,15 +108,21 @@ A few things worth knowing:
 - **Most syncs do nothing.** Pavillion saves the version it last fetched, and on subsequent syncs it asks the source "has this changed since then?" If the source answers no (or if the file looks identical to last time), Pavillion skips parsing entirely and the notification reads *Sync complete: no changes.* That's by design — syncing the same unchanged feed shouldn't change your event list.
 - **There's a rate limit.** You can run **Sync now** up to four times per hour, per source. That's high enough for normal migration work — fixing something on the source, re-syncing, fixing the next thing — and low enough to keep your source server from getting overwhelmed.
 
-## What happens on subsequent syncs
+## What happens when you re-import
 
-The second and third syncs are where most surprises come from, so the rules are worth knowing up front:
+The second and third imports are where most surprises come from, so the rules are worth knowing up front. They apply to a feed sync and to a re-uploaded file alike:
 
 - **Renaming or editing an event on the source doesn't create a duplicate on Pavillion** — the existing event gets updated in place.
-- **Once you've edited an event on Pavillion, your edit wins.** Later syncs leave that event alone; the source's version is not re-applied. This is the rule that makes migration predictable.
+- **Once you've edited an event on Pavillion, your edit wins.** Later imports leave that event alone; the source's version is not re-applied. This is the rule that makes migration predictable.
 - **Events that disappear from the source are not deleted on Pavillion.** If you want them gone, cancel or delete them by hand on Pavillion.
 
 Here's the mental model: **the source is in charge of an event until you touch it on Pavillion, after which Pavillion is in charge.** Leave an event alone and the source can keep refining it; touch it and your version sticks.
+
+A few rules are specific to uploading a file again:
+
+- **A new upload updates events from earlier uploads.** Pavillion matches each event against everything previously imported from a file on this calendar, so uploading this month's export after last month's refreshes the events you haven't edited instead of duplicating them. The new file becomes a second row in the list; that's expected.
+- **Events that a feed source owns are left alone.** If the same event also arrives through a connected feed URL, the feed stays in charge of it and the upload skips it — the notification counts these as *skipped (managed by sync)*. Events you've edited on Pavillion are counted as *preserved (edited locally)*.
+- **Keep the file rows in the list while you're still re-uploading.** Removing an import source doesn't delete the events it brought in, but it does make Pavillion forget where they came from. Upload the same export again after removing its row and you'll get a second copy of every event.
 
 ## Things that trip people up
 
