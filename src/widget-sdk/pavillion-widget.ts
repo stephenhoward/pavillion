@@ -23,7 +23,7 @@ interface WidgetInitOptions {
   lang?: string;
   onResize?: (height: number) => void;
   onEventClick?: (eventId: string) => void;
-  onNavigate?: (url: string) => void;
+  onNavigate?: (path: string) => void;
 }
 
 // Display options (view, accentColor, colorMode) are now stored server-side
@@ -32,10 +32,13 @@ interface WidgetInitOptions {
 // any of them so embedders have a signal to update, then ignore the values.
 const DEPRECATED_CONFIG_KEYS = ['view', 'accentColor', 'colorMode'] as const;
 
+// Wire contract for messages the widget iframe posts to the host page. The
+// sending side is src/widget/stores/widgetStore.ts; the two must agree on field
+// names or the host callbacks never fire. Navigation carries `path`.
 interface PavillionMessage {
   type: 'pavillion:resize' | 'pavillion:navigate' | 'pavillion:eventClick';
   height?: number;
-  url?: string;
+  path?: string;
   eventId?: string;
 }
 
@@ -190,8 +193,8 @@ class PavillionWidget {
     }
 
     // Handle navigation message
-    if (message.type === 'pavillion:navigate' && message.url) {
-      this.handleNavigate(message.url);
+    if (message.type === 'pavillion:navigate' && message.path) {
+      this.handleNavigate(message.path);
     }
 
     // Handle event click message
@@ -216,9 +219,9 @@ class PavillionWidget {
   /**
    * Handle navigation event from widget
    */
-  private handleNavigate(url: string): void {
+  private handleNavigate(path: string): void {
     if (this.config?.onNavigate) {
-      this.config.onNavigate(url);
+      this.config.onNavigate(path);
     }
   }
 
