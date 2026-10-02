@@ -2,8 +2,9 @@
  * Unit tests for useCalendarWindowSync.
  *
  * The target is a stub that records every call into one shared log, so the
- * assertions pin the order of setDateRange and reloadWithFilters rather than
- * only that each happened.
+ * assertions pin the order of setViewWindow and reloadWithFilters rather than
+ * only that each happened. The stub has no setDateRange: the view window must
+ * never reach the list filter's dates.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { nextTick, ref } from 'vue';
@@ -18,8 +19,8 @@ import type { CalendarWindow } from '@/common/ui/calendar-views/useCalendarViewS
 let calls: unknown[][];
 
 const target: CalendarWindowSyncTarget = {
-  setDateRange(start, end) {
-    calls.push(['setDateRange', start, end]);
+  setViewWindow(start, end) {
+    calls.push(['setViewWindow', start, end]);
   },
   async reloadWithFilters() {
     calls.push(['reloadWithFilters']);
@@ -41,7 +42,7 @@ describe('useCalendarWindowSync', () => {
     useCalendarWindowSync(window, target);
 
     expect(calls).toEqual([
-      ['setDateRange', '2026-09-01', '2026-09-30'],
+      ['setViewWindow', '2026-09-01', '2026-09-30'],
       ['reloadWithFilters'],
     ]);
 
@@ -58,7 +59,21 @@ describe('useCalendarWindowSync', () => {
     expect(calls).toEqual([]);
   });
 
-  it('sets the new range, then reloads, when the window moves', async () => {
+  it('sets the new range, then reloads, when one window replaces another', async () => {
+    const window = ref<CalendarWindow | null>(calendarWindow('2026-09-01', '2026-09-30'));
+    useCalendarWindowSync(window, target);
+    calls = [];
+
+    window.value = calendarWindow('2026-10-01', '2026-10-31');
+    await nextTick();
+
+    expect(calls).toEqual([
+      ['setViewWindow', '2026-10-01', '2026-10-31'],
+      ['reloadWithFilters'],
+    ]);
+  });
+
+  it('sets the new range, then reloads, when a window appears', async () => {
     const window = ref<CalendarWindow | null>(null);
     useCalendarWindowSync(window, target);
 
@@ -66,7 +81,7 @@ describe('useCalendarWindowSync', () => {
     await nextTick();
 
     expect(calls).toEqual([
-      ['setDateRange', '2026-09-13', '2026-09-19'],
+      ['setViewWindow', '2026-09-13', '2026-09-19'],
       ['reloadWithFilters'],
     ]);
   });
@@ -80,7 +95,7 @@ describe('useCalendarWindowSync', () => {
     await nextTick();
 
     expect(calls).toEqual([
-      ['setDateRange', null, null],
+      ['setViewWindow', null, null],
       ['reloadWithFilters'],
     ]);
   });

@@ -30,9 +30,10 @@ import { computed, ref, type Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 
-import type { CalendarViewMode } from '@/common/model/calendar_view';
+import { type CalendarViewMode, isCalendarViewMode } from '@/common/model/calendar_view';
 import {
   DATE_QUERY_KEY,
+  LIST_START_DATE_QUERY_KEY,
   calendarViewQuery,
   parseCalendarViewQuery,
 } from '@/common/routing/calendar-view-query';
@@ -49,9 +50,6 @@ export interface CalendarWindow {
 
 /** How far from today, in years, an anchor date may lie. */
 const ANCHOR_BOUND_YEARS = 100;
-
-/** The list filter key whose date seeds the anchor when leaving the list. */
-const LIST_START_DATE_KEY = 'startDate';
 
 /** The views each width tier can show, in switcher order. */
 const VIEWS_BY_TIER: Record<WidthTier, readonly CalendarViewMode[]> = {
@@ -117,7 +115,7 @@ export function useCalendarViewState(options: { defaultView: Readonly<Ref<Calend
     const query = Object.fromEntries(
       Object.entries(merged).filter(([, value]) => value !== undefined),
     );
-    router.replace({ query: query as typeof route.query });
+    void router.replace({ query: query as typeof route.query });
   }
 
   /**
@@ -130,13 +128,19 @@ export function useCalendarViewState(options: { defaultView: Readonly<Ref<Calend
    * never overrides a `date` already in the URL.
    */
   function setView(nextView: CalendarViewMode): void {
+    // Callers pass switcher values, but a template binding is not type-checked
+    // at runtime; an unknown view must not reach the URL.
+    if (!isCalendarViewMode(nextView)) {
+      return;
+    }
+
     let anchor = anchorDate.value;
 
     if (viewMode.value === 'list' && nextView !== 'list') {
       // Read through the contract so startDate gets the same strict
       // yyyy-MM-dd parse, and the same today fallback, as `date`.
       const fromList = parseCalendarViewQuery(
-        { [DATE_QUERY_KEY]: route.query[LIST_START_DATE_KEY] },
+        { [DATE_QUERY_KEY]: route.query[LIST_START_DATE_QUERY_KEY] },
         nextView,
       ).anchorDate;
       anchor = boundedAnchor(fromList);
@@ -169,7 +173,11 @@ export function useCalendarViewState(options: { defaultView: Readonly<Ref<Calend
     step(1);
   }
 
+  /** Return the anchor to today, if an anchored view is shown. */
   function goToday(): void {
+    if (effectiveViewMode.value === 'list') {
+      return;
+    }
     write(viewMode.value, DateTime.now().startOf('day'));
   }
 

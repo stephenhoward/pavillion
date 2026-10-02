@@ -113,6 +113,20 @@ describe('reading the route query', () => {
     expect(windowDates(state.window.value)).toEqual({ start: '2026-05-01', end: '2026-05-31' });
   });
 
+  it('follows a change to the default when the URL names no view', () => {
+    route.query = { date: '2026-03-11' };
+    const defaultView = ref<CalendarViewMode>('list');
+    const state = useCalendarViewState({ defaultView });
+    expect(state.viewMode.value).toBe('list');
+
+    // The admin preview updating the owner's starting view in place.
+    defaultView.value = 'month';
+
+    expect(state.viewMode.value).toBe('month');
+    expect(windowDates(state.window.value)).toEqual({ start: '2026-03-01', end: '2026-03-31' });
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it('falls back to the default view for a garbage view, without writing the URL', () => {
     const state = setup({ view: 'agenda', date: '2026-03-11' }, 'week');
 
@@ -242,6 +256,28 @@ describe('setView', () => {
     });
   });
 
+  it.each(['not-a-date', '0001-01-01', '9999-12-31'])(
+    'list -> month seeds today when startDate is %s',
+    (startDate) => {
+      const state = setup({ startDate });
+
+      state.setView('month');
+
+      expect(lastQuery().date).toBe(TODAY);
+      expect(lastQuery().startDate).toBe(startDate);
+      expect(windowDates(state.window.value)).toEqual({ start: '2026-09-01', end: '2026-09-30' });
+    },
+  );
+
+  it('ignores a view that is not a calendar view mode', () => {
+    const state = setup({ view: 'week', date: '2026-03-11' });
+
+    state.setView('agenda' as CalendarViewMode);
+
+    expect(replace).not.toHaveBeenCalled();
+    expect(state.viewMode.value).toBe('week');
+  });
+
   it('writes with replace, not push', () => {
     const state = setup({});
 
@@ -309,15 +345,41 @@ describe('goPrev / goNext / goToday', () => {
 
     state.goNext();
     state.goPrev();
+    state.goToday();
 
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it('does not step past the plausibility bound', () => {
+  it('does nothing while the tier shows a week or month URL as the list', () => {
+    const week = setup({ view: 'week', date: '2026-03-11' });
+    week.setTier('medium');
+    week.goNext();
+    week.goPrev();
+    week.goToday();
+
+    const month = setup({ view: 'month', date: '2026-03-11' });
+    month.setTier('narrow');
+    month.goNext();
+    month.goPrev();
+    month.goToday();
+
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not step past the plausibility bound going forward', () => {
     const state = setup({ view: 'month', date: '2126-09-01' });
     expect(state.anchorDate.value.toISODate()).toBe('2126-09-01');
 
     state.goNext();
+
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('does not step past the plausibility bound going back', () => {
+    const state = setup({ view: 'week', date: '1926-09-20' });
+    expect(state.anchorDate.value.toISODate()).toBe('1926-09-20');
+
+    state.goPrev();
 
     expect(replace).not.toHaveBeenCalled();
   });
