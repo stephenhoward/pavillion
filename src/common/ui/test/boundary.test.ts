@@ -47,8 +47,9 @@ const FORBIDDEN_ROOTS = ['client', 'site', 'widget', 'server'];
  * Printed with every live-scan failure, so a contributor who trips the scanner
  * while writing documentation is not left to rediscover the header note.
  */
-const COMMENTS_ARE_SCANNED = 'comments are scanned too: a quoted specifier in a comment counts as an '
-  + 'import (write the example without quotes, as the header of boundary.test.ts explains)';
+const COMMENTS_ARE_SCANNED = 'the scan is textual: a quoted specifier after from, import, or a Sass '
+  + 'at-rule counts even inside a comment or a string literal (write a comment example without '
+  + 'quotes, and build a test fixture through QUOTE as boundary.test.ts does)';
 
 /** Every scannable file under `dir`, recursively. */
 function sourceFiles(dir: string): string[] {
@@ -86,8 +87,8 @@ function violations(root: string, isViolation: (target: string) => boolean): str
 /*
  * The fixture blocks below drive the classifier with inline sources and
  * made-up file paths — one case per branch — so each rule is pinned whether or
- * not the live tree happens to exercise it. The live scan at the end of this
- * half is the CI safety net over the real tree.
+ * not the live tree happens to exercise it. The live-scan describe below is
+ * the CI safety net over the real tree.
  *
  * Fixture specifiers are spliced in through QUOTE rather than written between
  * literal quotes: this file sits under src/common/ui, so the live scan reads it
@@ -148,6 +149,12 @@ describe('src/common/ui boundary: parseReferences', () => {
       { specifier: 'vue', context: 'script' },
       { specifier: 'sass:color', context: 'style' },
     ]);
+  });
+
+  it('reads a Sass @import in a .vue style block as style only', () => {
+    const source = ['<style scoped lang="scss">', `@import ${QUOTE}sass:math${QUOTE};`, '</style>'].join('\n');
+
+    expect(parseReferences(source, '.vue')).toEqual([{ specifier: 'sass:math', context: 'style' }]);
   });
 
   it('reads a specifier quoted inside a comment, failing safe', () => {

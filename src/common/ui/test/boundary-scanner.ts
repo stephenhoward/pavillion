@@ -2,9 +2,9 @@
  * The import classifier behind boundary.test.ts.
  *
  * Kept apart from the test so every branch can be driven by an inline fixture
- * rather than only by whatever the live tree happens to contain. Everything
- * here is pure: nothing reads the filesystem, and a file path is only ever
- * resolved against SOURCE_ROOT, so a fixture may name a file that does not
+ * rather than only by whatever the live tree happens to contain. No function
+ * here reads a file: a path is only resolved against SOURCE_ROOT (fixed from
+ * the working directory at load), so a fixture may name a file that does not
  * exist. It backs that one guard and nothing else, which is why it lives beside
  * the test rather than under scripts/ as a CLI.
  */
@@ -24,7 +24,7 @@ export const UI_TEST_ROOT = path.join(UI_ROOT, 'test');
  * namespace arrives in the same epic, and pruning it here would only make this
  * file the cause of that failure.
  */
-export const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18next-vue'];
+const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18next-vue'];
 
 /**
  * Packages this module's own tests may import on top of ALLOWED_PACKAGES.
@@ -32,16 +32,20 @@ export const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18ne
  * The subtree gets its own list rather than an exemption, so a test still can't
  * reach for pinia or an app store to stand a fixture up.
  */
-export const ALLOWED_TEST_PACKAGES = ['vitest', '@vue/test-utils', 'fs', 'path'];
+const ALLOWED_TEST_PACKAGES = ['vitest', '@vue/test-utils', 'fs', 'path'];
 
-/** Matches a script-side specifier: `from`, `import`, or a dynamic `import(`. */
-const SCRIPT_SPECIFIER = /(?:\bfrom|\bimport)\s*\(?\s*['"]([^'"]+)['"]/g;
+/**
+ * Matches a script-side specifier: `from`, `import`, or a dynamic `import(`.
+ * Not after `@`, so a Sass `@import` in a `.vue` style block is read once, as
+ * style, rather than also as a script import a Sass builtin is rejected in.
+ */
+const SCRIPT_SPECIFIER = /(?<!@)\b(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
 
 /** Matches a Sass-side specifier: `@use`, `@forward`, or `@import`. */
 const STYLE_SPECIFIER = /@(?:use|forward|import)\s+['"]([^'"]+)['"]/g;
 
 /** Which half of a file a specifier was found in. */
-export type Context = 'script' | 'style';
+type Context = 'script' | 'style';
 
 export interface Reference {
   specifier: string;
@@ -81,14 +85,14 @@ export function parseReferences(source: string, extension: string): Reference[] 
  * each has its own rule below. Collapsing them into one "outside" answer is how
  * an escape goes silently permitted.
  */
-export type Target =
+type Target =
   | { kind: 'source', path: string }
   | { kind: 'package', name: string }
   | { kind: 'sass-builtin' }
   | { kind: 'escape' };
 
 /** The package a specifier belongs to, ignoring any subpath. */
-export function packageRoot(specifier: string): string {
+function packageRoot(specifier: string): string {
   const segments = specifier.split('/');
 
   return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
@@ -120,7 +124,7 @@ export function classify(filePath: string, specifier: string): Target {
 }
 
 /** Whether a file is one of this module's own tests. */
-export function isModuleTest(filePath: string): boolean {
+function isModuleTest(filePath: string): boolean {
   return filePath.startsWith(UI_TEST_ROOT + path.sep);
 }
 
