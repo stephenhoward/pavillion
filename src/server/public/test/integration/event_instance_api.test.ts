@@ -412,6 +412,98 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     });
   });
 
+  /**
+   * Hidden cancellation (hideFromPublic=true): the cancel handler does not
+   * rebuild instances, so the materialized row survives. Every public read
+   * path must drop it — listing omits it and the detail endpoint 404s — and
+   * restoring the occurrence (deleting the exclusion row) brings it back.
+   */
+  describe('hidden cancellation removes the occurrence from public surfaces', () => {
+    async function cancelHidden(eventId: string, startIso: string): Promise<void> {
+      const res = await request(env.app)
+        .post(`/api/v1/events/${eventId}/occurrences/cancel`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ start: startIso, hideFromPublic: true });
+      if (res.status !== 204) {
+        throw new Error(`Failed to cancel occurrence: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+    }
+
+    async function restore(eventId: string, startIso: string): Promise<void> {
+      const res = await request(env.app)
+        .delete(`/api/v1/events/${eventId}/occurrences/cancel`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ start: startIso });
+      if (res.status !== 204) {
+        throw new Error(`Failed to restore occurrence: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+    }
+
+    function findRow(body: any[], eventId: string): any {
+      return body.find((i: any) => i.event?.id === eventId);
+    }
+
+    it('omits a hidden-cancelled occurrence from the calendar listing', async () => {
+      // Past-dated single event: its lone rdate is materialized at creation.
+      const startIso = '2020-04-15T18:00:00Z';
+      const eventId = await createOneShotEvent(startIso, '2020-04-15T19:00:00Z', 'Hidden Single (List)');
+
+      const before = await request(env.app).get('/api/public/v1/calendar/instancecal/events');
+      expect(findRow(before.body, eventId)).toBeDefined();
+
+      await cancelHidden(eventId, startIso);
+
+      const response = await request(env.app).get('/api/public/v1/calendar/instancecal/events');
+      expect(response.status).toBe(200);
+      expect(findRow(response.body, eventId)).toBeUndefined();
+    });
+
+    it('returns 404 on the detail endpoint for a hidden-cancelled materialized occurrence', async () => {
+      const startIso = '2032-08-20T18:00:00Z';
+      const slug = '20320820-1800';
+      const eventId = await createOneShotEvent(startIso, '2032-08-20T19:00:00Z', 'Hidden Single (Instance)');
+
+      // Hit the detail endpoint first so the row is materialized; the next
+      // request then goes through the cache-hit branch.
+      const before = await request(env.app).get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+      expect(before.status).toBe(200);
+
+      await cancelHidden(eventId, startIso);
+
+      const response = await request(env.app).get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+      expect(response.status).toBe(404);
+    });
+
+    it('restoring a hidden cancellation brings the occurrence back on both public paths', async () => {
+      const startIso = '2032-09-20T18:00:00Z';
+      const slug = '20320920-1800';
+      const eventId = await createOneShotEvent(startIso, '2032-09-20T19:00:00Z', 'Hidden Single (Restore)');
+
+      // Materialize the row first so both paths read it back after restore.
+      const before = await request(env.app).get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+      expect(before.status).toBe(200);
+
+      await cancelHidden(eventId, startIso);
+      const hiddenList = await request(env.app).get('/api/public/v1/calendar/instancecal/events');
+      expect(findRow(hiddenList.body, eventId)).toBeUndefined();
+      const hiddenDetail = await request(env.app).get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+      expect(hiddenDetail.status).toBe(404);
+
+      await restore(eventId, startIso);
+
+      const list = await request(env.app).get('/api/public/v1/calendar/instancecal/events');
+      expect(list.status).toBe(200);
+      const row = findRow(list.body, eventId);
+      expect(row).toBeDefined();
+      expect(row.isCancelled).toBe(false);
+
+      const detail = await request(env.app).get(`/api/public/v1/events/${eventId}/instances/${slug}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.isCancelled).toBe(false);
+      expect(detail.body.event.id).toBe(eventId);
+    });
+  });
+
   it('returns space with content for a Space-scoped event (cache-miss / materialize path)', async () => {
     // Weekly recurring event; probe a far-future occurrence that has no
     // pre-materialized row — exercises the findByPk (cache-miss) branch.

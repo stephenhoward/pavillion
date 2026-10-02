@@ -175,7 +175,7 @@ export default class EventInstanceService {
       return instance;
     });
     this.markShownCancellations(instances);
-    return instances;
+    return this.dropHiddenCancellations(instances);
   }
 
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
@@ -230,7 +230,9 @@ export default class EventInstanceService {
     const remoteSourceActorMap = await this.fetchRemoteSourceActorMap(remoteEventIds);
 
     await resolveSourceCalendars(repostContexts, remoteSourceActorMap);
-    return instances;
+    // Filter only after source-calendar resolution: repostContexts is built
+    // by index against the entity array.
+    return this.dropHiddenCancellations(instances);
   };
 
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
@@ -489,7 +491,9 @@ export default class EventInstanceService {
 
     await resolveSourceCalendars(repostContexts, remoteSourceActorMap);
 
-    return mappedInstances;
+    // Filter only after source-calendar resolution: repostContexts is built
+    // by index against the entity array.
+    return this.dropHiddenCancellations(mappedInstances);
   }
 
   /**
@@ -525,7 +529,8 @@ export default class EventInstanceService {
       return null;
     }
 
-    return this.hydrateInstanceEntity(eventInstance);
+    const instance = await this.hydrateInstanceEntity(eventInstance);
+    return this.isHiddenCancellation(instance) ? null : instance;
   }
 
   /**
@@ -703,8 +708,11 @@ export default class EventInstanceService {
     if (cached) {
       // Short-circuit: do not re-validate against the RRuleSet. Materialized
       // rows are authoritative; a subsequent schedule edit that would now
-      // reject this date does not invalidate a pre-existing bookmark.
-      return this.hydrateInstanceEntity(cached, displayCalendarId);
+      // reject this date does not invalidate a pre-existing bookmark. A hidden
+      // cancellation is the exception: the row survives cancellation (the
+      // cancel handler skips the rebuild), so it must not resolve publicly.
+      const instance = await this.hydrateInstanceEntity(cached, displayCalendarId);
+      return this.isHiddenCancellation(instance) ? null : instance;
     }
 
     // 2. Load the event with BOTH schedules and the detail-page associations
@@ -1252,6 +1260,37 @@ export default class EventInstanceService {
         }
       }
     }
+  }
+
+  /**
+   * True when the instance's start matches a hidden-cancellation schedule
+   * (is_exclusion = true, hide_from_public = true) on the parent event.
+   *
+   * The materialized row survives a hidden cancellation because the cancel
+   * handler skips the instance rebuild, so public read paths must filter it
+   * in memory. Reads only the already-loaded schedules and matches by UTC
+   * millisecond, like {@link markShownCancellations}.
+   */
+  private isHiddenCancellation(instance: CalendarEventInstance): boolean {
+    const schedules = instance.event?.schedules;
+    if (!schedules || schedules.length === 0) {
+      return false;
+    }
+    const instanceStartMs = instance.start.toUTC().toMillis();
+    return schedules.some(schedule =>
+      schedule.isExclusion
+      && schedule.hideFromPublic
+      && schedule.startDate
+      && schedule.startDate.toUTC().toMillis() === instanceStartMs,
+    );
+  }
+
+  /**
+   * Returns the instances minus any hidden cancellation
+   * (see {@link isHiddenCancellation}).
+   */
+  private dropHiddenCancellations(instances: CalendarEventInstance[]): CalendarEventInstance[] {
+    return instances.filter(instance => !this.isHiddenCancellation(instance));
   }
 
   /**
