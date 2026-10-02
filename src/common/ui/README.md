@@ -51,6 +51,10 @@ Breakpoints that a component must branch on in script live in `assets/breakpoint
 
 A shared component owns its translation keys, and those keys live in the `ui` namespace. Apps register the bundle; they do not define or override the keys a shared component reads. This is what keeps a component's copy the same wherever it is mounted, and keeps an app from having to know which keys its dependencies happen to need.
 
+The bundles live in `calendar-views/locales/{lang}/ui.json`, and `locales.ts` exports them as `uiResources`. The site and widget spread `uiResources.<lang>` into their static i18next `resources` beside `system`; neither calls `addResourceBundle`. `test/locales.test.ts` fails if a language in `AVAILABLE_LANGUAGES` lacks a bundle or its keys differ from English, and each app's `test/service/locale.test.ts` fails if the app stops registering `ui` for one.
+
+This is the home for any string a shared component renders, whichever app mounts it. The widget's `system` namespace, which it imports from `src/site/locales/`, is app-level copy and outside this rule: it is part of the widget → site debt noted under [Boundary rule](#boundary-rule). When a string moves out of an app view into a shared component, its key moves into `ui` rather than staying in the app's `system`.
+
 ## Composable placement
 
 `composables/` holds composables that are useful across features — `useLocale`, `useLocalizedContent`. A composable that only makes sense alongside one feature's state belongs in that feature's folder, next to the components it serves, not here.

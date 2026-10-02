@@ -7,8 +7,11 @@
  * 2. Create translation files in src/client/locales/{code}/
  * 3. Create translation files in src/site/locales/{code}/
  * 4. Create translation files in src/server/locales/{code}/
- * 5. Update locale initialization in src/client/service/locale.ts
- * 6. Update locale initialization in src/site/service/locale.ts
+ * 5. Create src/common/ui/calendar-views/locales/{code}/ui.json and add it to
+ *    src/common/ui/locales.ts (the shared-component `ui` namespace)
+ * 6. Update locale initialization in src/client/service/locale.ts
+ * 7. Update locale initialization in src/site/service/locale.ts
+ * 8. Update locale initialization in src/widget/service/locale.ts
  */
 
 export interface Language {
