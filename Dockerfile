@@ -4,6 +4,7 @@
 # Stages:
 #   - development: For docker-compose.dev.yml with hot-reload
 #   - builder: Builds frontend assets for production
+#   - pgdg-keyring: Fetches the PostgreSQL apt signing key for production
 #   - production: Final production image
 
 # ==============================================================================
@@ -71,21 +72,33 @@ ARG BUILD_SHA
 RUN npm run build
 
 # ==============================================================================
+# Stage: PostgreSQL apt keyring
+# ==============================================================================
+# Fetches and dearmors the pgdg signing key in a throwaway stage so that curl
+# and gnupg stay out of the shipped image; production copies only the keyring.
+FROM node:24-trixie-slim AS pgdg-keyring
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg
+
+# ==============================================================================
 # Stage 2: Production runtime
 # ==============================================================================
 FROM node:24-trixie-slim AS production
 
 # Install required system packages
+# - ca-certificates: TLS trust store for outbound HTTPS at runtime
 # - dumb-init: proper signal handling for Node.js in containers
 # - postgresql-client-17: provides pg_dump/pg_restore for the worker's backup job
-#   (must match the postgres:17 server version; pulled from pgdg apt repo)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    gnupg \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+#   (must match the postgres:17 server version; pulled from the pgdg apt repo,
+#   whose signing key comes from the pgdg-keyring stage)
+COPY --from=pgdg-keyring /usr/share/keyrings/postgresql-archive-keyring.gpg /usr/share/keyrings/
+RUN echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     dumb-init \
     postgresql-client-17 \
     && rm -rf /var/lib/apt/lists/*
