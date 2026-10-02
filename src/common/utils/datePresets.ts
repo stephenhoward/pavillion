@@ -27,10 +27,13 @@ const rangeDurationMap: Record<DefaultDateRange, DurationLike> = {
 /**
  * Get the start of the week (Sunday) for a given date
  *
+ * Exported because the calendar week view windows its fetch on the same
+ * Sunday-based week as the "This Week" / "Next Week" presets.
+ *
  * @param date - DateTime to find week start for (defaults to today)
  * @returns DateTime for the Sunday of that week
  */
-function getWeekStart(date?: DateTime): DateTime {
+export function getWeekStart(date?: DateTime): DateTime {
   const now = date || DateTime.now();
 
   // Luxon weekday: Monday=1, Sunday=7

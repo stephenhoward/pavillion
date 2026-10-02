@@ -26,6 +26,56 @@
  *   becomes the default, an unparseable date becomes today. These values
  *   arrive from a URL bar, so a bad one must render a page, not an error.
  *
+ * ## `view` carries two meanings on the widget's URL
+ *
+ * 1. **A visitor's deviation from the default.** This is the meaning the rules
+ *    above describe. It is written only through `calendarViewQuery` (by
+ *    `useCalendarViewState` in `src/common/ui/calendar-views/`), and read only
+ *    through `parseCalendarViewQuery`.
+ * 2. **The owner-configured starting view.** The admin widget preview
+ *    (`widget-config.vue`) puts the owner's unsaved `view` on the widget
+ *    iframe's URL, and the widget store's `parseConfig` reads it as the
+ *    widget's default — the value later handed to `calendarViewQuery` and
+ *    `parseCalendarViewQuery` as `defaultView`.
+ *
+ * The preview is therefore a writer that **always** emits `view`, whatever
+ * the value: it states a default rather than deviating from one, so the
+ * default-omission rule does not apply to it and it does not call
+ * `calendarViewQuery`. It is the one sanctioned exception to that rule.
+ * Applying default-omission there would drop the very value the preview
+ * exists to state.
+ *
+ * The two meanings share a key only because of an ordering invariant:
+ * `parseConfig` reads `view` exactly once, at load, from
+ * `window.location.search`, before anything writes the route; from then on
+ * the key in the route query means the visitor's view and the view-state
+ * reader owns it. At load the two readings agree by construction (the URL's
+ * `view` is the default, so the visitor has not deviated). Re-reading
+ * `window.location.search` as configuration after a `router.replace` would
+ * read the visitor's choice as the owner's config — never do it.
+ *
+ * ## Precedence between `date` and the list filters `startDate` / `endDate`
+ *
+ * The public calendar page also carries `startDate` / `endDate`, written by
+ * `search-filter-public.vue` (including its this-week / next-week presets).
+ * They and `date` can disagree on the same URL; the rule is:
+ *
+ * - **The displayed view decides which vocabulary is in force.** In `week` or
+ *   `month`, `date` alone decides the period shown and fetched; `startDate` /
+ *   `endDate` are ignored for that purpose. In `list`, `startDate` /
+ *   `endDate` decide and `date` is ignored (and never written).
+ * - **Neither writer removes the other's keys.** Entering an anchored view
+ *   leaves `startDate` / `endDate` in the URL untouched, so returning to the
+ *   list restores the visitor's list filter; returning to the list drops only
+ *   `date`.
+ * - **The one crossing is a seed, not an override.** Switching from a list
+ *   view into `week` or `month` anchors on `startDate` when present (else
+ *   today), because the list's period is what the visitor was looking at. It
+ *   happens once, at that transition, and only when the URL's own view is
+ *   the list — when `date` is absent by construction. A week or month that a
+ *   narrow layout is displaying as a list keeps its `date`: `startDate` never
+ *   overrides a `date` already in the URL.
+ *
  * `calendarViewQuery` returns `undefined` for the keys to drop so a caller can
  * spread it over an existing query and hand the result to `router.replace` —
  * `undefined` values are omitted from the serialized URL, which is the same
