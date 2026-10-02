@@ -10,7 +10,7 @@
     margin-bottom: 0.75rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--pav-color-stone-700);
+    color: var(--pav-text-secondary);
   }
 
   .remove-schedule-btn {
@@ -59,21 +59,28 @@
   .grid-label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--pav-color-stone-700);
+    color: var(--pav-text-primary);
   }
 
   .grid-input {
     padding: 0.625rem 0.875rem;
-    border: 1px solid var(--pav-color-stone-200);
+    border: 1px solid var(--pav-border-secondary);
     border-radius: 0.375rem;
     font-size: 0.9375rem;
-    color: var(--pav-color-stone-900);
+    background: var(--pav-surface-secondary);
+    color: var(--pav-text-primary);
     font-family: inherit;
     transition: all 0.15s ease;
 
     &:focus {
       outline: none;
       border-color: var(--pav-color-orange-500);
+    }
+
+    // Native date/time pickers and the empty-field placeholder segments are
+    // UA-rendered; without this they stay light on the dark surface.
+    @media (prefers-color-scheme: dark) {
+      color-scheme: dark;
     }
   }
 
