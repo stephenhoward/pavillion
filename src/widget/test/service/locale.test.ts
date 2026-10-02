@@ -35,4 +35,14 @@ describe('widget locale service', () => {
   it('resolves a system key in the requested language instead of falling back to English', () => {
     expect(i18next.t('system:previous_week')).toBe('Semana anterior');
   });
+
+  it('resolves a ui key in the requested language instead of falling back to English', () => {
+    expect(i18next.t('ui:view_week')).toBe('Semana');
+  });
+
+  it('selects the plural form of a ui key from count', () => {
+    const t = i18next.getFixedT('fr', 'ui');
+    expect(t('more_events', { count: 1 })).toBe('1 autre événement');
+    expect(t('more_events', { count: 3 })).toBe('3 autres événements');
+  });
 });

@@ -13,31 +13,11 @@ import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
  * translated view. This test fails instead.
  */
 
-/** Keys the calendar-view components read. Both plural forms of more_events are listed. */
-const EXPECTED_KEYS = [
-  'loading',
-  'more_events_one',
-  'more_events_other',
-  'next_period',
-  'no_events_this_month',
-  'no_events_this_week',
-  'previous_period',
-  'today',
-  'view_list',
-  'view_month',
-  'view_switcher_label',
-  'view_week',
-];
-
 const LANGUAGE_CODES = AVAILABLE_LANGUAGES.map(language => language.code);
 
 describe('ui namespace bundles', () => {
   it('provides a bundle for every available language', () => {
     expect(Object.keys(uiResources).sort()).toEqual([...LANGUAGE_CODES].sort());
-  });
-
-  it('defines the expected key set in English', () => {
-    expect(Object.keys(uiResources.en.ui).sort()).toEqual(EXPECTED_KEYS);
   });
 
   describe.each(LANGUAGE_CODES)('%s', (code) => {

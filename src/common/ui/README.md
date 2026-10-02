@@ -16,7 +16,7 @@ A module under `src/common/ui/` may import:
 
 Files under `src/common/ui/test/` may additionally import `vitest`, `@vue/test-utils`, and the node builtins `fs` and `path`. They get their own list rather than an exemption, so a test still cannot reach for an app store or an HTTP client to stand a fixture up.
 
-`luxon` is imported by `calendar-views/calendar-grid.ts`, the week and month grid date math. `i18next-vue` is on the allowlist but unimported today, listed in advance of the `ui` i18n bundle that will need it, so arriving at that does not mean reopening this list.
+`luxon` is imported by `calendar-views/calendar-grid.ts`, the week and month grid date math. `i18next-vue` is on the allowlist but unimported today, listed in advance of the shared components that read the `ui` bundle, so their arrival does not mean reopening this list.
 
 The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/server` — by alias or by a relative path that escapes into them — and may never reach outside `src/` by a relative path at all. In the other direction, nothing under `src/server/` may import `src/common/ui`: this module assumes a browser.
 
@@ -51,7 +51,7 @@ Breakpoints that a component must branch on in script live in `assets/breakpoint
 
 A shared component owns its translation keys, and those keys live in the `ui` namespace. Apps register the bundle; they do not define or override the keys a shared component reads. This is what keeps a component's copy the same wherever it is mounted, and keeps an app from having to know which keys its dependencies happen to need.
 
-The bundles live in `calendar-views/locales/{lang}/ui.json`, and `locales.ts` exports them as `uiResources`. The site and widget spread `uiResources.<lang>` into their static i18next `resources` beside `system`; neither calls `addResourceBundle`. `test/locales.test.ts` fails if a language in `AVAILABLE_LANGUAGES` lacks a bundle or its keys differ from English, and each app's `test/service/locale.test.ts` fails if the app stops registering `ui` for one.
+The bundles live in `calendar-views/locales/{lang}/ui.json`, and `locales.ts` exports them as `uiResources`. The site, widget, and client each spread `uiResources.<lang>` into their static i18next `resources` beside their own namespaces; none calls `addResourceBundle`. `test/locales.test.ts` fails if a language in `AVAILABLE_LANGUAGES` lacks a bundle or its keys differ from English, and each app's `test/service/locale.test.ts` fails if the app stops registering `ui` for one.
 
 This is the home for any string a shared component renders, whichever app mounts it. The widget's `system` namespace, which it imports from `src/site/locales/`, is app-level copy and outside this rule: it is part of the widget → site debt noted under [Boundary rule](#boundary-rule). When a string moves out of an app view into a shared component, its key moves into `ui` rather than staying in the app's `system`.
 
