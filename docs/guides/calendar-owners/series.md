@@ -46,6 +46,8 @@ Click <Btn>Add Series</Btn>. A full-page editor opens with the following fields:
 
 **Series image.** An optional banner image for the series' public page. The same kind of image you'd put on an event — a photo from a past session, the program's logo, anything that signals the series at a glance. If you skip it, the series page renders without one and that's fine.
 
+**Image description.** Once a series image is uploaded, the editor offers the same **Image description for screen readers** choice as the event editor. **Skip description** hides the image from screen readers — right when the banner is decorative and adds nothing beyond the series name and description. **Add a description** gives you an **Image description** box for the language you're editing; a screen reader reads it in place of the image, so write what the image shows, with no need to start with "image of". Write one per language. Uploading a different image clears the descriptions, since they described the old one.
+
 Click <Btn>Create Series</Btn> to save. The new series appears in the list with an event count of zero.
 
 To rename, retranslate, or change the image later, click the pencil icon on the series' row. To delete it, click the trash icon — the dialog will confirm. Deleting a series doesn't delete its events; the events stay on the calendar, they just lose their series assignment.
