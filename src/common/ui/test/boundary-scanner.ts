@@ -20,9 +20,9 @@ export const UI_TEST_ROOT = path.join(UI_ROOT, 'test');
  * A closed list rather than a denylist, because the breach a shared
  * presentational module is likely to suffer is not `@/site/...` — a reviewer
  * catches that by eye — but pinia, axios, or an app store reached through one
- * of them. `i18next-vue` is unused today and stays listed: the `ui` i18n
- * namespace arrives in the same epic, and pruning it here would only make this
- * file the cause of that failure.
+ * of them. `i18next-vue` is unused today and stays listed in advance of the
+ * shared components that read the `ui` bundle; pruning it here would only make
+ * this file the cause of their failure.
  */
 const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18next-vue'];
 
