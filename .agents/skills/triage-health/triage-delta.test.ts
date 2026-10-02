@@ -566,6 +566,29 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.covered_by_renovate[0].prs.map(pr => pr.number).sort()).toEqual([102, 103]);
   });
 
+  it('never covers a package of a fixable CVE that has no fixed version of its own', () => {
+    // A real Trivy shape: one CVE against two packages, only one with a
+    // published fix. The finding is fixable overall and each package has a
+    // PR whose title parses cleanly, so the only thing that keeps `bar` from
+    // counting as covered is the absence of a fixed version to compare against.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([
+        vuln({ VulnerabilityID: 'CVE-2026-8005', PkgName: 'foo', InstalledVersion: '1.0.0', FixedVersion: '2.0.0', Severity: 'CRITICAL' }),
+        vuln({ VulnerabilityID: 'CVE-2026-8005', PkgName: 'bar', InstalledVersion: '0.9.0', FixedVersion: '', Severity: 'CRITICAL' }),
+      ])])],
+      renovatePrs: [
+        renovatePr({ number: 102, title: 'chore(deps): update dependency foo to v2.0.0', headRefName: 'renovate/foo-2.x' }),
+        renovatePr({ number: 103, title: 'chore(deps): update dependency bar to v1.0.0', headRefName: 'renovate/bar-1.x' }),
+      ],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-8005']);
+    expect(delta.new_actionable[0].renovateHints).toContainEqual(
+      expect.objectContaining({ number: 103, pkg: 'bar', reason: expect.stringContaining('no fixed version') }),
+    );
+  });
+
   it('compares each package against its own fixed version, not a sibling package version line', () => {
     // `bar` needs 3.0.0 and its PR delivers it; flattening the two packages'
     // fixed versions would judge `foo`'s 2.0.0 PR against 3.0.0 and demote a
@@ -607,6 +630,21 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.covered_by_renovate).toHaveLength(0);
     expect(delta.new_actionable).toHaveLength(1);
     expect(delta.new_actionable[0].renovateHints?.[0]).toMatchObject({ number: 591, pkg: 'undici' });
+  });
+
+  it('never covers a finding whose fixed version cannot be compared against the PR target', () => {
+    // A Debian epoch/revision string is not a release version compareVersions
+    // can order. An uncomparable pair must read as uncertainty, not coverage —
+    // `undefined < 0` is false, so falling through would clear the finding.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln({ FixedVersion: '1:6.27.0-1' })])])],
+      renovatePrs: [renovatePr({ number: 600, title: 'chore(deps): update dependency undici to v6.27.0', headRefName: 'renovate/undici-6.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-0001']);
+    expect(delta.new_actionable[0].renovateHints?.[0]).toMatchObject({ number: 600, pkg: 'undici' });
+    expect(delta.new_actionable[0].renovateHints?.[0].reason).toMatch(/cannot be compared/);
   });
 
   it('reads the target version out of the same title clause that names the package', () => {
@@ -715,6 +753,20 @@ describe('computeDelta: Renovate coverage', () => {
 
     expect(delta.covered_by_renovate).toHaveLength(0);
     expect(delta.new_actionable).toHaveLength(1);
+  });
+
+  it('ignores a trusted, open, correctly-titled PR whose branch is not under renovate/', () => {
+    // Author, state and title all say Renovate; only the branch prefix does
+    // not. The branch is otherwise Renovate-shaped (`<slug>-<version>`) so it
+    // reaches the prefix checks rather than failing on the slug rule.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln()])])],
+      renovatePrs: [renovatePr({ number: 601, headRefName: 'undici-6.27.0' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].renovateHints).toBeUndefined();
   });
 
   it('ignores an open PR on a renovate-shaped branch opened by a different bot', () => {
