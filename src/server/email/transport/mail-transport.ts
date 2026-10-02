@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import type { SendMailOptions, SentMessageInfo, Transporter } from 'nodemailer';
 
 /**
  * Abstract base class for mail transports.
@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
  * their own configured nodemailer transporter.
  */
 export abstract class MailTransport {
-  protected transport: nodemailer.Transporter | null = null;
+  protected transport: Transporter | null = null;
 
   /**
    * Sends an email using the configured transport.
@@ -16,7 +16,7 @@ export abstract class MailTransport {
    * @returns Promise resolving to sent message info
    * @throws Error if transport is not initialized
    */
-  public async sendMail(mailOptions: nodemailer.SendMailOptions): Promise<nodemailer.SentMessageInfo> {
+  public async sendMail(mailOptions: SendMailOptions): Promise<SentMessageInfo> {
     if (!this.transport) {
       throw new Error('Transport not initialized');
     }
