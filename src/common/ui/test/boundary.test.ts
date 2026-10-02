@@ -247,6 +247,49 @@ function recordedTokens(): Set<string> {
 }
 
 /**
+ * `public-*` mixins a shared component may include: each emits only layout,
+ * a media query around the caller's own `@content`, or an alpha mask — no
+ * colour and no theme selector. Every other `public-*` mixin in
+ * assets/mixins.scss reads a compile-time `$public-*` colour, writes a
+ * dark-mode rule (`public-dark-mode`, `public-light-mode-override`), or reads
+ * `--pav-*` names from inside the mixin, where the TOKENS.md check below
+ * cannot see them. Widen this list only with a mixin whose body meets the
+ * same bar.
+ */
+const LAYOUT_ONLY_MIXINS = [
+  'public-mobile-only',
+  'public-tablet-up',
+  'public-desktop-up',
+  'public-wide-up',
+  'public-sr-only',
+  'public-horizontal-scroll',
+  'public-scroll-fade-left',
+  'public-scroll-fade-right',
+  'public-scroll-fade-both',
+];
+
+/**
+ * Every `public-*` mixin a style block includes that is not layout-only,
+ * whether called bare (`@use ... as *`) or through a namespace
+ * (`mixins.public-empty-state`).
+ */
+function disallowedMixinIncludes(style: string): string[] {
+  return [...style.matchAll(/@include\s+(?:[\w-]+\.)?(public-[a-z0-9-]+)/g)]
+    .map(match => match[1])
+    .filter(name => !LAYOUT_ONLY_MIXINS.includes(name));
+}
+
+/**
+ * Every theme selector or colour-scheme query in a style block. A shared
+ * component's tokens already switch under the mounting app's theme selector,
+ * so any of these is a shared component reading the wrong value. Like the
+ * import scan, this does not strip comments.
+ */
+function themeSelectors(style: string): string[] {
+  return [...style.matchAll(/data-theme|prefers-color-scheme/g)].map(match => match[0]);
+}
+
+/**
  * A shared component is compiled once and mounted by every app, so its styles
  * may only read values each app supplies at runtime. A `$public-*` variable is
  * resolved at build time to the site and widget palette and cannot follow the
@@ -276,5 +319,52 @@ describe('src/common/ui styling contract', () => {
         .map(name => `${path.relative(SOURCE_ROOT, filePath)} -> ${name}`));
 
     expect(offenders).toEqual([]);
+  });
+
+  it('includes no public-* mixin outside the layout-only allowlist', () => {
+    const offenders = sharedComponents().flatMap(filePath =>
+      disallowedMixinIncludes(styleBlocks(filePath))
+        .map(name => `${path.relative(SOURCE_ROOT, filePath)} -> @include ${name}`));
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('writes no dark-mode rule', () => {
+    const offenders = sharedComponents().flatMap(filePath =>
+      themeSelectors(styleBlocks(filePath))
+        .map(selector => `${path.relative(SOURCE_ROOT, filePath)} -> ${selector}`));
+
+    expect(offenders).toEqual([]);
+  });
+
+  describe('detectors, against injected violations', () => {
+    it('flag a public-* colour or dark-mode mixin however it is namespaced', () => {
+      expect(disallowedMixinIncludes('.a { @include public-empty-state; }')).toEqual(['public-empty-state']);
+      expect(disallowedMixinIncludes('.a { @include mixins.public-button-base; }')).toEqual(['public-button-base']);
+      expect(disallowedMixinIncludes('.a { @include public-dark-mode { color: red; } }')).toEqual(['public-dark-mode']);
+      expect(disallowedMixinIncludes('.a { @include public-light-mode-override { color: red; } }'))
+        .toEqual(['public-light-mode-override']);
+    });
+
+    it('let every allowlisted layout mixin through', () => {
+      const style = LAYOUT_ONLY_MIXINS.map(name => `.a { @include mixins.${name}; }`).join('\n');
+
+      expect(disallowedMixinIncludes(style)).toEqual([]);
+    });
+
+    it('allowlist only mixins that assets/mixins.scss declares', () => {
+      const declared = readFileSync(path.join(UI_ROOT, 'assets/mixins.scss'), 'utf-8');
+
+      for (const name of LAYOUT_ONLY_MIXINS) {
+        expect(declared).toMatch(new RegExp(`^@mixin ${name}\\s*\\{`, 'm'));
+      }
+    });
+
+    it('flag data-theme selectors and prefers-color-scheme queries', () => {
+      expect(themeSelectors('[data-theme="dark"] .a { color: red; }')).toEqual(['data-theme']);
+      expect(themeSelectors(':root:not([data-theme=light]) .a { color: red; }')).toEqual(['data-theme']);
+      expect(themeSelectors('@media (prefers-color-scheme: dark) { .a { color: red; } }'))
+        .toEqual(['prefers-color-scheme']);
+    });
   });
 });
