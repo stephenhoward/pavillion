@@ -49,4 +49,15 @@ describe('CalendarService public URL', () => {
 
     expect(calendar!.publicUrl).toBe(`https://${TEST_DOMAIN}/test-calendar`);
   });
+
+  // The stored url name is not regex-gated at this call site, so the stamp
+  // must encode it rather than interpolate it into the address it hands out.
+  it('percent-encodes a url name that would otherwise escape its segment', async () => {
+    const entity = { toModel: () => new Calendar('calendar-id', '//evil.com/../admin') };
+    sandbox.stub(CalendarEntity, 'findOne').resolves(entity as any);
+
+    const calendar = await service.getCalendarByName('test-calendar');
+
+    expect(calendar!.publicUrl).toBe(`https://${TEST_DOMAIN}/%2F%2Fevil.com%2F..%2Fadmin`);
+  });
 });

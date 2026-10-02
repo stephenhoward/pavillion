@@ -107,10 +107,20 @@ describe('public path builders', () => {
       ['seriesPath', seriesPath('mycalendar', 'weekly-standup')],
     ] as const;
 
-    it('emits a root-relative path, never an absolute URL', () => {
-      const observed = emitted.map(([name, path]) => [name, path.startsWith('/'), path.includes('://')]);
+    // A scheme-relative '//evil.com' starts with '/' and contains no '://', so
+    // the second leading separator is checked on its own. A backslash counts:
+    // WHATWG parsers read a slash then a backslash as an authority too.
+    // DISCOVER_PATH is passed straight to res.redirect in app_routes.ts, so a
+    // regression here is an open redirect, not just a bad link.
+    it('emits a root-relative path, never an absolute or scheme-relative URL', () => {
+      const observed = emitted.map(([name, path]) => [
+        name,
+        path.startsWith('/'),
+        path.includes('://'),
+        /^[/\\]{2}/.test(path),
+      ]);
 
-      expect(observed).toEqual(emitted.map(([name]) => [name, true, false]));
+      expect(observed).toEqual(emitted.map(([name]) => [name, true, false, false]));
     });
 
     // The site SPA's locale-prefixed routes are '/:locale(es|fr|…)/…', so a

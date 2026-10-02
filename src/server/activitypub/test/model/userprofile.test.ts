@@ -19,6 +19,21 @@ describe('UserProfileResponse', () => {
     expect(new URL(actorDocument.url).host).toBe(new URL(actorDocument.id).host);
   });
 
+  /**
+   * Peers cache `url` (as `calendar_actor.page_url`) on machines we do not
+   * administer, so a url name must not be able to steer it out of the
+   * calendar's own path segment. Stored url names are regex-gated today; this
+   * pins the encoding that holds if one is not.
+   */
+  it.each([
+    ['a path separator', 'a/b', 'https://d/a%2Fb'],
+    ['a traversal', 'a/../admin', 'https://d/a%2F..%2Fadmin'],
+    ['a scheme-relative authority', '//evil.com', 'https://d/%2F%2Fevil.com'],
+    ['a query delimiter', 'cal?x=1', 'https://d/cal%3Fx%3D1'],
+  ])('percent-encodes %s in the url name rather than emitting it raw', (_label, urlName, expected) => {
+    expect(new UserProfileResponse(urlName, 'd').url).toBe(expected);
+  });
+
   it('keeps the existing actor properties alongside `url`', () => {
     const actorDocument = new UserProfileResponse('test-calendar', 'pavillion.dev', 'TEST_KEY').toObject();
 
