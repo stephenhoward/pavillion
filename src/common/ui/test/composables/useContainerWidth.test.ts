@@ -150,6 +150,36 @@ describe('useContainerWidth', () => {
     expect(host.tier).toBe('wide');
   });
 
+  it('disconnects and resets to narrow when the element ref goes back to null', async () => {
+    const host = mountHost();
+    await nextTick();
+    observers[0].resize(1200);
+    expect(host.tier).toBe('wide');
+
+    host.visible.value = false;
+    await nextTick();
+
+    expect(observers[0].disconnect).toHaveBeenCalled();
+    expect(host.width).toBe(0);
+    expect(host.tier).toBe('narrow');
+  });
+
+  it('observes afresh when the element is bound again', async () => {
+    const host = mountHost();
+    await nextTick();
+
+    host.visible.value = false;
+    await nextTick();
+    host.visible.value = true;
+    await nextTick();
+
+    expect(observers).toHaveLength(2);
+    expect(observers[1].observe).toHaveBeenCalledWith(host.wrapper.find('div').element);
+
+    observers[1].resize(700);
+    expect(host.tier).toBe('medium');
+  });
+
   it('measures once and does not throw when ResizeObserver is unavailable', async () => {
     vi.stubGlobal('ResizeObserver', undefined);
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1100 } as DOMRect);

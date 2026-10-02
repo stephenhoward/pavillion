@@ -15,7 +15,13 @@ import { widthTier, type WidthTier } from '@/common/ui/assets/breakpoints';
  * keeps the measurement current from then on. Where ResizeObserver does not
  * exist (JSDOM, older runtimes) the element is measured once and left at that.
  *
- * Until an element is bound the width is 0 and the tier is `narrow`. Narrow is
+ * The first reading is getBoundingClientRect().width, the border box; the
+ * observer reports contentRect.width, the content box. Bind an element with no
+ * horizontal padding or border (the calendar root), or the two disagree and
+ * the tier can flip across a boundary on the observer's first callback.
+ *
+ * Whenever no element is bound — before the first one, or after the ref goes
+ * back to null — the width is 0 and the tier is `narrow`. Narrow is
  * the safe default because it renders the list layout, which works at any
  * width. Avoiding a flash of the wrong layout is the mounting container's job
  * (it holds a loading state until data and measurement are ready), not this
@@ -39,6 +45,7 @@ export function useContainerWidth(el: Ref<HTMLElement | null>): {
     stopObserving();
 
     if (!element) {
+      width.value = 0;
       return;
     }
 
