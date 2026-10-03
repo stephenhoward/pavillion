@@ -346,6 +346,7 @@ onUnmounted(() => {
     );
     animation: gentle-pulse 1.8s ease-in-out infinite;
 
+    // No token carries the pulse gradient; it lightens in dark mode.
     @include public-dark-mode {
       background: linear-gradient(
         135deg,

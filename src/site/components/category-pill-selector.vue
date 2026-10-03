@@ -374,6 +374,7 @@ onUnmounted(() => {
     opacity: 0.9;
   }
 
+  // No token carries this focus outline: --pav-border-strong is fainter.
   @include public-dark-mode {
     &:focus:not(:disabled) {
       outline-color: rgba(255, 255, 255, 0.4);
