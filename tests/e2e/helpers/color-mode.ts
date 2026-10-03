@@ -41,6 +41,12 @@ interface ColorProbe {
 /** Minimum contrast for text against its surface: the WCAG large-text floor. */
 const MIN_TEXT_CONTRAST = 3;
 
+/** The WCAG AA floor for normal-size text, for callers that need the stricter check. */
+export const MIN_NORMAL_TEXT_CONTRAST = 4.5;
+
+/** Minimum contrast for icons and other graphics: the WCAG non-text floor. */
+const MIN_NON_TEXT_CONTRAST = 3;
+
 const POLL = { timeout: 15000, intervals: [200, 500, 1000] };
 
 export const opposite = (theme: Theme): Theme => (theme === 'light' ? 'dark' : 'light');
@@ -66,10 +72,15 @@ async function probeColors(root: LocatorRoot, selector: string): Promise<ColorPr
 
 /**
  * Assert that `selector`'s text colour belongs to `theme` and is legible on
- * the opaque surface it is painted on. Polls, because a forced mode may be
- * applied after the first paint.
+ * the opaque surface it is painted on, at `minContrast` or better. Polls,
+ * because a forced mode may be applied after the first paint.
  */
-export async function expectThemedText(root: LocatorRoot, selector: string, theme: Theme): Promise<void> {
+export async function expectThemedText(
+  root: LocatorRoot,
+  selector: string,
+  theme: Theme,
+  minContrast: number = MIN_TEXT_CONTRAST,
+): Promise<void> {
   await expect.poll(
     async () => {
       const probe = await probeColors(root, selector);
@@ -77,10 +88,30 @@ export async function expectThemedText(root: LocatorRoot, selector: string, them
       return {
         inkSide: sideOf(probe.color),
         surfaceSide: surface ? sideOfRgba(surface) : null,
-        legible: surface ? contrastRatio(probe.color, surface) >= MIN_TEXT_CONTRAST : false,
+        legible: surface ? contrastRatio(probe.color, surface) >= minContrast : false,
       };
     },
     { message: `${selector} text under ${theme}`, ...POLL },
+  ).toEqual({ inkSide: opposite(theme), surfaceSide: theme, legible: true });
+}
+
+/**
+ * Assert that a masked icon — whose visible colour is its own background —
+ * belongs to `theme` and clears the WCAG 3:1 non-text floor against the
+ * opaque surface behind it.
+ */
+export async function expectThemedIcon(root: LocatorRoot, selector: string, theme: Theme): Promise<void> {
+  await expect.poll(
+    async () => {
+      const probe = await probeColors(root, selector);
+      const surface = surfaceOf(probe.backdrop.slice(1));
+      return {
+        inkSide: sideOf(probe.backgroundColor),
+        surfaceSide: surface ? sideOfRgba(surface) : null,
+        legible: surface ? contrastRatio(probe.backgroundColor, surface) >= MIN_NON_TEXT_CONTRAST : false,
+      };
+    },
+    { message: `${selector} icon under ${theme}`, ...POLL },
   ).toEqual({ inkSide: opposite(theme), surfaceSide: theme, legible: true });
 }
 

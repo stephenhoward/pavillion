@@ -7,6 +7,8 @@ import {
   expectThemedText,
   expectColorSide,
   expectThemedSurface,
+  expectThemedIcon,
+  MIN_NORMAL_TEXT_CONTRAST,
 } from './helpers/color-mode';
 
 /**
@@ -500,12 +502,16 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
         await expect(iframe.locator(`.${view}-view`)).toBeVisible({ timeout: 20000 });
         await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1);
 
-        // The footer sits outside the themed container, on the iframe's
-        // transparent canvas, so its colours are classified on their own.
+        // The footer sits outside the themed container and paints its own
+        // surface, so its text and logo must be legible on that surface
+        // rather than on whatever the host page shows through the canvas.
         await expectColorSide(iframe, '.widget-footer', 'color', opposite(colorMode));
         await expectColorSide(iframe, '.widget-footer', 'borderTopColor', opposite(colorMode));
         // The logo is a masked <span>; its visible colour is its background.
         await expectColorSide(iframe, '.widget-footer .pavillion-logo', 'backgroundColor', opposite(colorMode));
+        // Small text, so the normal-text AA floor rather than the large-text one.
+        await expectThemedText(iframe, '.widget-footer a', colorMode, MIN_NORMAL_TEXT_CONTRAST);
+        await expectThemedIcon(iframe, '.widget-footer .pavillion-logo', colorMode);
 
         await expectThemedText(iframe, '.category-filter-section .filter-label', colorMode);
         await expectColorSide(iframe, '.search-section .search-icon', 'color', opposite(colorMode));
