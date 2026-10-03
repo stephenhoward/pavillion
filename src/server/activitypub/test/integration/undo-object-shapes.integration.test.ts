@@ -4,7 +4,8 @@
  * activity embedded inline (the shape Mastodon sends). Both must resolve
  * through UndoActivity.targetIdOf, and the stored ap_inbox row — never the
  * embedded copy — must remain the source of truth for what is undone,
- * including the auth_origin cross-check processUnshareEvent performs.
+ * including the auth_origin cross-check processUnshareEvent performs and
+ * the sender ownership gate processUnfollowAccount performs.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -89,15 +90,15 @@ describe('Inbound Undo object shapes (integration)', () => {
     object: EVENT_AP_ID,
   };
 
-  async function seedFollow(): Promise<void> {
-    await ActivityPubInboxMessageEntity.create({
+  async function seedFollow(authOrigin: string | null = 'https://remote.example'): Promise<ActivityPubInboxMessageEntity> {
+    const followRow = await ActivityPubInboxMessageEntity.create({
       id: FOLLOW_ID,
       calendar_id: LOCAL_CALENDAR_ID,
       type: 'Follow',
       message_time: new Date(),
       message: followActivity,
       auth_source: 'http_signature',
-      auth_origin: 'https://remote.example',
+      auth_origin: authOrigin,
       processed_status: 'ok',
     });
     await FollowerCalendarEntity.create({
@@ -105,6 +106,7 @@ describe('Inbound Undo object shapes (integration)', () => {
       calendar_actor_id: remoteActorId,
       calendar_id: LOCAL_CALENDAR_ID,
     });
+    return followRow;
   }
 
   async function seedAnnounce(): Promise<void> {
@@ -125,7 +127,14 @@ describe('Inbound Undo object shapes (integration)', () => {
     });
   }
 
-  async function deliverUndo(actor: string, object: unknown): Promise<ActivityPubInboxMessageEntity> {
+  // `authOrigin` overrides the verified peer origin recorded on the Undo row;
+  // by default it is the origin of the Undo's own actor, as on a genuine
+  // signed delivery.
+  async function deliverUndo(
+    actor: string,
+    object: unknown,
+    authOrigin?: string | null,
+  ): Promise<ActivityPubInboxMessageEntity> {
     const undoRow = await ActivityPubInboxMessageEntity.create({
       id: `https://remote.example/activities/undo-${uuidv4()}`,
       calendar_id: LOCAL_CALENDAR_ID,
@@ -133,7 +142,7 @@ describe('Inbound Undo object shapes (integration)', () => {
       message_time: new Date(),
       message: { type: 'Undo', actor, object },
       auth_source: 'http_signature',
-      auth_origin: new URL(actor).origin,
+      auth_origin: authOrigin === undefined ? new URL(actor).origin : authOrigin,
     });
     await inboxService.processInboxMessage(undoRow);
     await undoRow.reload();
@@ -207,5 +216,85 @@ describe('Inbound Undo object shapes (integration)', () => {
 
     expect(undoRow.processed_status).toBe('error');
     expect(await countFollowers()).toBe(1);
+  });
+
+  describe('Undo(Follow) sender ownership', () => {
+    const FORGER_ACTOR_URI = 'https://forger.example/users/mallory';
+
+    it('keeps the follower when another instance undoes the Follow by URI', async () => {
+      await seedFollow();
+
+      const undoRow = await deliverUndo(FORGER_ACTOR_URI, FOLLOW_ID);
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('keeps the follower when another instance undoes an embedded copy of the Follow', async () => {
+      await seedFollow();
+
+      // The embedded copy names alice as the Follow's actor; only its id is
+      // used, and the Undo's own sender is what the gate checks.
+      const undoRow = await deliverUndo(FORGER_ACTOR_URI, followActivity);
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('keeps the follower when a different actor on the same host sends the Undo', async () => {
+      await seedFollow();
+
+      const undoRow = await deliverUndo('https://remote.example/users/bob', FOLLOW_ID);
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('keeps the follower when the Undo claims the follower as actor but was authenticated against another origin', async () => {
+      await seedFollow();
+
+      const undoRow = await deliverUndo(REMOTE_ACTOR_URI, FOLLOW_ID, 'https://forger.example');
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('keeps the follower when the Undo row has no verified origin', async () => {
+      await seedFollow();
+
+      const undoRow = await deliverUndo(REMOTE_ACTOR_URI, FOLLOW_ID, null);
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('removes the follower when the stored Follow row has no verified origin', async () => {
+      // Follow rows stored before the origin was recorded carry none; the
+      // gate keys on the Undo row, so those followers can still unfollow.
+      await seedFollow(null);
+
+      const undoRow = await deliverUndo(REMOTE_ACTOR_URI, FOLLOW_ID);
+
+      expect(undoRow.processed_status).toBe('ok');
+      expect(await countFollowers()).toBe(0);
+    });
+
+    it('skips the gate on a direct call flagged as local in-process dispatch', async () => {
+      const followRow = await seedFollow();
+      const calendar = new Calendar(LOCAL_CALENDAR_ID, 'undo-shapes');
+
+      await inboxService.processUnfollowAccount(calendar, followRow, undefined, { trustLocalOrigin: true });
+
+      expect(await countFollowers()).toBe(0);
+    });
+
+    it('fails closed on a direct call that supplies neither an Undo row nor the local flag', async () => {
+      const followRow = await seedFollow();
+      const calendar = new Calendar(LOCAL_CALENDAR_ID, 'undo-shapes');
+
+      await inboxService.processUnfollowAccount(calendar, followRow, undefined);
+
+      expect(await countFollowers()).toBe(1);
+    });
   });
 });
