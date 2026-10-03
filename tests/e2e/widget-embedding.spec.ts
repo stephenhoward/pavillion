@@ -227,6 +227,13 @@ test.describe('Widget Embedding', () => {
     expect(siteConfigRequests).toBe(1);
     expect(await themeAttribute()).toBe(listTheme);
 
+    // The in-SPA route change must reach the host page through the SDK's
+    // onNavigate callback, not just as a raw postMessage the SDK drops.
+    await page.waitForFunction(
+      () => (window as any).__navigations.some((url: string) => url.includes('/events/')),
+      { timeout: 10000 },
+    );
+
     // Click back button to return to list view
     await iframe.locator('.back-link').first().click();
 

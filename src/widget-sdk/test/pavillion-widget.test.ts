@@ -245,26 +245,45 @@ describe('Pavillion Widget SDK', () => {
       expect(resizeHandler).toHaveBeenCalledWith(600);
     });
 
-    it('should handle navigation messages from widget iframe', () => {
-      const navigationHandler = vi.fn();
+    it('should invoke onNavigate with the path from a pavillion:navigate message', () => {
+      const onNavigate = vi.fn();
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+        onNavigate,
+      });
 
-      // Simulate message from iframe
-      const mockEvent = {
-        origin: 'https://calendar.example.com',
-        data: {
-          type: 'pavillion:navigate',
-          url: '/widget/my-calendar/events/123',
-        },
-      };
+      // With no pavillion-widget.js script tag in the document, the SDK falls
+      // back to the page origin, so a message from that origin passes the check.
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'pavillion:navigate', path: '/widget/my-calendar/events/123' },
+      }));
 
-      // Validate origin and handle navigation
-      if (mockEvent.origin === 'https://calendar.example.com') {
-        if (mockEvent.data.type === 'pavillion:navigate') {
-          navigationHandler(mockEvent.data.url);
-        }
-      }
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith('/widget/my-calendar/events/123');
 
-      expect(navigationHandler).toHaveBeenCalledWith('/widget/my-calendar/events/123');
+      widget.destroy();
+    });
+
+    it('should not invoke onNavigate for a pavillion:navigate message carrying url instead of path', () => {
+      const onNavigate = vi.fn();
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+        onNavigate,
+      });
+
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'pavillion:navigate', url: '/widget/my-calendar/events/123' },
+      }));
+
+      expect(onNavigate).not.toHaveBeenCalled();
+
+      widget.destroy();
     });
 
     it('should ignore messages from unauthorized origins', () => {

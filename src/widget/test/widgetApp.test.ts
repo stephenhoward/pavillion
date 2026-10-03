@@ -224,7 +224,7 @@ describe('Widget App Infrastructure', () => {
       }
     });
 
-    it('should send navigation message to parent window', () => {
+    it('should send navigation message to parent window using the SDK path field', () => {
       // Create a mock parent window
       const mockParent = {
         postMessage: vi.fn(),
