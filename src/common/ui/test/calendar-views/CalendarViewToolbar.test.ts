@@ -31,9 +31,13 @@ afterEach(() => {
   mounted = undefined;
 });
 
-function mountToolbar(props: { viewMode?: CalendarViewMode; availableViews?: readonly CalendarViewMode[] } = {}) {
+function mountToolbar(props: {
+  viewMode?: CalendarViewMode;
+  availableViews?: readonly CalendarViewMode[];
+  attachTo?: HTMLElement;
+} = {}) {
   mounted = mount(CalendarViewToolbar, {
-    attachTo: document.body,
+    attachTo: props.attachTo ?? document.body,
     props: {
       viewMode: props.viewMode ?? 'list',
       availableViews: props.availableViews ?? ALL_VIEWS,
@@ -58,6 +62,12 @@ describe('CalendarViewToolbar', () => {
       expect(radios(wrapper).map(radio => radio.text())).toEqual(['List', 'Week']);
     });
 
+    it('labels the month view from the ui namespace', () => {
+      const wrapper = mountToolbar();
+
+      expect(radios(wrapper).map(radio => radio.text())).toEqual(['List', 'Week', 'Month']);
+    });
+
     it('renders nothing when only one view is available', () => {
       const wrapper = mountToolbar({ availableViews: ['list'] });
 
@@ -76,6 +86,32 @@ describe('CalendarViewToolbar', () => {
 
       expect(radios(wrapper).map(radio => radio.attributes('aria-checked'))).toEqual(['false', 'true', 'false']);
       expect(radios(wrapper).map(radio => radio.attributes('tabindex'))).toEqual(['-1', '0', '-1']);
+    });
+
+    it('keeps the group reachable when the current view is not offered', () => {
+      const wrapper = mountToolbar({ viewMode: 'month', availableViews: ['list', 'week'] });
+
+      expect(radios(wrapper).map(radio => radio.attributes('tabindex'))).toEqual(['0', '-1']);
+      expect(radios(wrapper).every(radio => radio.attributes('aria-checked') === 'false')).toBe(true);
+    });
+
+    it('emits nothing when the checked view is clicked', async () => {
+      const wrapper = mountToolbar({ viewMode: 'week' });
+
+      await radios(wrapper)[1].trigger('click');
+
+      expect(wrapper.emitted('update:viewMode')).toBeUndefined();
+    });
+
+    it.each([
+      ['Home', 'list'],
+      ['End', 'month'],
+    ] as const)('emits nothing for %s on the view already at that end', async (key, view) => {
+      const wrapper = mountToolbar({ viewMode: view });
+
+      await radios(wrapper)[ALL_VIEWS.indexOf(view)].trigger('keydown', { key });
+
+      expect(wrapper.emitted('update:viewMode')).toBeUndefined();
     });
 
     it('emits update:viewMode with the clicked view', async () => {
@@ -111,6 +147,52 @@ describe('CalendarViewToolbar', () => {
       await wrapper.setProps({ viewMode: 'week' });
 
       expect(document.activeElement).toBe(radios(wrapper)[1].element);
+    });
+
+    it('does not take focus when the parent changes the view without a key press', async () => {
+      const wrapper = mountToolbar({ viewMode: 'list' });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      outside.focus();
+
+      await wrapper.setProps({ viewMode: 'week' });
+
+      expect(document.activeElement).toBe(outside);
+      outside.remove();
+    });
+
+    it('does not take focus for a parent change after focus has left the group', async () => {
+      const wrapper = mountToolbar({ viewMode: 'list' });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      const first = radios(wrapper)[0].element as HTMLElement;
+      first.focus();
+
+      await radios(wrapper)[0].trigger('keydown', { key: 'ArrowRight' });
+      outside.focus();
+      await wrapper.setProps({ viewMode: 'week' });
+
+      expect(document.activeElement).toBe(outside);
+      outside.remove();
+    });
+
+    it.each([
+      ['ArrowLeft', 'list', 'week'],
+      ['ArrowRight', 'week', 'list'],
+      ['ArrowDown', 'list', 'week'],
+      ['ArrowUp', 'week', 'list'],
+    ] as const)('in right-to-left text, %s from %s selects %s', async (key, from, to) => {
+      const rtl = document.createElement('div');
+      rtl.setAttribute('dir', 'rtl');
+      document.body.appendChild(rtl);
+      const wrapper = mountToolbar({ viewMode: from, attachTo: rtl });
+
+      await radios(wrapper)[ALL_VIEWS.indexOf(from)].trigger('keydown', { key });
+
+      expect(wrapper.emitted('update:viewMode')).toEqual([[to]]);
+      wrapper.unmount();
+      mounted = undefined;
+      rtl.remove();
     });
 
     it('moves among available views only', async () => {

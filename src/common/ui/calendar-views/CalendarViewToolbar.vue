@@ -4,6 +4,7 @@
       class="ui-view-toolbar__views"
       role="radiogroup"
       :aria-label="t('view_switcher_label')"
+      @focusout="onFocusout"
     >
       <button
         v-for="(view, index) in props.availableViews"
@@ -13,7 +14,7 @@
         role="radio"
         class="ui-view-toolbar__view"
         :aria-checked="view === props.viewMode"
-        :tabindex="view === props.viewMode ? 0 : -1"
+        :tabindex="view === tabStop ? 0 : -1"
         @click="select(view)"
         @keydown="onKeydown($event, index)"
       >
@@ -138,6 +139,14 @@ function setRadio(view: CalendarViewMode, el: unknown): void {
 /** Set when a key press selected a view, so focus follows once the parent applies it. */
 const focusPending = ref(false);
 
+/**
+ * The radio holding the group's one tab stop: the checked view, or the first
+ * available view when the checked one is not offered, so the group is never
+ * unreachable by keyboard.
+ */
+const tabStop = computed<CalendarViewMode>(() =>
+  props.availableViews.includes(props.viewMode) ? props.viewMode : props.availableViews[0]);
+
 const hasPeriod = computed(() => props.viewMode === 'week' || props.viewMode === 'month');
 
 function select(view: CalendarViewMode): void {
@@ -146,16 +155,27 @@ function select(view: CalendarViewMode): void {
   }
 }
 
+/**
+ * Whether the radio sits in right-to-left text, where ArrowLeft moves
+ * forward. Read from the nearest `dir` attribute, which is how every app
+ * sets direction.
+ */
+function isRtl(el: Element): boolean {
+  return el.closest('[dir]')?.getAttribute('dir')?.toLowerCase() === 'rtl';
+}
+
 function onKeydown(event: KeyboardEvent, index: number): void {
   const count = props.availableViews.length;
+  const forward = isRtl(event.currentTarget as Element) ? 'ArrowLeft' : 'ArrowRight';
+  const backward = forward === 'ArrowRight' ? 'ArrowLeft' : 'ArrowRight';
   let target: number;
 
   switch (event.key) {
-    case 'ArrowRight':
+    case forward:
     case 'ArrowDown':
       target = (index + 1) % count;
       break;
-    case 'ArrowLeft':
+    case backward:
     case 'ArrowUp':
       target = (index - 1 + count) % count;
       break;
@@ -170,8 +190,23 @@ function onKeydown(event: KeyboardEvent, index: number): void {
   }
 
   event.preventDefault();
-  focusPending.value = true;
-  select(props.availableViews[target]);
+  const view = props.availableViews[target];
+  if (view !== props.viewMode) {
+    focusPending.value = true;
+    select(view);
+  }
+}
+
+/**
+ * Focus leaving the group cancels a pending keyboard move, so a later
+ * parent-driven change (a resize clamping the effective view) cannot pull
+ * focus back here.
+ */
+function onFocusout(event: FocusEvent): void {
+  const group = event.currentTarget as HTMLElement;
+  if (!group.contains(event.relatedTarget as Node | null)) {
+    focusPending.value = false;
+  }
 }
 
 watch(() => props.viewMode, (view) => {
@@ -216,7 +251,7 @@ watch(() => props.viewMode, (view) => {
   transition: background-color 0.15s ease, color 0.15s ease;
 
   &:focus-visible {
-    outline: 2px solid var(--pav-accent);
+    outline: 2px solid var(--pav-text-primary);
     outline-offset: 2px;
   }
 }
@@ -232,17 +267,14 @@ watch(() => props.viewMode, (view) => {
     color: var(--pav-text-primary);
   }
 
-  // The checked segment takes the accent fill and the white ink every
-  // accent-filled public control uses.
+  // The checked segment is raised out of the track: elevation and weight
+  // carry the selection, with an accent rule as a decorative cue only. No
+  // text sits on the accent — TOKENS.md has no ink that contrasts with it.
   &[aria-checked="true"] {
-    background-color: var(--pav-accent);
-    color: white;
-    font-weight: 500;
-    box-shadow: var(--pav-shadow-sm);
-
-    &:hover {
-      background-color: var(--pav-accent-hover);
-    }
+    background-color: var(--pav-surface-primary);
+    color: var(--pav-text-primary);
+    font-weight: 600;
+    box-shadow: var(--pav-shadow-sm), inset 0 -2px 0 var(--pav-accent);
   }
 }
 
