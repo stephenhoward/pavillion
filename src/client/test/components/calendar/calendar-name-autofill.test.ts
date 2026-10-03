@@ -1,4 +1,5 @@
 import { expect, describe, it } from 'vitest';
+import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 
 /**
  * Unit Tests: Calendar Name Auto-fill Slug Generation
@@ -6,11 +7,12 @@ import { expect, describe, it } from 'vitest';
  * Tests the slug generation algorithm used to auto-populate
  * the Calendar Name field from the Calendar Title.
  *
- * The server validates urlName with /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/
- * so generated slugs must pass this pattern.
+ * Generated slugs are checked against the shape rule, CALENDAR_URL_NAME_RE.
+ * A slug can be shape-valid yet reserved; CreateCalendarForm.vue reports
+ * that on submit rather than altering the slug.
  */
 
-// Replicated from calendars.vue for isolated unit testing
+// Replicated from CreateCalendarForm.vue for isolated unit testing
 function slugify(title: string): string {
   return title
     .toLowerCase()
@@ -20,8 +22,6 @@ function slugify(title: string): string {
     .substring(0, 24)
     .replace(/^[-_]|[-_]$/g, '');
 }
-
-const VALID_URL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/;
 
 describe('Calendar Name Auto-fill Slug Generation', () => {
   describe('Basic slug generation', () => {
@@ -96,22 +96,29 @@ describe('Calendar Name Auto-fill Slug Generation', () => {
   describe('Server-side validation compatibility', () => {
     it('slug for "My Community Calendar" passes server urlName pattern', () => {
       const slug = slugify('My Community Calendar');
-      expect(VALID_URL_NAME_RE.test(slug)).toBe(true);
+      expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
     });
 
     it('slug for "Arts & Culture Events" passes server urlName pattern', () => {
       const slug = slugify('Arts & Culture Events');
-      expect(VALID_URL_NAME_RE.test(slug)).toBe(true);
+      expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
     });
 
     it('slug for "Summer Festival 2025" passes server urlName pattern', () => {
       const slug = slugify('Summer Festival 2025');
-      expect(VALID_URL_NAME_RE.test(slug)).toBe(true);
+      expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
     });
 
     it('slug for "Springfield Chamber of Commerce" passes server urlName pattern', () => {
       const slug = slugify('Springfield Chamber of Commerce');
-      expect(VALID_URL_NAME_RE.test(slug)).toBe(true);
+      expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
+    });
+
+    it('slug for "Admin" is shape-valid but reserved', () => {
+      const slug = slugify('Admin');
+      expect(slug).toBe('admin');
+      expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
+      expect(isValidCalendarUrlName(slug)).toBe(false);
     });
   });
 });

@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
 
 /**
- * Client-side calendar name validation tests.
+ * Calendar url-name shape rule tests.
  *
- * The regex is duplicated from the Vue component
- * (src/client/components/logged_in/calendar/calendars.vue)
- * and must stay in sync with the server-side CalendarService.isValidUrlName.
- *
- * Pattern: /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i
+ * Exercises CALENDAR_URL_NAME_RE, the shape rule only. Reserved-name
+ * rejection is a separate check (isValidCalendarUrlName) and is not
+ * covered here.
  *
  * Rules:
  *  - 3-24 characters long
@@ -15,10 +14,8 @@ import { describe, it, expect } from 'vitest';
  *  - Must end with a letter, digit, or underscore (NOT hyphen)
  *  - Middle characters may be letters, digits, underscores, or hyphens
  */
-const VALID_URL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
-
 function isValidCalendarName(name: string): boolean {
-  return VALID_URL_NAME_RE.test(name);
+  return CALENDAR_URL_NAME_RE.test(name);
 }
 
 describe('Calendar name validation', () => {

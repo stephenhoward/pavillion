@@ -384,6 +384,20 @@ describe('ActivityPubService.normalizeIdentifier', () => {
     expect(ActivityPubService.normalizeIdentifier('my_cal_')).toBe('my_cal_@pavillion.dev');
   });
 
+  it('accepts a qualified identifier whose username has a trailing underscore', () => {
+    // The qualified path validates the username with the same shape rule as
+    // the bare path, so `my_cal_` is followable either way.
+    expect(ActivityPubService.normalizeIdentifier('my_cal_@Example.Com')).toBe('my_cal_@example.com');
+  });
+
+  it('rejects a username with a trailing hyphen', () => {
+    expect(ActivityPubService.isValidUsername('trailing-')).toBe(false);
+  });
+
+  it('rejects a username with a leading underscore', () => {
+    expect(ActivityPubService.isValidUsername('_lead')).toBe(false);
+  });
+
   it.each(['admin', 'feed', 'discover', 'inbox'])(
     'accepts the reserved route segment %s as a bare urlName',
     (urlName) => {

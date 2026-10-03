@@ -120,7 +120,7 @@ export function formatRemoteCalendarId(calendarUrlName: string, instance: Instan
  * Generate a unique calendar URL name for testing
  *
  * Calendar URL names in Pavillion must match BOTH:
- * 1. Calendar URL validation: ^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$
+ * 1. Calendar URL validation: CALENDAR_URL_NAME_RE (src/common/validation/calendarUrlName.ts)
  * 2. ActivityPub username validation: ^[a-z0-9_]{3,16}$
  *
  * The intersection is:
