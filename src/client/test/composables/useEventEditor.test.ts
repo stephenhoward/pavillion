@@ -974,6 +974,25 @@ describe('useEventEditor', () => {
       expect(state.err).toBe('error_loading_calendars');
     });
 
+    it('should set translated error text when initialization fails after the event loaded', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      const t = (key: string) => `translated:${key}`;
+
+      const { state, initializeEvent } = useEventEditor();
+
+      await initializeEvent(
+        null,
+        undefined,
+        async () => { throw new Error('locations failed'); },
+        t,
+      );
+
+      // The form (not the load-error view) renders here, and it shows err as text
+      expect(state.event).not.toBeNull();
+      expect(state.err).toBe('translated:error_loading_calendars');
+    });
+
     it('should update available calendars', async () => {
       const calendar1 = new Calendar('cal-1', 'calendar-1');
       const calendar2 = new Calendar('cal-2', 'calendar-2');

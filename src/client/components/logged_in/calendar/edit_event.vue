@@ -1650,6 +1650,7 @@ onBeforeMount(async () => {
       languages.value = updatedLanguages;
     },
     fetchLocations,
+    t,
   );
 
   // After event is loaded, take the initial snapshot
