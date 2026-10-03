@@ -88,7 +88,7 @@ class ActivityPubService {
   }
 
   static isValidUsername(username: string): boolean {
-    return username.match(/^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9]$/i) !== null;
+    return CALENDAR_URL_NAME_RE.test(username);
   }
 
   static isValidOrgIdentifier(identifier: string): boolean {

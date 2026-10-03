@@ -16,6 +16,7 @@ import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
+import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
 import { createLogger } from '@/server/common/helper/logger';
 import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
@@ -561,9 +562,7 @@ export default class ActivityPubServerRoutes {
    */
   async readOutbox(req: Request, res: Response): Promise<void> {
     const { urlname } = req.params;
-    const VALID_URLNAME = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
-
-    if (!VALID_URLNAME.test(urlname)) {
+    if (!CALENDAR_URL_NAME_RE.test(urlname)) {
       res.status(400).send('Invalid calendar name');
       return;
     }

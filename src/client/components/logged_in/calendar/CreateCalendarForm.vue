@@ -3,6 +3,7 @@ import { reactive, ref, watch, nextTick, onMounted, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { EmptyValueError, InvalidUrlNameError, UnauthenticatedError, UrlNameAlreadyExistsError } from '@/common/exceptions';
+import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 import CalendarService from '@/client/service/calendar';
 
 const site_config = inject('site_config');
@@ -32,9 +33,6 @@ const calendar_name_placeholder = t('calendar_name_placeholder');
 // Tracks whether the user has manually edited the calendar name field.
 // Once true, auto-fill from title is disabled.
 const calendarNameManuallyEdited = ref(false);
-
-// Regex matching server-side isValidUrlName
-const VALID_URL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
 
 /**
  * Converts a human-readable title into a URL-safe calendar name slug.
@@ -102,8 +100,12 @@ function validateCalendarName(calendarName: string): string | null {
   if (!calendarName || calendarName.trim() === '') {
     return t('error_empty_calendar_name');
   }
-  if (!VALID_URL_NAME_RE.test(calendarName.trim())) {
+  const trimmed = calendarName.trim();
+  if (!CALENDAR_URL_NAME_RE.test(trimmed)) {
     return t('error_invalid_calendar_name');
+  }
+  if (!isValidCalendarUrlName(trimmed)) {
+    return t('error_reserved_calendar_name');
   }
   return null;
 }
