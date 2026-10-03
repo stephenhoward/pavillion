@@ -187,6 +187,9 @@ watch(() => route.fullPath, (newPath) => {
   font-size: $public-font-size-xs;
   text-align: center;
   color: var(--pav-text-secondary);
+  // The footer sits outside the view containers that paint the widget
+  // surface, so it paints its own; otherwise its ink lands on the host page.
+  background: var(--pav-surface-primary);
 
   a {
     color: inherit;
