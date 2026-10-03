@@ -76,12 +76,6 @@
       outline: none;
       border-color: var(--pav-color-orange-500);
     }
-
-    // Native date/time pickers and the empty-field placeholder segments are
-    // UA-rendered; without this they stay light on the dark surface.
-    @media (prefers-color-scheme: dark) {
-      color-scheme: dark;
-    }
   }
 
   .recurrence-summary {

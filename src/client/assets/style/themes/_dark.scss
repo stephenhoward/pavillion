@@ -4,6 +4,9 @@
  */
 
 [data-theme="dark"] {
+  /* Native control parts (date/time pickers, scrollbars) follow the theme */
+  color-scheme: dark;
+
   /* Surface Colors (Stone-based) */
   --pav-surface-primary: var(--pav-color-stone-900);
   --pav-surface-secondary: var(--pav-color-stone-800);
@@ -77,6 +80,9 @@
 /* Dark mode via system preference */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    /* Native control parts (date/time pickers, scrollbars) follow the theme */
+    color-scheme: dark;
+
     /* Surface Colors (Stone-based) */
     --pav-surface-primary: var(--pav-color-stone-900);
     --pav-surface-secondary: var(--pav-color-stone-800);
