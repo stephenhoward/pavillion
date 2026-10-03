@@ -10,8 +10,8 @@
  * src/common/utils/datePresets.ts, which decides the window the calendar
  * fetches events for; the grid and the fetch window have to agree on where a
  * week begins or the first and last columns come back empty. The arithmetic is
- * reproduced here rather than imported because getWeekStart is module-private
- * there.
+ * reproduced here rather than imported so the grid math stays Luxon-only and
+ * uncoupled from the fetch-window helper.
  */
 import { DateTime, Info, Interval } from 'luxon';
 

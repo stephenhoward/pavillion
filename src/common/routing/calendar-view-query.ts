@@ -4,9 +4,10 @@
  * Three surfaces read or write this pair of keys — the public calendar page,
  * the embedded widget, and the admin widget preview that drives the widget's
  * iframe — and each one used to spell `view` (and would have spelled `date`)
- * inline. These four exports are the single declaration of both the key names
- * and the rules that decide when each key appears, so a link built on one
- * surface is read the same way on another.
+ * inline. This module is the single declaration of both the key names and
+ * the rules that decide when each key appears, so a link built on one surface
+ * is read the same way on another. It also names the list filter's two date
+ * keys, because the precedence rule below has to refer to them.
  *
  * This is query vocabulary, not a path shape, so it sits outside DEC-018's
  * builder surface in `public-paths.ts` — a path builder answers "what does a
@@ -26,6 +27,73 @@
  *   becomes the default, an unparseable date becomes today. These values
  *   arrive from a URL bar, so a bad one must render a page, not an error.
  *
+ * ## `view` carries two meanings on the widget's URL
+ *
+ * 1. **A visitor's deviation from the default.** This is the meaning the rules
+ *    above describe. It is written only through `calendarViewQuery` (by
+ *    `useCalendarViewState` in `src/common/ui/calendar-views/`), and read only
+ *    through `parseCalendarViewQuery`.
+ * 2. **The owner-configured starting view.** The admin widget preview
+ *    (`widget-config.vue`) puts the owner's unsaved `view` on the widget
+ *    iframe's URL, and the widget store's `parseConfig` reads it as the
+ *    widget's default — the value later handed to `calendarViewQuery` and
+ *    `parseCalendarViewQuery` as `defaultView`.
+ *
+ * The preview is therefore a writer that **always** emits `view`, whatever
+ * the value: it states a default rather than deviating from one, so the
+ * default-omission rule does not apply to it and it does not call
+ * `calendarViewQuery`. It is the one sanctioned exception to that rule.
+ * Applying default-omission there would drop the very value the preview
+ * exists to state. After load, the preview changes the owner's default in
+ * place by posting a `pavillion:updateConfig` message to the iframe, never
+ * through the route.
+ *
+ * The two meanings share a key only because of an ordering invariant:
+ * `parseConfig` reads `view` exactly once, at load, from
+ * `window.location.search`, before anything writes the route; from then on
+ * the key in the route query means the visitor's view and the view-state
+ * reader owns it. At load the two readings agree by construction (the URL's
+ * `view` is the default, so the visitor has not deviated). Re-reading
+ * `window.location.search` as configuration after a `router.replace` would
+ * read the visitor's choice as the owner's config — never do it.
+ *
+ * ## Precedence between `date` and the list filters `startDate` / `endDate`
+ *
+ * Both public surfaces — the site's calendar page and the widget, which
+ * mounts the same `search-filter-public.vue` — also carry the list filter's
+ * `startDate` / `endDate` (LIST_START_DATE_QUERY_KEY / LIST_END_DATE_QUERY_KEY,
+ * including the filter's this-week / next-week presets). They and `date` can
+ * disagree on the same URL. The rule binds every writer on either surface:
+ * `router.replace` callers and link builders alike.
+ *
+ * - **Each vocabulary is backed by its own state.** `date` drives the view
+ *   window, which reaches the events source through its own slot
+ *   (`setViewWindow`, via `useCalendarWindowSync`). `startDate` / `endDate`
+ *   are the list filter's state, read and written by the list filter alone.
+ *   The view window is never written into the list filter's dates, nor the
+ *   list filter's dates into the view window.
+ * - **The displayed view decides which vocabulary is in force.** In `week` or
+ *   `month`, the view window — from `date` alone — decides the period shown
+ *   and fetched, and takes precedence over the list filter's dates. In
+ *   `list`, there is no view window: `startDate` / `endDate` decide, and
+ *   `date` is ignored (and never written).
+ * - **Neither writer removes the other's keys.** Entering an anchored view
+ *   leaves `startDate` / `endDate` in the URL and in the list filter's state
+ *   untouched, so returning to the list restores the visitor's list filter by
+ *   construction; returning to the list drops only `date`.
+ * - **The one crossing is a seed, not an override.** Switching from a list
+ *   view into `week` or `month` anchors on `startDate` when present (else
+ *   today), because the list's period is what the visitor was looking at. It
+ *   happens once, at that transition, and only when the URL's own view is
+ *   the list — when `date` is absent by construction. A week or month that a
+ *   narrow layout is displaying as a list keeps its `date`: `startDate` never
+ *   overrides a `date` already in the URL.
+ * - **A link that omits `view` lands on the surface's default view**, which
+ *   is not always the list. A link meant to open a list period (a day link
+ *   from a week or month cell, for instance) must emit `view` through
+ *   `calendarViewQuery('list', …, defaultView)` alongside its list-filter
+ *   dates, or on a surface whose default is `month` it opens the month.
+ *
  * `calendarViewQuery` returns `undefined` for the keys to drop so a caller can
  * spread it over an existing query and hand the result to `router.replace` —
  * `undefined` values are omitted from the serialized URL, which is the same
@@ -42,6 +110,12 @@ export const VIEW_QUERY_KEY = 'view';
 
 /** The query-string key carrying the anchor date of a week or month view. */
 export const DATE_QUERY_KEY = 'date';
+
+/** The query-string key carrying the list filter's first day (yyyy-MM-dd). */
+export const LIST_START_DATE_QUERY_KEY = 'startDate';
+
+/** The query-string key carrying the list filter's last day (yyyy-MM-dd). */
+export const LIST_END_DATE_QUERY_KEY = 'endDate';
 
 /** The format the anchor date is written in: a local calendar day. */
 const DATE_QUERY_FORMAT = 'yyyy-MM-dd';
