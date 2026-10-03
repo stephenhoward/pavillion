@@ -23,9 +23,11 @@ export type EditorMode = 'create' | 'edit' | 'duplicate';
 export interface EventEditorState {
   isLoading: boolean;
   /**
-   * Save errors hold translated text. Load failures (event never loaded) hold
-   * an `event_editor.editor` translation key, which edit_event.vue resolves
-   * so the message follows the interface language.
+   * Load failures (event never loaded) hold an `event_editor.editor`
+   * translation key, which edit_event.vue's load-error view resolves so the
+   * message follows the interface language. Once the event has loaded, the
+   * form's error box renders `err` as text, so save errors and later
+   * initialization failures hold translated text.
    */
   err: string;
   errDetail: string;
@@ -224,12 +226,15 @@ export function useEventEditor(defaultLanguage: string = 'en') {
    * @param eventIdProp - Optional event ID from component props
    * @param onLanguagesUpdate - Callback to update languages list
    * @param onLocationsFetch - Callback to fetch locations for a calendar
+   * @param t - Translation function for a failure after the event loaded,
+   *   where the form's error box renders `err` as text
    * @returns Promise that resolves when initialization is complete
    */
   const initializeEvent = async (
     eventIdProp?: string | null,
     onLanguagesUpdate?: (languages: string[]) => void,
     onLocationsFetch?: (calendarId: string) => Promise<void>,
+    t?: (key: string) => string,
   ): Promise<void> => {
     try {
       state.isLoading = true;
@@ -351,7 +356,11 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     }
     catch (error) {
       console.error('Error initializing event editor:', error);
-      state.err = 'error_loading_calendars';
+      // Before the event loads, the load-error view translates the key;
+      // after, the form renders and shows err as-is, so translate here.
+      state.err = state.event && t
+        ? t('error_loading_calendars')
+        : 'error_loading_calendars';
     }
     finally {
       state.isLoading = false;

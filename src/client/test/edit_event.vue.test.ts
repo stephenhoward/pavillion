@@ -10,6 +10,7 @@ import i18next from 'i18next';
 
 import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { mountComponent } from '@/client/test/lib/vue';
 import EditEvent from '@/client/components/logged_in/calendar/edit_event.vue';
 import CalendarService from '@/client/service/calendar';
@@ -251,6 +252,25 @@ describe('Editor Behavior - Route-Based', () => {
 
       await expectLoadErrorText('Failed to load event', 'Error al cargar el evento');
     });
+  });
+
+  it('shows translated text in the form error box when initialization fails after the event loaded', async () => {
+    const calendar = new Calendar('testId', 'testName');
+    calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
+
+    // The first getLanguages call is the editor's own initialization step,
+    // after the new event exists; later (template) calls behave normally.
+    sandbox.stub(CalendarEvent.prototype, 'getLanguages')
+      .callThrough()
+      .onFirstCall().throws(new Error('initialization failed'));
+
+    const { wrapper } = await mountedEditorOnRoute('/event', [calendar]);
+    currentWrapper = wrapper;
+
+    const formError = wrapper.find('form#event-form .error');
+    expect(formError.exists()).toBe(true);
+    expect(formError.text()).toContain('Failed to load calendars');
+    expect(formError.text()).not.toContain('error_loading_calendars');
   });
 
   it('create mode displays correct title', async () => {
