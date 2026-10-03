@@ -3,7 +3,11 @@ import { readFileSync } from 'fs';
 import path from 'path';
 
 import { getDefaultEnabledLanguageCodes, isValidLanguageCode } from '@/common/i18n/languages';
-import { RESERVED_ROUTE_SEGMENTS, isReservedRouteSegment } from '@/common/routing/reserved-segments';
+import {
+  RESERVED_ROUTE_SEGMENTS,
+  classifyReservedRouteSegment,
+  isReservedRouteSegment,
+} from '@/common/routing/reserved-segments';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
 
 const SOURCE_ROOT = path.resolve(__dirname, '../../..');
@@ -232,12 +236,12 @@ describe('reserved route segments', () => {
 
     // The module reserves locale codes by delegating to isValidLanguageCode
     // rather than listing them, so the list cannot drift from the supported
-    // languages. Two call sites now read the two sets as disjoint — the
-    // classifier in CalendarService.findReservedUrlNameCollisions treats a
-    // non-listed reserved name as a locale code. Nothing else enforces it, and
-    // it holds today only incidentally (every supported code is two characters,
-    // every entry three or more), so a longer code such as 'pt-br' could break
-    // it silently.
+    // languages. classifyReservedRouteSegment reads the two sets as disjoint:
+    // it tests the list first, so a name that is both listed and a locale code
+    // would be labelled 'reserved_segment' and never 'locale_code'. Nothing
+    // else enforces it, and it holds today only incidentally (every supported
+    // code is two characters, every entry three or more), so a longer code such
+    // as 'pt-br' could break it silently.
     it('names no supported language code, so the two reservation sources stay disjoint', () => {
       const localeEntries = RESERVED_ROUTE_SEGMENTS.filter(segment => isValidLanguageCode(segment));
 
@@ -269,5 +273,56 @@ describe('reserved route segments', () => {
 
       expect(imports.filter(specifier => /^@\/(server|client|site|widget)\//.test(specifier))).toEqual([]);
     });
+  });
+});
+
+/**
+ * The classifier is the single implementation of the reserved/locale split;
+ * `isReservedRouteSegment` is derived from it. These tests pin which reason each
+ * kind of segment carries, and that the predicate agrees with it.
+ */
+describe('classifyReservedRouteSegment', () => {
+  it.each([...RESERVED_ROUTE_SEGMENTS])('classifies the listed segment %s as reserved_segment', (segment) => {
+    expect(classifyReservedRouteSegment(segment)).toBe('reserved_segment');
+  });
+
+  it.each(getDefaultEnabledLanguageCodes())('classifies the locale code %s as locale_code', (code) => {
+    expect(classifyReservedRouteSegment(code)).toBe('locale_code');
+  });
+
+  it.each(['Admin', 'VIEW'])('folds case on the listed segment %s', (segment) => {
+    expect(classifyReservedRouteSegment(segment)).toBe('reserved_segment');
+  });
+
+  it('folds case on a locale code', () => {
+    expect(classifyReservedRouteSegment('Es')).toBe('locale_code');
+  });
+
+  it.each(['my-calendar', 'admins', ''])('returns null for the unreserved name %o', (name) => {
+    expect(classifyReservedRouteSegment(name)).toBeNull();
+  });
+
+  // Same caller precondition as the predicate: no decoding, trimming, or
+  // normalization beyond case folding.
+  it.each(['%61dmin', ' admin', 'admin.'])('does not decode, trim, or normalize %o', (segment) => {
+    expect(classifyReservedRouteSegment(segment)).toBeNull();
+  });
+
+  it('agrees with isReservedRouteSegment on every sampled segment', () => {
+    const sample = [
+      ...RESERVED_ROUTE_SEGMENTS,
+      ...getDefaultEnabledLanguageCodes(),
+      'Admin',
+      'Es',
+      'my-calendar',
+      'admins',
+      'viewpoint',
+      '',
+      '%61dmin',
+    ];
+
+    for (const segment of sample) {
+      expect(isReservedRouteSegment(segment), segment).toBe(classifyReservedRouteSegment(segment) !== null);
+    }
   });
 });

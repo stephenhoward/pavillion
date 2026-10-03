@@ -21,8 +21,8 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * array would exclude `discover` and `view` from exactly the handler that must
  * serve them.
  *
- * Entries are lower case; `isReservedRouteSegment` does the case folding, which
- * matches the case-insensitive route regexes in src/server/app_routes.ts. The
+ * Entries are lower case; `classifyReservedRouteSegment` does the case folding
+ * (and `isReservedRouteSegment` folds through it), which matches the case-insensitive route regexes in src/server/app_routes.ts. The
  * array is frozen so a consumer that builds a route regex alternation from it
  * cannot have the alternation changed out from under it at runtime.
  *
@@ -74,25 +74,58 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = Object.freeze([
 const RESERVED_SEGMENT_LOOKUP: ReadonlySet<string> = new Set<string>(RESERVED_ROUTE_SEGMENTS);
 
 /**
- * Reports whether a single URL path segment is reserved for application routing.
+ * Why a segment is reserved: it is named in {@link RESERVED_ROUTE_SEGMENTS}, or
+ * it is a supported locale code.
+ */
+export type ReservedRouteSegmentReason = 'reserved_segment' | 'locale_code';
+
+/**
+ * Classifies a single URL path segment by why it is reserved for application
+ * routing, or returns null when a calendar may claim it. This is the single
+ * implementation of the reserved/locale split; `isReservedRouteSegment` is
+ * derived from it.
  *
  * Any supported locale code is reserved too: /:lang/:calendarName would make a
  * calendar named after a locale unroutable.
  *
+ * Precedence: the frozen list is tested first, so a segment that is both listed
+ * and a supported locale code classifies as 'reserved_segment'. The disjointness
+ * test in src/common/test/routing/reserved-segments.test.ts keeps the two
+ * sources apart, which makes this unobservable today.
+ *
  * Caller precondition: `segment` must already be percent-decoded and validated
  * against `CALENDAR_URL_NAME_RE` (src/common/validation/calendarUrlName.ts).
  * This function does no decoding, trimming, or normalization beyond case
- * folding, so it answers `false` for '%61dmin', ' admin' and 'admin.' — those
- * are the charset validator's job to reject. The distinction matters to route
+ * folding, so it answers null for '%61dmin', ' admin' and 'admin.' — those are
+ * the charset validator's job to reject. The distinction matters to route
  * matching: Express matches on the raw, undecoded pathname and only decodes
  * `:params` afterwards, so a router consuming this function must decide
  * deliberately where decoding happens relative to the reservation check.
  *
  * @param segment - One decoded, charset-validated path segment, without slashes
+ * @returns The reason a calendar may not claim this segment, or null if it may
+ */
+export function classifyReservedRouteSegment(segment: string): ReservedRouteSegmentReason | null {
+  const normalized = segment.toLowerCase();
+
+  if (RESERVED_SEGMENT_LOOKUP.has(normalized)) {
+    return 'reserved_segment';
+  }
+  if (isValidLanguageCode(normalized)) {
+    return 'locale_code';
+  }
+  return null;
+}
+
+/**
+ * Reports whether a single URL path segment is reserved for application routing.
+ *
+ * Derived from {@link classifyReservedRouteSegment}, whose docblock carries the
+ * caller precondition: the segment must already be decoded and charset-validated.
+ *
+ * @param segment - One decoded, charset-validated path segment, without slashes
  * @returns true when a calendar may not claim this segment as its url name
  */
 export function isReservedRouteSegment(segment: string): boolean {
-  const normalized = segment.toLowerCase();
-
-  return RESERVED_SEGMENT_LOOKUP.has(normalized) || isValidLanguageCode(normalized);
+  return classifyReservedRouteSegment(segment) !== null;
 }
