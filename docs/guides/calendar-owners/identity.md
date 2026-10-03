@@ -73,7 +73,7 @@ For the rules of what's translatable, how visitors land on the right language ve
 
 ## The default event image
 
-The default event image is an image that fills in for any event you publish without uploading one specifically for it. It shows up on your events list and on the event's own page when no event-specific image overrides it. It also travels with the event when another calendar reposts it — if the reposted event has no image of its own, your default lands on the other calendar's page as that event's image.
+The default event image is an image that fills in for any event you publish without uploading one specifically for it. It shows up on the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. That is the only place it appears. The event's own page shows only an image uploaded for that event, so a visitor who opens an event that relies on the default sees no image there. The default also stays home: when another calendar reposts your event, it shows only the event's own image, and events you repost from other calendars don't pick up your default either.
 
 The Settings tab lets you upload one image. Uploading replaces it; removing it leaves events without their own image to show no image at all.
 
