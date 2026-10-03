@@ -21,8 +21,18 @@ Agent configuration lives in `.agents/`, with `.claude` as a symlink pointing at
   agents/     # Claude Code subagent definitions (Claude-specific)
   commands/   # Claude Code slash commands (Claude-specific)
   tools/      # shared vitest config + the few CLIs no single skill owns
+  mods/       # Claude Code function-hook plugins (Claude-specific; not auto-loaded)
 .claude -> .agents
 ```
+
+`.agents/mods/` holds Claude Code mods — plugins of function hooks that run
+inside the engine. Claude Code does not load them from this folder on its
+own: for one session run `claude --plugin-dir .agents/mods/<mod>`; to load one
+every session, put its absolute path in `CLAUDE_CODE_PLUGIN_DIRS` in the `env`
+block of `~/.claude/settings.json` (user settings only — the engine ignores the
+variable in project settings). Each mod's README says what it does and how to
+check it. Mods are not covered by `npm test`; each carries its own
+`claude plugin test <mod>` suite.
 
 A deterministic CLI belongs in `scripts/` under the skill that owns it, not
 in `.agents/tools/` — see `.agents/tools/README.md` for the current split and

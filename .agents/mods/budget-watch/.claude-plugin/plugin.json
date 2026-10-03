@@ -1,0 +1,50 @@
+{
+  "name": "budget-watch",
+  "version": "0.1.0",
+  "description": "Appends a [budget] line the model reads when context fill or a session rate-limit window crosses a band, and resumes work after a five-hour limit resets.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "contextStart": {
+      "type": "number",
+      "title": "First context band (%)",
+      "description": "The context fill at which the first [budget] context line is appended, as a whole percentage of the window.",
+      "default": 40
+    },
+    "contextStep": {
+      "type": "number",
+      "title": "Context band step (%)",
+      "description": "How many percentage points of context fill between one [budget] context line and the next.",
+      "default": 5
+    },
+    "fiveHourBands": {
+      "type": "string",
+      "title": "Five-hour window bands",
+      "description": "Comma-separated percentages of the five-hour rate-limit window at which a [budget] session line is appended.",
+      "default": "70,80,90,95"
+    },
+    "sevenDayBands": {
+      "type": "string",
+      "title": "Seven-day window bands",
+      "description": "Comma-separated percentages of the seven-day rate-limit window at which a [budget] session line is appended.",
+      "default": "90,95"
+    },
+    "autoResume": {
+      "type": "boolean",
+      "title": "Auto-resume after a limit",
+      "description": "When a turn dies on a rate limit, submit the resume prompt once the window resets. /budget resume off cancels a planned resume.",
+      "default": true
+    },
+    "sevenDayResumeHours": {
+      "type": "number",
+      "title": "Seven-day resume horizon (hours)",
+      "description": "Auto-resume after a seven-day limit only when its reset is within this many hours; otherwise the session stays stopped.",
+      "default": 3
+    },
+    "resumePrompt": {
+      "type": "string",
+      "title": "Resume prompt",
+      "description": "The prompt submitted when the limit resets.",
+      "default": "The session rate limit has reset. Resume the work in progress from the handoff on the active bead. If there is no handoff, report the current state and stop."
+    }
+  }
+}
