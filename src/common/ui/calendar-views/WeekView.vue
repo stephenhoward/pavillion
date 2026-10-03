@@ -22,7 +22,7 @@
           </RouterLink>
         </div>
 
-        <ul class="day-events">
+        <ul v-if="eventsFor(day.dateKey).length > 0" class="day-events">
           <li v-for="instance in visibleEvents(day.dateKey)" :key="instance.id">
             <RouterLink class="event-item" :to="props.eventRoute(instance)">
               <span class="event-time">{{ eventTime(instance) }}</span>
@@ -38,8 +38,11 @@
       </div>
     </div>
 
-    <p v-if="props.isLoading" class="view-status" role="status">{{ t('loading') }}</p>
-    <EmptyState v-else-if="isEmpty">
+    <!-- Always in the DOM so assistive tech has a live region to watch before loading begins. -->
+    <p class="view-status" :class="{ 'is-idle': !props.isLoading }" role="status">
+      {{ props.isLoading ? t('loading') : '' }}
+    </p>
+    <EmptyState v-if="!props.isLoading && isEmpty">
       <p>{{ t('no_events_this_week') }}</p>
     </EmptyState>
   </div>
@@ -149,12 +152,16 @@ const eventTime = (instance: CalendarEventInstance) =>
     }
   }
 
+  // An accent ring rather than an accent fill: the accent is owner-configurable
+  // in the widget, so no ink colour is guaranteed to contrast with it.
   &.is-today .day-number {
-    background: var(--pav-accent);
-    color: var(--pav-surface-primary);
+    background: var(--pav-surface-primary);
+    color: var(--pav-text-primary);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 2px var(--pav-accent);
 
     &:hover {
-      background: var(--pav-accent-hover);
+      background: var(--pav-interactive-hover);
     }
   }
 
@@ -221,7 +228,7 @@ const eventTime = (instance: CalendarEventInstance) =>
   .event-item,
   .event-overflow {
     &:focus-visible {
-      outline: 2px solid var(--pav-accent);
+      outline: 2px solid var(--pav-text-primary);
       outline-offset: 2px;
     }
   }
@@ -232,5 +239,9 @@ const eventTime = (instance: CalendarEventInstance) =>
   padding: 1.5rem;
   text-align: center;
   color: var(--pav-text-secondary);
+
+  &.is-idle {
+    padding: 0;
+  }
 }
 </style>
