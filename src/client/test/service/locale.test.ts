@@ -24,6 +24,7 @@ vi.mock('@/common/i18n/config', () => ({
 }));
 
 import { readLocaleCookie, writeLocaleCookie } from '@/common/i18n/cookie';
+import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { detectLanguage, initI18Next, applyAccountLanguage, changeLanguage } from '@/client/service/locale';
 
 describe('locale service', () => {
@@ -227,6 +228,21 @@ describe('locale service', () => {
         expect(Object.keys(ns).length).toBeGreaterThan(0);
       }
     });
+
+    // i18next is mocked here, so hasResourceBundle is unavailable; inspect the
+    // resources passed to init instead. `ui` is the shared-component namespace
+    // owned by src/common/ui.
+    it.each(AVAILABLE_LANGUAGES.map(language => language.code))(
+      'should register the ui namespace for %s',
+      (code) => {
+        initI18Next('en');
+
+        const config = vi.mocked(i18next.init).mock.lastCall?.[0] as { resources: Record<string, Record<string, Record<string, unknown>>> };
+        const ns = config.resources[code]?.ui;
+        expect(ns).toBeDefined();
+        expect(Object.keys(ns).length).toBeGreaterThan(0);
+      },
+    );
   });
 
   describe('applyAccountLanguage', () => {

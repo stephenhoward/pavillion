@@ -1,0 +1,14 @@
+{
+  "view_switcher_label": "Vista del calendario",
+  "view_list": "Lista",
+  "view_week": "Semana",
+  "view_month": "Mes",
+  "previous_period": "Anterior",
+  "next_period": "Siguiente",
+  "today": "Hoy",
+  "more_events_one": "{{count}} evento más",
+  "more_events_other": "{{count}} eventos más",
+  "no_events_this_week": "No hay eventos esta semana",
+  "no_events_this_month": "No hay eventos este mes",
+  "loading": "Cargando..."
+}

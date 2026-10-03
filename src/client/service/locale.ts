@@ -56,6 +56,9 @@ import frSetup from '@/client/locales/fr/setup.json';
 import frFunding from '@/client/locales/fr/funding.json';
 import frPolicy from '@/client/locales/fr/policy.json';
 
+// Shared-component namespace owned by src/common/ui
+import { uiResources } from '@/common/ui/locales';
+
 /**
  * Detects the best language for the client from available signals.
  *
@@ -128,6 +131,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: enSetup,
         funding: enFunding,
         policy: enPolicy,
+        ...uiResources.en,
       },
       es: {
         system: esSystem,
@@ -145,6 +149,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: esSetup,
         funding: esFunding,
         policy: esPolicy,
+        ...uiResources.es,
       },
       fr: {
         system: frSystem,
@@ -162,6 +167,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: frSetup,
         funding: frFunding,
         policy: frPolicy,
+        ...uiResources.fr,
       },
     },
   });

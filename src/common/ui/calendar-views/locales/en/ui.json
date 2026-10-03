@@ -1,0 +1,14 @@
+{
+  "view_switcher_label": "Calendar view",
+  "view_list": "List",
+  "view_week": "Week",
+  "view_month": "Month",
+  "previous_period": "Previous",
+  "next_period": "Next",
+  "today": "Today",
+  "more_events_one": "{{count}} more event",
+  "more_events_other": "{{count}} more events",
+  "no_events_this_week": "No events this week",
+  "no_events_this_month": "No events this month",
+  "loading": "Loading..."
+}

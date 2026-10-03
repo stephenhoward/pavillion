@@ -12,7 +12,7 @@ You are an i18n auditor for a Vue.js 3 / Node.js application using i18next. Veri
 ## Project i18n Architecture
 
 - **i18next** with `useTranslation()` composable in `<script setup>` Vue SFCs
-- **Translation files:** `src/client/locales/`, `src/site/locales/`, server-side in domain directories
+- **Translation files:** `src/client/locales/`, `src/site/locales/` (also registered by the widget), `src/common/ui/calendar-views/locales/` (the shared-component `ui` namespace, registered by site, widget, and client), `src/server/locales/`
 - **Handlebars templates** for emails with translation helpers
 - **Default language:** English (`en`)
 - **Key format:** dot-separated hierarchical, snake_case segments (e.g. `calendar.event.edit_title`)
