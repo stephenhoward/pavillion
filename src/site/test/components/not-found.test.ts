@@ -3,13 +3,10 @@
  *
  * The widget renders this component under a forced colour mode, set as
  * `data-theme` on the iframe's `<html>`. Its heading and suggestion colours
- * reach the right theme only if the component's compiled, scoped CSS routes
- * every dark rule through the self-guarding `public-dark-mode` mixin:
- *
- * - a forced dark theme has a rule of its own, with the `data-theme` selector
- *   on an ancestor and the scope attribute on the element (a scope attribute
- *   on the ancestor would match nothing — see pv-ezc7);
- * - the OS dark preference only applies where no light theme was forced.
+ * reach the right theme because they read theme-switched `--pav-*` tokens,
+ * which `public-theme-tokens` redeclares under the forced and OS dark
+ * selectors on `#app` / `.widget-root`. The component itself therefore
+ * carries one colour rule per element and no theme selector of its own.
  *
  * The SFC's style block is compiled here with Sass and Vue's scoped-CSS
  * transform, using the scope id the mounted component actually renders, so
@@ -130,36 +127,22 @@ describe('NotFound', () => {
     expect(wrapper.find('p').attributes()).toHaveProperty(scopeId);
   });
 
-  describe.each(['h1', 'p'])('%s colour', (element) => {
+  describe.each([
+    ['h1', 'var(--pav-text-primary)'],
+    ['p', 'var(--pav-text-secondary)'],
+  ])('%s colour', (element, token) => {
     const target = () => new RegExp(`\\.not-found ${element}\\[${escapeRegExp(scopeId)}\\]$`);
     const forElement = () => rules.filter(rule => target().test(rule.selector));
 
-    it('has a light base colour outside any theme selector', () => {
-      const base = forElement().filter(rule => rule.media === null && !rule.selector.includes('data-theme'));
-      expect(base).toHaveLength(1);
+    it('reads its theme-switched token in a single unguarded rule', () => {
+      const rulesForElement = forElement();
+      expect(rulesForElement).toHaveLength(1);
+      expect(rulesForElement[0].media).toBeNull();
+      expect(rulesForElement[0].color).toBe(token);
     });
 
-    it('is recoloured by a forced dark theme on an ancestor, whatever the OS prefers', () => {
-      const base = forElement().find(rule => rule.media === null && !rule.selector.includes('data-theme'))!;
-      const forcedDark = forElement().filter(
-        rule => rule.media === null && /^\[data-theme="?dark"?\] /.test(rule.selector),
-      );
-
-      expect(forcedDark).toHaveLength(1);
-      expect(forcedDark[0].color).not.toBe(base.color);
-    });
-
-    it('follows the OS dark preference only where no light theme was forced', () => {
-      const forcedDark = forElement().find(rule => /^\[data-theme="?dark"?\] /.test(rule.selector))!;
-      const osDark = forElement().filter(rule => rule.media?.includes('prefers-color-scheme: dark'));
-
-      // At least one rule keeps `auto` following the OS; every one of them
-      // stands down under data-theme="light".
-      expect(osDark.length).toBeGreaterThan(0);
-      for (const rule of osDark) {
-        expect(rule.selector).toMatch(/^:where\(:root:not\(\[data-theme="?light"?\]\)\) /);
-        expect(rule.color).toBe(forcedDark.color);
-      }
+    it('declares no theme selector of its own', () => {
+      expect(forElement().some(rule => rule.selector.includes('data-theme'))).toBe(false);
     });
   });
 });

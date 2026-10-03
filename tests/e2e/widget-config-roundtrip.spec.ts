@@ -352,15 +352,16 @@ test('list view and event detail paint with the saved accent', async ({ page, br
 // preference reported by `prefers-color-scheme`. The signal is the
 // `data-theme` attribute that `widgetStore.applyColorMode()` writes to the
 // widget iframe's `<html>` — `light` or `dark` for a forced mode, absent for
-// `auto`. The self-guarding `public-dark-mode` mixin reads it:
-// `[data-theme="dark"]` forces the dark branch, `[data-theme="light"]`
-// suppresses the OS media-query branch.
+// `auto`. `public-theme-tokens` on `.widget-root` reads it:
+// `[data-theme="dark"]` redeclares the `--pav-*` tokens with their dark
+// values, `[data-theme="light"]` suppresses the OS media-query branch.
 //
 // The attribute is the behavioral observable from `applyColorMode()`. Every
 // scenario also asserts the downstream background-color cascade on
-// `.widget-container` — without that, a regression in the mixin (e.g. Vue's
-// `:global(...) &` compilation bug, see pv-ezc7) could leave the attribute
-// set while the actual cascade was broken. The background is classified by
+// `.widget-container`, which reads `--pav-surface-primary` — without that, a
+// regression in the token layer (e.g. Vue's `:global(...) &` compilation bug,
+// see pv-ezc7) could leave the attribute set while the actual cascade was
+// broken. The background is classified by
 // the shared `expectColorSide` helper rather than matched to a token value.
 
 test('color mode "light" overrides system dark preference', async ({ page, browser }) => {
@@ -477,7 +478,7 @@ const FORCED_MODE_DIRECTIONS: { colorMode: Theme; osScheme: Theme }[] = [
 ];
 
 for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
-  test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, empty state and not-found`, async ({ page, browser }) => {
+  test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, event detail, error state, empty state and not-found`, async ({ page, browser }) => {
     // The mitown-climate repro accent, so the date controls' selected fill
     // can be told apart from the default orange (pv-b7gp).
     const ACCENT = '#669c35';
@@ -567,6 +568,14 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       await categoryPill.click();
     });
 
+    await test.step('event detail: overlay surface and back link', async () => {
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await iframe.locator('.list-view .event-title-link').first().click();
+      await expect(iframe.locator('.instance-back-header .back-link')).toBeVisible({ timeout: 20000 });
+      await expectColorSide(iframe, '.event-detail-overlay', 'backgroundColor', colorMode);
+      await expectThemedText(iframe, '.instance-back-header .back-link', colorMode);
+    });
+
     await test.step('list view: shared EmptyState when there are no events', async () => {
       // An empty event list is forced by stubbing the events endpoint; the
       // route applies to the iframe's requests too.
@@ -576,6 +585,25 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       await expect(iframe.locator('.ui-empty-state')).toBeVisible({ timeout: 20000 });
       await expectThemedText(iframe, '.ui-empty-state p', colorMode);
       await embedPage.unroute(eventsRoute);
+    });
+
+    await test.step('event detail: error state and retry button', async () => {
+      // A failed instance request (not a 404, which reads as not-found) puts
+      // the overlay in its error state, styled by the shared
+      // public-error-state mixin.
+      const instanceRoute = '**/api/public/v1/events/*/instances/**';
+      await embedPage.route(instanceRoute, route => route.fulfill({ status: 500, json: {} }));
+      await gotoInWidgetFrame(
+        embedPage,
+        env.baseURL,
+        '/widget/test_calendar/events/00000000-0000-4000-8000-000000000000/20260101-1200',
+      );
+      await expect(iframe.locator('.error-container .error')).toBeVisible({ timeout: 20000 });
+      await expectThemedSurface(iframe, '.error-container .error', colorMode);
+      await expectThemedText(iframe, '.error-container .error', colorMode);
+      await expectThemedText(iframe, '.error-container .back-button', colorMode);
+      await expectColorSide(iframe, '.error-container .back-button', 'borderTopColor', opposite(colorMode));
+      await embedPage.unroute(instanceRoute);
     });
 
     await test.step('not-found page', async () => {

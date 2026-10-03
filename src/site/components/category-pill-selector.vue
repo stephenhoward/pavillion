@@ -279,8 +279,8 @@ onUnmounted(() => {
   height: 44px;
   border: none;
   border-radius: $public-radius-full;
-  background-color: $public-bg-tertiary-light;
-  color: $public-text-secondary-light;
+  background-color: var(--pav-surface-tertiary);
+  color: var(--pav-text-secondary);
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
@@ -293,20 +293,19 @@ onUnmounted(() => {
 
   &:hover {
     background-color: rgba(0, 0, 0, 0.1);
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
   }
 
   &:active {
     transform: scale(0.95);
   }
 
+  // No token carries this hover fill: --pav-interactive-hover resolves to the
+  // same value as the arrow's resting --pav-surface-tertiary, so using it would
+  // erase the hover feedback.
   @include public-dark-mode {
-    background-color: $public-bg-tertiary-dark;
-    color: $public-text-secondary-dark;
-
     &:hover {
       background-color: rgba(255, 255, 255, 0.14);
-      color: $public-text-primary-dark;
     }
   }
 }
@@ -375,6 +374,7 @@ onUnmounted(() => {
     opacity: 0.9;
   }
 
+  // No token carries this focus outline: --pav-border-strong is fainter.
   @include public-dark-mode {
     &:focus:not(:disabled) {
       outline-color: rgba(255, 255, 255, 0.4);

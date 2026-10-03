@@ -605,23 +605,11 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 
 @mixin public-error-state {
   padding: $public-space-md;
-  background: $public-error-bg-light;
-  border: 1px solid rgba($public-error-light, 0.3);
+  background: var(--pav-surface-error);
+  border: 1px solid color-mix(in srgb, var(--pav-text-error) 30%, transparent);
   border-radius: $public-radius-sm;
-  color: $public-error-light;
+  color: var(--pav-text-error);
   font-size: $public-font-size-base;
-
-  @include public-dark-mode {
-    background: $public-error-bg-dark;
-    border-color: rgba($public-error-dark, 0.3);
-    color: $public-error-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-error-bg-light;
-    border-color: rgba($public-error-light, 0.3);
-    color: $public-error-light;
-  }
 }
 
 @mixin public-empty-state {
@@ -936,9 +924,6 @@ $font-medium: $public-font-weight-medium;
 
 $public-mobile-breakpoint: 640px;
 $public-tablet-breakpoint: 1024px;
-
-// Link color alias (accent)
-$public-link-color: $public-accent-light;
 
 // ================================================================
 // REDESIGN COMPONENT MIXINS

@@ -188,19 +188,11 @@ onBeforeMount(async () => {
 @use '@/site/assets/mixins' as *;
 
 .event-detail-overlay {
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-primary);
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-  }
 }
 
 .event-detail-content {
@@ -215,16 +207,8 @@ onBeforeMount(async () => {
 
 .instance-back-header {
   padding: $public-space-md $public-space-lg;
-  border-bottom: 1px solid $public-border-subtle-light;
+  border-bottom: 1px solid var(--pav-border-subtle);
   margin-bottom: $public-space-2xl;
-
-  @include public-dark-mode {
-    border-bottom-color: $public-border-subtle-dark;
-  }
-
-  @include public-light-mode-override {
-    border-bottom-color: $public-border-subtle-light;
-  }
 
   .back-link {
     display: inline-flex;
@@ -236,12 +220,12 @@ onBeforeMount(async () => {
     font-family: $public-font-family;
     font-size: $public-font-size-base;
     font-weight: $public-font-weight-medium;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     cursor: pointer;
     transition: $public-transition-fast;
 
     &:hover {
-      color: var(--pav-accent-light);
+      color: var(--pav-accent);
 
       .back-arrow {
         transform: translateX(-3px);
@@ -250,22 +234,6 @@ onBeforeMount(async () => {
 
     &:focus-visible {
       @include public-focus-visible;
-    }
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-
-      &:hover {
-        color: var(--pav-accent-dark);
-      }
-    }
-
-    @include public-light-mode-override {
-      color: $public-text-secondary-light;
-
-      &:hover {
-        color: var(--pav-accent-light);
-      }
     }
   }
 
@@ -322,35 +290,15 @@ onBeforeMount(async () => {
 
     padding: $public-space-sm $public-space-lg;
     background: transparent;
-    border: 1px solid $public-border-medium-light;
+    border: 1px solid var(--pav-border-medium);
     border-radius: $public-radius-sm;
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
     font-size: $public-font-size-base;
     transition: $public-transition-fast;
 
     &:hover {
-      background: $public-hover-overlay-light;
-      border-color: $public-border-strong-light;
-    }
-
-    @include public-dark-mode {
-      border-color: $public-border-medium-dark;
-      color: $public-text-primary-dark;
-
-      &:hover {
-        background: $public-hover-overlay-dark;
-        border-color: $public-border-strong-dark;
-      }
-    }
-
-    @include public-light-mode-override {
-      border-color: $public-border-medium-light;
-      color: $public-text-primary-light;
-
-      &:hover {
-        background: $public-hover-overlay-light;
-        border-color: $public-border-strong-light;
-      }
+      background: var(--pav-interactive-hover);
+      border-color: var(--pav-border-strong);
     }
   }
 }

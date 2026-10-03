@@ -76,7 +76,6 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
     <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
     <EmptyState
       v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending"
-      class="empty-state"
     >
       <p v-if="publicStore.hasActiveFilters">
         {{ t('no_events_with_filters') }}
