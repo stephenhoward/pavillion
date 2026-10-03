@@ -566,7 +566,7 @@ class ProcessInboxService {
           if ( targetEntity ) {
             switch( targetEntity.type ) {
               case 'Follow':
-                await this.processUnfollowAccount(calendar, targetEntity);
+                await this.processUnfollowAccount(calendar, targetEntity, message, options);
                 break;
               case 'Announce':
                 await this.processUnshareEvent(calendar, targetEntity, undoActor, options);
@@ -2220,11 +2220,40 @@ class ProcessInboxService {
   /**
    * Processes an Unfollow action (via Undo) by removing a follower relationship.
    *
+   * SECURITY: only the actor that sent the Follow may undo it. Before the
+   * follower row is removed, the Undo must pass an ownership gate:
+   *
+   *   - the Undo's `actor` equals the stored Follow's `actor` exactly (URI
+   *     equality, so one calendar on a multi-calendar peer cannot unfollow
+   *     a sibling), and
+   *   - the Undo row's verified `auth_origin` host equals that actor's host.
+   *     `auth_origin` is the sender's verified identity; the Follow's
+   *     `actor` only identifies the follower being removed. The stored
+   *     Follow row's own `auth_origin` is not consulted, so a Follow stored
+   *     before that column existed can still be undone by its sender.
+   *
+   * The gate fails closed: a missing Undo row or actor, a null
+   * `auth_origin`, or an unparseable URL all reject. A rejection is logged
+   * and returns without removing anything and without throwing, so the Undo
+   * row is still marked processed.
+   *
+   * The gate is skipped only when `trustLocalOrigin` is set, on the local
+   * in-process dispatch path, where rows carry no `auth_origin` because no
+   * remote party exists to authenticate.
+   *
    * @param {Calendar} calendar - The calendar being unfollowed
    * @param {ActivityPubInboxMessageEntity} message - The original Follow inbox message entity
+   * @param {ActivityPubInboxMessageEntity} [undoMessage] - The inbound Undo inbox message entity
+   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
+   *   is true, the ownership gate is skipped.
    * @returns {Promise<void>}
    */
-  async processUnfollowAccount(calendar: Calendar, message: ActivityPubInboxMessageEntity) {
+  async processUnfollowAccount(
+    calendar: Calendar,
+    message: ActivityPubInboxMessageEntity,
+    undoMessage?: ActivityPubInboxMessageEntity,
+    options: { trustLocalOrigin?: boolean } = {},
+  ) {
     // Extract the actor from the original Follow activity's stored JSON
     const activityJson = message.message as Record<string, unknown> | undefined;
     if (!activityJson) {
@@ -2237,6 +2266,45 @@ class ProcessInboxService {
     if (!actor) {
       logger.warn(`Unfollow message actor is null or undefined`);
       return;
+    }
+
+    if (!options.trustLocalOrigin) {
+      const rawUndoActor = (undoMessage?.message as any)?.actor;
+      const undoActor = typeof rawUndoActor === 'string' ? rawUndoActor : undefined;
+      const reject = (reason: string) => logActivityRejection({
+        rejection_type: 'ownership_verification_failed',
+        activity_type: 'Undo',
+        actor_uri: undoActor ?? 'unknown',
+        actor_domain: this.extractDomain(undoActor ?? 'unknown'),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason,
+        message_id: undoMessage?.id,
+        additional_context: { followId: message.id },
+      });
+
+      if (!undoActor) {
+        reject('Undo(Follow) rejected: Undo carries no actor to verify');
+        return;
+      }
+      if (undoActor !== actor) {
+        reject('Undo(Follow) rejected: Undo actor is not the actor of the Follow');
+        return;
+      }
+      if (!undoMessage?.auth_origin) {
+        reject('Undo(Follow) rejected: Undo has no verified origin');
+        return;
+      }
+      try {
+        if (new URL(undoMessage.auth_origin).host !== new URL(actor).host) {
+          reject('Undo(Follow) rejected: verified origin does not match the host of the Follow actor');
+          return;
+        }
+      }
+      catch {
+        reject('Undo(Follow) rejected: could not parse verified origin or Follow actor as URL');
+        return;
+      }
     }
 
     // Find the CalendarActorEntity for this actor
