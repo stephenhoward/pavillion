@@ -73,6 +73,31 @@ bd note <id> "..."    # Append a note (does not clobber existing notes)
 bd close <id>         # Complete work
 ```
 
+## Budget Signals
+
+When the `budget-watch` mod is loaded (`.agents/mods/budget-watch`; inert otherwise), the engine appends `[budget]` lines to the conversation. They are facts, not instructions, arriving as user-role rows nobody typed. Never reply to one; act on the bands below. Role skills (implementer, orchestrator, reviewer) refine these rules and must not restate the vocabulary.
+
+- `[budget] context N% (main)` / `[budget] context N% (agent <id>, <type>)` — this loop's own context fill, from 40% every 5%. Re-arms after compaction.
+- `[budget] session five-hour N%, resets <time>[, about N min at current rate]` and the `seven-day` twin — account-wide rate-limit windows, shared by every parallel agent and every other session on the account. The burn-rate clause is a floor on how fast the window drains, not a forecast.
+
+**Context bands (per loop):**
+- 60%: finish the current unit; start nothing that needs more than the remaining headroom. Plan the exit.
+- 75%: write the handoff (below), stop at the next clean point, report. Do not run on to auto-compact unless your role skill says compaction is acceptable for your role.
+
+**Session bands (five-hour window):**
+- Under 80%: anything may start.
+- 80–90%: only interruptible or checkpointed work starts; no new multi-step efforts.
+- Over 90%: interruptible work only, or a checkpointed unit the burn-rate clause says will finish.
+- The limit can land mid-tool-call. The defence is durable state at every unit boundary, not a reaction at the end.
+
+**Seven-day window:** 90% means write the handoff and stop. The rest is headroom for the human's own interactive use, not agent budget.
+
+**Classify work by what a cut costs:** interruptible (read-only review, lint, tests, writing notes) may run to 100%; checkpointed (WIP commit plus bead note per unit) may run past 90% when the unit fits; uncheckpointable (a fresh multi-file implementation, a new wave level) does not start past 80%.
+
+**Where handoffs live — the active bead.** The mod's resume prompt says "resume from the handoff on the active bead". The active bead is the one this session holds `in_progress` (`bd update <id> --claim`). A session working without a bead creates and claims one before it needs a handoff (`bd create --type=task` with a title naming the work). The handoff goes in the bead's notes, forward-only: every line answers "what do I do?" or "what will break me?" — no history for its own sake. `bd note` appends; `bd update --notes` replaces.
+
+`/budget` shows readings, bands and any planned resume. `/budget resume off` cancels one. The mod resumes on its own after a five-hour reset, and after a seven-day reset only when that reset is within 3 hours.
+
 ## Commit Messages
 
 - ALWAYS use conventional commit format
