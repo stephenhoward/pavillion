@@ -658,6 +658,10 @@ defineExpose({
         height: 600px;
         border: none;
         border-radius: 0.75rem;
+        // The widget document declares no root color-scheme, so it is light.
+        // An iframe whose scheme differs from its embedding element's gets an
+        // opaque canvas; matching keeps the frame transparent in dark mode.
+        color-scheme: light;
       }
     }
   }
