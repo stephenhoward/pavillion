@@ -26,10 +26,16 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
+import {
+  SOURCE_ROOT,
+  UI_ROOT,
+  UI_TEST_ROOT,
+  classify,
+  isPermittedOutsideSource,
+  parseReferences,
+  type Reference,
+} from './boundary-scanner';
 
-const SOURCE_ROOT = path.join(process.cwd(), 'src');
-const UI_ROOT = path.join(SOURCE_ROOT, 'common/ui');
-const UI_TEST_ROOT = path.join(UI_ROOT, 'test');
 const SERVER_ROOT = path.join(SOURCE_ROOT, 'server');
 
 const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.vue', '.scss'];
@@ -38,30 +44,12 @@ const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.vue', '.scss'];
 const FORBIDDEN_ROOTS = ['client', 'site', 'widget', 'server'];
 
 /**
- * Packages a module under src/common/ui may import.
- *
- * A closed list rather than a denylist, because the breach a shared
- * presentational module is likely to suffer is not `@/site/...` — a reviewer
- * catches that by eye — but pinia, axios, or an app store reached through one
- * of them. `i18next-vue` is unused today and stays listed: the `ui` i18n
- * namespace arrives in the same epic, and pruning it here would only make this
- * file the cause of that failure.
+ * Printed with every live-scan failure, so a contributor who trips the scanner
+ * while writing documentation is not left to rediscover the header note.
  */
-const ALLOWED_PACKAGES = ['vue', 'vue-router', 'luxon', 'i18next', 'i18next-vue'];
-
-/**
- * Packages this module's own tests may import on top of ALLOWED_PACKAGES.
- *
- * The subtree gets its own list rather than an exemption, so a test still can't
- * reach for pinia or an app store to stand a fixture up.
- */
-const ALLOWED_TEST_PACKAGES = ['vitest', '@vue/test-utils', 'fs', 'path'];
-
-/** Matches a script-side specifier: `from`, `import`, or a dynamic `import(`. */
-const SCRIPT_SPECIFIER = /(?:\bfrom|\bimport)\s*\(?\s*['"]([^'"]+)['"]/g;
-
-/** Matches a Sass-side specifier: `@use`, `@forward`, or `@import`. */
-const STYLE_SPECIFIER = /@(?:use|forward|import)\s+['"]([^'"]+)['"]/g;
+const COMMENTS_ARE_SCANNED = 'the scan is textual: a quoted specifier after from, import, or a Sass '
+  + 'at-rule counts even inside a comment or a string literal (write a comment example without '
+  + 'quotes, and build a test fixture through QUOTE as boundary.test.ts does)';
 
 /** Every scannable file under `dir`, recursively. */
 function sourceFiles(dir: string): string[] {
@@ -76,86 +64,9 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-/** Which half of a file a specifier was found in. */
-type Context = 'script' | 'style';
-
-interface Reference {
-  specifier: string;
-  context: Context;
-}
-
-/**
- * Every module specifier a file imports, whatever the syntax it uses, tagged
- * with the half of the file it came from.
- *
- * A `.vue` file is scanned with both patterns rather than one: its script block
- * imports the TS way and its Sass style block imports the Sass way, and the
- * style block is where this codebase does most of its `@use`. A single pattern
- * chosen by extension would read the script and go blind to the style, which is
- * the half a shared component is most likely to reach an app through.
- *
- * The context tag is what lets a Sass builtin be allowed where Sass runs and
- * nowhere else.
- */
+/** Every module specifier a file on disk imports. */
 function references(filePath: string): Reference[] {
-  const source = readFileSync(filePath, 'utf-8');
-  const extension = path.extname(filePath);
-
-  const patterns: [Context, RegExp][] = extension === '.scss'
-    ? [['style', STYLE_SPECIFIER]]
-    : extension === '.vue'
-      ? [['script', SCRIPT_SPECIFIER], ['style', STYLE_SPECIFIER]]
-      : [['script', SCRIPT_SPECIFIER]];
-
-  return patterns.flatMap(([context, pattern]) =>
-    [...source.matchAll(pattern)].map(match => ({ specifier: match[1], context })));
-}
-
-/**
- * What a specifier points at.
- *
- * A bare package specifier and a relative path that climbs out of `src/` both
- * resolve to nothing inside the source tree, but they are different claims —
- * one names a dependency, the other leaves the repo's own layout behind — and
- * each has its own rule below. Collapsing them into one "outside" answer is how
- * an escape goes silently permitted.
- */
-type Target =
-  | { kind: 'source', path: string }
-  | { kind: 'package', name: string }
-  | { kind: 'sass-builtin' }
-  | { kind: 'escape' };
-
-/** The package a specifier belongs to, ignoring any subpath. */
-function packageRoot(specifier: string): string {
-  const segments = specifier.split('/');
-
-  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
-}
-
-/**
- * Resolving relative specifiers rather than pattern-matching `../../site`
- * catches an escape however many levels deep it is spelled.
- */
-function classify(filePath: string, specifier: string): Target {
-  if (specifier.startsWith('@/')) {
-    return { kind: 'source', path: specifier.slice(2) };
-  }
-
-  if (specifier.startsWith('.')) {
-    const resolved = path.resolve(path.dirname(filePath), specifier);
-    const relative = path.relative(SOURCE_ROOT, resolved);
-
-    return relative.startsWith('..')
-      ? { kind: 'escape' }
-      : { kind: 'source', path: relative };
-  }
-
-  if (specifier.startsWith('sass:')) {
-    return { kind: 'sass-builtin' };
-  }
-
-  return { kind: 'package', name: packageRoot(specifier) };
+  return parseReferences(readFileSync(filePath, 'utf-8'), path.extname(filePath));
 }
 
 /** `file → specifier` pairs, rendered so a failure names both. */
@@ -173,42 +84,176 @@ function violations(root: string, isViolation: (target: string) => boolean): str
   });
 }
 
-/** Whether a file is one of this module's own tests. */
-function isModuleTest(filePath: string): boolean {
-  return filePath.startsWith(UI_TEST_ROOT + path.sep);
+/*
+ * The fixture blocks below drive the classifier with inline sources and
+ * made-up file paths — one case per branch — so each rule is pinned whether or
+ * not the live tree happens to exercise it. The live-scan describe below is
+ * the CI safety net over the real tree.
+ *
+ * Fixture specifiers are spliced in through QUOTE rather than written between
+ * literal quotes: this file sits under src/common/ui, so the live scan reads it
+ * too, and a literal fixture would be scanned as an import of its own.
+ */
+const QUOTE = '\'';
+
+function scriptImport(specifier: string): string {
+  return `import x from ${QUOTE}${specifier}${QUOTE};`;
 }
+
+function styleUse(specifier: string): string {
+  return `@use ${QUOTE}${specifier}${QUOTE};`;
+}
+
+/** A component three directories below src/: src/common/ui/components. */
+const COMPONENT = path.join(UI_ROOT, 'components/fixture.vue');
+
+/** A source file four directories below src/. */
+const NESTED_SOURCE = path.join(UI_ROOT, 'calendar-views/month/fixture.ts');
+
+/** A non-test file under the module, outside its test/ subtree. */
+const MODULE_SOURCE = path.join(UI_ROOT, 'composables/fixture.ts');
+
+/** One of the module's own tests. */
+const MODULE_TEST = path.join(UI_TEST_ROOT, 'fixture.test.ts');
+
+describe('src/common/ui boundary: parseReferences', () => {
+  it('reads only script specifiers in a .ts file, static and dynamic alike', () => {
+    const source = [scriptImport('vue'), `const m = import(${QUOTE}./lazy${QUOTE});`, styleUse('sass:color')].join('\n');
+
+    expect(parseReferences(source, '.ts')).toEqual([
+      { specifier: 'vue', context: 'script' },
+      { specifier: './lazy', context: 'script' },
+    ]);
+  });
+
+  it('reads only style specifiers in a .scss file', () => {
+    const source = [styleUse('sass:color'), `@forward ${QUOTE}./tokens${QUOTE};`, scriptImport('vue')].join('\n');
+
+    expect(parseReferences(source, '.scss')).toEqual([
+      { specifier: 'sass:color', context: 'style' },
+      { specifier: './tokens', context: 'style' },
+    ]);
+  });
+
+  it('reads both halves of a .vue file and tags each with its own context', () => {
+    const source = [
+      '<script setup lang="ts">',
+      scriptImport('vue'),
+      '</script>',
+      '<style scoped lang="scss">',
+      styleUse('sass:color'),
+      '</style>',
+    ].join('\n');
+
+    expect(parseReferences(source, '.vue')).toEqual([
+      { specifier: 'vue', context: 'script' },
+      { specifier: 'sass:color', context: 'style' },
+    ]);
+  });
+
+  it('reads a Sass @import in a .vue style block as style only', () => {
+    const source = ['<style scoped lang="scss">', `@import ${QUOTE}sass:math${QUOTE};`, '</style>'].join('\n');
+
+    expect(parseReferences(source, '.vue')).toEqual([{ specifier: 'sass:math', context: 'style' }]);
+  });
+
+  it('reads a specifier quoted inside a comment, failing safe', () => {
+    expect(parseReferences(`// e.g. ${scriptImport('pinia')}`, '.ts'))
+      .toEqual([{ specifier: 'pinia', context: 'script' }]);
+  });
+});
+
+describe('src/common/ui boundary: classify', () => {
+  it('reads an @/ alias as a path inside src/', () => {
+    expect(classify(COMPONENT, '@/site/stores/x')).toEqual({ kind: 'source', path: 'site/stores/x' });
+  });
+
+  it('resolves a relative specifier into src/ however it is spelled', () => {
+    expect(classify(COMPONENT, '../../../site/stores/x')).toEqual({ kind: 'source', path: 'site/stores/x' });
+  });
+
+  it('treats a climb that lands exactly on src/ as source, not an escape', () => {
+    expect(classify(COMPONENT, '../../..')).toEqual({ kind: 'source', path: '' });
+    expect(classify(NESTED_SOURCE, '../../../..')).toEqual({ kind: 'source', path: '' });
+  });
+
+  it('flags a climb one level past src/ as an escape, at any depth', () => {
+    expect(classify(COMPONENT, '../../../../package.json')).toEqual({ kind: 'escape' });
+    expect(classify(COMPONENT, '../../../../../outside')).toEqual({ kind: 'escape' });
+    expect(classify(NESTED_SOURCE, '../../../../../package.json')).toEqual({ kind: 'escape' });
+  });
+
+  it('separates a Sass builtin from a package', () => {
+    expect(classify(COMPONENT, 'sass:color')).toEqual({ kind: 'sass-builtin' });
+  });
+
+  it('names a package by its root, scoped or not, ignoring any subpath', () => {
+    expect(classify(COMPONENT, 'luxon/src/datetime')).toEqual({ kind: 'package', name: 'luxon' });
+    expect(classify(COMPONENT, '@vue/test-utils/dist/x')).toEqual({ kind: 'package', name: '@vue/test-utils' });
+  });
+});
+
+describe('src/common/ui boundary: isPermittedOutsideSource', () => {
+  const script = (specifier: string): Reference => ({ specifier, context: 'script' });
+  const style = (specifier: string): Reference => ({ specifier, context: 'style' });
+
+  it('permits an allowlisted package', () => {
+    expect(isPermittedOutsideSource(COMPONENT, script('vue'))).toBe(true);
+    expect(isPermittedOutsideSource(COMPONENT, script('i18next-vue'))).toBe(true);
+  });
+
+  it('rejects a package outside the allowlist', () => {
+    expect(isPermittedOutsideSource(COMPONENT, script('axios'))).toBe(false);
+    expect(isPermittedOutsideSource(COMPONENT, script('pinia'))).toBe(false);
+  });
+
+  it('permits a Sass builtin in a style context', () => {
+    expect(isPermittedOutsideSource(COMPONENT, style('sass:color'))).toBe(true);
+  });
+
+  it('rejects a Sass builtin in a script context', () => {
+    expect(isPermittedOutsideSource(COMPONENT, script('sass:color'))).toBe(false);
+  });
+
+  it('leaves a climb that lands on src/ to the app-root assertion', () => {
+    expect(isPermittedOutsideSource(COMPONENT, script('../../..'))).toBe(true);
+  });
+
+  it('rejects a relative escape above src/, whatever the context', () => {
+    expect(isPermittedOutsideSource(COMPONENT, script('../../../../package.json'))).toBe(false);
+    expect(isPermittedOutsideSource(COMPONENT, style('../../../../node_modules/x'))).toBe(false);
+  });
+
+  it('permits a test-only package inside the module test subtree', () => {
+    expect(isPermittedOutsideSource(MODULE_TEST, script('vitest'))).toBe(true);
+    expect(isPermittedOutsideSource(MODULE_TEST, script('@vue/test-utils'))).toBe(true);
+  });
+
+  it('rejects a test-only package outside the module test subtree', () => {
+    expect(isPermittedOutsideSource(MODULE_SOURCE, script('vitest'))).toBe(false);
+    expect(isPermittedOutsideSource(path.join(UI_ROOT, 'testing/fixture.ts'), script('fs'))).toBe(false);
+  });
+
+  it('still rejects an unlisted package inside the module test subtree', () => {
+    expect(isPermittedOutsideSource(MODULE_TEST, script('pinia'))).toBe(false);
+  });
+});
 
 /**
- * Whether a reference that leaves the source tree is one the README permits.
- *
- * A `source` target is not this assertion's business — the app-root assertion
- * above already judges it.
+ * CI safety net: the same rules run against the real src/common/ui and
+ * src/server trees. Kept apart from the fixture blocks above, which are what
+ * pin each branch; this is what catches a real violation landing.
  */
-function isPermittedOutsideSource(filePath: string, reference: Reference): boolean {
-  const target = classify(filePath, reference.specifier);
-
-  switch (target.kind) {
-    case 'source':
-      return true;
-    case 'escape':
-      return false;
-    case 'sass-builtin':
-      return reference.context === 'style';
-    case 'package':
-      return ALLOWED_PACKAGES.includes(target.name)
-        || (isModuleTest(filePath) && ALLOWED_TEST_PACKAGES.includes(target.name));
-  }
-}
-
-describe('src/common/ui boundary', () => {
+describe('src/common/ui boundary: live scan (CI safety net)', () => {
   it('imports nothing from a single frontend app or from the server', () => {
     const forbidden = new RegExp(`^(${FORBIDDEN_ROOTS.join('|')})(/|$)`);
 
-    expect(violations(UI_ROOT, target => forbidden.test(target))).toEqual([]);
+    expect(violations(UI_ROOT, target => forbidden.test(target)), COMMENTS_ARE_SCANNED).toEqual([]);
   });
 
   it('is never imported by the server', () => {
-    expect(violations(SERVER_ROOT, target => /^common\/ui(\/|$)/.test(target))).toEqual([]);
+    expect(violations(SERVER_ROOT, target => /^common\/ui(\/|$)/.test(target)), COMMENTS_ARE_SCANNED)
+      .toEqual([]);
   });
 
   it('imports no package outside the declared allowlist', () => {
@@ -220,7 +265,7 @@ describe('src/common/ui boundary', () => {
         .map(({ specifier }) => `${relativeFile} -> ${specifier}`);
     });
 
-    expect(offenders).toEqual([]);
+    expect(offenders, COMMENTS_ARE_SCANNED).toEqual([]);
   });
 });
 
