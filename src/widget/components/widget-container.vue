@@ -160,32 +160,19 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  background: $public-bg-primary-light;
-  color: $public-text-primary-light;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    color: $public-text-primary-dark;
-  }
+  background: var(--pav-surface-primary);
+  color: var(--pav-text-primary);
 }
 
 header {
   padding: $public-space-md;
-  border-bottom: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-bottom-color: $public-border-subtle-dark;
-  }
+  border-bottom: 1px solid var(--pav-border-subtle);
 
   .calendar-title {
     font-size: $public-font-size-lg;
     font-weight: $public-font-weight-light;
     margin: 0 0 $public-space-md 0;
-    color: $public-text-primary-light;
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
+    color: var(--pav-text-primary);
 
     @include public-mobile-only {
       font-size: $public-font-size-md;

@@ -28,23 +28,15 @@ const { t } = useTranslation('system');
   h1 {
     font-size: $public-font-size-2xl;
     font-weight: $public-font-weight-semibold;
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
     margin: 0 0 $public-space-md 0;
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
   }
 
   p {
     font-size: $public-font-size-md;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     margin: 0 0 $public-space-xl 0;
     line-height: $public-line-height-relaxed;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-    }
   }
 
   .not-found-home-link {

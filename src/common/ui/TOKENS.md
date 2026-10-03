@@ -14,7 +14,7 @@ In the widget, `.widget-root` owns the token layer because it is also where `wid
 
 ### Naming rule
 
-Where the client's theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and the shadow scale in `tokens/_shadows.scss`) has a token of the same meaning, the client's name wins. A public base with no client counterpart keeps its own name under the `--pav-` prefix.
+Where the client's theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and the shadow scale in `tokens/_shadows.scss`) has a token of the same meaning, the client's name wins. A public base with no client counterpart keeps its own name under the `--pav-` prefix. The rule compares against the theme tier only — the semantic tokens those files declare — not the `--pav-color-*` palette primitives beneath them, which is why `--pav-accent` and `--pav-success` keep public names here even though the Client section below maps them onto palette values.
 
 | `$public-*` base | Token | Name source |
 |---|---|---|

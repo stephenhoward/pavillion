@@ -477,7 +477,7 @@ const FORCED_MODE_DIRECTIONS: { colorMode: Theme; osScheme: Theme }[] = [
 ];
 
 for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
-  test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, empty state and not-found`, async ({ page, browser }) => {
+  test(`color mode "${colorMode}" on a ${osScheme} OS reaches footer, filters, date popover, event detail, empty state and not-found`, async ({ page, browser }) => {
     // The mitown-climate repro accent, so the date controls' selected fill
     // can be told apart from the default orange (pv-b7gp).
     const ACCENT = '#669c35';
@@ -565,6 +565,14 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
         { timeout: 15000, intervals: [200, 500, 1000] },
       ).toBe(ACCENT_RGB);
       await categoryPill.click();
+    });
+
+    await test.step('event detail: overlay surface and back link', async () => {
+      await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
+      await iframe.locator('.list-view .event-title-link').first().click();
+      await expect(iframe.locator('.instance-back-header .back-link')).toBeVisible({ timeout: 20000 });
+      await expectColorSide(iframe, '.event-detail-overlay', 'backgroundColor', colorMode);
+      await expectThemedText(iframe, '.instance-back-header .back-link', colorMode);
     });
 
     await test.step('list view: shared EmptyState when there are no events', async () => {

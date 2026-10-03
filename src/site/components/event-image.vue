@@ -195,12 +195,8 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   overflow: hidden;
-  background-color: $public-bg-tertiary-light;
+  background-color: var(--pav-surface-tertiary);
   border-radius: $public-radius-md;
-
-  @include public-dark-mode {
-    background-color: $public-bg-tertiary-dark;
-  }
 
   .image-content {
     position: absolute;
@@ -224,6 +220,7 @@ onUnmounted(() => {
     pointer-events: none;
     box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
 
+    // No token carries the inset vignette; it deepens in dark mode.
     @include public-dark-mode {
       box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.15);
     }
@@ -241,11 +238,7 @@ onUnmounted(() => {
 .context-card {
   height: 100%;
   border-radius: $public-radius-sm;
-  box-shadow: $public-shadow-xs-light;
-
-  @include public-dark-mode {
-    box-shadow: $public-shadow-xs-dark;
-  }
+  box-shadow: var(--pav-shadow-xs);
 
   .image-content {
     border-radius: $public-radius-sm;
@@ -271,12 +264,8 @@ onUnmounted(() => {
 .context-hero {
   aspect-ratio: 16 / 9;
   border-radius: $public-radius-lg;
-  box-shadow: $public-shadow-md-light;
+  box-shadow: var(--pav-shadow-md);
   max-height: 400px;
-
-  @include public-dark-mode {
-    box-shadow: $public-shadow-md-dark;
-  }
 
   .image-content {
     border-radius: $public-radius-lg;
@@ -286,6 +275,7 @@ onUnmounted(() => {
     border-radius: $public-radius-lg;
     box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.08);
 
+    // No token carries the inset vignette; it deepens in dark mode.
     @include public-dark-mode {
       box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.2);
     }
@@ -304,12 +294,8 @@ onUnmounted(() => {
 .context-feature {
   aspect-ratio: 2 / 1;
   border-radius: $public-radius-xl;
-  box-shadow: $public-shadow-lg-light;
+  box-shadow: var(--pav-shadow-lg);
   max-height: 480px;
-
-  @include public-dark-mode {
-    box-shadow: $public-shadow-lg-dark;
-  }
 
   .image-content {
     border-radius: $public-radius-xl;
@@ -319,6 +305,7 @@ onUnmounted(() => {
     border-radius: $public-radius-xl;
     box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.1);
 
+    // No token carries the inset vignette; it deepens in dark mode.
     @include public-dark-mode {
       box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.25);
     }

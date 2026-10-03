@@ -72,7 +72,7 @@
   /* Shared-component tokens. Names the site and widget declare that the
      client's own components do not use; declared here so a component from
      src/common/ui renders in the client too. Each maps onto an existing client
-     value — see "Where the client declares them" in src/common/ui/TOKENS.md.
+     value — see the "Client" section of src/common/ui/TOKENS.md.
      Dark variants in _dark.scss. */
   --pav-accent: var(--pav-color-interactive-primary);
   --pav-accent-hover: var(--pav-color-interactive-primary-hover);

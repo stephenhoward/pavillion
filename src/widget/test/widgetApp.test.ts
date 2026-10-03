@@ -6,23 +6,18 @@ import { useWidgetStore } from '../stores/widgetStore';
 import { WIDGET_CONFIG_DEFAULTS } from '@/common/model/widget_config';
 
 /**
- * Build a fake MediaQueryList whose `matches` value is fixed and whose
- * addEventListener/removeEventListener are spy-able. Mirrors the pattern
+ * Build a fake MediaQueryList whose `matches` value is fixed. Mirrors the pattern
  * established in widgetStore.test.ts (pv-16wd.1.2) so all widget tests
  * share a single matchMedia mocking approach.
  */
 function mockMatchMedia(matches: boolean) {
-  const addSpy = vi.fn();
-  const removeSpy = vi.fn();
   const fakeMQL: Partial<MediaQueryList> = {
     matches,
     media: '(prefers-color-scheme: dark)',
-    addEventListener: addSpy as unknown as MediaQueryList['addEventListener'],
-    removeEventListener: removeSpy as unknown as MediaQueryList['removeEventListener'],
   };
   const matchMediaSpy = vi.fn().mockReturnValue(fakeMQL);
   vi.stubGlobal('matchMedia', matchMediaSpy);
-  return { addSpy, removeSpy, matchMediaSpy };
+  return { matchMediaSpy };
 }
 
 describe('Widget App Infrastructure', () => {
