@@ -17,7 +17,7 @@ import { AccountEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
-import { isReservedRouteSegment, RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
+import { classifyReservedRouteSegment, type ReservedRouteSegmentReason } from '@/common/routing/reserved-segments';
 import { calendarPath } from '@/common/routing/public-paths';
 import { ValidationError } from '@/common/exceptions/base';
 import { MediaNotFoundError } from '@/common/exceptions/media';
@@ -417,18 +417,12 @@ class CalendarService {
    * break every existing link to it.
    *
    * Stored url names are already percent-decoded and charset-constrained, which
-   * satisfies the precondition of {@link isReservedRouteSegment}; it folds case,
-   * so a row stored as 'Admin' is reported too.
+   * satisfies the precondition of {@link classifyReservedRouteSegment}; it folds
+   * case, so a row stored as 'Admin' is reported too.
    *
-   * Each collision carries why it is reserved, so the caller logs the reason
-   * rather than re-deriving it. The preceding filter guarantees every url name
-   * reaching the classifier satisfies at least one disjunct, so the two-way
-   * split is exhaustive by construction and either branch order would do. It
-   * lives here rather than in the startup caller for locality: this module
-   * already imports both `isReservedRouteSegment` and `RESERVED_ROUTE_SEGMENTS`
-   * from the file that owns them, so whoever adds a third disjunct is likely to
-   * see this method. That leaves the split with two implementations — here and
-   * inside `isReservedRouteSegment` — tracked as pv-8f9u.
+   * Each collision's reason comes straight from `classifyReservedRouteSegment`,
+   * the single implementation of the reserved/locale split, so the caller logs
+   * the reason rather than re-deriving it.
    *
    * @returns The collisions in ascending url-name order; empty when none collide
    */
@@ -438,15 +432,11 @@ class CalendarService {
       order: [['url_name', 'ASC']],
     });
 
-    return calendars
-      .map(calendar => calendar.url_name)
-      .filter(urlName => isReservedRouteSegment(urlName))
-      .map(urlName => ({
-        urlName,
-        reason: RESERVED_ROUTE_SEGMENTS.includes(urlName.toLowerCase())
-          ? 'reserved_segment' as const
-          : 'locale_code' as const,
-      }));
+    return calendars.flatMap(({ url_name: urlName }) => {
+      const reason = classifyReservedRouteSegment(urlName);
+
+      return reason ? [{ urlName, reason }] : [];
+    });
   }
 
   /**
@@ -2283,7 +2273,7 @@ export interface AdminCalendarRow {
  */
 export interface ReservedUrlNameCollision {
   urlName: string;
-  reason: 'reserved_segment' | 'locale_code';
+  reason: ReservedRouteSegmentReason;
 }
 
 export interface AdminCalendarListResult {
