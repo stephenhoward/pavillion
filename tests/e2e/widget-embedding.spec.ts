@@ -414,7 +414,7 @@ test.describe('Widget Embedding', () => {
     // A search with no matches empties the list; the frame must follow the
     // content down rather than hold its previous height.
     await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
-    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect(iframe.locator('.list-view .ui-empty-state')).toBeVisible({ timeout: 10000 });
     await expect.poll(() => frameHeight(page), { timeout: 10000 }).toBeLessThan(fullHeight - 100);
     await expectDocumentFitsFrame(page);
   });
@@ -477,7 +477,7 @@ test.describe('Widget Embedding', () => {
     // The popover is absolutely positioned, so it adds nothing to the height
     // the widget reports; with the frame at its shortest it must still fit.
     await iframe.locator('#public-event-search').fill('zzqxnomatchzzqx');
-    await expect(iframe.locator('.empty-state')).toBeVisible({ timeout: 10000 });
+    await expect(iframe.locator('.list-view .ui-empty-state')).toBeVisible({ timeout: 10000 });
     await expect.poll(
       () => frameElement.evaluate((el) => el.getBoundingClientRect().height),
       { timeout: 10000 },
