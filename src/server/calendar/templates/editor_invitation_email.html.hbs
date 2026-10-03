@@ -89,7 +89,6 @@
                 <strong>{{t 'what_this_means'}}</strong>
             </div>
             
-            {{#if isNewUser}}
             <p>{{t 'new_user_instructions'}}</p>
             
             <p style="text-align: center;">
@@ -99,15 +98,6 @@
             </p>
             
             <p><small>{{t 'new_user_expiry_notice'}}</small></p>
-            {{else}}
-            <p>{{t 'existing_user_instructions'}}</p>
-            
-            <p style="text-align: center;">
-                <a href="{{calendarUrl}}" class="button">
-                    {{t 'view_calendar_button'}}
-                </a>
-            </p>
-            {{/if}}
             
             <p>{{t 'signature'}}<br>{{inviterName}}</p>
         </div>
