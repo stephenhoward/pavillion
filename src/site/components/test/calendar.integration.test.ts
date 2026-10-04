@@ -806,3 +806,189 @@ describe('calendar.vue - Locale-aware day group headings', () => {
     expect(heading).toContain('marzo');
   });
 });
+
+describe('calendar.vue - calendar views', () => {
+  let pinia;
+  let router;
+  let mockCalendar: Calendar;
+
+  /** The query strings of every events request made so far. */
+  function eventFetches(): URLSearchParams[] {
+    return vi.mocked(ModelService.listModels).mock.calls
+      .map(([url]) => url as string)
+      .filter(url => url.includes('/events'))
+      .map(url => new URLSearchParams(url.split('?')[1] ?? ''));
+  }
+
+  async function mountAt(query: Record<string, string | string[]>) {
+    await router.push({ path: '/test-calendar', query });
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          NotFound: true,
+          CategoryPillSelector: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    return wrapper;
+  }
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+
+    mockCalendar = new Calendar('calendar-123', 'test-calendar');
+    const content = new CalendarContent('en');
+    content.name = 'Test Calendar';
+    mockCalendar.addContent(content);
+
+    router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:calendar', name: 'calendar', component: calendar }],
+    });
+
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('opens on the list, with the list markup and date controls', async () => {
+    const wrapper = await mountAt({});
+
+    expect(wrapper.find('.month-view').exists()).toBe(false);
+    expect(wrapper.find('.week-view').exists()).toBe(false);
+    expect(wrapper.find('.date-range-section').exists()).toBe(true);
+    expect(wrapper.find('[role="radio"][aria-checked="true"]').text()).toBe('view_list');
+  });
+
+  it('fetches a deep-linked month once, for the month window', async () => {
+    const wrapper = await mountAt({ view: 'month', date: '2026-03-15' });
+
+    const fetches = eventFetches();
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0].get('startDate')).toBe('2026-03-01');
+    expect(fetches[0].get('endDate')).toBe('2026-03-31');
+
+    expect(wrapper.find('.month-view').exists()).toBe(true);
+    expect(wrapper.find('.events-container').exists()).toBe(false);
+    expect(wrapper.find('.date-range-section').exists()).toBe(false);
+    expect(wrapper.find('.ui-view-toolbar__label').text()).toBe('March 2026');
+  });
+
+  it('switches from a filtered list to the month with one fetch, leaving the list filter alone', async () => {
+    const wrapper = await mountAt({ startDate: '2026-03-10', endDate: '2026-03-12' });
+    const store = usePublicCalendarStore();
+    vi.mocked(ModelService.listModels).mockClear();
+
+    const monthRadio = wrapper.findAll('[role="radio"]').find(radio => radio.text() === 'view_month');
+    await monthRadio!.trigger('click');
+    await flushPromises();
+
+    const fetches = eventFetches();
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0].get('startDate')).toBe('2026-03-01');
+    expect(fetches[0].get('endDate')).toBe('2026-03-31');
+
+    expect(router.currentRoute.value.query).toEqual({
+      startDate: '2026-03-10',
+      endDate: '2026-03-12',
+      view: 'month',
+      date: '2026-03-10',
+    });
+    expect(store.startDate).toBe('2026-03-10');
+    expect(store.endDate).toBe('2026-03-12');
+  });
+
+  it('makes one fetch per period step', async () => {
+    const wrapper = await mountAt({ view: 'month', date: '2026-03-15' });
+    vi.mocked(ModelService.listModels).mockClear();
+
+    await wrapper.find('.ui-view-toolbar__step--next').trigger('click');
+    await flushPromises();
+
+    const fetches = eventFetches();
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0].get('startDate')).toBe('2026-04-01');
+    expect(fetches[0].get('endDate')).toBe('2026-04-30');
+    expect(router.currentRoute.value.query.date).toBe('2026-04-15');
+  });
+
+  it('does not write the month window into the list filter keys on a search', async () => {
+    const wrapper = await mountAt({ view: 'month', date: '2026-03-15' });
+
+    await wrapper.find('input[type="text"]').setValue('concert');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    await flushPromises();
+
+    expect(router.currentRoute.value.query).toEqual({
+      view: 'month',
+      date: '2026-03-15',
+      search: 'concert',
+    });
+  });
+
+  it('restores the list filter when returning from the month to the list', async () => {
+    const wrapper = await mountAt({
+      view: 'month',
+      date: '2026-03-15',
+      startDate: '2026-02-01',
+      endDate: '2026-02-07',
+    });
+    vi.mocked(ModelService.listModels).mockClear();
+
+    const listRadio = wrapper.findAll('[role="radio"]').find(radio => radio.text() === 'view_list');
+    await listRadio!.trigger('click');
+    await flushPromises();
+
+    const fetches = eventFetches();
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0].get('startDate')).toBe('2026-02-01');
+    expect(fetches[0].get('endDate')).toBe('2026-02-07');
+    expect(router.currentRoute.value.query).toEqual({ startDate: '2026-02-01', endDate: '2026-02-07' });
+    expect(wrapper.find('.date-range-section').exists()).toBe(true);
+  });
+
+  it('links a day number to the list filtered to that day, keeping other filters', async () => {
+    const wrapper = await mountAt({ view: 'month', date: '2026-03-15', search: 'concert' });
+
+    const dayLink = wrapper.find('a.day-number[aria-label*="March 4"]');
+    const href = new URL(dayLink.attributes('href')!, 'http://localhost');
+
+    expect(href.pathname).toBe('/test-calendar');
+    expect(Object.fromEntries(href.searchParams)).toEqual({
+      search: 'concert',
+      startDate: '2026-03-04',
+      endDate: '2026-03-04',
+    });
+  });
+
+  it('shows filtered events from the store in the week grid', async () => {
+    const wrapper = await mountAt({ view: 'week', date: '2026-03-15' });
+    const store = usePublicCalendarStore();
+
+    const event = new CalendarEvent('event-1', 'calendar-123');
+    const content = new CalendarEventContent('en');
+    content.name = 'Spring Concert';
+    event.addContent(content);
+    const instance = new CalendarEventInstance(
+      'instance-1',
+      event,
+      DateTime.fromISO('2026-03-17T19:00:00'),
+      DateTime.fromISO('2026-03-17T21:00:00'),
+    );
+    store.allEvents = [instance];
+    await flushPromises();
+
+    const chip = wrapper.find('.week-view a.event-item');
+    expect(chip.text()).toContain('Spring Concert');
+    expect(chip.attributes('href')).toMatch(/^\/test-calendar\/events\/event-1\//);
+  });
+});

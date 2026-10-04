@@ -7,6 +7,28 @@ import type { Media } from '@/common/model/media';
 import ModelService from '@/client/service/models';
 import CalendarService from '@/site/service/calendar';
 
+/**
+ * The period a week or month view is showing, as local ISO dates (inclusive).
+ *
+ * Held apart from the list filter's `startDate` / `endDate` so that showing a
+ * week or month never overwrites the visitor's list filter. See the precedence
+ * rule in `@/common/routing/calendar-view-query`.
+ */
+export interface ViewWindow {
+  startDate: string;
+  endDate: string;
+}
+
+/*
+ * Request sequence numbers for the two fetches. Overlapping reloads (rapid
+ * prev/next, or a link that changes both the view window and the list filter)
+ * can resolve out of order; only the most recently started request of each
+ * kind may write its result, so a late earlier response never overwrites a
+ * later period's events.
+ */
+let latestEventsRequest = 0;
+let latestCategoriesRequest = 0;
+
 export interface PublicCalendarState {
   // Calendar data
   currentCalendarUrlName: string | null;
@@ -39,6 +61,9 @@ export interface PublicCalendarState {
   // Date range filtering
   startDate: string | null;
   endDate: string | null;
+
+  // The week or month view's period; null while a list is shown
+  viewWindow: ViewWindow | null;
 
   // Event data
   allEvents: CalendarEventInstance[];
@@ -79,6 +104,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     searchQuery: '',
     startDate: null,
     endDate: null,
+    viewWindow: null,
     allEvents: [],
     filteredEvents: [],
     isLoadingCategories: false,
@@ -276,6 +302,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         this.setCurrentCalendar(calendarUrlName);
       }
 
+      const requestId = ++latestCategoriesRequest;
       this.isLoadingCategories = true;
       this.categoryError = null;
 
@@ -301,6 +328,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         }
 
         const categoriesData = await ModelService.listModels(url);
+        if (requestId !== latestCategoriesRequest) {
+          return;
+        }
 
         this.availableCategories = categoriesData.items.map(categoryData =>
           EventCategory.fromObject(categoryData),
@@ -308,12 +338,17 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         this.hasLoadedCategories = true;
       }
       catch (error) {
+        if (requestId !== latestCategoriesRequest) {
+          return;
+        }
         console.error('Error loading categories:', error);
         this.categoryError = 'Failed to load categories';
         this.availableCategories = [];
       }
       finally {
-        this.isLoadingCategories = false;
+        if (requestId === latestCategoriesRequest) {
+          this.isLoadingCategories = false;
+        }
       }
     },
 
@@ -325,6 +360,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         this.setCurrentCalendar(calendarUrlName);
       }
 
+      const requestId = ++latestEventsRequest;
       this.isLoadingEvents = true;
       this.eventError = null;
 
@@ -356,19 +392,27 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         }
 
         const eventsData = await ModelService.listModels(url);
+        if (requestId !== latestEventsRequest) {
+          return;
+        }
 
         this.allEvents = eventsData.items.map(eventData =>
           CalendarEventInstance.fromObject(eventData),
         );
       }
       catch (error) {
+        if (requestId !== latestEventsRequest) {
+          return;
+        }
         console.error('Error loading events:', error);
         this.eventError = 'Failed to load events';
         this.allEvents = [];
       }
       finally {
-        this.isLoadingEvents = false;
-        this.hasLoadedEvents = true;
+        if (requestId === latestEventsRequest) {
+          this.isLoadingEvents = false;
+          this.hasLoadedEvents = true;
+        }
       }
     },
 
@@ -416,7 +460,19 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Clear all filters (search, categories, and date range)
+     * Set the period a week or month view is showing, or clear it (both null)
+     * when a list is shown. Never touches the list filter's startDate/endDate;
+     * reloadWithFilters() prefers this window over them while it is set.
+     */
+    setViewWindow(start: string | null, end: string | null) {
+      this.viewWindow = start !== null && end !== null
+        ? { startDate: start, endDate: end }
+        : null;
+    },
+
+    /**
+     * Clear all filters (search, categories, and date range). The view window
+     * is not a filter and is left alone.
      */
     clearAllFilters() {
       this.searchQuery = '';
@@ -437,6 +493,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Clear all state
      */
     clearAll() {
+      // viewWindow is left alone: it belongs to the view the page is showing
+      // (calendar.vue sets it during setup, before the calendar is selected),
+      // not to the calendar being switched away from.
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
       // Nulls the default event image too — it is a getter over this calendar.
       this.currentCalendar = null;
@@ -465,8 +524,10 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Categories are NOT reloaded with selectedCategoryIds — category
      * presence must be independent of the user's category selection.
      *
-     * When the user has not picked an explicit date filter, both branches
-     * fall back to the calendar's default date window. Without this, the
+     * The date range is the view window while a week or month is shown, else
+     * the list filter's startDate/endDate. When the user has not picked an
+     * explicit date filter, both branches fall back to the calendar's default
+     * date window. Without this, the
      * categories endpoint would count events across all time on initial
      * load and every pill would render as "active" even when the default
      * window contains no events for some categories.
@@ -474,8 +535,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     async reloadWithFilters() {
       if (this.currentCalendarUrlName) {
         const defaultRange = getDefaultDateRange(this.calendarDefaultDateRange);
-        const effectiveStartDate = this.startDate ?? defaultRange.startDate;
-        const effectiveEndDate = this.endDate ?? defaultRange.endDate;
+        const effectiveStartDate = this.viewWindow?.startDate ?? this.startDate ?? defaultRange.startDate;
+        const effectiveEndDate = this.viewWindow?.endDate ?? this.endDate ?? defaultRange.endDate;
 
         const filters: FilterOptions = {
           startDate: effectiveStartDate,

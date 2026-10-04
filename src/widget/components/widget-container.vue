@@ -127,7 +127,7 @@ onUnmounted(() => {
   <div v-else class="widget-container">
     <header v-if="state.calendar">
       <!-- Search and Filter Component -->
-      <SearchFilterPublic :widget-view-mode="widgetStore.viewMode" />
+      <SearchFilterPublic :view-mode="widgetStore.viewMode" />
     </header>
 
     <main

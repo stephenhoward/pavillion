@@ -415,6 +415,99 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
     });
   });
 
+  describe('view window', () => {
+    beforeEach(() => {
+      store.currentCalendarUrlName = 'test-calendar';
+      vi.mocked(ModelService.listModels).mockResolvedValue({ items: [] } as any);
+    });
+
+    it('fetches the view window in preference to the list filter dates', async () => {
+      store.setDateRange('2025-11-15', '2025-11-21');
+      store.setViewWindow('2025-12-01', '2025-12-31');
+
+      const loadEventsSpy = vi.spyOn(store, 'loadEvents');
+      const loadCategoriesSpy = vi.spyOn(store, 'loadCategories');
+
+      await store.reloadWithFilters();
+
+      expect(loadEventsSpy).toHaveBeenCalledWith('test-calendar', {
+        startDate: '2025-12-01',
+        endDate: '2025-12-31',
+      });
+      expect(loadCategoriesSpy).toHaveBeenCalledWith('test-calendar', {
+        startDate: '2025-12-01',
+        endDate: '2025-12-31',
+      });
+    });
+
+    it('never writes the view window into the list filter dates', () => {
+      store.setDateRange('2025-11-15', '2025-11-21');
+
+      store.setViewWindow('2025-12-01', '2025-12-31');
+
+      expect(store.startDate).toBe('2025-11-15');
+      expect(store.endDate).toBe('2025-11-21');
+      expect(store.hasOnlyDateFilters).toBe(true);
+    });
+
+    it('returns to the list filter dates once the view window is cleared', async () => {
+      store.setDateRange('2025-11-15', '2025-11-21');
+      store.setViewWindow('2025-12-01', '2025-12-31');
+      store.setViewWindow(null, null);
+
+      const loadEventsSpy = vi.spyOn(store, 'loadEvents');
+
+      await store.reloadWithFilters();
+
+      expect(store.viewWindow).toBeNull();
+      expect(loadEventsSpy).toHaveBeenCalledWith('test-calendar', {
+        startDate: '2025-11-15',
+        endDate: '2025-11-21',
+      });
+    });
+
+    it('survives clearing filters and switching calendars', () => {
+      store.setViewWindow('2025-12-01', '2025-12-31');
+
+      store.clearAllFilters();
+      store.setCurrentCalendar('another-calendar');
+
+      expect(store.viewWindow).toEqual({ startDate: '2025-12-01', endDate: '2025-12-31' });
+    });
+  });
+
+  describe('overlapping reloads', () => {
+    it('keeps the events of the most recently started reload when an earlier one resolves last', async () => {
+      store.currentCalendarUrlName = 'test-calendar';
+
+      const resolvers: Array<(value: any) => void> = [];
+      vi.mocked(ModelService.listModels).mockImplementation((url: string) => {
+        if (url.includes('/categories')) {
+          return Promise.resolve({ items: [] } as any);
+        }
+        return new Promise(resolve => resolvers.push(resolve));
+      });
+
+      const instanceData = (id: string) => ({
+        id,
+        start: DateTime.fromISO('2025-12-01T10:00:00').toISO(),
+        end: DateTime.fromISO('2025-12-01T11:00:00').toISO(),
+        event: { id: `event-${id}`, calendarId: 'calendar-1', content: {} },
+      });
+
+      const first = store.reloadWithFilters();
+      const second = store.reloadWithFilters();
+
+      resolvers[1]({ items: [instanceData('newer')] });
+      await second;
+      resolvers[0]({ items: [instanceData('older')] });
+      await first;
+
+      expect(store.allEvents.map(instance => instance.id)).toEqual(['newer']);
+      expect(store.isLoadingEvents).toBe(false);
+    });
+  });
+
   describe('getFilteredEventsByDay', () => {
     /**
      * Build a minimal CalendarEventInstance with a Luxon DateTime that carries

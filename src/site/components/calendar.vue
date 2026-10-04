@@ -1,9 +1,25 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, computed, inject } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { reactive, onBeforeMount, onMounted, computed, inject, ref, watch } from 'vue';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import type Config from '@/client/service/config';
+import type { CalendarViewMode } from '@/common/model/calendar_view';
+import type CalendarEventInstance from '@/common/model/event_instance';
+import {
+  DATE_QUERY_KEY,
+  LIST_END_DATE_QUERY_KEY,
+  LIST_START_DATE_QUERY_KEY,
+  VIEW_QUERY_KEY,
+  calendarViewQuery,
+} from '@/common/routing/calendar-view-query';
+import { calendarPath, eventPath } from '@/common/routing/public-paths';
+import { CalendarViewToolbar, MonthView, WeekView } from '@/common/ui/calendar-views';
+import { periodLabel } from '@/common/ui/calendar-views/calendar-grid';
+import { useCalendarViewState } from '@/common/ui/calendar-views/useCalendarViewState';
+import { useCalendarWindowSync } from '@/common/ui/calendar-views/useCalendarWindowSync';
+import { useContainerWidth } from '@/common/ui/composables/useContainerWidth';
+import { formatInstanceSlug } from '@/common/utils/instance-slug';
 
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
@@ -18,7 +34,7 @@ const route = useRoute();
 const router = useRouter();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
-const { currentLocale } = useLocale();
+const { currentLocale, localizedPath } = useLocale();
 const { localizedContent } = useLocalizedContent();
 
 const state = reactive({
@@ -38,13 +54,106 @@ const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
 const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
 const defaultEventImage = computed(() => publicCalendarStore.defaultEventImage);
 
+// ----------------------------------------------------------------
+// Calendar view (list / week / month)
+// ----------------------------------------------------------------
+
+// The site has no owner-configured starting view: it always opens on the list.
+const defaultView = computed<CalendarViewMode>(() => 'list');
+
+const root = ref<HTMLElement | null>(null);
+const { tier, width } = useContainerWidth(root);
+
+const {
+  effectiveViewMode,
+  anchorDate,
+  window: fetchWindow,
+  availableViews,
+  setView,
+  goPrev,
+  goNext,
+  goToday,
+  setTier,
+} = useCalendarViewState({ defaultView });
+
+// Forward the tier only once the root has been measured. Before mount the
+// width reads 0 (tier `narrow`); passing that on would collapse a deep-linked
+// week or month to the list during setup, so the first fetch would be the
+// list's range and the measured tier would immediately fetch again. Until
+// measured, the view state keeps its `wide` starting tier and the URL's view.
+watch([tier, width], ([nextTier, nextWidth]) => {
+  if (nextWidth > 0) {
+    setTier(nextTier);
+  }
+}, { immediate: true });
+
+// The view window outlives this component in the store (back-navigation keeps
+// it); start from none so a list URL never fetches a previous visit's month.
+publicCalendarStore.setViewWindow(null, null);
+
+// The first fetch belongs to the existing mount sequence: SearchFilterPublic
+// reloads on mount (or once calendar settings load), by which point the window
+// sync below has already set the view window during setup. Reloading from the
+// sync before then would fetch twice — or fetch a previously viewed calendar,
+// since this calendar is only selected in onBeforeMount.
+let isMounted = false;
+onMounted(() => {
+  isMounted = true;
+});
+
+useCalendarWindowSync(fetchWindow, {
+  setViewWindow: (start, end) => publicCalendarStore.setViewWindow(start, end),
+  reloadWithFilters: () => {
+    const isReady = isMounted
+      && publicCalendarStore.isCalendarSettingsLoaded
+      && publicCalendarStore.currentCalendarUrlName === calendarUrlName;
+    return isReady ? publicCalendarStore.reloadWithFilters() : Promise.resolve();
+  },
+});
+
+const currentPeriodLabel = computed(() => effectiveViewMode.value === 'list'
+  ? ''
+  : periodLabel(effectiveViewMode.value, anchorDate.value, currentLocale.value));
+
+const gridIsLoading = computed(() => state.isLoading
+  || publicCalendarStore.isLoadingEvents
+  || !publicCalendarStore.hasLoadedEvents);
+
+/** An event chip links to the occurrence page, built as event-card.vue builds it. */
+function eventRoute(instance: CalendarEventInstance): RouteLocationRaw {
+  return localizedPath(eventPath(calendarUrlName, instance.event.id, formatInstanceSlug(instance.start)));
+}
+
 /**
- * Clears all active filters and resets the URL query params.
+ * A day number (or a cell's overflow link) opens the list filtered to that
+ * day. The view is emitted through calendarViewQuery so the link lands on the
+ * list whatever the surface's default; the other filters are kept.
+ */
+function dayRoute(isoDate: string): RouteLocationRaw {
+  const merged: Record<string, unknown> = {
+    ...route.query,
+    ...calendarViewQuery('list', anchorDate.value, defaultView.value),
+    [LIST_START_DATE_QUERY_KEY]: isoDate,
+    [LIST_END_DATE_QUERY_KEY]: isoDate,
+  };
+  const query = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined));
+
+  return { path: localizedPath(calendarPath(calendarUrlName)), query: query as Record<string, string> };
+}
+
+/**
+ * Clears all active filters and resets the filter query params, keeping the
+ * calendar view the visitor is on.
  */
 function clearAllFilters() {
   publicCalendarStore.clearAllFilters();
   publicCalendarStore.reloadWithFilters();
-  router.replace({ query: {} });
+  const viewQuery = Object.fromEntries(
+    [VIEW_QUERY_KEY, DATE_QUERY_KEY]
+      .filter(key => route.query[key] !== undefined)
+      .map(key => [key, route.query[key]]),
+  );
+  router.replace({ query: viewQuery });
 }
 
 onBeforeMount(async () => {
@@ -109,6 +218,7 @@ onBeforeMount(async () => {
   </div>
   <div
     v-else
+    ref="root"
     class="calendar-page"
   >
     <header
@@ -128,7 +238,7 @@ onBeforeMount(async () => {
       </div>
 
       <!-- Search and Filter Component (includes persistent Clear All Filters button) -->
-      <SearchFilterPublic />
+      <SearchFilterPublic :view-mode="effectiveViewMode" />
     </header>
 
     <main
@@ -151,121 +261,151 @@ onBeforeMount(async () => {
         class="error"
       >{{ publicCalendarStore.categoryError }}</div>
 
-      <!-- Events Display -->
-      <div
-        v-if="Object.keys(filteredEventsByDay).length > 0"
-        class="events-container"
-      >
-        <section
-          v-for="day in Object.keys(filteredEventsByDay).sort()"
-          :key="day"
-          class="day-section"
+      <CalendarViewToolbar
+        :view-mode="effectiveViewMode"
+        :available-views="availableViews"
+        :anchor-date="anchorDate"
+        :period-label="currentPeriodLabel"
+        @update:view-mode="setView"
+        @prev="goPrev"
+        @next="goNext"
+        @today="goToday"
+      />
+
+      <WeekView
+        v-if="effectiveViewMode === 'week'"
+        :anchor-date="anchorDate"
+        :events-by-day="filteredEventsByDay"
+        :is-loading="gridIsLoading"
+        :event-route="eventRoute"
+        :day-route="dayRoute"
+      />
+      <MonthView
+        v-else-if="effectiveViewMode === 'month'"
+        :anchor-date="anchorDate"
+        :events-by-day="filteredEventsByDay"
+        :is-loading="gridIsLoading"
+        :event-route="eventRoute"
+        :day-route="dayRoute"
+      />
+
+      <!-- Events Display (list view) -->
+      <template v-else>
+        <div
+          v-if="Object.keys(filteredEventsByDay).length > 0"
+          class="events-container"
         >
-          <h2 class="day-heading">
-            {{ DateTime.fromISO(day).setLocale(currentLocale).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}
-          </h2>
-          <ul class="day-events">
-            <li
-              v-for="instance in filteredEventsByDay[day]"
-              :key="instance.id"
-              class="day-event-item"
+          <section
+            v-for="day in Object.keys(filteredEventsByDay).sort()"
+            :key="day"
+            class="day-section"
+          >
+            <h2 class="day-heading">
+              {{ DateTime.fromISO(day).setLocale(currentLocale).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}
+            </h2>
+            <ul class="day-events">
+              <li
+                v-for="instance in filteredEventsByDay[day]"
+                :key="instance.id"
+                class="day-event-item"
+              >
+                <EventCard
+                  :instance="instance"
+                  :calendar-url-name="calendarUrlName"
+                  :calendar="publicCalendarStore.currentCalendar"
+                  :default-image="defaultEventImage"
+                />
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
+        <div
+          v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending"
+          class="empty-state"
+        >
+          <div
+            class="empty-state-icon"
+            aria-hidden="true"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
             >
-              <EventCard
-                :instance="instance"
-                :calendar-url-name="calendarUrlName"
-                :calendar="publicCalendarStore.currentCalendar"
-                :default-image="defaultEventImage"
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="18"
+                rx="2"
+                ry="2"
               />
-            </li>
-          </ul>
-        </section>
-      </div>
-
-      <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-      <div
-        v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending"
-        class="empty-state"
-      >
-        <div
-          class="empty-state-icon"
-          aria-hidden="true"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
+              <line
+                x1="16"
+                y1="2"
+                x2="16"
+                y2="6"
+              />
+              <line
+                x1="8"
+                y1="2"
+                x2="8"
+                y2="6"
+              />
+              <line
+                x1="3"
+                y1="10"
+                x2="21"
+                y2="10"
+              />
+            </svg>
+          </div>
+          <div
+            role="status"
+            class="empty-state-text"
           >
-            <rect
-              x="3"
-              y="4"
-              width="18"
-              height="18"
-              rx="2"
-              ry="2"
-            />
-            <line
-              x1="16"
-              y1="2"
-              x2="16"
-              y2="6"
-            />
-            <line
-              x1="8"
-              y1="2"
-              x2="8"
-              y2="6"
-            />
-            <line
-              x1="3"
-              y1="10"
-              x2="21"
-              y2="10"
-            />
-          </svg>
+            <p>{{ t('no_events_available') }}</p>
+            <p
+              v-if="publicCalendarStore.searchQuery"
+              class="empty-state-hint"
+            >
+              {{ t('no_events_for_search', { term: publicCalendarStore.searchQuery }) }}
+            </p>
+            <p
+              v-else-if="hasNonDateFilters"
+              class="empty-state-hint"
+            >{{ t('no_events_with_filters_hint') }}</p>
+            <p
+              v-else-if="hasOnlyDateFilters"
+              class="empty-state-hint"
+            >{{ t('no_events_in_date_range_hint') }}</p>
+            <p
+              v-else
+              class="empty-state-hint"
+            >{{ t('no_events_available_hint') }}</p>
+          </div>
+          <button
+            v-if="hasActiveFilters"
+            type="button"
+            class="clear-filters-btn"
+            @click="clearAllFilters"
+          >
+            {{ t('clear_all_filters') }}
+          </button>
         </div>
+
+        <!-- Loading State -->
         <div
+          v-if="state.isLoading || publicCalendarStore.isLoadingEvents"
           role="status"
-          class="empty-state-text"
+          class="loading"
         >
-          <p>{{ t('no_events_available') }}</p>
-          <p
-            v-if="publicCalendarStore.searchQuery"
-            class="empty-state-hint"
-          >
-            {{ t('no_events_for_search', { term: publicCalendarStore.searchQuery }) }}
-          </p>
-          <p
-            v-else-if="hasNonDateFilters"
-            class="empty-state-hint"
-          >{{ t('no_events_with_filters_hint') }}</p>
-          <p
-            v-else-if="hasOnlyDateFilters"
-            class="empty-state-hint"
-          >{{ t('no_events_in_date_range_hint') }}</p>
-          <p
-            v-else
-            class="empty-state-hint"
-          >{{ t('no_events_available_hint') }}</p>
+          {{ t('loading_events') }}
         </div>
-        <button
-          v-if="hasActiveFilters"
-          type="button"
-          class="clear-filters-btn"
-          @click="clearAllFilters"
-        >
-          {{ t('clear_all_filters') }}
-        </button>
-      </div>
-
-      <!-- Loading State -->
-      <div
-        v-if="state.isLoading || publicCalendarStore.isLoadingEvents"
-        role="status"
-        class="loading"
-      >
-        {{ t('loading_events') }}
-      </div>
+      </template>
     </main>
   </div>
 </template>
@@ -274,7 +414,10 @@ onBeforeMount(async () => {
 @use '../assets/mixins' as *;
 
 .calendar-page {
-  // Full-page layout, no extra wrapper needed
+  // Full-page layout, no extra wrapper needed. It is also the element whose
+  // width picks the view tier, so it must carry no horizontal padding or
+  // border (useContainerWidth's first reading is border-box, later ones
+  // content-box).
 }
 
 // ================================================================
@@ -371,6 +514,11 @@ onBeforeMount(async () => {
 
 .day-event-item {
   // No extra styles needed; EventCard handles its own layout
+}
+
+// The shared toolbar is token-only; the page sets only its spacing.
+.ui-view-toolbar {
+  margin-bottom: $public-space-xl;
 }
 
 // Loading and error states

@@ -235,11 +235,15 @@ import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './category-pill-selector.vue';
 import { getThisWeek, getNextWeek, getDefaultDateRange } from '@/common/utils/datePresets';
 import type { CalendarViewMode } from '@/common/model/calendar_view';
+import {
+  LIST_END_DATE_QUERY_KEY,
+  LIST_START_DATE_QUERY_KEY,
+} from '@/common/routing/calendar-view-query';
 import { Search, CalendarDays } from 'lucide-vue-next';
 
-// Accept optional widget view mode prop
 const props = defineProps<{
-  widgetViewMode?: CalendarViewMode;
+  /** The view the container is displaying; date controls belong to the list. */
+  viewMode: CalendarViewMode;
 }>();
 
 const { t } = useTranslation('system', {
@@ -256,16 +260,9 @@ const publicStore = usePublicCalendarStore();
 const dateFilterRef = ref<HTMLElement | null>(null);
 const dateFilterButtonRef = ref<HTMLButtonElement | null>(null);
 
-// Check if we're in widget context and determine if date filter should show
-const isInWidget = computed(() => route.path.startsWith('/widget/'));
-const shouldShowDateFilter = computed(() => {
-  if (!isInWidget.value) {
-    return true; // Always show in regular site
-  }
-
-  // In widget context, only show date filter for list view
-  return props.widgetViewMode === 'list';
-});
+// A week or month view shows its own period, so the list's date filter only
+// applies (and only shows) while the list is displayed.
+const shouldShowDateFilter = computed(() => props.viewMode === 'list');
 
 const state = reactive({
   searchQuery: '',
@@ -591,19 +588,20 @@ const updateURL = () => {
     delete query.categories;
   }
 
-  // Update date range parameters
+  // Update date range parameters. Every other key (including the calendar
+  // view's `view` and `date`) is carried over untouched from route.query.
   if (publicStore.startDate) {
-    query.startDate = publicStore.startDate;
+    query[LIST_START_DATE_QUERY_KEY] = publicStore.startDate;
   }
   else {
-    delete query.startDate;
+    delete query[LIST_START_DATE_QUERY_KEY];
   }
 
   if (publicStore.endDate) {
-    query.endDate = publicStore.endDate;
+    query[LIST_END_DATE_QUERY_KEY] = publicStore.endDate;
   }
   else {
-    delete query.endDate;
+    delete query[LIST_END_DATE_QUERY_KEY];
   }
 
   // Use replace to avoid adding to browser history
@@ -636,27 +634,30 @@ const initializeFromURL = () => {
   }
 
   // Initialize date range
-  if (query.startDate && typeof query.startDate === 'string') {
-    state.startDate = query.startDate;
-    publicStore.startDate = query.startDate;
+  const queryStartDate = query[LIST_START_DATE_QUERY_KEY];
+  const queryEndDate = query[LIST_END_DATE_QUERY_KEY];
+
+  if (queryStartDate && typeof queryStartDate === 'string') {
+    state.startDate = queryStartDate;
+    publicStore.startDate = queryStartDate;
   }
 
-  if (query.endDate && typeof query.endDate === 'string') {
-    state.endDate = query.endDate;
-    publicStore.endDate = query.endDate;
+  if (queryEndDate && typeof queryEndDate === 'string') {
+    state.endDate = queryEndDate;
+    publicStore.endDate = queryEndDate;
   }
 
   // Determine date filter mode: detect if stored dates match a preset before
   // falling back to 'custom'. This ensures bookmarked preset URLs highlight the
   // correct pill instead of always showing the custom date inputs.
-  if (query.startDate || query.endDate) {
+  if (queryStartDate || queryEndDate) {
     const thisWeek = getThisWeek();
     const nextWeek = getNextWeek();
 
-    if (query.startDate === thisWeek.startDate && query.endDate === thisWeek.endDate) {
+    if (queryStartDate === thisWeek.startDate && queryEndDate === thisWeek.endDate) {
       state.dateFilterMode = 'thisWeek';
     }
-    else if (query.startDate === nextWeek.startDate && query.endDate === nextWeek.endDate) {
+    else if (queryStartDate === nextWeek.startDate && queryEndDate === nextWeek.endDate) {
       state.dateFilterMode = 'nextWeek';
     }
     else if (!state.dateFilterMode) {
@@ -664,16 +665,26 @@ const initializeFromURL = () => {
       state.dateFilterMode = 'custom';
     }
   }
-  else if (!query.startDate && !query.endDate) {
+  else {
     state.dateFilterMode = null;
   }
 };
 
-// Watch for URL changes (browser back/forward)
-watch(() => route.query, () => {
+// Watch for changes to this component's own URL keys (browser back/forward,
+// a day link from a week or month cell). Keys owned by the calendar view —
+// `view` and `date` — are excluded: the view's window sync reloads for those,
+// and reacting here too would fetch twice per view change.
+const filterQueryKey = computed(() => JSON.stringify([
+  route.query.search,
+  route.query.categories,
+  route.query[LIST_START_DATE_QUERY_KEY],
+  route.query[LIST_END_DATE_QUERY_KEY],
+]));
+
+watch(filterQueryKey, () => {
   initializeFromURL();
   publicStore.reloadWithFilters();
-}, { deep: true });
+});
 
 // Watch for store date range changes to sync local state and URL
 // This handles external clearAllFilters() calls from calendar.vue
