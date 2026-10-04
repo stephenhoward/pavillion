@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia';
-import { DateTime } from 'luxon';
 import type { LocationQuery } from 'vue-router';
 import { type CalendarViewMode, isCalendarViewMode } from '@/common/model/calendar_view';
 import {
@@ -13,8 +12,10 @@ import { VIEW_QUERY_KEY } from '@/common/routing/calendar-view-query';
 export type ColorMode = WidgetColorMode;
 
 export interface WidgetState {
-  // Configuration
-  viewMode: CalendarViewMode;
+  // Configuration. The owner's configured view is the widget's starting
+  // view, not a lock: the visitor's own choice lives in the route query
+  // (see useCalendarViewState), and this value is only its default.
+  configuredView: CalendarViewMode;
   accentColor: string;
   colorMode: ColorMode;
   calendarUrlName: string | null;
@@ -25,22 +26,16 @@ export interface WidgetState {
   // left for event detail; the detail's Back button restores it when it
   // cannot simply step back to the list's own history entry.
   lastListQuery: LocationQuery | null;
-
-  // View state persistence
-  currentWeekStart: string | null; // ISO date string
-  currentMonthStart: string | null; // ISO date string
 }
 
 export const useWidgetStore = defineStore('widget', {
   state: (): WidgetState => ({
-    viewMode: WIDGET_CONFIG_DEFAULTS.view,
+    configuredView: WIDGET_CONFIG_DEFAULTS.view,
     accentColor: WIDGET_CONFIG_DEFAULTS.accentColor,
     colorMode: WIDGET_CONFIG_DEFAULTS.colorMode,
     calendarUrlName: null,
     configLoadedForUrlName: null,
     lastListQuery: null,
-    currentWeekStart: null,
-    currentMonthStart: null,
   }),
 
   actions: {
@@ -57,7 +52,7 @@ export const useWidgetStore = defineStore('widget', {
      */
     applyServerConfig(widgetConfig: Record<string, unknown> | null | undefined) {
       if (!widgetConfig || typeof widgetConfig !== 'object') {
-        this.viewMode = WIDGET_CONFIG_DEFAULTS.view;
+        this.configuredView = WIDGET_CONFIG_DEFAULTS.view;
         this.accentColor = WIDGET_CONFIG_DEFAULTS.accentColor;
         this.colorMode = WIDGET_CONFIG_DEFAULTS.colorMode;
         return;
@@ -65,7 +60,7 @@ export const useWidgetStore = defineStore('widget', {
 
       // view
       if (isCalendarViewMode(widgetConfig.view)) {
-        this.viewMode = widgetConfig.view;
+        this.configuredView = widgetConfig.view;
       }
       else {
         if (widgetConfig.view !== undefined) {
@@ -73,7 +68,7 @@ export const useWidgetStore = defineStore('widget', {
             `[widgetStore] Invalid 'view' received from server: ${String(widgetConfig.view)}. Falling back to default.`,
           );
         }
-        this.viewMode = WIDGET_CONFIG_DEFAULTS.view;
+        this.configuredView = WIDGET_CONFIG_DEFAULTS.view;
       }
 
       // accentColor
@@ -125,10 +120,12 @@ export const useWidgetStore = defineStore('widget', {
      * @param urlParams - URLSearchParams object containing widget configuration
      */
     parseConfig(urlParams: URLSearchParams) {
-      // Parse view mode
+      // Parse the configured (starting) view. This is the admin preview's
+      // meaning of `view`; see the two-meanings note in
+      // @/common/routing/calendar-view-query.
       const view = urlParams.get(VIEW_QUERY_KEY);
       if (view !== null && isCalendarViewMode(view)) {
-        this.viewMode = view;
+        this.configuredView = view;
       }
 
       // Parse accent color (URL decoded by URLSearchParams)
@@ -264,54 +261,6 @@ export const useWidgetStore = defineStore('widget', {
           path,
         }, '*');
       }
-    },
-
-    /**
-     * Get or initialize the current week start date
-     *
-     * @returns DateTime object for the start of the current week
-     */
-    getCurrentWeekStart(): DateTime {
-      if (this.currentWeekStart) {
-        return DateTime.fromISO(this.currentWeekStart);
-      }
-      // Initialize to current week
-      const now = DateTime.now().startOf('week');
-      this.currentWeekStart = now.toISODate();
-      return now;
-    },
-
-    /**
-     * Set the current week start date
-     *
-     * @param date - DateTime object for the start of the week
-     */
-    setCurrentWeekStart(date: DateTime) {
-      this.currentWeekStart = date.toISODate();
-    },
-
-    /**
-     * Get or initialize the current month start date
-     *
-     * @returns DateTime object for the start of the current month
-     */
-    getCurrentMonthStart(): DateTime {
-      if (this.currentMonthStart) {
-        return DateTime.fromISO(this.currentMonthStart);
-      }
-      // Initialize to current month
-      const now = DateTime.now().startOf('month');
-      this.currentMonthStart = now.toISODate();
-      return now;
-    },
-
-    /**
-     * Set the current month start date
-     *
-     * @param date - DateTime object for the start of the month
-     */
-    setCurrentMonthStart(date: DateTime) {
-      this.currentMonthStart = date.toISODate();
     },
   },
 });

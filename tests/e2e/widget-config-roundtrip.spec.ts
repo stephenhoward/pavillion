@@ -108,11 +108,13 @@ test('admin change to widget view mode is reflected in rendered widget', async (
   await embedPage.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
   const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
 
-  // Assert the week-view container rendered inside the iframe. This proves the
+  // Assert the shared week grid rendered inside the iframe. This proves the
   // full roundtrip: admin save → DB → widget-facing endpoint → widgetStore →
-  // rendered DOM.
+  // rendered DOM. The embed is wide (default 1280px host viewport), so the
+  // configured week is shown as configured, with the visitor's switcher.
   await expect(iframe.locator('.week-view')).toBeVisible({ timeout: 20000 });
-  await expect(iframe.locator('.week-grid')).toBeVisible();
+  await expect(iframe.locator('.week-grid .week-day-column')).toHaveCount(7);
+  await expect(iframe.getByRole('radio', { name: 'Week' })).toHaveAttribute('aria-checked', 'true');
 
   // Make sure the list view did NOT render (proves the server config took
   // precedence over the default, not the other way around).
@@ -135,7 +137,7 @@ test('admin change to widget view mode is reflected in rendered widget', async (
  */
 async function saveWidgetConfig(
   page: Page,
-  options: { accentColor?: string; colorMode?: 'auto' | 'light' | 'dark' },
+  options: { view?: 'List View' | 'Week View' | 'Month View'; accentColor?: string; colorMode?: 'auto' | 'light' | 'dark' },
 ): Promise<{ view: string; accentColor: string; colorMode: string }> {
   const widgetConfig = page.locator('.widget-config');
   await expect(widgetConfig).toBeVisible({ timeout: 15000 });
@@ -144,6 +146,12 @@ async function saveWidgetConfig(
   // The save button is disabled while the form is in its loaded/clean state.
   const saveButton = widgetConfig.locator('button.save-button');
   await expect(saveButton).toBeDisabled({ timeout: 10000 });
+
+  if (options.view !== undefined) {
+    const card = widgetConfig.locator('button.view-mode-card').filter({ hasText: options.view });
+    await card.click();
+    await expect(card).toHaveAttribute('aria-pressed', 'true');
+  }
 
   if (options.accentColor !== undefined) {
     // <input type="color"> in Chromium/Playwright sometimes does not propagate
@@ -623,3 +631,88 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
     await cleanup();
   });
 }
+
+// ============================================================================
+// Month as the configured starting view, at two embed widths
+// ============================================================================
+//
+// The configured view is a starting view, and the widget picks what it can
+// show from its own (iframe) width, not the host window's. The fixture page
+// pads the iframe by 40px a side, so a 1024px host viewport gives a ~944px
+// frame (medium tier: list and month) and a 500px one a ~420px frame
+// (narrow tier: list only, no switcher).
+
+/**
+ * Record, in every widget document of the context, which view's markup
+ * appeared first. A MutationObserver callback runs before the browser paints,
+ * so a list rendered for even one frame before the month grid is caught.
+ */
+async function recordFirstView(embedPage: Page): Promise<void> {
+  await embedPage.addInitScript(() => {
+    if (!window.location.pathname.startsWith('/widget/')) {
+      return;
+    }
+    const w = window as unknown as { __firstView?: string };
+    const record = () => {
+      if (w.__firstView) {
+        return;
+      }
+      if (document.querySelector('.month-grid')) {
+        w.__firstView = 'month';
+      }
+      else if (document.querySelector('.list-view')) {
+        w.__firstView = 'list';
+      }
+    };
+    new MutationObserver(record).observe(document, { subtree: true, childList: true });
+  });
+}
+
+test('month-configured widget opens on the month grid without painting the list first, and on the list when narrow', async ({ page, browser }) => {
+  await loginAsAdmin(page, env.baseURL);
+  await openWidgetAdminTab(page, env.baseURL);
+  const saved = await saveWidgetConfig(page, { view: 'Month View' });
+  expect(saved.view).toBe('month');
+
+  await test.step('1024px host: month grid and switcher, list never seen first', async () => {
+    const embedContext = await browser.newContext({ viewport: { width: 1024, height: 900 } });
+    const embedPage = await embedContext.newPage();
+    await recordFirstView(embedPage);
+    await embedPage.goto(
+      `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`,
+    );
+    const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
+
+    await expect(iframe.locator('.month-grid')).toBeVisible({ timeout: 20000 });
+    await expect(iframe.getByRole('radio', { name: 'Month' })).toHaveAttribute('aria-checked', 'true');
+    await expect(iframe.getByRole('radio', { name: 'List' })).toBeVisible();
+    // Medium tier: no week.
+    await expect(iframe.getByRole('radio', { name: 'Week' })).toHaveCount(0);
+    await expect(iframe.locator('.list-view')).toHaveCount(0);
+
+    const frame = embedPage.frames().find(f => f.url().includes('/widget/'))!;
+    expect(await frame.evaluate(() => (window as unknown as { __firstView?: string }).__firstView)).toBe('month');
+
+    await embedContext.close();
+  });
+
+  await test.step('500px host: list and no switcher', async () => {
+    const embedContext = await browser.newContext({ viewport: { width: 500, height: 900 } });
+    const embedPage = await embedContext.newPage();
+    await embedPage.goto(
+      `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`,
+    );
+    const iframe = embedPage.frameLocator('iframe[src*="/widget/"]');
+
+    await expect(iframe.locator('.list-view')).toBeVisible({ timeout: 20000 });
+    await expect(iframe.locator('.month-grid')).toHaveCount(0);
+    await expect(iframe.locator('.ui-view-toolbar')).toHaveCount(0);
+
+    // Widening the host restores the configured month: the narrow layout
+    // displayed it as a list without dropping it.
+    await embedPage.setViewportSize({ width: 1280, height: 900 });
+    await expect(iframe.locator('.month-grid')).toBeVisible({ timeout: 20000 });
+
+    await embedContext.close();
+  });
+});

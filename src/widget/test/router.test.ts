@@ -233,7 +233,7 @@ describe('widget router server-config guard', () => {
     expect(store.colorMode).toBe('dark');
     expect(store.accentColor).toBe('#123456');
     // Unoverridden server values still apply.
-    expect(store.viewMode).toBe('list');
+    expect(store.configuredView).toBe('list');
   });
 
   it('falls back to defaults when the widget config endpoint responds with an error', async () => {

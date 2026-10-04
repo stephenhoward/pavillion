@@ -73,7 +73,7 @@ describe('widget-container mount ordering', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia());
-    useWidgetStore().viewMode = 'list';
+    useWidgetStore().configuredView = 'list';
     vi.mocked(CalendarService.prototype.getCalendarByUrlName)
       .mockResolvedValue(new Calendar('calendar-1', 'test_calendar'));
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));

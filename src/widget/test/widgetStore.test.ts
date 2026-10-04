@@ -25,7 +25,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
         colorMode: 'dark',
       });
 
-      expect(store.viewMode).toBe('month');
+      expect(store.configuredView).toBe('month');
       expect(store.accentColor).toBe('#00ff00');
       expect(store.colorMode).toBe('dark');
     });
@@ -35,7 +35,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
 
       store.applyServerConfig(null);
 
-      expect(store.viewMode).toBe(WIDGET_CONFIG_DEFAULTS.view);
+      expect(store.configuredView).toBe(WIDGET_CONFIG_DEFAULTS.view);
       expect(store.accentColor).toBe(WIDGET_CONFIG_DEFAULTS.accentColor);
       expect(store.colorMode).toBe(WIDGET_CONFIG_DEFAULTS.colorMode);
     });
@@ -54,7 +54,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy.mock.calls[0][0]).toContain('accentColor');
       // Other valid fields still take effect.
-      expect(store.viewMode).toBe('week');
+      expect(store.configuredView).toBe('week');
       expect(store.colorMode).toBe('light');
     });
 
@@ -68,7 +68,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
         colorMode: 'auto',
       });
 
-      expect(store.viewMode).toBe(WIDGET_CONFIG_DEFAULTS.view);
+      expect(store.configuredView).toBe(WIDGET_CONFIG_DEFAULTS.view);
       expect(warnSpy).toHaveBeenCalled();
       expect(warnSpy.mock.calls.some(call => String(call[0]).includes("'view'"))).toBe(true);
     });
@@ -98,13 +98,13 @@ describe('widgetStore — server-side config + admin-preview override', () => {
         accentColor: '#ff9131',
         colorMode: 'auto',
       });
-      expect(store.viewMode).toBe('week');
+      expect(store.configuredView).toBe('week');
 
       // Admin preview overrides via query string: view=month
       const urlParams = new URLSearchParams('view=month');
       store.parseConfig(urlParams);
 
-      expect(store.viewMode).toBe('month');
+      expect(store.configuredView).toBe('month');
       // Other fields untouched.
       expect(store.accentColor).toBe('#ff9131');
       expect(store.colorMode).toBe('auto');
@@ -122,7 +122,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
       const urlParams = new URLSearchParams('view=week&accentColor=%23abcdef&colorMode=dark');
       store.parseConfig(urlParams);
 
-      expect(store.viewMode).toBe('week');
+      expect(store.configuredView).toBe('week');
       expect(store.accentColor).toBe('#abcdef');
       expect(store.colorMode).toBe('dark');
     });
@@ -140,7 +140,7 @@ describe('widgetStore — server-side config + admin-preview override', () => {
       store.parseConfig(urlParams);
 
       // Server values preserved — invalid URL params rejected.
-      expect(store.viewMode).toBe('week');
+      expect(store.configuredView).toBe('week');
       expect(store.accentColor).toBe('#ff9131');
       expect(store.colorMode).toBe('dark');
     });
