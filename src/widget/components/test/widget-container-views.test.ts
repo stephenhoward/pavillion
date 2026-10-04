@@ -13,6 +13,7 @@ import { createRouter, createMemoryHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
+import { DateTime } from 'luxon';
 
 import WidgetContainer from '../widget-container.vue';
 import ListView from '../list-view.vue';
@@ -101,14 +102,17 @@ describe('widget-container configured view', () => {
     expect(renderedView(wrapper)).toBe('month');
   });
 
-  it('lets a ?view= override win over the server config for the initial render', async () => {
+  it('lets a ?view= override win over the server config as the configured view', async () => {
     // What the router guard does at load: server config, then the URL override.
     const store = useWidgetStore();
     store.applyServerConfig({ view: 'list' });
     store.parseConfig(new URLSearchParams('view=week'));
 
-    const { wrapper } = await mountContainerAt('/widget/test_calendar?view=week');
+    // Mounted on the bare path, so no visitor view in the route can be what
+    // renders the week: only the configured view can.
+    const { wrapper } = await mountContainerAt('/widget/test_calendar');
 
+    expect(store.configuredView).toBe('week');
     expect(renderedView(wrapper)).toBe('week');
   });
 
@@ -186,6 +190,24 @@ describe('widget-container width', () => {
 
     expect(renderedView(wrapper)).toBe('month');
     expect(wrapper.find('.ui-view-toolbar').exists()).toBe(true);
+  });
+});
+
+describe('widget-container event links', () => {
+  it('opens the widget event detail for the occurrence', async () => {
+    useWidgetStore().applyServerConfig({ view: 'month' });
+    const { wrapper } = await mountContainerAt('/widget/test_calendar');
+
+    const eventRoute = wrapper.findComponent(MonthView).props('eventRoute') as (instance: unknown) => any;
+    const instance = {
+      start: DateTime.fromISO('2026-05-08T18:00:00.000Z', { zone: 'utc' }),
+      event: { id: 'evt-1' },
+    };
+
+    expect(eventRoute(instance)).toEqual({
+      name: 'widget-event-detail',
+      params: { urlName: 'test_calendar', eventId: 'evt-1', startTime: '20260508-1800' },
+    });
   });
 });
 

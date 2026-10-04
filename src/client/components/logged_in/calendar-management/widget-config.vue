@@ -478,7 +478,7 @@ defineExpose({
   .view-mode-group {
     // The help sits between the label and the cards, not under a field.
     .description {
-      margin: calc(-1 * var(--pav-space-2)) 0 var(--pav-space-3) 0;
+      margin-block: 0 var(--pav-space-3);
     }
 
     .view-mode-cards {

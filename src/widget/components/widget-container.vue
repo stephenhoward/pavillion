@@ -56,14 +56,19 @@ const state = reactive({
  *
  * 1. The router guard's `widgetStore.parseConfig` reads it once, at load, from
  *    window.location.search, as the admin preview's override of the owner's
- *    configured view. The same-origin `pavillion:updateConfig` message below
- *    also writes `configuredView`. Neither ever writes the visitor's view.
+ *    configured view. The admin preview changes `view` by changing the
+ *    iframe's src, which reloads the frame, so `parseConfig` re-reads it.
+ *    The same-origin `pavillion:updateConfig` message below also writes
+ *    `configuredView`, but its view only shows while the route carries no
+ *    visitor view. Neither ever writes the visitor's view.
  * 2. useCalendarViewState reads it from the route query as the visitor's own
  *    choice, parsed against `configuredView` as the default.
  *
  * So once a visitor has chosen a view of their own, the preview no longer
  * changes what renders — correct, because the preview simulates the owner's
- * setting. On the plain visitor path there is no conflict: the SDK passes
+ * setting. The accepted consequence: reloading a URL that carries a
+ * visitor's `?view=` makes `parseConfig` treat it as the starting view. On
+ * the plain visitor path there is no conflict: the SDK passes
  * only `lang` (view/accentColor/colorMode are DEPRECATED_CONFIG_KEYS in
  * src/widget-sdk/pavillion-widget.ts).
  *
@@ -171,6 +176,10 @@ const handleMessage = (event: MessageEvent) => {
     return;
   }
 
+  if (!event.data || typeof event.data !== 'object') {
+    return;
+  }
+
   if (event.data.type === 'pavillion:updateConfig') {
     const { config } = event.data;
 
@@ -272,9 +281,9 @@ onUnmounted(() => {
       class="widget-main"
       :data-loading="state.isLoading || publicCalendarStore.isLoadingEvents || undefined"
     >
-      <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div v-if="publicCalendarStore.eventError" class="error">{{ publicCalendarStore.eventError }}</div>
-      <div v-if="publicCalendarStore.categoryError" class="error">{{ publicCalendarStore.categoryError }}</div>
+      <div v-if="state.err" role="alert" class="error">{{ state.err }}</div>
+      <div v-if="publicCalendarStore.eventError" role="alert" class="error">{{ publicCalendarStore.eventError }}</div>
+      <div v-if="publicCalendarStore.categoryError" role="alert" class="error">{{ publicCalendarStore.categoryError }}</div>
 
       <CalendarViewToolbar
         :view-mode="effectiveViewMode"
@@ -303,14 +312,8 @@ onUnmounted(() => {
         :event-route="eventRoute"
         :day-route="dayRoute"
       />
-      <template v-else>
-        <ListView />
-
-        <!-- Loading State -->
-        <div v-if="state.isLoading" class="loading">
-          {{ t('loading_events') }}
-        </div>
-      </template>
+      <!-- ListView renders its own role="status" loading region. -->
+      <ListView v-else />
     </main>
   </div>
 </template>
@@ -365,9 +368,5 @@ header {
   @include public-error-state;
 
   margin: $public-space-md;
-}
-
-.loading {
-  @include public-loading-state;
 }
 </style>
