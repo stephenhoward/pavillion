@@ -1493,6 +1493,51 @@ describe('SearchFilterPublic Component', () => {
       expect(wrapper.find('.date-range-section').exists()).toBe(true);
     });
 
+    it('hides the clear button in a month view when only the hidden date filter is set', async () => {
+      const store = usePublicCalendarStore();
+      store.setDateRange('2026-02-01', '2026-02-07');
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(false);
+    });
+
+    it('clears only the visible filters in a month view, keeping the hidden date range', async () => {
+      await router.push({
+        path: '/calendar/test',
+        query: { view: 'month', date: '2026-03-01', search: 'concert', startDate: '2026-02-01', endDate: '2026-02-07' },
+      });
+      const store = usePublicCalendarStore();
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      await wrapper.find('.clear-all-filters-btn').trigger('click');
+      await flushPromises();
+
+      expect(store.searchQuery).toBe('');
+      expect(store.startDate).toBe('2026-02-01');
+      expect(store.endDate).toBe('2026-02-07');
+      expect(router.currentRoute.value.query).toEqual({
+        view: 'month',
+        date: '2026-03-01',
+        startDate: '2026-02-01',
+        endDate: '2026-02-07',
+      });
+    });
+
     it('shows the date controls again when the view returns to list', async () => {
       const wrapper = mount(SearchFilterPublic, {
         props: { viewMode: 'month' },

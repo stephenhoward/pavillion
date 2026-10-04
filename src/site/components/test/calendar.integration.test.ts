@@ -17,6 +17,21 @@ import { DateTime } from 'luxon';
 vi.mock('../../service/calendar');
 vi.mock('@/client/service/models');
 
+// Lets a test pin the measured width; null keeps the real composable (which
+// reads 0 in JSDOM, leaving the view state at its starting `wide` tier).
+const containerWidth = vi.hoisted(() => ({
+  value: null as null | { tier: 'narrow' | 'medium' | 'wide'; width: number },
+}));
+vi.mock('@/common/ui/composables/useContainerWidth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/common/ui/composables/useContainerWidth')>();
+  const { ref } = await import('vue');
+  return {
+    useContainerWidth: (el: Parameters<typeof actual.useContainerWidth>[0]) => (containerWidth.value
+      ? { tier: ref(containerWidth.value.tier), width: ref(containerWidth.value.width) }
+      : actual.useContainerWidth(el)),
+  };
+});
+
 // Mock i18next-vue
 vi.mock('i18next-vue', () => ({
   useTranslation: () => ({
@@ -858,6 +873,46 @@ describe('calendar.vue - calendar views', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    containerWidth.value = null;
+  });
+
+  it('shows a deep-linked month as the list at a narrow width, fetching once and keeping the URL', async () => {
+    containerWidth.value = { tier: 'narrow', width: 500 };
+
+    const wrapper = await mountAt({ view: 'month', date: '2026-03-15' });
+
+    const fetches = eventFetches();
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0].get('startDate')).not.toBe('2026-03-01');
+    expect(wrapper.find('.month-view').exists()).toBe(false);
+    expect(wrapper.find('.empty-state').exists()).toBe(true);
+    expect(wrapper.find('[role="radiogroup"]').exists()).toBe(false);
+    expect(router.currentRoute.value.query).toEqual({ view: 'month', date: '2026-03-15' });
+  });
+
+  it('clearing all filters keeps only the view keys', async () => {
+    containerWidth.value = { tier: 'narrow', width: 500 };
+    const wrapper = await mountAt({
+      view: 'month',
+      date: '2026-03-15',
+      search: 'concert',
+      startDate: '2026-02-01',
+      endDate: '2026-02-07',
+    });
+
+    await wrapper.find('.clear-filters-btn').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.query).toEqual({ view: 'month', date: '2026-03-15' });
+  });
+
+  it('clearing all filters from a plain list URL empties the query', async () => {
+    const wrapper = await mountAt({ search: 'concert', startDate: '2026-02-01', endDate: '2026-02-07' });
+
+    await wrapper.find('.clear-filters-btn').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.query).toEqual({});
   });
 
   it('opens on the list, with the list markup and date controls', async () => {
@@ -933,6 +988,9 @@ describe('calendar.vue - calendar views', () => {
       date: '2026-03-15',
       search: 'concert',
     });
+    const store = usePublicCalendarStore();
+    expect(store.startDate).toBeNull();
+    expect(store.endDate).toBeNull();
   });
 
   it('restores the list filter when returning from the month to the list', async () => {

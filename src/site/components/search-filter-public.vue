@@ -213,8 +213,10 @@
       />
     </div>
 
-    <!-- Clear All Filters (visible whenever any filter is active) -->
-    <div v-if="publicStore.hasActiveFilters" class="clear-all-section">
+    <!-- Clear All Filters: in the list, whenever any filter is active; in a
+         week or month view the date controls are hidden, so only the visible
+         (search and category) filters count, and only they are cleared. -->
+    <div v-if="hasClearableFilters" class="clear-all-section">
       <button
         type="button"
         class="clear-all-filters-btn"
@@ -303,12 +305,17 @@ const dateFilterButtonText = computed(() => {
   return formatDateRange(defaultRange.value.startDate, defaultRange.value.endDate);
 });
 
+// Whether the clear button has anything visible to clear
+const hasClearableFilters = computed(() => shouldShowDateFilter.value
+  ? publicStore.hasActiveFilters
+  : publicStore.hasNonDateFilters);
+
 // Computed label for the clear button — adapts based on active filter types
 const clearButtonLabel = computed(() => {
   const hasSearch = publicStore.searchQuery.trim().length > 0;
-  const hasOtherFilters = publicStore.selectedCategoryIds.length > 0
-    || publicStore.startDate !== null
-    || publicStore.endDate !== null;
+  const hasDateFilter = shouldShowDateFilter.value
+    && (publicStore.startDate !== null || publicStore.endDate !== null);
+  const hasOtherFilters = publicStore.selectedCategoryIds.length > 0 || hasDateFilter;
 
   if (hasSearch && hasOtherFilters) {
     return t('clear_all_filters');
@@ -552,8 +559,14 @@ const clearDateFilter = () => {
   closeDateFilter();
 };
 
-// Clear all filters
+// Clear all filters. Outside the list the date filter is hidden, so it is
+// kept and restored when the visitor returns to the list.
 const clearAllFilters = () => {
+  if (!shouldShowDateFilter.value) {
+    clearVisibleFilters();
+    return;
+  }
+
   state.searchQuery = '';
   state.startDate = null;
   state.endDate = null;
@@ -564,6 +577,20 @@ const clearAllFilters = () => {
   }
 
   publicStore.clearAllFilters();
+  publicStore.reloadWithFilters();
+  updateURL();
+};
+
+// Clear search and categories, leaving the hidden list date range alone
+const clearVisibleFilters = () => {
+  state.searchQuery = '';
+  if (state.searchTimeout) {
+    clearTimeout(state.searchTimeout);
+  }
+
+  publicStore.setSearchQuery('');
+  publicStore.setSearchPending(false);
+  publicStore.setSelectedCategories([]);
   publicStore.reloadWithFilters();
   updateURL();
 };

@@ -496,6 +496,10 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       // viewWindow is left alone: it belongs to the view the page is showing
       // (calendar.vue sets it during setup, before the calendar is selected),
       // not to the calendar being switched away from.
+      // Invalidate any in-flight request so the previous calendar's late
+      // response cannot render under this one.
+      latestEventsRequest++;
+      latestCategoriesRequest++;
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
       // Nulls the default event image too — it is a getter over this calendar.
       this.currentCalendar = null;

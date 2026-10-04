@@ -241,10 +241,10 @@ onBeforeMount(async () => {
       <SearchFilterPublic :view-mode="effectiveViewMode" />
     </header>
 
-    <main
-      class="calendar-main"
-      :aria-busy="state.isLoading || publicCalendarStore.isLoadingEvents"
-    >
+    <!-- aria-busy sits on the list container, not here: <main> also holds the
+         toolbar's live period label and the grids' status text, which a busy
+         ancestor would silence on every period step. -->
+    <main class="calendar-main">
       <div
         v-if="state.err"
         role="alert"
@@ -294,6 +294,7 @@ onBeforeMount(async () => {
         <div
           v-if="Object.keys(filteredEventsByDay).length > 0"
           class="events-container"
+          :aria-busy="state.isLoading || publicCalendarStore.isLoadingEvents"
         >
           <section
             v-for="day in Object.keys(filteredEventsByDay).sort()"

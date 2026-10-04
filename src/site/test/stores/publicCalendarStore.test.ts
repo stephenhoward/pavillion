@@ -477,6 +477,13 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
   });
 
   describe('overlapping reloads', () => {
+    const instanceData = (id: string) => ({
+      id,
+      start: DateTime.fromISO('2025-12-01T10:00:00').toISO(),
+      end: DateTime.fromISO('2025-12-01T11:00:00').toISO(),
+      event: { id: `event-${id}`, calendarId: 'calendar-1', content: {} },
+    });
+
     it('keeps the events of the most recently started reload when an earlier one resolves last', async () => {
       store.currentCalendarUrlName = 'test-calendar';
 
@@ -486,13 +493,6 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
           return Promise.resolve({ items: [] } as any);
         }
         return new Promise(resolve => resolvers.push(resolve));
-      });
-
-      const instanceData = (id: string) => ({
-        id,
-        start: DateTime.fromISO('2025-12-01T10:00:00').toISO(),
-        end: DateTime.fromISO('2025-12-01T11:00:00').toISO(),
-        event: { id: `event-${id}`, calendarId: 'calendar-1', content: {} },
       });
 
       const first = store.reloadWithFilters();
@@ -505,6 +505,51 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
 
       expect(store.allEvents.map(instance => instance.id)).toEqual(['newer']);
       expect(store.isLoadingEvents).toBe(false);
+    });
+
+    it('ignores an earlier reload that fails after a later one succeeded', async () => {
+      store.currentCalendarUrlName = 'test-calendar';
+
+      const pending: Array<{ resolve: (value: any) => void; reject: (error: Error) => void }> = [];
+      vi.mocked(ModelService.listModels).mockImplementation((url: string) => {
+        if (url.includes('/categories')) {
+          return Promise.resolve({ items: [] } as any);
+        }
+        return new Promise((resolve, reject) => pending.push({ resolve, reject }));
+      });
+
+      const first = store.reloadWithFilters();
+      const second = store.reloadWithFilters();
+
+      pending[1].resolve({ items: [instanceData('newer')] });
+      await second;
+      pending[0].reject(new Error('Network error'));
+      await first;
+
+      expect(store.eventError).toBeNull();
+      expect(store.allEvents.map(instance => instance.id)).toEqual(['newer']);
+    });
+
+    it('drops a response that arrives after switching to another calendar', async () => {
+      store.currentCalendarUrlName = 'calendar-a';
+
+      let resolveEvents: (value: any) => void = () => {};
+      vi.mocked(ModelService.listModels).mockImplementation((url: string) => {
+        if (url.includes('/categories')) {
+          return Promise.resolve({ items: [] } as any);
+        }
+        return new Promise(resolve => {
+          resolveEvents = resolve;
+        });
+      });
+
+      const reload = store.reloadWithFilters();
+      store.setCurrentCalendar('calendar-b');
+
+      resolveEvents({ items: [instanceData('from-a')] });
+      await reload;
+
+      expect(store.allEvents).toEqual([]);
     });
   });
 
