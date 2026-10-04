@@ -548,7 +548,7 @@
       "configuration_title": "Configuración del widget",
       "configuration_description": "Personaliza la apariencia y el comportamiento de tu widget de calendario.",
       "view_mode_label": "Modo de vista",
-      "view_mode_help": "Elige cómo se muestran los eventos en el widget de manera predeterminada.",
+      "view_mode_help": "La vista que los visitantes ven primero. Pueden cambiar a otra vista en el widget.",
       "view_mode_list": "Vista de lista (desplazamiento vertical)",
       "view_mode_list_title": "Vista de lista",
       "view_mode_list_description": "Lista de eventos con desplazamiento vertical",

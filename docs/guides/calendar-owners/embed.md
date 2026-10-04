@@ -4,7 +4,7 @@ description: Embed your Pavillion calendar on your own website — generate the 
 
 # Embed your calendar on your own website
 
-> Status: partial. The allowed-domain section below is written; the rest of this guide will be written after launch.
+> Status: partial. The allowed-domain and starting-view sections below are written; the rest of this guide will be written after launch.
 
 If your community already has a website — an organization page, a venue site, a project landing page — you can put your Pavillion calendar directly on it instead of asking visitors to click through to a separate URL. You do that with the embed widget: a short piece of code, copied from your calendar's **Widget** tab, that shows your calendar inside a page on your site.
 
@@ -42,6 +42,10 @@ On instances that ask calendars to be [covered by a funding plan](funding.md) fo
 - **Website builders that wrap custom code in a frame of their own.** Some builders don't put pasted HTML directly on your page; they load it inside a frame served from the builder's own domain. The browser checks every layer, so the widget is refused even though your domain is set correctly. If the widget shows up on a plain test page on your site but not inside a builder's "custom HTML" block, this is the likely cause — check whether your builder offers a way to add code directly to the page.
 - **An empty box, or a browser message saying the content was refused.** That's the restriction working. Compare the address bar of the page with what you entered, character for character — a typo in the domain blocks the widget just as surely as a different site would.
 - **Testing on a local copy of your site.** A copy running on your own computer (a `localhost` address) can always show the widget, so a developer can try it before the real domain is set. Don't take that as proof the live site will work; check it there too.
+
+## Choose the starting view
+
+The view you pick on the **Widget** tab — list, week or month — is the one visitors see when the widget first loads, not the only one: they can switch views themselves, and a narrow embed, like a phone screen, always opens on the list.
 
 ## Planned scope
 

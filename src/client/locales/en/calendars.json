@@ -563,7 +563,7 @@
       "configuration_title": "Widget Settings",
       "configuration_description": "Customize the appearance and behavior of your calendar widget.",
       "view_mode_label": "View Mode",
-      "view_mode_help": "Choose how events are displayed in the widget by default.",
+      "view_mode_help": "The view visitors see first. They can switch to another view in the widget.",
       "view_mode_list": "List View (vertical scrolling)",
       "view_mode_list_title": "List View",
       "view_mode_list_description": "Vertical scrolling list of events",
