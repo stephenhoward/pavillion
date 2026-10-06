@@ -72,6 +72,8 @@ A few notes on the URL itself:
 - **Pick the feed URL, not the calendar page URL.** Most calendar tools have a separate "Subscribe (ICS)" or "iCal feed" link that points at the `.ics` file. That's what goes in this field.
 - **`https://` is strongly preferred.** Pavillion can fetch over `http://` but doing so means anyone on the network path can read your feed and tamper with imports. If your source can serve over `https://`, use that URL.
 
+A calendar can connect **up to 10 feed URLs** by default. Uploaded files don't count toward that, so re-uploading an export as often as you need never uses up a slot. The number is set by whoever runs your Pavillion instance, so yours may differ. Once a calendar is at its limit, adding another feed fails with the message *Calendar has reached the maximum of 10 import sources*, and uploading a file is refused as well. Remove a feed you've finished migrating to free its slot — the events it brought in stay on your calendar.
+
 Click <Btn>Add source</Btn>. The new source appears in the list, and the verify-ownership wizard opens automatically — you can't sync a feed until you've proved the source is yours.
 
 ::: tip <Lightbulb /> A note on the calendar URL field.
