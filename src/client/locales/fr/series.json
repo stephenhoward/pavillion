@@ -43,7 +43,7 @@
     "description_placeholder": "Saisissez une description pour cette série",
     "url_name": "Nom d'URL",
     "url_name_placeholder": "nom-url",
-    "url_name_help": "Utilisé dans les URL. Lettres minuscules, chiffres et traits de soulignement uniquement.",
+    "url_name_help": "Utilisé dans les URL. De 3 à 24 lettres, chiffres, traits d'union ou traits de soulignement. Ne peut pas commencer par un trait d'union ou un trait de soulignement, ni se terminer par un trait d'union.",
     "details_section": "Détails de la série",
     "image_section": "Image de la série",
     "image": "Image de la série",
