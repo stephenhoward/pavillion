@@ -37,6 +37,14 @@ function stripHtmlTags(html: string): string {
 }
 
 /**
+ * True for a language-keyed content map: a non-null, non-array object. Arrays
+ * and primitives in a content position are malformed and resolve as absent.
+ */
+function isLanguageKeyedMap(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
  * Normalized inbound event parameters produced by
  * {@link EventObject.parseInboundEvent} and consumed by
  * CalendarEvent.fromObject() via the calendar service layer.
@@ -48,12 +56,12 @@ function stripHtmlTags(html: string): string {
  */
 export interface RemoteEventParams {
   /**
-   * Per-language content entries with HTML stripped. The Pavillion-format
-   * sanitizer emits a fixed allow-listed key set (see
-   * `EventObject._sanitizeContentObject`), but still passes non-object entries
-   * raw, and when no resolution branch produces content a raw wire `content`
-   * value passes through unmodified via the top-level spread — so this stays
-   * untyped rather than naming the nominal shape.
+   * Per-language content entries with HTML stripped. Either absent or a
+   * non-empty map whose every entry is an object carrying only allow-listed,
+   * markup-stripped keys (see `EventObject._sanitizeContentObject`). The raw
+   * wire `content` never survives the top-level spread; malformed content
+   * normalizes to absent. Typed loosely because the Pavillion-format branch
+   * emits a different key set than the standard ActivityStreams branch.
    */
   content?: Record<string, any>;
   /** Wire-provided category list, passed through unvalidated. */
@@ -432,17 +440,28 @@ class EventObject extends ActivityPubObject {
       { externalUrl: null, urlPrompt: null },
       apObject,
     );
+    // The resolution block below is the only writer of content: a wire value
+    // it does not handle (an array, a raw string) must not survive the spread.
+    delete result.content;
 
     // --- Content resolution ---
     // Priority: pavillion:content > bare content (old format) > name/summary/nameMap/summaryMap
     // All paths sanitize text fields — even pavillion:content from trusted instances,
     // since any remote instance can include this key in its AP payload.
-    if (apObject['pavillion:content']) {
-      result.content = EventObject._sanitizeContentObject(apObject['pavillion:content']);
+    // A malformed pavillion:content falls through to the standard AS branch,
+    // exactly as if it were absent. Content is set only when non-empty.
+    if (isLanguageKeyedMap(apObject['pavillion:content'])) {
+      const content = EventObject._sanitizeContentObject(apObject['pavillion:content']);
+      if (Object.keys(content).length > 0) {
+        result.content = content;
+      }
     }
-    else if (apObject.content && typeof apObject.content === 'object' && !Array.isArray(apObject.content)) {
+    else if (isLanguageKeyedMap(apObject.content)) {
       // Old Pavillion format: bare content object with language keys
-      result.content = EventObject._sanitizeContentObject(apObject.content);
+      const content = EventObject._sanitizeContentObject(apObject.content);
+      if (Object.keys(content).length > 0) {
+        result.content = content;
+      }
     }
     else {
       // Standard AS format: build content from name/summary/nameMap/summaryMap
@@ -881,7 +900,8 @@ class EventObject extends ActivityPubObject {
    *
    * A non-string value becomes undefined rather than passing through, so a
    * downstream update writes nothing for that field instead of writing a
-   * non-string into a text column.
+   * non-string into a text column. A non-object entry (a raw string, null, a
+   * number) is dropped, and a non-map input yields an empty result.
    *
    * Length is not bounded here. The columns belong to the calendar domain and
    * so does their cap: EventService normalizes federated content through
@@ -891,20 +911,20 @@ class EventObject extends ActivityPubObject {
    * announce-repost.md), which is also where the version-skew consequence of
    * closing the key set here is written down.
    */
-  private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
+  private static _sanitizeContentObject(content: unknown): Record<string, any> {
     const ALLOWED_CONTENT_KEYS = ['name', 'title', 'description', 'accessibilityInfo', 'imageAlt'] as const;
     const sanitized: Record<string, any> = {};
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      return sanitized;
+    }
     for (const lang of Object.keys(content)) {
-      const entry = content[lang];
+      const entry = (content as Record<string, any>)[lang];
       if (entry && typeof entry === 'object') {
         const allowed: Record<string, any> = {};
         for (const key of ALLOWED_CONTENT_KEYS) {
           allowed[key] = typeof entry[key] === 'string' ? stripHtmlTags(entry[key]) : undefined;
         }
         sanitized[lang] = allowed;
-      }
-      else {
-        sanitized[lang] = entry;
       }
     }
     return sanitized;
