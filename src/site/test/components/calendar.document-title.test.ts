@@ -64,6 +64,7 @@ vi.mock('@/site/stores/publicCalendarStore', () => {
       loadCategories: vi.fn().mockResolvedValue(undefined),
       clearAllFilters: vi.fn(),
       reloadWithFilters: vi.fn(),
+      setViewWindow: vi.fn(),
     }),
   };
 });

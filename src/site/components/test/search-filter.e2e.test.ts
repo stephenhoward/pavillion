@@ -187,6 +187,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       global.innerWidth = 500;
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },
@@ -224,6 +225,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       await router.push('/calendar/test-calendar');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },
@@ -256,6 +258,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       await router.push('/calendar/test-calendar');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },
@@ -294,6 +297,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       await router.push('/calendar/test-calendar');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },
@@ -352,6 +356,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       await router.push('/calendar/test-calendar');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },
@@ -494,6 +499,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       await router.push('/calendar/test-calendar');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router],
         },

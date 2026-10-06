@@ -32,6 +32,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -61,6 +62,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show clear button when search has value', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -84,6 +86,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should NOT show clear button when search contains only whitespace', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -107,6 +110,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -131,6 +135,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -154,6 +159,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -179,6 +185,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -204,6 +211,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -232,6 +240,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -269,6 +278,7 @@ describe('SearchFilterPublic Component', () => {
       store.availableCategories = [category1];
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -293,6 +303,7 @@ describe('SearchFilterPublic Component', () => {
       store.availableCategories = [category1];
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -312,6 +323,7 @@ describe('SearchFilterPublic Component', () => {
   describe('Date Range Filtering', () => {
     it('should open date filter dropdown when button clicked', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -337,6 +349,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -371,6 +384,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -401,6 +415,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show custom date inputs when calendar pill clicked', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -431,6 +446,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -458,6 +474,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should close dropdown when both date fields are manually cleared', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -503,6 +520,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -545,6 +563,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show year in button label when custom date range spans different years', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -576,6 +595,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should not show year in button label when custom date range is within same year', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -605,6 +625,7 @@ describe('SearchFilterPublic Component', () => {
     });
     it('should show single date label when start and end dates are the same', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -649,6 +670,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show the default date range in the button label when no filter is active', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -666,6 +688,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -688,6 +711,7 @@ describe('SearchFilterPublic Component', () => {
   describe('Escape Key Behavior', () => {
     it('should close the date filter dropdown when Escape is pressed', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -714,6 +738,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should return focus to the date filter button after closing with Escape', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -744,6 +769,7 @@ describe('SearchFilterPublic Component', () => {
   describe('Clear Date Filter', () => {
     it('should not show clear date filter button when no date filter is active', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -759,6 +785,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -790,6 +817,7 @@ describe('SearchFilterPublic Component', () => {
       await router.push('/calendar/test');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -827,6 +855,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should have aria-label attribute on clear date filter button', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -853,6 +882,7 @@ describe('SearchFilterPublic Component', () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -884,6 +914,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should hide clear button after clearing the date filter', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -913,6 +944,7 @@ describe('SearchFilterPublic Component', () => {
   describe('Clear All Filters Persistent Button', () => {
     it('should not show clear-all-filters-btn when no filters are active', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -928,6 +960,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSearchQuery('yoga');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -943,6 +976,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSelectedCategories(['cat-1']);
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -955,6 +989,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show clear-all-filters-btn when date filter is active and results exist', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -982,6 +1017,7 @@ describe('SearchFilterPublic Component', () => {
       await router.push('/calendar/test');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1007,6 +1043,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSearchQuery('yoga');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1048,6 +1085,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSearchQuery('yoga');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1065,6 +1103,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSelectedCategories(['cat-1']);
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1079,6 +1118,7 @@ describe('SearchFilterPublic Component', () => {
 
     it('should show "Clear Filters" label when only date filter is active', async () => {
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1106,6 +1146,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSelectedCategories(['cat-1']);
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1123,6 +1164,7 @@ describe('SearchFilterPublic Component', () => {
       store.setSearchQuery('yoga');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1152,6 +1194,7 @@ describe('SearchFilterPublic Component', () => {
       await router.push('/calendar/test');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1188,6 +1231,7 @@ describe('SearchFilterPublic Component', () => {
       });
 
       const _wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1215,6 +1259,7 @@ describe('SearchFilterPublic Component', () => {
       });
 
       mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1242,6 +1287,7 @@ describe('SearchFilterPublic Component', () => {
       });
 
       mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1273,6 +1319,7 @@ describe('SearchFilterPublic Component', () => {
       });
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1308,6 +1355,7 @@ describe('SearchFilterPublic Component', () => {
       });
 
       mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1329,6 +1377,7 @@ describe('SearchFilterPublic Component', () => {
       await router.push('/calendar/test');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
@@ -1346,6 +1395,162 @@ describe('SearchFilterPublic Component', () => {
       // URL should be updated
       expect(router.currentRoute.value.query.search).toBe('new search');
     });
+
+    it('keeps the calendar view keys when writing a filter', async () => {
+      await router.push({
+        path: '/calendar/test',
+        query: { view: 'month', date: '2026-03-01' },
+      });
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      await wrapper.find('input[type="text"]').setValue('concert');
+      await new Promise(resolve => setTimeout(resolve, 350));
+      await flushPromises();
+
+      expect(router.currentRoute.value.query).toEqual({
+        view: 'month',
+        date: '2026-03-01',
+        search: 'concert',
+      });
+    });
+
+    it('does not reload when only the calendar view keys change', async () => {
+      const store = usePublicCalendarStore();
+      await router.push('/calendar/test');
+
+      mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
+
+      await router.replace({ query: { view: 'month', date: '2026-03-01' } });
+      await flushPromises();
+
+      expect(reloadSpy).not.toHaveBeenCalled();
+    });
+
+    it('reloads when its own keys change in the URL', async () => {
+      const store = usePublicCalendarStore();
+      await router.push('/calendar/test');
+
+      mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
+
+      await router.replace({ query: { startDate: '2026-03-04', endDate: '2026-03-04' } });
+      await flushPromises();
+
+      expect(store.startDate).toBe('2026-03-04');
+      expect(store.endDate).toBe('2026-03-04');
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Date controls by view', () => {
+    it.each(['week', 'month'] as const)('hides the date controls in the %s view', async (viewMode) => {
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.date-range-section').exists()).toBe(false);
+      expect(wrapper.find('.search-input').exists()).toBe(true);
+    });
+
+    it('shows the date controls in the list view', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.date-range-section').exists()).toBe(true);
+    });
+
+    it('hides the clear button in a month view when only the hidden date filter is set', async () => {
+      const store = usePublicCalendarStore();
+      store.setDateRange('2026-02-01', '2026-02-07');
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(false);
+    });
+
+    it('clears only the visible filters in a month view, keeping the hidden date range', async () => {
+      await router.push({
+        path: '/calendar/test',
+        query: { view: 'month', date: '2026-03-01', search: 'concert', startDate: '2026-02-01', endDate: '2026-02-07' },
+      });
+      const store = usePublicCalendarStore();
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      await wrapper.find('.clear-all-filters-btn').trigger('click');
+      await flushPromises();
+
+      expect(store.searchQuery).toBe('');
+      expect(store.startDate).toBe('2026-02-01');
+      expect(store.endDate).toBe('2026-02-07');
+      expect(router.currentRoute.value.query).toEqual({
+        view: 'month',
+        date: '2026-03-01',
+        startDate: '2026-02-01',
+        endDate: '2026-02-07',
+      });
+    });
+
+    it('shows the date controls again when the view returns to list', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'month' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      await wrapper.setProps({ viewMode: 'list' });
+
+      expect(wrapper.find('.date-range-section').exists()).toBe(true);
+    });
   });
 
   describe('Real-time Filter Application', () => {
@@ -1354,6 +1559,7 @@ describe('SearchFilterPublic Component', () => {
       const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
 
       const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
         global: {
           plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
