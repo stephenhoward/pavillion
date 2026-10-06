@@ -81,7 +81,9 @@
     "more_filters": "More Filters",
     "hide_filters": "Hide Filters",
     "show_filters": "Show Filters",
-    "date_range_invalid": "Invalid date range"
+    "date_range_invalid": "Invalid date range",
+    "date_from": "From {{date}}",
+    "date_until": "Until {{date}}"
   },
   "event_location": "Location",
   "get_directions": "Get directions",
