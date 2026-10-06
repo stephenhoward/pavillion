@@ -19,7 +19,7 @@ const emit = defineEmits(['merge-categories', 'deselect-all']);
 const isVisible = computed(() => props.selectedCount >= 2);
 
 const selectionText = computed(() => {
-  return `${props.selectedCount} selected`;
+  return t('selected_count', { count: props.selectedCount });
 });
 
 const mergeCategories = () => {
