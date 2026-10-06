@@ -41,7 +41,137 @@
     "panel_intro": "Guides sur docs.pavillion.social en lien avec ce que vous faites ici.",
     "open_in_docs": "Lire sur docs.pavillion.social",
     "browse_all_calendar-owners": "Parcourir tous les guides pour propriétaires de calendrier",
-    "browse_all_instance-administrators": "Parcourir tous les guides pour administrateurs"
+    "browse_all_instance-administrators": "Parcourir tous les guides pour administrateurs",
+    "guides": {
+      "quickstart": {
+        "label": "Démarrage rapide",
+        "description": "Passez d'une première connexion à un calendrier publié avec un événement en une dizaine de minutes."
+      },
+      "when_to_create": {
+        "label": "Quand créer un calendrier",
+        "description": "Décidez quand créer un nouveau calendrier plutôt que suivre un calendrier existant."
+      },
+      "public_url": {
+        "label": "Partager votre URL publique",
+        "description": "Partagez l'URL publique et l'identifiant de fédération de votre calendrier sur le web ou dans une discussion."
+      },
+      "embed": {
+        "label": "Intégrer votre calendrier",
+        "description": "Intégrez votre calendrier à votre propre site web grâce à un widget configurable."
+      },
+      "editors": {
+        "label": "Éditeurs et accès",
+        "description": "Invitez des éditeurs, gérez leur accès et comprenez ce qu'ils peuvent faire ou non."
+      },
+      "identity": {
+        "label": "Identité du calendrier",
+        "description": "Définissez le nom, la description, les langues, l'identifiant d'URL et l'image par défaut de votre calendrier."
+      },
+      "federation_etiquette": {
+        "label": "Savoir-vivre de la fédération",
+        "description": "Soyez un bon voisin entre calendriers fédérés : attribution, repartage, et quand s'en abstenir."
+      },
+      "recurring": {
+        "label": "Événements récurrents",
+        "description": "Créez un événement qui se répète chaque semaine, chaque mois ou selon une règle personnalisée, exceptions comprises."
+      },
+      "categories": {
+        "label": "Catégories",
+        "description": "Concevez un vocabulaire court et durable qui filtre votre page et correspond entre calendriers fédérés."
+      },
+      "multilingual": {
+        "label": "Événements multilingues",
+        "description": "Publiez des événements en plusieurs langues et choisissez ce que voient les visiteurs quand une traduction manque."
+      },
+      "cancel": {
+        "label": "Annuler un événement",
+        "description": "Annulez un événement correctement et comprenez comment l'annulation se propage aux calendriers qui repartagent le vôtre."
+      },
+      "series": {
+        "label": "Séries d'événements",
+        "description": "Regroupez des événements liés, comme une saison de concerts ou un cycle de conférences, sous un même nom."
+      },
+      "places": {
+        "label": "Lieux",
+        "description": "Enregistrez les lieux de vos événements une seule fois et réutilisez-les pour de nombreux événements."
+      },
+      "follow_repost": {
+        "label": "Suivre et repartager",
+        "description": "Suivez d'autres calendriers, examinez leurs événements dans un fil privé et repartagez ceux qui conviennent."
+      },
+      "category_matching": {
+        "label": "Correspondance des catégories",
+        "description": "Associez les catégories d'autres calendriers aux vôtres lorsque vous repartagez des événements fédérés."
+      },
+      "funding_owner": {
+        "label": "Financement communautaire",
+        "description": "Soutenez votre instance avec un plan de financement volontaire, plus proche de la radio publique que d'un accès payant."
+      },
+      "moderation_owner": {
+        "label": "Traiter les signalements",
+        "description": "Examinez les signalements des visiteurs sur votre calendrier et agissez, en remontant à l'administrateur si nécessaire."
+      },
+      "account": {
+        "label": "Votre compte",
+        "description": "Gérez votre mot de passe, votre adresse e-mail et les paramètres de compte qui ne dépendent pas d'un calendrier."
+      },
+      "admin_config": {
+        "label": "Configurer votre instance",
+        "description": "Configurez votre instance avec local.yaml, les variables d'environnement et la priorité des couches de configuration."
+      },
+      "good_admin": {
+        "label": "Être un bon administrateur",
+        "description": "Soyez l'administrateur chez qui les propriétaires de calendrier veulent être hébergés : prendre soin sans paternalisme."
+      },
+      "admin_accounts": {
+        "label": "Gestion des comptes",
+        "description": "Suspendez, rétablissez, supprimez et récupérez des comptes sur votre instance."
+      },
+      "who_gets": {
+        "label": "Qui obtient un calendrier",
+        "description": "Choisissez comment les nouveaux calendriers sont créés : inscription ouverte, sur invitation uniquement ou attribués par l'administrateur."
+      },
+      "removing": {
+        "label": "Supprimer un calendrier",
+        "description": "Supprimez un calendrier de votre instance et comprenez l'effet sur les copies fédérées."
+      },
+      "communicating": {
+        "label": "Communiquer avec les propriétaires",
+        "description": "Informez les propriétaires de calendrier des interruptions de service, des mises à jour et des changements de politique."
+      },
+      "mod_boundaries": {
+        "label": "Limites de la modération",
+        "description": "Sachez quand agir, quand faire remonter et quand ne pas intervenir dans la modération des propriétaires."
+      },
+      "coc": {
+        "label": "Code de conduite",
+        "description": "Rédigez un code de conduite applicable, en distinguant les règles du logiciel de la politique et de la culture."
+      },
+      "fed_incidents": {
+        "label": "Incidents de fédération",
+        "description": "Traitez les signalements venant d'autres instances ou les concernant, sans réagir ni trop ni trop peu."
+      },
+      "how_fed_works": {
+        "label": "Comment fonctionne la fédération",
+        "description": "Comprenez ce que votre instance signe, envoie et accepte : le protocole face à la politique."
+      },
+      "fed_policy": {
+        "label": "Politique de fédération",
+        "description": "Décidez avec quelles instances vous fédérer et comment traiter les demandes de défédération."
+      },
+      "funding_setup": {
+        "label": "Configurer les plans de financement",
+        "description": "Configurez Stripe pour que les propriétaires de calendrier puissent soutenir votre instance avec des plans de financement."
+      },
+      "asking": {
+        "label": "Demander de l'argent",
+        "description": "Demandez de l'argent à la communauté qui utilise votre instance : quand, à quelle fréquence et avec quelle transparence."
+      },
+      "ics_import": {
+        "label": "Importer des événements via ICS",
+        "description": "Migrez des événements d'un autre calendrier vers celui-ci par une importation ponctuelle d'un fichier ICS."
+      }
+    }
   },
   "report": {
     "form_title": "Signaler l'événement",
