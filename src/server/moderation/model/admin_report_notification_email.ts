@@ -1,6 +1,6 @@
-import config from 'config';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
+import { publicUrl } from '@/server/common/helper/public-url';
 
 const textTemplate = compileTemplate('src/server/moderation', 'admin-report-notification.text.hbs');
 const htmlTemplate = compileTemplate('src/server/moderation', 'admin-report-notification.html.hbs');
@@ -58,7 +58,7 @@ class AdminReportNotificationEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    const reviewUrl = config.get('domain') + '/calendar/' + this.calendarId + '/reports';
+    const reviewUrl = publicUrl('/calendar/' + this.calendarId + '/reports');
     const priorityLabel = this.priority.toUpperCase();
 
     const templateData = {
