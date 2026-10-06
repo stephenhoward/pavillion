@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
+import path from 'path';
+import { createRequire } from 'module';
 
 import { parseEventPageParams, buildEventMetaTags, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
@@ -414,6 +416,85 @@ describe('MetaTags Helper', () => {
       expect(result!.image).toBe('https://example.com/api/v1/media/default-img-uuid');
     });
 
+    describe('image alt text', () => {
+      async function build(event: CalendarEvent, calendar: Calendar, locale = 'en') {
+        const iface = createMockInterface();
+        (iface.current!.getCalendarByName as sinon.SinonStub).resolves(calendar);
+        (iface.current!.getEventById as sinon.SinonStub).resolves(event);
+        const params = { calendarUrlName: 'my-calendar', eventId: 'event-uuid-1' };
+        return buildEventMetaTags(iface, params, locale, baseUrl);
+      }
+
+      it('carries the event image alt text for a described image', async () => {
+        const event = createMockEvent({ mediaId: 'media-uuid-1' });
+        event.content('en').imageAlt = 'A packed hall facing the stage';
+
+        const result = await build(event, createMockCalendar());
+
+        expect(result!.imageAlt).toBe('A packed hall facing the stage');
+      });
+
+      // og:image:alt="" would claim the image has an empty description;
+      // omitting the field is the decorative signal (mirrors the AS2 emitter,
+      // DEC-014). Whitespace-only counts as empty, as in localizedField.
+      it('omits the alt field for a decorative image', async () => {
+        const event = createMockEvent({ mediaId: 'media-uuid-1' });
+        event.content('en').imageAlt = '   ';
+
+        const result = await build(event, createMockCalendar());
+
+        expect(result!.image).toBe('https://example.com/api/v1/media/media-uuid-1');
+        expect(result).not.toHaveProperty('imageAlt');
+      });
+
+      // Resolved per field, not off the row resolveContentLocale picked: the
+      // French row has a title, so it is selected for the title, but its blank
+      // alt falls through to English -- matching what the page announces.
+      it('falls back to the English alt when the locale row has a blank alt', async () => {
+        const event = createMockEvent({ mediaId: 'media-uuid-1' });
+        event.content('en').imageAlt = 'A packed hall facing the stage';
+        event.addContent(new CalendarEventContent('fr', 'Concert', 'Un concert', '', ''));
+
+        const result = await build(event, createMockCalendar(), 'fr');
+
+        expect(result!.title).toBe('Concert');
+        expect(result!.imageAlt).toBe('A packed hall facing the stage');
+      });
+
+      it('falls back to the first language with an alt when neither locale nor English has one', async () => {
+        const event = createMockEvent({ mediaId: 'media-uuid-1' });
+        event.addContent(new CalendarEventContent('es', 'Concierto', '', '', 'Una sala llena'));
+
+        const result = await build(event, createMockCalendar(), 'fr');
+
+        expect(result!.imageAlt).toBe('Una sala llena');
+      });
+
+      // The card shows the calendar's default image, so the calendar's alt is
+      // the one that describes it -- never alt left on the event's own content.
+      it('uses the calendar alt when the image is the calendar default', async () => {
+        const calendar = createMockCalendar({ defaultImageId: 'default-img-uuid' });
+        calendar.content('en').imageAlt = 'Lanterns strung over the plaza';
+        const event = createMockEvent();
+        event.content('en').imageAlt = 'Stale alt for a removed image';
+
+        const result = await build(event, calendar);
+
+        expect(result!.image).toBe('https://example.com/api/v1/media/default-img-uuid');
+        expect(result!.imageAlt).toBe('Lanterns strung over the plaza');
+      });
+
+      it('omits the alt field when there is no image at all', async () => {
+        const event = createMockEvent();
+        event.content('en').imageAlt = 'Stale alt for a removed image';
+
+        const result = await build(event, createMockCalendar());
+
+        expect(result!.image).toBeNull();
+        expect(result).not.toHaveProperty('imageAlt');
+      });
+    });
+
     it('should fall back to first available language when requested locale has no content', async () => {
       const iface = createMockInterface();
       const calendar = createMockCalendar();
@@ -573,6 +654,53 @@ describe('MetaTags Helper', () => {
       expect(result).toBeNull();
       expect(CALENDAR_URL_NAME_RE.test('%61dmin')).toBe(false);
       expect((iface.current!.getEventById as sinon.SinonStub).called).toBe(false);
+    });
+  });
+
+  describe('site.index.html.ejs image alt tags', () => {
+    const templatePath = path.resolve(__dirname, '../../../templates/site.index.html.ejs');
+    // ejs ships no type declarations; narrow the one call this suite makes.
+    const ejs = createRequire(import.meta.url)('ejs') as {
+      renderFile(file: string, data: Record<string, unknown>): Promise<string>;
+    };
+
+    function render(meta: Record<string, unknown>) {
+      return ejs.renderFile(templatePath, {
+        locale: 'en',
+        environment: 'development',
+        cssFiles: [],
+        manifest: {},
+        hreflangLinks: [],
+        meta: {
+          title: 'Test Event',
+          description: 'A great event',
+          url: 'https://example.com/my-calendar/events/event-uuid-1',
+          type: 'article',
+          siteName: 'My Calendar',
+          image: 'https://example.com/api/v1/media/media-uuid-1',
+          ...meta,
+        },
+      });
+    }
+
+    it('emits og:image:alt and twitter:image:alt for a described image', async () => {
+      const html = await render({ imageAlt: 'A "packed" hall' });
+
+      expect(html).toContain('<meta property="og:image:alt" content="A &#34;packed&#34; hall" />');
+      expect(html).toContain('<meta name="twitter:image:alt" content="A &#34;packed&#34; hall" />');
+    });
+
+    it('emits no alt tags for a decorative image', async () => {
+      const html = await render({});
+
+      expect(html).toContain('og:image"');
+      expect(html).not.toContain('image:alt');
+    });
+
+    it('emits no alt tags when there is no image', async () => {
+      const html = await render({ image: null, imageAlt: 'Orphaned alt' });
+
+      expect(html).not.toContain('image:alt');
     });
   });
 });
