@@ -11,6 +11,7 @@
  */
 
 import PublicCalendarInterface from '@/server/public/interface/index';
+import { TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import { stripLocalePrefix } from '@/common/i18n/locale-url';
 import { isReservedRouteSegment } from '@/common/routing/reserved-segments';
@@ -33,6 +34,13 @@ export interface MetaTagData {
   title: string;
   description: string;
   image: string | null;
+  /**
+   * Alt text for `image`. Absent, never '', when the image is decorative or
+   * there is no image -- an empty og:image:alt would claim an empty
+   * description, where omitting the tag is the honest signal (as the AS2
+   * emitter does, see DEC-014).
+   */
+  imageAlt?: string;
   url: string;
   type: string;
   siteName: string;
@@ -248,6 +256,35 @@ function resolveContentLocale(
 }
 
 /**
+ * Resolves a single translated field per field rather than off a selected row.
+ *
+ * Server twin of the site's `localizedField`: the requested locale's non-empty
+ * value, else English, else the first language with one, else ''. Whitespace
+ * counts as empty; the chosen value is returned as stored. Kept in step with
+ * that composable so the card and the page agree on whether an image is
+ * described and by which language's text.
+ */
+function resolveField<T extends TranslatedContentModel>(
+  model: TranslatedModel<T> | null | undefined,
+  field: keyof T & string,
+  requestedLocale: string,
+): string {
+  if (!model) return '';
+
+  const languages = model.getLanguages();
+  const valueFor = (language: string): string => {
+    if (!languages.includes(language)) return '';
+    const value = model.content(language)[field];
+    return typeof value === 'string' && value.trim() !== '' ? value : '';
+  };
+
+  return valueFor(requestedLocale)
+    || valueFor(DEFAULT_LANGUAGE_CODE)
+    || languages.map(valueFor).find(value => value !== '')
+    || '';
+}
+
+/**
  * Builds OpenGraph/Twitter Card meta tag data for a public event page.
  *
  * Fetches the calendar and event (or event instance) via the public interface,
@@ -363,13 +400,18 @@ async function buildMetaTagsInternal(
     siteName = calendar.content(calendarLocale).name || '';
   }
 
-  // Resolve image URL: event media -> calendar default image -> null
+  // Resolve image URL: event media -> calendar default image -> null. The alt
+  // follows whichever image was chosen (the site's resolveImageAlt rule): the
+  // calendar's alt describes the calendar default, never the event's own.
   let image: string | null = null;
+  let imageAlt = '';
   if (event.media?.id) {
     image = `${baseUrl}/api/v1/media/${event.media.id}`;
+    imageAlt = resolveField(event, 'imageAlt', locale);
   }
   else if (calendar.defaultEventImage?.id) {
     image = `${baseUrl}/api/v1/media/${calendar.defaultEventImage.id}`;
+    imageAlt = resolveField(calendar, 'imageAlt', locale);
   }
 
   // Build canonical URL. DEC-018 addresses a calendar at the domain root, and
@@ -385,6 +427,7 @@ async function buildMetaTagsInternal(
     title,
     description: sanitizedDescription,
     image,
+    ...(imageAlt ? { imageAlt } : {}),
     url,
     type: 'article',
     siteName,
