@@ -17,8 +17,7 @@ import WidgetDomainService from '@/server/calendar/service/widget_domain';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
 import WidgetEmbed from '@/client/components/logged_in/calendar-management/widget-embed.vue';
 import WidgetConfig from '@/client/components/logged_in/calendar-management/widget-config.vue';
-import WeekView from '@/widget/components/week-view.vue';
-import MonthView from '@/widget/components/month-view.vue';
+import { MonthView, WeekView } from '@/common/ui/calendar-views';
 import ListView from '@/widget/components/list-view.vue';
 import { useWidgetStore } from '@/widget/stores/widgetStore';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
@@ -72,10 +71,6 @@ describe('Widget Integration Tests', () => {
           system: {
             loading_events: 'Loading...',
             no_events_available: 'No events',
-            previous_week: 'Previous',
-            next_week: 'Next',
-            previous_month: 'Previous Month',
-            next_month: 'Next Month',
           },
         },
       },
@@ -164,7 +159,7 @@ describe('Widget Integration Tests', () => {
       const urlParams = new URLSearchParams('view=week&accentColor=%23ff9131&colorMode=auto');
       widgetStore.parseConfig(urlParams);
 
-      expect(widgetStore.viewMode).toBe('week');
+      expect(widgetStore.configuredView).toBe('week');
       expect(widgetStore.accentColor).toBe('#ff9131');
       expect(widgetStore.colorMode).toBe('auto');
 
@@ -236,9 +231,20 @@ describe('Widget Integration Tests', () => {
       });
     };
 
+    // The widget renders the shared grids; these props are what
+    // widget-container.vue hands them.
+    const gridProps = {
+      anchorDate: DateTime.fromISO('2026-01-06'),
+      eventsByDay: {},
+      isLoading: false,
+      eventRoute: () => '/widget/mycal',
+      dayRoute: () => '/widget/mycal',
+    };
+
     it('should render week view with 7-day grid', async () => {
       const router = createMockRouter();
       const wrapper = mount(WeekView, {
+        props: gridProps,
         global: {
           plugins: [[I18NextVue, { i18next }], router],
         },
@@ -254,6 +260,7 @@ describe('Widget Integration Tests', () => {
     it('should render month view with calendar grid', async () => {
       const router = createMockRouter();
       const wrapper = mount(MonthView, {
+        props: gridProps,
         global: {
           plugins: [[I18NextVue, { i18next }], router],
         },
@@ -406,7 +413,6 @@ describe('Widget Integration Tests', () => {
 
   describe('Widget performance with 100+ events', () => {
     it('should handle large event datasets efficiently', async () => {
-      const publicStore = usePublicCalendarStore();
       const router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -414,35 +420,39 @@ describe('Widget Integration Tests', () => {
         ],
       });
 
-      // Create 100+ mock events spread across the current week
-      // WeekView only shows events for the current week, so we need dates that match
-      const events = [];
-      const baseDate = DateTime.now().startOf('week');
-      for (let i = 0; i < 120; i++) {
-        // Spread events across 7 days of the week (ensures some days have > 3 events for overflow)
-        const dayOffset = i % 7;
-        const eventDate = baseDate.plus({ days: dayOffset });
-        events.push({
+      // 120+ events spread over the fortnight either side of today, so every
+      // day of the week containing today has more than MAX_VISIBLE_EVENTS.
+      const today = DateTime.now().startOf('day');
+      const eventsByDay: Record<string, any[]> = {};
+      for (let i = 0; i < 130; i++) {
+        const eventDate = today.plus({ days: (i % 13) - 6 });
+        const dateKey = eventDate.toISODate()!;
+        (eventsByDay[dateKey] ??= []).push({
           id: `event-${i}`,
           start: {
-            toLocal: () => ({ toISODate: () => eventDate.toISODate(), toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}` }),
+            toLocal: () => ({ toISODate: () => dateKey, toLocaleString: () => `${i % 12}:00 AM` }),
           },
           event: {
             id: `e${i}`,
             content: () => ({ name: `Event ${i}` }),
+            hasContent: () => true,
+            getLanguages: () => ['en'],
             media: null,
             categories: [],
           },
         });
       }
 
-      // Use allEvents property (not events)
-      publicStore.allEvents = events as any;
-
-      // Mount WeekView and verify it renders without issues
       const startTime = performance.now();
 
       const wrapper = mount(WeekView, {
+        props: {
+          anchorDate: today,
+          eventsByDay,
+          isLoading: false,
+          eventRoute: () => '/widget/mycal',
+          dayRoute: () => '/widget/mycal',
+        },
         global: {
           plugins: [[I18NextVue, { i18next }], router],
         },
@@ -457,10 +467,9 @@ describe('Widget Integration Tests', () => {
       // Performance check: should render in under 1 second
       expect(renderTime).toBeLessThan(1000);
 
-      // With 120 events spread across 7 days (~17 events/day), overflow indicators should appear
-      // since MAX_VISIBLE_EVENTS is 3. Each day will show "+14 more" or similar.
-      const overflowIndicators = wrapper.findAll('.event-overflow');
-      expect(overflowIndicators.length).toBeGreaterThan(0);
+      // Every day of the week holds ~10 events, past the visible cap, so each
+      // column shows an overflow link.
+      expect(wrapper.findAll('.event-overflow')).toHaveLength(7);
     });
   });
 });

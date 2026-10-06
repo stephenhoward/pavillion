@@ -77,7 +77,7 @@ describe('Widget App Infrastructure', () => {
       const urlParams = new URLSearchParams('view=week&accentColor=%23ff9131&colorMode=light');
       store.parseConfig(urlParams);
 
-      expect(store.viewMode).toBe('week');
+      expect(store.configuredView).toBe('week');
     });
 
     it('should parse accentColor parameter from URL', () => {
@@ -105,7 +105,7 @@ describe('Widget App Infrastructure', () => {
       store.parseConfig(urlParams);
 
       // Defaults come from WIDGET_CONFIG_DEFAULTS (common/model/widget_config).
-      expect(store.viewMode).toBe('list');
+      expect(store.configuredView).toBe('list');
       expect(store.accentColor).toBe('#ff9131');
       expect(store.colorMode).toBe('auto');
     });

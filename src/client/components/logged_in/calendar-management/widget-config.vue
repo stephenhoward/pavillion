@@ -6,7 +6,12 @@
 
       <div class="form-group view-mode-group">
         <p id="view-mode-group-label" class="form-label">{{ t('view_mode_label') }}</p>
-        <div class="view-mode-cards" role="group" aria-labelledby="view-mode-group-label">
+        <div id="view-mode-help" class="description">{{ t('view_mode_help') }}</div>
+        <div
+          class="view-mode-cards"
+          role="group"
+          aria-labelledby="view-mode-group-label"
+          aria-describedby="view-mode-help">
           <button
             type="button"
             class="view-mode-card"
@@ -471,6 +476,11 @@ defineExpose({
   }
 
   .view-mode-group {
+    // The help sits between the label and the cards, not under a field.
+    .description {
+      margin-block: 0 var(--pav-space-3);
+    }
+
     .view-mode-cards {
       display: grid;
       grid-template-columns: 1fr;

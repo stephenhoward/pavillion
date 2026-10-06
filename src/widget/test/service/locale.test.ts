@@ -33,7 +33,7 @@ describe('widget locale service', () => {
   });
 
   it('resolves a system key in the requested language instead of falling back to English', () => {
-    expect(i18next.t('system:previous_week')).toBe('Semana anterior');
+    expect(i18next.t('system:loading_events')).toBe('Cargando eventos...');
   });
 
   it('resolves a ui key in the requested language instead of falling back to English', () => {

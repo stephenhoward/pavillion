@@ -44,9 +44,11 @@
  * default-omission rule does not apply to it and it does not call
  * `calendarViewQuery`. It is the one sanctioned exception to that rule.
  * Applying default-omission there would drop the very value the preview
- * exists to state. After load, the preview changes the owner's default in
- * place by posting a `pavillion:updateConfig` message to the iframe, never
- * through the route.
+ * exists to state. When the owner picks another view, the preview's src
+ * changes with it, so the iframe reloads and `parseConfig` re-reads `view`
+ * as the new default. The preview also posts a `pavillion:updateConfig`
+ * message whose `view` updates the default in place, but that only changes
+ * what renders while the route carries no visitor view.
  *
  * The two meanings share a key only because of an ordering invariant:
  * `parseConfig` reads `view` exactly once, at load, from
@@ -55,7 +57,11 @@
  * reader owns it. At load the two readings agree by construction (the URL's
  * `view` is the default, so the visitor has not deviated). Re-reading
  * `window.location.search` as configuration after a `router.replace` would
- * read the visitor's choice as the owner's config — never do it.
+ * read the visitor's choice as the owner's config — never do it. A full
+ * reload is a fresh load, though: reloading a URL that carries a visitor's
+ * `view` makes `parseConfig` treat it as the starting view. That is an
+ * accepted consequence; the SDK never puts `view` on the iframe URL, so only
+ * a visitor who navigated inside the frame and then reloaded it meets it.
  *
  * ## Precedence between `date` and the list filters `startDate` / `endDate`
  *
