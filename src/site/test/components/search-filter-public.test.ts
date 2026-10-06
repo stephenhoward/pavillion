@@ -656,6 +656,46 @@ describe('SearchFilterPublic Component', () => {
     });
   });
 
+  describe('Partial Custom Date Label', () => {
+    beforeEach(async () => {
+      await i18next.init({
+        lng: 'en',
+        resources: {
+          en: {
+            system: {
+              'public_search_filter.date_from': 'Starting {{date}}',
+              'public_search_filter.date_until': 'Ending {{date}}',
+            },
+          },
+        },
+      });
+    });
+
+    it('renders the translated "from" label when only a start date is set', async () => {
+      await router.push({ path: '/calendar/test', query: { startDate: '2026-03-05' } });
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: { plugins: [pinia, router, [I18NextVue, { i18next }]] },
+      });
+      await flushPromises();
+
+      expect(wrapper.find('.button-text').text()).toBe('Starting Mar 5');
+    });
+
+    it('renders the translated "until" label when only an end date is set', async () => {
+      await router.push({ path: '/calendar/test', query: { endDate: '2026-03-05' } });
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: { plugins: [pinia, router, [I18NextVue, { i18next }]] },
+      });
+      await flushPromises();
+
+      expect(wrapper.find('.button-text').text()).toBe('Ending Mar 5');
+    });
+  });
+
   describe('Default Date Range Display', () => {
     // Fix "now" so getDefaultDateRange() resolves to a known string.
     // 2026-04-29T12:00:00Z renders to Apr 29 in every reasonable test-runner zone.
@@ -1368,6 +1408,46 @@ describe('SearchFilterPublic Component', () => {
       expect(store.selectedCategoryIds).toEqual(['Sports', 'Health']);
       expect(store.startDate).toBe('2025-01-01');
       expect(store.endDate).toBe('2025-01-07');
+    });
+
+    it('ignores malformed list dates in the URL and removes them', async () => {
+      const store = usePublicCalendarStore();
+
+      await router.push({
+        path: '/calendar/test',
+        query: { startDate: 'not-a-date', endDate: '2025-13-45' },
+      });
+
+      mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: { plugins: [pinia, router, [I18NextVue, { i18next }]] },
+      });
+      await flushPromises();
+
+      expect(store.startDate).toBeNull();
+      expect(store.endDate).toBeNull();
+      expect(router.currentRoute.value.query.startDate).toBeUndefined();
+      expect(router.currentRoute.value.query.endDate).toBeUndefined();
+    });
+
+    it('keeps a valid list date when its partner in the URL is malformed', async () => {
+      const store = usePublicCalendarStore();
+
+      await router.push({
+        path: '/calendar/test',
+        query: { startDate: '2025-01-01', endDate: '2025-02-30' },
+      });
+
+      mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: { plugins: [pinia, router, [I18NextVue, { i18next }]] },
+      });
+      await flushPromises();
+
+      expect(store.startDate).toBe('2025-01-01');
+      expect(store.endDate).toBeNull();
+      expect(router.currentRoute.value.query.startDate).toBe('2025-01-01');
+      expect(router.currentRoute.value.query.endDate).toBeUndefined();
     });
 
     it('should update URL when filters change', async () => {

@@ -7,6 +7,7 @@ import {
   DATE_QUERY_KEY,
   calendarViewQuery,
   parseCalendarViewQuery,
+  parseListDateQuery,
 } from '@/common/routing/calendar-view-query';
 
 /** Drop the keys `calendarViewQuery` marked as absent, as a router would. */
@@ -132,6 +133,26 @@ describe('calendar view query', () => {
 
       expect(parsed.viewMode).toBe('week');
       expect(parsed.anchorDate.toISODate()).toBe('2026-03-14');
+    });
+  });
+
+  describe('parseListDateQuery', () => {
+    it('accepts a real yyyy-MM-dd day', () => {
+      expect(parseListDateQuery('2026-03-14')).toBe('2026-03-14');
+    });
+
+    it.each([
+      ['a non-date string', 'not-a-date'],
+      ['an impossible month and day', '2025-13-45'],
+      ['a day past the end of the month', '2025-02-30'],
+      ['a different date format', '03/14/2026'],
+      ['a datetime', '2026-03-14T10:00'],
+      ['an empty string', ''],
+      ['an array', ['2026-03-14']],
+      ['null', null],
+      ['undefined', undefined],
+    ])('rejects %s', (_label, value) => {
+      expect(parseListDateQuery(value)).toBeNull();
     });
   });
 });

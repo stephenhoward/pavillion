@@ -67,7 +67,9 @@
     "more_filters": "Plus de filtres",
     "hide_filters": "Masquer les filtres",
     "show_filters": "Afficher les filtres",
-    "date_range_invalid": "Plage de dates invalide"
+    "date_range_invalid": "Plage de dates invalide",
+    "date_from": "À partir du {{date}}",
+    "date_until": "Jusqu'au {{date}}"
   },
   "back_to_calendar": "Retour à {{name}}",
   "series_events": "Événements de cette série",
