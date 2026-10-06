@@ -16,11 +16,11 @@ A module under `src/common/ui/` may import:
 
 Files under `src/common/ui/test/` may additionally import `vitest`, `@vue/test-utils`, and the node builtins `fs` and `path`. They get their own list rather than an exemption, so a test still cannot reach for an app store or an HTTP client to stand a fixture up.
 
-`luxon` is imported by `calendar-views/calendar-grid.ts`, the week and month grid date math. `i18next-vue` is on the allowlist but unimported today, listed in advance of the shared components that read the `ui` bundle, so their arrival does not mean reopening this list.
+`luxon` is the date math of the calendar grids and the view state. `i18next-vue` is read by the shared components that render `ui` keys.
 
 The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/server` — by alias or by a relative path that escapes into them — and may never reach outside `src/` by a relative path at all. In the other direction, nothing under `src/server/` may import `src/common/ui`: this module assumes a browser.
 
-`test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. It deliberately carries no "the client imports nothing from here" assertion: the client is a consumer like the other two apps. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary.
+`test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. It deliberately carries no "the client imports nothing from here" assertion: the client is a consumer like the other two apps. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary. The sanctioned exception is a composable that must drive an app store: it accepts the store through a structurally typed interface instead of importing it, as `useCalendarWindowSync` and `useCalendarViewContainer` do, so the app passes its store in and the module never names it.
 
 Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-ese5. The decision behind this module, including that boundary, is [DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md).
 

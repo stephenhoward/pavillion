@@ -3,11 +3,15 @@
  * views: the measured root, the URL-backed view state, the events source kept
  * in step with the view's window, and the bindings the toolbar and grids take.
  *
- * Each app supplies only what differs between them: its default view, its
- * events source, when that source is ready to reload, what counts as loading,
- * and the shape of its routes. The events source is typed structurally (see
+ * Each container passes its default view, its events source (`target`), a
+ * readiness check, a loading check, its locale, and its route builders. Only
+ * the default view and the route builders differ between the site and the
+ * widget today. The events source is typed structurally (see
  * `CalendarWindowSyncTarget`), so an app store satisfies it without this
- * module importing a store.
+ * module importing a store. That is also why the readiness and loading checks
+ * are the caller's: they read the store's shape, which this module must not
+ * know, so both containers passing identical lambdas is deliberate, not
+ * leftover duplication.
  *
  * Call it synchronously in `<script setup>`: it registers an `onMounted`
  * hook, and the returned `root` must be bound with `ref="root"` on an element
