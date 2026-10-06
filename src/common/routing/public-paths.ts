@@ -40,6 +40,9 @@
  *   template one onto a remote host: `src/server/calendar/helper/source_calendar.ts`
  *   explains why a peer's page URL comes from the peer's own actor document,
  *   and why the retired `/view/` spelling is the safer guess when we have none.
+ * - **Query state.** Which view a link opens on, and anchored where, is the
+ *   view-state vocabulary in ./calendar-view-query.ts — the third module in
+ *   this directory, recorded in DEC-019. A builder here emits a path only.
  *
  * The route table these shapes must agree with is `buildSiteRoutes` in
  * src/site/routes.ts; src/common/test/routing/public-url-contract.test.ts joins

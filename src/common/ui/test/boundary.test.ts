@@ -9,7 +9,7 @@
  * same component.
  *
  * Scope is the new module only. Existing widget -> site and site -> client
- * imports elsewhere in the tree are tracked debt on pv-z1in, not failures here.
+ * imports elsewhere in the tree are tracked debt on pv-ese5, not failures here.
  *
  * There is deliberately no "the client imports nothing from here" assertion.
  * The client is a consumer like the site and widget: a shared component reads
