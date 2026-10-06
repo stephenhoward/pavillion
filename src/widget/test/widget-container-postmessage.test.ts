@@ -28,8 +28,6 @@ vi.mock('@/site/components/not-found.vue', () => ({
 vi.mock('@/site/components/search-filter-public.vue', () => ({
   default: { template: '<div></div>' },
 }));
-vi.mock('@/widget/components/week-view.vue', () => ({ default: { template: '<div></div>' } }));
-vi.mock('@/widget/components/month-view.vue', () => ({ default: { template: '<div></div>' } }));
 vi.mock('@/widget/components/list-view.vue', () => ({ default: { template: '<div></div>' } }));
 
 import WidgetContainer from '@/widget/components/widget-container.vue';

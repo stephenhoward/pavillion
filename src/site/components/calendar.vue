@@ -1,24 +1,15 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, onMounted, computed, inject, ref, watch } from 'vue';
-import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
+import { reactive, onBeforeMount, computed, inject } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import type Config from '@/client/service/config';
 import type { CalendarViewMode } from '@/common/model/calendar_view';
 import type CalendarEventInstance from '@/common/model/event_instance';
-import {
-  DATE_QUERY_KEY,
-  LIST_END_DATE_QUERY_KEY,
-  LIST_START_DATE_QUERY_KEY,
-  VIEW_QUERY_KEY,
-  calendarViewQuery,
-} from '@/common/routing/calendar-view-query';
+import { DATE_QUERY_KEY, VIEW_QUERY_KEY } from '@/common/routing/calendar-view-query';
 import { calendarPath, eventPath } from '@/common/routing/public-paths';
 import { CalendarViewToolbar, MonthView, WeekView } from '@/common/ui/calendar-views';
-import { periodLabel } from '@/common/ui/calendar-views/calendar-grid';
-import { useCalendarViewState } from '@/common/ui/calendar-views/useCalendarViewState';
-import { useCalendarWindowSync } from '@/common/ui/calendar-views/useCalendarWindowSync';
-import { useContainerWidth } from '@/common/ui/composables/useContainerWidth';
+import { useCalendarViewContainer } from '@/common/ui/calendar-views/useCalendarViewContainer';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 
 import CalendarService from '../service/calendar';
@@ -58,88 +49,34 @@ const defaultEventImage = computed(() => publicCalendarStore.defaultEventImage);
 // Calendar view (list / week / month)
 // ----------------------------------------------------------------
 
-// The site has no owner-configured starting view: it always opens on the list.
-const defaultView = computed<CalendarViewMode>(() => 'list');
-
-const root = ref<HTMLElement | null>(null);
-const { tier, width } = useContainerWidth(root);
-
 const {
+  root,
   effectiveViewMode,
   anchorDate,
-  window: fetchWindow,
   availableViews,
   setView,
   goPrev,
   goNext,
   goToday,
-  setTier,
-} = useCalendarViewState({ defaultView });
-
-// Forward the tier only once the root has been measured. Before mount the
-// width reads 0 (tier `narrow`); passing that on would collapse a deep-linked
-// week or month to the list during setup, so the first fetch would be the
-// list's range and the measured tier would immediately fetch again. Until
-// measured, the view state keeps its `wide` starting tier and the URL's view.
-watch([tier, width], ([nextTier, nextWidth]) => {
-  if (nextWidth > 0) {
-    setTier(nextTier);
-  }
-}, { immediate: true });
-
-// The view window outlives this component in the store (back-navigation keeps
-// it); start from none so a list URL never fetches a previous visit's month.
-publicCalendarStore.setViewWindow(null, null);
-
-// The first fetch belongs to the existing mount sequence: SearchFilterPublic
-// reloads on mount (or once calendar settings load), by which point the window
-// sync below has already set the view window during setup. Reloading from the
-// sync before then would fetch twice — or fetch a previously viewed calendar,
-// since this calendar is only selected in onBeforeMount.
-let isMounted = false;
-onMounted(() => {
-  isMounted = true;
+  currentPeriodLabel,
+  gridIsLoading,
+  eventRoute,
+  dayRoute,
+} = useCalendarViewContainer({
+  // The site has no owner-configured starting view: it always opens on the list.
+  defaultView: computed<CalendarViewMode>(() => 'list'),
+  target: publicCalendarStore,
+  isReady: () => publicCalendarStore.isCalendarSettingsLoaded
+    && publicCalendarStore.currentCalendarUrlName === calendarUrlName,
+  isLoading: () => state.isLoading
+    || publicCalendarStore.isLoadingEvents
+    || !publicCalendarStore.hasLoadedEvents,
+  locale: currentLocale,
+  // An event chip links to the occurrence page, built as event-card.vue builds it.
+  eventRoute: (instance: CalendarEventInstance) =>
+    localizedPath(eventPath(calendarUrlName, instance.event.id, formatInstanceSlug(instance.start))),
+  calendarRoute: query => ({ path: localizedPath(calendarPath(calendarUrlName)), query }),
 });
-
-useCalendarWindowSync(fetchWindow, {
-  setViewWindow: (start, end) => publicCalendarStore.setViewWindow(start, end),
-  reloadWithFilters: () => {
-    const isReady = isMounted
-      && publicCalendarStore.isCalendarSettingsLoaded
-      && publicCalendarStore.currentCalendarUrlName === calendarUrlName;
-    return isReady ? publicCalendarStore.reloadWithFilters() : Promise.resolve();
-  },
-});
-
-const currentPeriodLabel = computed(() => effectiveViewMode.value === 'list'
-  ? ''
-  : periodLabel(effectiveViewMode.value, anchorDate.value, currentLocale.value));
-
-const gridIsLoading = computed(() => state.isLoading
-  || publicCalendarStore.isLoadingEvents
-  || !publicCalendarStore.hasLoadedEvents);
-
-/** An event chip links to the occurrence page, built as event-card.vue builds it. */
-function eventRoute(instance: CalendarEventInstance): RouteLocationRaw {
-  return localizedPath(eventPath(calendarUrlName, instance.event.id, formatInstanceSlug(instance.start)));
-}
-
-/**
- * A day number (or a cell's overflow link) opens the list filtered to that
- * day. The view is emitted through calendarViewQuery so the link lands on the
- * list whatever the surface's default; the other filters are kept.
- */
-function dayRoute(isoDate: string): RouteLocationRaw {
-  const merged: Record<string, unknown> = {
-    ...route.query,
-    ...calendarViewQuery('list', anchorDate.value, defaultView.value),
-    [LIST_START_DATE_QUERY_KEY]: isoDate,
-    [LIST_END_DATE_QUERY_KEY]: isoDate,
-  };
-  const query = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined));
-
-  return { path: localizedPath(calendarPath(calendarUrlName)), query: query as Record<string, string> };
-}
 
 /**
  * Clears all active filters and resets the filter query params, keeping the
