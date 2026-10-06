@@ -136,10 +136,18 @@ describe('setup', () => {
 // ---------------------------------------------------------------------------
 
 describe('width tier', () => {
-  it('keeps a deep-linked month while the root is unmeasured', () => {
+  it('keeps a deep-linked month while the root is unmeasured', async () => {
     const container = setup({ query: { view: 'month', date: '2026-09-10' }, tier: 'narrow', width: 0 });
+    await nextTick();
 
     expect(container.effectiveViewMode.value).toBe('month');
+    // The first fetch is the month's range: after the setup clear, the view
+    // window is only ever the month, never put back to the list's (null).
+    const windows = calls.filter(call => call[0] === 'setViewWindow');
+    expect(windows).toEqual([
+      ['setViewWindow', null, null],
+      ['setViewWindow', '2026-09-01', '2026-09-30'],
+    ]);
   });
 
   it('collapses to the list once a narrow width is measured', async () => {

@@ -496,8 +496,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       // viewWindow is left alone: it belongs to the view the page is showing
       // (the site's calendar.vue and the widget's widget-container.vue set it
       // during setup, via useCalendarViewContainer, before the calendar is
-      // selected),
-      // not to the calendar being switched away from.
+      // selected), not to the calendar being switched away from.
       // Invalidate any in-flight request so the previous calendar's late
       // response cannot render under this one.
       latestEventsRequest++;
