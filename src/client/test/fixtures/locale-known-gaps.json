@@ -1,22 +1,5 @@
 {
   "es": {
-    "client/calendars.json": [
-      "calendar.documentation",
-      "calendar.menu_label",
-      "import.file_badge",
-      "import.file_help",
-      "import.file_invalid_type",
-      "import.file_label",
-      "import.file_remove",
-      "import.file_required",
-      "import.file_too_large",
-      "import.import_success",
-      "import.tab_file",
-      "import.tab_url",
-      "import.tabs_aria_label",
-      "list.documentation",
-      "list.menu_label"
-    ],
     "client/system.json": [
       "help.guides.account.description",
       "help.guides.account.label",
@@ -85,23 +68,6 @@
     ]
   },
   "fr": {
-    "client/calendars.json": [
-      "calendar.documentation",
-      "calendar.menu_label",
-      "import.file_badge",
-      "import.file_help",
-      "import.file_invalid_type",
-      "import.file_label",
-      "import.file_remove",
-      "import.file_required",
-      "import.file_too_large",
-      "import.import_success",
-      "import.tab_file",
-      "import.tab_url",
-      "import.tabs_aria_label",
-      "list.documentation",
-      "list.menu_label"
-    ],
     "client/system.json": [
       "help.guides.account.description",
       "help.guides.account.label",
