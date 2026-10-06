@@ -40,7 +40,7 @@ Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Series** 
 
 Click <Btn>Add Series</Btn>. A full-page editor opens with the following fields:
 
-**URL name.** The slug that becomes the last segment of the series' public URL — `your-calendar/series/summer-music-series`. Lowercase letters, numbers, and underscores only. Pick something stable; the URL name is set when the series is created and stays put after that.
+**URL name.** The slug that becomes the last segment of the series' public URL — `your-calendar/series/summer-music-series`. Use 3 to 24 letters, numbers, hyphens, or underscores; it can't start with a hyphen or an underscore, or end with a hyphen. Pick something stable; the URL name is set when the series is created and stays put after that.
 
 **Series name.** The display name visitors see — *Summer Music Series*, *Fall Lecture Series*. If your calendar publishes in more than one language, the editor lets you provide the name in each: click <Btn>Add Language</Btn>, pick the language, and fill in the translation. The series itself is one thing with multiple labels, the same way a category is.
 

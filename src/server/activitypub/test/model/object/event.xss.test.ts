@@ -370,6 +370,52 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Content shape guard. The allow-list above only protects content that
+  // reaches it. The parser spreads the wire object into its result, so a
+  // `content` value the resolution chain did not handle (an array, a raw
+  // string) used to survive verbatim — unsanitized names stored under language
+  // '0'. Malformed content now normalizes to absent; it never throws.
+  // ---------------------------------------------------------------------------
+  describe('content shape guard', () => {
+    it('drops an array content instead of passing it through raw', () => {
+      const r = EventObject.parseInboundEvent({
+        content: [{ name: '<script>alert(1)</script>', evil: 'raw' }],
+      });
+      expect(r.content).toBeUndefined();
+      expect(Object.keys(r)).not.toContain('0');
+    });
+
+    it('falls back to the standard AS fields when pavillion:content is an array', () => {
+      const r = EventObject.parseInboundEvent({
+        name: 'Fallback',
+        'pavillion:content': [{ name: '<script>x</script>' }],
+      });
+      expect(Object.keys(r.content)).toEqual(['en']);
+      expect(r.content.en.name).toBe('Fallback');
+    });
+
+    it('drops a raw string content that strips to nothing', () => {
+      const r = EventObject.parseInboundEvent({
+        content: '<img src=x onerror=alert(1)>',
+      });
+      expect(r.content).toBeUndefined();
+    });
+
+    it('drops non-object language entries and keeps the object ones', () => {
+      const r = EventObject.parseInboundEvent({
+        'pavillion:content': { en: 'a raw string', fr: null, de: 7, es: { name: 'Fiesta' } },
+      });
+      expect(Object.keys(r.content)).toEqual(['es']);
+      expect(r.content.es.name).toBe('Fiesta');
+    });
+
+    it('leaves content absent when no language entry survives', () => {
+      expect(EventObject.parseInboundEvent({ content: { en: 'raw string' } }).content).toBeUndefined();
+      expect(EventObject.parseInboundEvent({ 'pavillion:content': {} }).content).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Structural tripwire for the allow-list.
   //
   // The allow-list is a silent, direction-asymmetric coupling: adding a field

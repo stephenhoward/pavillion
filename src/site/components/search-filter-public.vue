@@ -240,6 +240,7 @@ import type { CalendarViewMode } from '@/common/model/calendar_view';
 import {
   LIST_END_DATE_QUERY_KEY,
   LIST_START_DATE_QUERY_KEY,
+  parseListDateQuery,
 } from '@/common/routing/calendar-view-query';
 import { Search, CalendarDays } from 'lucide-vue-next';
 
@@ -297,8 +298,8 @@ const dateFilterButtonText = computed(() => {
   }
   else if (state.dateFilterMode === 'custom' && (state.startDate || state.endDate)) {
     // Partial date selection
-    if (state.startDate) return `From ${formatDate(state.startDate)}`;
-    if (state.endDate) return `Until ${formatDate(state.endDate)}`;
+    if (state.startDate) return t('date_from', { date: formatDate(state.startDate) });
+    if (state.endDate) return t('date_until', { date: formatDate(state.endDate) });
   }
   // No filter active: surface the implicit default window so the visitor
   // can see what date range the events list represents.
@@ -660,16 +661,27 @@ const initializeFromURL = () => {
     publicStore.setSelectedCategories(categories as string[]);
   }
 
-  // Initialize date range
-  const queryStartDate = query[LIST_START_DATE_QUERY_KEY];
-  const queryEndDate = query[LIST_END_DATE_QUERY_KEY];
+  // Initialize date range. Only real yyyy-MM-dd days are accepted; a
+  // malformed value is dropped from the URL rather than sent to the API.
+  const queryStartDate = parseListDateQuery(query[LIST_START_DATE_QUERY_KEY]);
+  const queryEndDate = parseListDateQuery(query[LIST_END_DATE_QUERY_KEY]);
 
-  if (queryStartDate && typeof queryStartDate === 'string') {
+  const malformedKeys = [
+    [LIST_START_DATE_QUERY_KEY, queryStartDate],
+    [LIST_END_DATE_QUERY_KEY, queryEndDate],
+  ].filter(([key, parsed]) => query[key as string] !== undefined && !parsed);
+  if (malformedKeys.length > 0) {
+    const cleanQuery = { ...route.query };
+    malformedKeys.forEach(([key]) => delete cleanQuery[key as string]);
+    router.replace({ query: cleanQuery });
+  }
+
+  if (queryStartDate) {
     state.startDate = queryStartDate;
     publicStore.startDate = queryStartDate;
   }
 
-  if (queryEndDate && typeof queryEndDate === 'string') {
+  if (queryEndDate) {
     state.endDate = queryEndDate;
     publicStore.endDate = queryEndDate;
   }

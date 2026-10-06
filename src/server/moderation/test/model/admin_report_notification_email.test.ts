@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 import i18next from 'i18next';
 import AdminReportNotificationEmail from '../../model/admin_report_notification_email';
 import { initI18Next } from '@/server/common/test/lib/i18next';
@@ -289,8 +290,8 @@ describe('AdminReportNotificationEmail', () => {
 
     const mailData = email.buildMessage('en');
 
-    expect(mailData.textMessage).toContain('/calendar/cal-123/reports');
-    expect(mailData.htmlMessage).toContain('/calendar/cal-123/reports');
+    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
+    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
   });
 
   it('should include priority in rendered output', () => {

@@ -34,6 +34,14 @@ describe('site locale service', () => {
     expect(i18next.getFixedT('es', 'ui')('view_week')).toBe('Semana');
   });
 
+  it('updates <html lang> when a locale route changes the language', async () => {
+    // The server renders <html lang> for the first paint only; a client-side
+    // navigation to /:lang/... switches the UI language, and screen readers
+    // need the attribute to follow it (WCAG 3.1.1).
+    await i18next.changeLanguage('fr');
+    expect(document.documentElement.lang).toBe('fr');
+  });
+
   it('selects the plural form of a ui key from count', () => {
     const t = i18next.getFixedT('fr', 'ui');
     expect(t('more_events', { count: 1 })).toBe('1 autre événement');

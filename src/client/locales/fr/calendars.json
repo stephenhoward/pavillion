@@ -460,6 +460,8 @@
   },
   "bulk_category_operations": {
     "menu_label": "Opérations groupées sur les catégories",
+    "selected_count_one": "{{count}} sélectionnée",
+    "selected_count_other": "{{count}} sélectionnées",
     "category_selected": "{{count}} catégorie sélectionnée",
     "categories_selected": "{{count}} catégories sélectionnées",
     "merge_categories": "Fusionner les catégories",

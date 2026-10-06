@@ -41,7 +41,137 @@
     "panel_intro": "Guías en docs.pavillion.social relacionadas con lo que estás haciendo aquí.",
     "open_in_docs": "Leer en docs.pavillion.social",
     "browse_all_calendar-owners": "Ver todas las guías para propietarios de calendarios",
-    "browse_all_instance-administrators": "Ver todas las guías para administradores"
+    "browse_all_instance-administrators": "Ver todas las guías para administradores",
+    "guides": {
+      "quickstart": {
+        "label": "Inicio rápido",
+        "description": "Pasa de un primer inicio de sesión a un calendario publicado con un evento en unos diez minutos."
+      },
+      "when_to_create": {
+        "label": "Cuándo crear un calendario",
+        "description": "Decide cuándo crear un calendario nuevo en lugar de seguir uno existente."
+      },
+      "public_url": {
+        "label": "Comparte tu URL pública",
+        "description": "Comparte la URL pública y el identificador de federación de tu calendario en la web o en un chat."
+      },
+      "embed": {
+        "label": "Incrusta tu calendario",
+        "description": "Incrusta tu calendario en tu propio sitio web con un widget configurable."
+      },
+      "editors": {
+        "label": "Editores y acceso",
+        "description": "Invita a editores, gestiona su acceso y entiende qué pueden y qué no pueden hacer."
+      },
+      "identity": {
+        "label": "Identidad del calendario",
+        "description": "Define el nombre, la descripción, los idiomas, el identificador de URL y la imagen predeterminada de tu calendario."
+      },
+      "federation_etiquette": {
+        "label": "Etiqueta de federación",
+        "description": "Sé un buen vecino entre calendarios federados: atribución, reenvíos y cuándo no reenviar."
+      },
+      "recurring": {
+        "label": "Eventos recurrentes",
+        "description": "Configura un evento que se repite cada semana, cada mes o según una regla personalizada, con sus excepciones."
+      },
+      "categories": {
+        "label": "Categorías",
+        "description": "Diseña un vocabulario pequeño y duradero que filtre tu página y coincida entre calendarios federados."
+      },
+      "multilingual": {
+        "label": "Eventos multilingües",
+        "description": "Publica eventos en varios idiomas y elige qué se muestra a los visitantes cuando falta una traducción."
+      },
+      "cancel": {
+        "label": "Cancelar un evento",
+        "description": "Cancela un evento correctamente y entiende cómo se propaga a los calendarios que reenvían el tuyo."
+      },
+      "series": {
+        "label": "Series de eventos",
+        "description": "Agrupa eventos relacionados, como una temporada de conciertos o un ciclo de conferencias, bajo un mismo nombre."
+      },
+      "places": {
+        "label": "Lugares",
+        "description": "Guarda los lugares de tus eventos una sola vez y reutilízalos en muchos eventos."
+      },
+      "follow_repost": {
+        "label": "Seguir y reenviar",
+        "description": "Sigue otros calendarios, revisa sus eventos en un feed privado y reenvía los que encajen."
+      },
+      "category_matching": {
+        "label": "Correspondencia de categorías",
+        "description": "Asocia las categorías de otros calendarios con las tuyas al reenviar eventos federados."
+      },
+      "funding_owner": {
+        "label": "Financiación comunitaria",
+        "description": "Apoya a tu instancia con un plan de financiación voluntario, más parecido a la radio pública que a un muro de pago."
+      },
+      "moderation_owner": {
+        "label": "Gestionar reportes",
+        "description": "Revisa los reportes de visitantes sobre tu calendario y actúa, escalando al administrador cuando haga falta."
+      },
+      "account": {
+        "label": "Tu cuenta",
+        "description": "Gestiona tu contraseña, tu correo electrónico y la configuración de cuenta que no depende de un calendario."
+      },
+      "admin_config": {
+        "label": "Configura tu instancia",
+        "description": "Configura tu instancia con local.yaml, variables de entorno y la prioridad por capas de la configuración."
+      },
+      "good_admin": {
+        "label": "Ser un buen administrador",
+        "description": "Sé el tipo de administrador con quien los propietarios de calendarios quieren alojarse: cuidar sin paternalismo."
+      },
+      "admin_accounts": {
+        "label": "Operaciones de cuentas",
+        "description": "Suspende, restablece, elimina y recupera cuentas en tu instancia."
+      },
+      "who_gets": {
+        "label": "Quién recibe un calendario",
+        "description": "Elige cómo se crean los calendarios nuevos: registro abierto, solo por invitación o asignados por el administrador."
+      },
+      "removing": {
+        "label": "Eliminar un calendario",
+        "description": "Elimina un calendario de tu instancia y entiende cómo afecta a las copias federadas."
+      },
+      "communicating": {
+        "label": "Hablar con los propietarios",
+        "description": "Informa a los propietarios de calendarios sobre interrupciones del servicio, actualizaciones y cambios de política."
+      },
+      "mod_boundaries": {
+        "label": "Límites de la moderación",
+        "description": "Sabe cuándo actuar, cuándo escalar y cuándo no intervenir en la moderación de los propietarios."
+      },
+      "coc": {
+        "label": "Código de conducta",
+        "description": "Redacta un código de conducta aplicable, separando las reglas del software de la política y la cultura."
+      },
+      "fed_incidents": {
+        "label": "Incidentes de federación",
+        "description": "Gestiona reportes de otras instancias y sobre ellas sin reaccionar de más ni de menos."
+      },
+      "how_fed_works": {
+        "label": "Cómo funciona la federación",
+        "description": "Entiende qué firma, envía y acepta tu instancia: protocolo frente a política."
+      },
+      "fed_policy": {
+        "label": "Política de federación",
+        "description": "Decide con qué instancias federarte y cómo gestionar las solicitudes de desfederación."
+      },
+      "funding_setup": {
+        "label": "Configurar planes de financiación",
+        "description": "Configura Stripe para que los propietarios de calendarios puedan apoyar tu instancia con planes de financiación."
+      },
+      "asking": {
+        "label": "Pedir dinero",
+        "description": "Pide dinero a la comunidad que usa tu instancia: cuándo, con qué frecuencia y con cuánta transparencia."
+      },
+      "ics_import": {
+        "label": "Importar eventos desde ICS",
+        "description": "Migra eventos de otro calendario a este con una importación única de un archivo ICS."
+      }
+    }
   },
   "report": {
     "form_title": "Reportar Evento",

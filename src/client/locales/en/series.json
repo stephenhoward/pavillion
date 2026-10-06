@@ -43,7 +43,7 @@
     "description_placeholder": "Enter a description for this series",
     "url_name": "URL Name",
     "url_name_placeholder": "url-name",
-    "url_name_help": "Used in URLs. Lowercase letters, numbers, and underscores only.",
+    "url_name_help": "Used in URLs. 3 to 24 letters, numbers, hyphens, or underscores. Cannot start with a hyphen or underscore, or end with a hyphen.",
     "details_section": "Series Details",
     "image_section": "Series Image",
     "image": "Series Image",

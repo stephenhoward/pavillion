@@ -161,6 +161,22 @@ export function parseCalendarViewQuery(
 }
 
 /**
+ * Read one list-filter date (`startDate` or `endDate`) out of a route query.
+ *
+ * The value arrives from a URL anyone can edit, so only a real calendar day
+ * written as yyyy-MM-dd is accepted; anything else reads as absent.
+ *
+ * @param value - The raw query value (may be a string, array, or null)
+ * @returns The date string unchanged, or `null` when it is not a valid day
+ */
+export function parseListDateQuery(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return DateTime.fromFormat(value, DATE_QUERY_FORMAT).isValid ? value : null;
+}
+
+/**
  * Build the query keys describing a view state, for merging over an existing
  * route query.
  *

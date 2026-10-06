@@ -43,7 +43,7 @@
     "description_placeholder": "Ingresa una descripción para esta serie",
     "url_name": "Nombre de URL",
     "url_name_placeholder": "nombre-url",
-    "url_name_help": "Se utiliza en las URL. Solo letras minúsculas, números y guiones bajos.",
+    "url_name_help": "Se utiliza en las URL. De 3 a 24 letras, números, guiones o guiones bajos. No puede empezar con guion ni guion bajo, ni terminar con guion.",
     "details_section": "Detalles de la Serie",
     "image_section": "Imagen de la Serie",
     "image": "Imagen de la Serie",

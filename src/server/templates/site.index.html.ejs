@@ -15,12 +15,18 @@
     <meta property="og:site_name" content="<%= meta.siteName %>" />
     <% if (meta.image) { %>
     <meta property="og:image" content="<%= meta.image %>" />
+    <% if (meta.imageAlt) { %>
+    <meta property="og:image:alt" content="<%= meta.imageAlt %>" />
+    <% } %>
     <% } %>
     <meta name="twitter:card" content="<%= meta.image ? 'summary_large_image' : 'summary' %>" />
     <meta name="twitter:title" content="<%= meta.title %>" />
     <meta name="twitter:description" content="<%= meta.description %>" />
     <% if (meta.image) { %>
     <meta name="twitter:image" content="<%= meta.image %>" />
+    <% if (meta.imageAlt) { %>
+    <meta name="twitter:image:alt" content="<%= meta.imageAlt %>" />
+    <% } %>
     <% } %>
     <% } %>
     <% if (typeof hreflangLinks !== 'undefined' && hreflangLinks && hreflangLinks.length > 0) { %>

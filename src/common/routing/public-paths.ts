@@ -20,10 +20,11 @@
  *   pre-decode and may already be percent-encoded. Routing them through
  *   `eventPath` would percent-encode them a second time.
  *
- * Emitting an absolute URL is not a reason to stay outside: a server caller
- * prepends `https://{config.domain}` to a path from here, which is what
- * `CalendarService.withPublicUrl`, `EditorNotificationEmail` and the actor
- * document's `url` (`src/server/activitypub/model/userprofile.ts`) all do.
+ * Emitting an absolute URL is not a reason to stay outside: the server
+ * prepends the origin to a path from here via `publicUrl`
+ * (`src/server/common/helper/public-url.ts`), while
+ * `CalendarService.withPublicUrl` and the actor document's `url`
+ * (`src/server/activitypub/model/userprofile.ts`) compose it inline.
  *
  * Deliberately NOT here:
  *
