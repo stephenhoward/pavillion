@@ -14,6 +14,7 @@ import {
   SERVER_OWNED_SEGMENTS,
 } from '@/server/app_routes';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
+import { serverMountedSegments } from '@/common/test/routing/server-mounts';
 import ConfigurationInterface from '@/server/configuration/interface';
 import PublicCalendarInterface from '@/server/public/interface';
 import { PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
@@ -817,6 +818,17 @@ describe('app_routes', () => {
         expect(RESERVED_ROUTE_SEGMENTS, `${segment} must stay unclaimable by a calendar`)
           .toContain(segment);
       }
+    });
+
+    // A subset test passes when the list shrinks, so this pins it from the
+    // other side: every segment a server router mounts must be excluded from
+    // the catch-all. 'health' is the one exception, because server.ts mounts it
+    // first, ahead of the page router; 'widget' is the page router's own entry.
+    it('should list every segment the server routers mount', () => {
+      const { segments } = serverMountedSegments();
+      const expected = [...new Set([...segments.filter(s => s !== 'health'), 'widget'])].sort();
+
+      expect([...SERVER_OWNED_SEGMENTS].sort()).toEqual(expected);
     });
 
     // The two assertions above both iterate SERVER_OWNED_SEGMENTS, so dropping

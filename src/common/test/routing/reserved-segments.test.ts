@@ -9,6 +9,9 @@ import {
   isReservedRouteSegment,
 } from '@/common/routing/reserved-segments';
 import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { buildSiteRoutes } from '@/site/routes';
+
+import { serverMountedSegments } from './server-mounts';
 
 const SOURCE_ROOT = path.resolve(__dirname, '../../..');
 
@@ -107,21 +110,48 @@ function clientRouterTopLevelSegments(): { segments: string[], unparseable: stri
  */
 describe('reserved route segments', () => {
   describe('server-mounted prefixes', () => {
-    // Enumerated from the client catch-all exclusions and the asset/coverage
-    // redirects in src/server/app_routes.ts, the federation routers mounted at
-    // '/' in src/server/activitypub/api/v1.ts, and /health in src/server/server.ts.
-    const serverSegments = [
+    // Every top-level segment src/server/** mounts on the Express app today.
+    // Asserted exactly, so that a new mount shows up as a diff here.
+    const expectedServerSegments = [
       '.well-known',
       'api',
       'assets',
       'calendars',
-      'coverage',
       'health',
       'users',
-      'widget',
     ];
 
-    it.each(serverSegments)('reserves %s', (segment) => {
+    // src/server/app_routes.ts is exempt from the scan: its paths are RegExp,
+    // `new RegExp(...)` and call-built shapes, whose dispositions are pinned
+    // over HTTP in src/server/common/test/app_routes.test.ts and by stack walk
+    // in public-url-contract.test.ts. These are the segments it serves itself.
+    const pageRouterSegments = ['coverage', 'widget'];
+
+    it('reads every mount path in the server', () => {
+      const { unparseable } = serverMountedSegments();
+
+      expect(
+        unparseable,
+        'src/server declares mount paths this test cannot read as string literals, '
+        + 'so their segments are unchecked. Extend serverMountedSegments in server-mounts.ts to cover: '
+        + unparseable.join(' | '),
+      ).toEqual([]);
+    });
+
+    it('sees exactly the top-level segments the server mounts', () => {
+      const { segments } = serverMountedSegments();
+
+      expect(segments).toEqual(expectedServerSegments);
+    });
+
+    it('reserves every top-level segment the server mounts', () => {
+      const { segments } = serverMountedSegments();
+
+      const unreserved = segments.filter(segment => !isReservedRouteSegment(segment));
+      expect(unreserved).toEqual([]);
+    });
+
+    it.each(pageRouterSegments)('reserves the page router segment %s', (segment) => {
       expect(isReservedRouteSegment(segment)).toBe(true);
     });
 
@@ -177,8 +207,27 @@ describe('reserved route segments', () => {
   });
 
   describe('public site routes', () => {
-    it('reserves the discovery page', () => {
-      expect(isReservedRouteSegment('discover')).toBe(true);
+    // Read from the real site route table, bound to stub components.
+    const StubComponent = { template: '<div />' };
+    const siteSegments = [...new Set(
+      buildSiteRoutes({
+        discovery: StubComponent,
+        calendar: StubComponent,
+        event: StubComponent,
+        instance: StubComponent,
+        series: StubComponent,
+      })
+        .map(route => topLevelSegment(route.path))
+        .filter((segment): segment is string => segment !== null),
+    )];
+
+    it('sees exactly the static top-level segments the site router owns', () => {
+      expect(siteSegments.sort()).toEqual(['discover']);
+    });
+
+    it('reserves every static top-level segment the site router owns', () => {
+      const unreserved = siteSegments.filter(segment => !isReservedRouteSegment(segment));
+      expect(unreserved).toEqual([]);
     });
 
     it('reserves view permanently so the redirects stay unambiguous', () => {
