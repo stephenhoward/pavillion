@@ -1,5 +1,5 @@
 ---
-description: Customize the public identity of your Pavillion calendar — name, description, languages, URL handle, and default event image.
+description: Customize the public identity of your Pavillion calendar — name, description, languages, URL handle, default event image, and default date filter.
 ---
 
 # Customize your calendar's identity
@@ -73,7 +73,7 @@ For the rules of what's translatable, how visitors land on the right language ve
 
 ## The default event image
 
-The default event image is an image that fills in for any event you publish without uploading one specifically for it. It shows up on the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. That is the only place it appears. The event's own page shows only an image uploaded for that event, so a visitor who opens an event that relies on the default sees no image there. The default also stays home: when another calendar reposts your event, it shows only the event's own image, and events you repost from other calendars don't pick up your default either.
+The default event image is an image that fills in for any event you publish without uploading one specifically for it. It appears in two places. The first is the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. The second is the link preview: when someone pastes a link to one of your calendar's event pages into a chat or a social post and the event has no image of its own, the preview shows your default. The event's own page shows only an image uploaded for that event, so a visitor who follows that link and opens an event that relies on the default sees no image there. Reposts don't carry it in either direction: when another calendar reposts your event, its list shows only the event's own image, and events you repost from other calendars don't pick up your default in your list either.
 
 The Settings tab lets you upload one image. Uploading replaces it; removing it leaves events without their own image to show no image at all.
 
@@ -82,6 +82,14 @@ Once the default is uploaded, the same **Image description for screen readers** 
 **Use a default that reads as your calendar, not as a specific event.** A neighborhood-association calendar's default might be the association's logo on a plain background, or a wide shot of the park where most events happen, or a piece of identifying community artwork. Avoid using a default that looks like it belongs to one particular event.
 
 **The default is a fallback, not a requirement.** For any specific event that deserves its own image, upload one in the event editor and it'll override the default for that event. For routine events without strong visual identity — the monthly meeting, the weekly volunteer day — the default can stand in as a fallback visual.
+
+## The default date filter
+
+The **Default Date Filter** sets how far ahead a visitor sees when they open your public calendar without choosing dates: the list starts today and runs for the window you pick. It applies to your public page and your embedded widget. Visitors can still widen or move the range with the date control at the top of the page; the filter only decides what they see first.
+
+The choices are **1 week**, **2 weeks**, **1 month**, **3 months**, **6 months**, **9 months**, and **12 months**. Until you pick one, your public page uses your instance's default window — two weeks, unless your administrator has set another.
+
+**Match the window to how often you publish.** A calendar with a few events a month reads as empty on a one- or two-week window, and a first-time visitor who sees an empty page rarely goes looking for the date control. A busy calendar with something every day can stay short, so the list opens on what's coming up soon rather than a long scroll.
 
 ## Things that trip people up
 

@@ -92,7 +92,7 @@ Open a new browser tab and go to `https://your-instance.example/your-handle`, re
 
 What you're looking at is what anyone on the internet sees. No login required. Your event should be there, with the place, the date, the description, and the category you chose. Click into the event to see its detail page — that's the URL you'd share for a single event.
 
-If you don't see it, the most likely reason is the date filter. The public page opens to a default window — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from <Btn>Manage Calendar</Btn> if two weeks isn't right for your community's rhythm.
+If you don't see it, the most likely reason is the date filter. The public page opens to a [default window](./identity#the-default-date-filter) — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from <Btn>Manage Calendar</Btn> if two weeks isn't right for your community's rhythm.
 
 Paste your calendar's URL into a chat with a friend. Have them open it. Ask whether the event makes sense to them as someone who's never seen it before. That feedback — from a fresh pair of eyes who is the audience, not the organizer — is more useful than any checklist.
 
