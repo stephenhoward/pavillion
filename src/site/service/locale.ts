@@ -1,6 +1,7 @@
 import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { createI18nConfig } from '@/common/i18n/config';
+import { syncDocumentLanguage } from '@/common/i18n/document-language';
 
 // Import translation resources
 import enSystem from '@/site/locales/en/system.json';
@@ -19,6 +20,8 @@ import { uiResources } from '@/common/ui/locales';
  * @returns {Promise<i18next.i18n>} Resolves to the configured i18next instance
  */
 export const initI18Next = (): Promise<typeof i18next> => {
+  syncDocumentLanguage(i18next);
+
   return i18next
     .use(LanguageDetector)
     .init(createI18nConfig({

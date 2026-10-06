@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import i18next from 'i18next';
 
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
@@ -38,6 +38,28 @@ describe('widget locale service', () => {
 
   it('resolves a ui key in the requested language instead of falling back to English', () => {
     expect(i18next.t('ui:view_week')).toBe('Semana');
+  });
+
+  describe('document language', () => {
+    afterEach(async () => {
+      await i18next.changeLanguage('es');
+    });
+
+    it('sets <html lang> to the language the widget renders in', () => {
+      // WCAG 3.1.1: screen readers pick pronunciation rules from <html lang>,
+      // so it must match the UI language rather than the shell's static 'en'.
+      expect(document.documentElement.lang).toBe('es');
+    });
+
+    it('updates <html lang> when the active language changes', async () => {
+      await i18next.changeLanguage('fr');
+      expect(document.documentElement.lang).toBe('fr');
+    });
+
+    it('uses the resolved language when given a regional variant', async () => {
+      await i18next.changeLanguage('es-MX');
+      expect(document.documentElement.lang).toBe('es');
+    });
   });
 
   it('selects the plural form of a ui key from count', () => {

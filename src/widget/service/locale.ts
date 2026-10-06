@@ -1,5 +1,6 @@
 import i18next from 'i18next';
 import { createI18nConfig } from '@/common/i18n/config';
+import { syncDocumentLanguage } from '@/common/i18n/document-language';
 
 // Import translation resources (widget shares system translations with site)
 import enSystem from '@/site/locales/en/system.json';
@@ -19,6 +20,8 @@ import { uiResources } from '@/common/ui/locales';
  * @returns The configured i18next instance
  */
 export const initI18Next = (language?: string) => {
+  syncDocumentLanguage(i18next);
+
   i18next
     .init(createI18nConfig({
       ...(language ? { lng: language } : {}),
