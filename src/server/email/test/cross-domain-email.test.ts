@@ -55,6 +55,7 @@ describe('Cross-Domain Email Integration', () => {
       expect(storedEmail?.to).toContain('user@example.com');
       expect(storedEmail?.subject).toBeDefined();
       expect(storedEmail?.text).toContain(resetToken);
+      expect(storedEmail?.text).toContain(`https://${TEST_DOMAIN}/auth/password?code=${resetToken}`);
     });
 
     it('should capture password reset email content in testing transport', async () => {

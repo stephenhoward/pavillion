@@ -1,7 +1,7 @@
-import config from 'config';
 import { Account } from '@/common/model/account';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
+import { publicUrl } from '@/server/common/helper/public-url';
 
 const textTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.html.hbs');
@@ -25,18 +25,20 @@ export default class EmailChangeConfirmationEmail extends EmailMessage {
     // and the client confirm route /auth/email/confirm/:token (epic pv-91a3,
     // :token is the forward standard). Do NOT switch this back to `?code=`
     // without realigning the route and the client page.
+    const confirmUrl = publicUrl('/auth/email/confirm');
+
     return {
       emailAddress: this.newEmail,
       subject: this.renderSubject(language,{}),
       textMessage: this.renderPlaintext(language, {
         token: this.token,
         language: language,
-        confirmUrl: config.get('domain') + '/auth/email/confirm',
+        confirmUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         token: this.token,
         language: language,
-        confirmUrl: config.get('domain') + '/auth/email/confirm',
+        confirmUrl,
       }),
     };
   }

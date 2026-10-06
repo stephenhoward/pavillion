@@ -32,8 +32,8 @@ describe('AccountAlreadyExistsEmail', () => {
 
     const message = email.buildMessage('en');
 
-    expect(message.textMessage).toContain(domain + '/auth/login');
-    expect(message.textMessage).toContain(domain + '/auth/forgot');
+    expect(message.textMessage).toContain('https://' + domain + '/auth/login');
+    expect(message.textMessage).toContain('https://' + domain + '/auth/forgot');
   });
 
   it('should include login and forgot password URLs in HTML', () => {
@@ -43,8 +43,8 @@ describe('AccountAlreadyExistsEmail', () => {
 
     const message = email.buildMessage('en');
 
-    expect(message.htmlMessage).toContain(domain + '/auth/login');
-    expect(message.htmlMessage).toContain(domain + '/auth/forgot');
+    expect(message.htmlMessage).toContain('https://' + domain + '/auth/login');
+    expect(message.htmlMessage).toContain('https://' + domain + '/auth/forgot');
   });
 
   it('should have a subject line', () => {

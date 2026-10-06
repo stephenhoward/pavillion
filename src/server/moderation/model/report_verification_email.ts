@@ -1,6 +1,6 @@
-import config from 'config';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
+import { publicUrl } from '@/server/common/helper/public-url';
 
 const textTemplate = compileTemplate('src/server/moderation', 'report-verification.text.hbs');
 const htmlTemplate = compileTemplate('src/server/moderation', 'report-verification.html.hbs');
@@ -37,7 +37,7 @@ class ReportVerificationEmail extends EmailMessage {
    * @returns Complete mail data ready for sending
    */
   buildMessage(language: string): MailData {
-    const verifyUrl = config.get('domain') + '/api/public/v1/reports/verify/' + this.verificationToken;
+    const verifyUrl = publicUrl('/api/public/v1/reports/verify/' + this.verificationToken);
     const truncatedName = this.eventName.length > 100 ? this.eventName.substring(0, 100) + '...' : this.eventName;
 
     return {

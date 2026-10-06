@@ -1,7 +1,7 @@
-import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
+import { publicUrl } from '@/server/common/helper/public-url';
 import AccountInvitation from '@/common/model/invitation';
 
 const textTemplate = compileTemplate('src/server/calendar', 'editor_invitation_email.text.hbs');
@@ -28,10 +28,7 @@ class EditorInvitationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const domain = config.get('domain');
-    // Absolute: both templates render this as an anchor href, and a mail client
-    // has no origin to resolve a scheme-less value against.
-    const invitationUrl = `https://${domain}/auth/invitation`;
+    const invitationUrl = publicUrl('/auth/invitation');
     const calendarName = this.calendar.content(language).name;
     const templateData = {
       calendarName,

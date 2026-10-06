@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 import i18next from 'i18next';
 import AutoEscalationNotificationEmail from '../../model/auto_escalation_notification_email';
 import { initI18Next } from '@/server/common/test/lib/i18next';
@@ -272,8 +273,8 @@ describe('AutoEscalationNotificationEmail', () => {
 
     const mailData = email.buildMessage('en');
 
-    expect(mailData.textMessage).toContain('/admin/moderation/reports/report-uuid-123');
-    expect(mailData.htmlMessage).toContain('/admin/moderation/reports/report-uuid-123');
+    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/admin/moderation/reports/report-uuid-123`);
+    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/admin/moderation/reports/report-uuid-123`);
   });
 
   it('should pass the language to template rendering', () => {
