@@ -445,6 +445,8 @@
   },
   "bulk_category_operations": {
     "menu_label": "Operaciones masivas de categorías",
+    "selected_count_one": "{{count}} seleccionada",
+    "selected_count_other": "{{count}} seleccionadas",
     "category_selected": "{{count}} categoría seleccionada",
     "categories_selected": "{{count}} categorías seleccionadas",
     "merge_categories": "Combinar categorías",
