@@ -59,7 +59,7 @@ This is the home for any string a shared component renders, whichever app mounts
 
 ## Composable placement
 
-`composables/` holds composables that are useful across features — `useLocale`, `useLocalizedContent`. A composable that only makes sense alongside one feature's state belongs in that feature's folder, next to the components it serves, not here.
+`composables/` holds composables that are useful across features — `useLocale`, `useLocalizedContent`, `useContainerWidth`. A composable that only makes sense alongside one feature's state belongs in that feature's folder, next to the components it serves, not here.
 
 ## Tests
 
