@@ -208,9 +208,10 @@ export const useWidgetStore = defineStore('widget', {
     /**
      * Apply the color mode as `data-theme` on the widget document's root.
      *
-     * `light` and `dark` set `<html data-theme="…">`, which the self-guarding
-     * `public-dark-mode` mixin reads: `[data-theme="dark"]` forces the dark
-     * branch, and `[data-theme="light"]` suppresses its OS media-query branch.
+     * `light` and `dark` set `<html data-theme="…">`, which the
+     * `public-theme-tokens` token layer reads: `[data-theme="dark"]` forces
+     * the dark tokens and color-scheme, and `[data-theme="light"]` suppresses
+     * its OS media-query branch.
      * `auto` removes the attribute so that media query follows the visitor's
      * OS preference live, with no JavaScript listener involved.
      *

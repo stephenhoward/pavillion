@@ -21,7 +21,7 @@ In the widget, `.widget-root` owns the token layer because it is also where `wid
 
 ### color-scheme
 
-`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. Until the widget's own `.widget-root` color-scheme block in `src/widget/components/app.vue` is removed, that block comes later in source and still decides the widget's value. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
+`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
 
 ### Naming rule
 
