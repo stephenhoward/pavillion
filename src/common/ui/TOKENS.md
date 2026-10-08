@@ -9,7 +9,7 @@ Look a name up here when moving a call site off `$public-*` or off a literal dar
 
 ## Site and widget
 
-`public-theme-tokens` in `assets/mixins.scss` is the one site/widget declaration site. Its base block declares every token with its light value, plus `color-scheme: light`. The private `_public-theme-dark-values` mixin beside it declares every dark value, plus `color-scheme: dark`, with no selector of its own; `public-theme-tokens` includes it under both dark branches — `[data-theme="dark"]`, and `prefers-color-scheme: dark` unless `data-theme="light"` — the same dual selector the client's theme layer uses. Each dark value is therefore written once. `test/public-theme-tokens.test.ts` fails if a `$public-<base>-light` / `-dark` pair has no token.
+`public-theme-tokens` in `assets/mixins.scss` is the one site/widget declaration site. Its base block declares every token with its light value, plus `color-scheme: light`. The private `_public-theme-dark-values` mixin beside it declares every dark value, plus `color-scheme: dark`, with no selector of its own; `public-theme-tokens` includes it under both dark branches — `[data-theme="dark"]`, and `prefers-color-scheme: dark` unless `data-theme="light"` — the same dual selector the client's theme layer uses. Each dark value is therefore written once. `test/public-theme-tokens.test.ts` fails if a row of either table below is missing from the base block or the helper, if the base block declares a name neither table records (the four fixed accent properties apart), if a dark value is written anywhere but the helper or either dark branch stops including it, if site, widget or shared style reads a `var(--pav-*)` the base block does not declare, or if a `$public-<base>-light` / `-dark` pair has no token.
 
 ### Where the tokens live
 
@@ -115,7 +115,7 @@ The event-image vignette darkens more in dark mode, and every dark alpha is exac
 
 ## Client mappings
 
-The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` checks that the client declares them, but today only for the shared tokens derived from a `$public-*` pair; the check becomes driven by the shared table in the next change.
+The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` checks that it declares every row of the shared table, and that no public-only name is declared anywhere in the client's style tree.
 
 A shared token whose name source is **client** is the client's own theme token. The client's components do not use the shared tokens with a **public** name source, so the theme layer declares them only for shared components, each mapped onto an existing client value. None of these mappings changes a value the client already declared.
 
