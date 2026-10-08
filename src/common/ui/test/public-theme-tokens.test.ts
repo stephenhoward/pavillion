@@ -26,7 +26,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-import { tokenSection } from './boundary-scanner';
+import { styleBlocks, tokenSection } from './boundary-scanner';
 
 const MIXINS_PATH = path.join(process.cwd(), 'src/common/ui/assets/mixins.scss');
 const TOKENS_PATH = path.join(process.cwd(), 'src/common/ui/TOKENS.md');
@@ -161,10 +161,7 @@ function styleFiles(dirs: string[]): string[] {
 /** A file's style, comments stripped: the whole of a `.scss`, the `<style>` blocks of a `.vue`. */
 function styleOf(file: string): string {
   const source = readFileSync(file, 'utf-8');
-  const style = file.endsWith('.vue')
-    ? [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1]).join('\n')
-    : source;
-  return stripComments(style);
+  return stripComments(file.endsWith('.vue') ? styleBlocks(source) : source);
 }
 
 describe('public-theme-tokens', () => {
