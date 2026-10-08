@@ -277,7 +277,8 @@
       "relme_parse_error": "The verification page could not be parsed as HTML. Please confirm the URL serves a valid HTML page.",
       "relme_link_not_found": "No matching rel=\"me\" link was found on the verification page. Please confirm the link is published and try again.",
       "relme_hostname_mismatch": "The verification page must be on the same hostname as the calendar feed.",
-      "relme_psl_violation": "The verification page domain is not eligible for verification."
+      "relme_psl_violation": "The verification page domain is not eligible for verification.",
+      "source_cap_exceeded": "This calendar has reached the maximum number of import sources. Remove a feed before importing a file."
     },
     "verify_wizard": {
       "title": "Verify ownership",

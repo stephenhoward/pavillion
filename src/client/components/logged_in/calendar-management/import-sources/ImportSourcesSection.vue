@@ -107,6 +107,7 @@ import { useTranslation } from 'i18next-vue';
 import { Plus } from 'lucide-vue-next';
 
 import type { ImportSource } from '@/common/model/import_source';
+import { ImportSourceCapExceededError } from '@/common/exceptions/import';
 import ImportSourceService, { type ImportRunSummary } from '@/client/service/import_source';
 import { importSourceErrorKey } from '@/client/service/import_source_errors';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -304,7 +305,11 @@ const createFileSource = async (file: File) => {
   }
   catch (err) {
     console.error('Failed to import calendar file', err);
-    state.addError = (err as Error)?.message || t('error_creating');
+    // The cap error's message is the bare IMPORT_SOURCE_CAP_EXCEEDED code;
+    // translate it so the owner sees a sentence instead.
+    state.addError = err instanceof ImportSourceCapExceededError
+      ? t('errors.source_cap_exceeded')
+      : (err as Error)?.message || t('error_creating');
   }
   finally {
     state.isAdding = false;

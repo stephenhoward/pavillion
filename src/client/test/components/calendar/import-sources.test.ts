@@ -9,6 +9,7 @@ import ImportSourceList from '@/client/components/logged_in/calendar-management/
 import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
 import AddImportSourceForm from '@/client/components/logged_in/calendar-management/import-sources/AddImportSourceForm.vue';
 import ImportSourceService from '@/client/service/import_source';
+import { ImportSourceCapExceededError } from '@/common/exceptions/import';
 import { useToast, resetToastState, type Toast } from '@/client/composables/useToast';
 
 const routes: RouteRecordRaw[] = [
@@ -307,6 +308,27 @@ describe('ImportSourcesSection', () => {
       expect((wrapper.vm as any).state.addError).toBeTruthy();
       expect((wrapper.vm as any).state.sources).toHaveLength(0);
       expect((wrapper.vm as any).state.isAdding).toBe(false);
+    });
+
+    it('shows a translated message, not the raw code, when the upload hits the source cap', async () => {
+      listSourcesMock.mockResolvedValue([]);
+      createSourceFromFileMock.mockRejectedValue(new ImportSourceCapExceededError());
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['x'], 'events.ics', { type: 'text/calendar' });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+
+      const alert = wrapper.find('.add-import-source-form [role="alert"]');
+      expect(alert.exists()).toBe(true);
+      expect(alert.text()).not.toContain('IMPORT_SOURCE_CAP_EXCEEDED');
+      expect(alert.text()).toMatch(/maximum number of import sources/);
     });
 
     it('renders the filename and a File badge, hiding Sync Now and Verify', async () => {
