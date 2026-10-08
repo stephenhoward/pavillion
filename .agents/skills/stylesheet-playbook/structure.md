@@ -27,8 +27,8 @@ Notes on the shared rows:
 
 - A component under `src/common/ui/` may not reach into `src/client/assets/style/**`. The boundary rule in `src/common/ui/README.md` forbids it and `src/common/ui/test/boundary.test.ts` enforces it.
 - `src/common/ui/assets/breakpoints.ts` mirrors the `public-tablet-up` / `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `src/common/ui/test/breakpoints.test.ts` fails when the two drift apart. Change both together.
-- `src/site/assets/mixins.scss` is now a one-line `@forward` shim onto the shared file, kept for existing call sites. New call sites use `@use '@/common/ui/assets/mixins'` directly.
-- `mixins.scss` also carries unprefixed compatibility aliases (`filter-container`, `input-base`, `dark-mode`, the `$spacing-*` scale) for call sites that predate the `public-*` naming. Those are legacy surface, not the design system — do not reach for them in a new shared component.
+- Site and widget style loads the public design system as `@use '@/common/ui/assets/mixins'`. That file holds the non-colour `$public-*` constants (type, spacing, radius, motion, breakpoints), the `public-*` component mixins and the runtime token layer (`public-theme-tokens`). Colour and shadow come only from `--pav-*` tokens; `scripts/check-theme-tokens.ts` (in `npm run lint`) fails on a colour `$public-*`, a dark selector, `prefers-color-scheme` or `color-scheme` outside the token layer. See DEC-019 rules 7 and 10.
+- `mixins.scss` also carries unprefixed compatibility aliases (`filter-*`, `search-*`, `input-base`, `mobile-only`, `medium-size-device`, the `$spacing-*` scale, `$font-regular` / `$font-medium`) for call sites that predate the `public-*` naming. They are not the design system and are slated for removal (pv-msw8) — do not reach for them in new code.
 
 ### Extraction Threshold
 
@@ -152,6 +152,5 @@ The rationale: a role attribute identifies *what an element is* for assistive te
 
 - Some components have large scoped style blocks (30+ lines) that could be extracted
 - A few components duplicate patterns that exist in the component library
-- The site's mixins have moved to `src/common/ui/assets/mixins.scss`, leaving `src/site/assets/mixins.scss` as a `@forward` shim that most existing site and widget call sites still go through. New call sites should use the shared path; the shim is retired once they all do.
-- The client and public token systems remain separate: client components read a broad set of `--pav-*` custom properties, the public stylesheet declares only four of them. That is why a styled shared component cannot render in the client, and it is the open question on pv-z1in.
+- The client and public palettes remain separate. Both declare the shared `--pav-*` tier (`src/common/ui/TOKENS.md`), so a shared component renders in all three apps, but each app keeps its own values behind those names; convergence is open on pv-olnr. Spacing and type scales are separate too: the client's `--pav-space-*` / `--pav-font-size-*` are runtime tokens, the public side's are compile-time `$public-*` constants with different values.
 - `src/client/assets/style/` and `src/common/ui/assets/` are parallel systems with overlapping concerns (spacing scales, dark-mode handling) and no shared source.

@@ -5,7 +5,7 @@ The `--pav-*` custom properties the frontend apps declare at runtime, in two tie
 - **Shared tokens** are declared by every app — the site and widget through `public-theme-tokens`, the client through its own theme layer. They are the only names a shared component under `src/common/ui` may read (`test/boundary.test.ts` enforces that).
 - **Public-only tokens** are declared by `public-theme-tokens` alone, for the site's and widget's own components. A shared component may not read them: the client does not declare them, so the component would render unstyled there.
 
-Look a name up here when moving a call site off `$public-*` or off a literal dark block, and do not guess it. A value that varies by theme or by host is a runtime token; a value that does not stays a compile-time `$public-*` constant in `assets/mixins.scss`.
+Look a name up here before writing a theme-varying value, and do not guess it. A value that varies by theme or by host is a runtime token; a value that does not stays a compile-time `$public-*` constant in `assets/mixins.scss` ([DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md) rule 10, enforced by `scripts/check-theme-tokens.ts`).
 
 ## Site and widget
 
