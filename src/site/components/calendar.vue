@@ -349,7 +349,7 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .calendar-page {
   // Full-page layout, no extra wrapper needed. It is also the element whose
@@ -392,13 +392,9 @@ onBeforeMount(async () => {
 
 .calendar-description {
   font-size: $public-font-size-md;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 // ================================================================
@@ -434,11 +430,7 @@ onBeforeMount(async () => {
 
   padding: $public-space-sm 0;
   margin: 0 0 $public-space-lg 0;
-  color: $public-text-secondary-light;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
+  color: var(--pav-text-secondary);
 }
 
 .day-events {
@@ -476,16 +468,12 @@ onBeforeMount(async () => {
   .empty-state-icon {
     width: 3rem;
     height: 3rem;
-    color: $public-text-tertiary-light;
+    color: var(--pav-text-muted);
     margin-bottom: $public-space-md;
 
     svg {
       width: 100%;
       height: 100%;
-    }
-
-    @include public-dark-mode {
-      color: $public-text-tertiary-dark;
     }
   }
 
@@ -497,12 +485,8 @@ onBeforeMount(async () => {
 
   .empty-state-hint {
     font-size: $public-font-size-sm;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     margin-top: $public-space-xs;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-    }
   }
 
   .clear-filters-btn {
@@ -510,31 +494,21 @@ onBeforeMount(async () => {
     margin-top: $public-space-md;
     padding: $public-space-xs $public-space-md;
     background: none;
-    border: 1px solid $public-accent-light;
+    border: 1px solid var(--pav-accent);
     border-radius: 9999px;
-    color: $public-accent-light;
+    color: var(--pav-accent);
     font-size: $public-font-size-sm;
     font-weight: $public-font-weight-medium;
     cursor: pointer;
     transition: $public-transition-fast;
 
     &:hover {
-      background: $public-accent-light;
+      background: var(--pav-accent);
       color: white;
     }
 
     &:focus-visible {
       @include public-focus-visible;
-    }
-
-    @include public-dark-mode {
-      border-color: $public-accent-dark;
-      color: $public-accent-dark;
-
-      &:hover {
-        background: $public-accent-dark;
-        color: white;
-      }
     }
   }
 }

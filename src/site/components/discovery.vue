@@ -249,7 +249,7 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .discovery {
   display: flex;
@@ -292,13 +292,9 @@ onBeforeMount(async () => {
 
 .discovery-instance-description {
   font-size: $public-font-size-md;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-md 0;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .discovery-learn-more {
@@ -369,8 +365,8 @@ onBeforeMount(async () => {
 }
 
 .discovery-tile {
-  // Inherits background, border (color/width), and dark-mode bg/border from
-  // the sidebar-card mixin. Overrides below: tile-specific radius, padding,
+  // Inherits background and border (color/width) from the sidebar-card
+  // mixin. Overrides below: tile-specific radius, padding,
   // hover lift, layout, and link semantics.
   @include public-sidebar-card;
 
@@ -385,19 +381,12 @@ onBeforeMount(async () => {
 
   &:hover {
     transform: translateY(-2px);
-    border-color: $public-border-medium-light;
-    box-shadow: $public-shadow-md-light;
+    border-color: var(--pav-border-medium);
+    box-shadow: var(--pav-shadow-md);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    &:hover {
-      border-color: $public-border-medium-dark;
-      box-shadow: $public-shadow-md-dark;
-    }
   }
 }
 
@@ -411,13 +400,9 @@ onBeforeMount(async () => {
 
 .discovery-tile-description {
   font-size: $public-font-size-base;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   line-height: $public-line-height-normal;
   margin: 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .discovery-tile-handle {
