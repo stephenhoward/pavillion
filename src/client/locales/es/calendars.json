@@ -277,7 +277,8 @@
       "relme_parse_error": "No se pudo analizar la página de verificación como HTML. Por favor, confirma que la URL sirve una página HTML válida.",
       "relme_link_not_found": "No se encontró ningún enlace rel=\"me\" coincidente en la página de verificación. Por favor, confirma que el enlace está publicado e inténtalo de nuevo.",
       "relme_hostname_mismatch": "La página de verificación debe estar en el mismo nombre de host que el feed del calendario.",
-      "relme_psl_violation": "El dominio de la página de verificación no es elegible para la verificación."
+      "relme_psl_violation": "El dominio de la página de verificación no es elegible para la verificación.",
+      "source_cap_exceeded": "Este calendario ha alcanzado el número máximo de fuentes de importación. Elimina una fuente antes de importar un archivo."
     },
     "verify_wizard": {
       "title": "Verificar propiedad",
