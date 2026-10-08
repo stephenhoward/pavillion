@@ -377,6 +377,30 @@ test.describe('Widget Embedding', () => {
     expect(accentVars.dark).toBeTruthy();
   });
 
+  test('widget text renders in the bundled typeface, not the browser default', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 20000 });
+
+    const { unstyled, loaded } = await iframe.locator('html').evaluate(async (html) => {
+      const doc = html.ownerDocument;
+      await doc.fonts.ready;
+      const unstyled = [html, ...html.querySelectorAll('body, body *')]
+        .map((el) => getComputedStyle(el).fontFamily)
+        .filter((family) => !family.startsWith('"Creato Display"'));
+      // fonts.check() is true when no @font-face matches at all, so count
+      // the declared faces that actually loaded instead.
+      const loaded = [...doc.fonts]
+        .filter((face) => face.family.replace(/"/g, '') === 'Creato Display' && face.status === 'loaded')
+        .length;
+      return { unstyled, loaded };
+    });
+
+    expect(unstyled).toEqual([]);
+    expect(loaded).toBeGreaterThan(0);
+  });
+
   test('postMessage resize events reach the embedding page', async ({ page }) => {
     await page.goto(embeddingUrl());
 
