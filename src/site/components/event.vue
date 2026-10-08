@@ -351,7 +351,7 @@ function closeReportModal() {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // EVENT DETAIL PAGE
@@ -368,12 +368,8 @@ function closeReportModal() {
 
 .event-back-header {
   padding: $public-space-md $public-space-lg;
-  border-bottom: 1px solid $public-border-subtle-light;
+  border-bottom: 1px solid var(--pav-border-subtle);
   margin-bottom: $public-space-2xl;
-
-  @include public-dark-mode {
-    border-bottom-color: $public-border-subtle-dark;
-  }
 
   .breadcrumb {
     margin: 0;
@@ -384,13 +380,13 @@ function closeReportModal() {
     display: inline-flex;
     align-items: center;
     gap: $public-space-sm;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     text-decoration: none;
     font-weight: $public-font-weight-medium;
     transition: $public-transition-fast;
 
     &:hover {
-      color: $public-accent-light;
+      color: var(--pav-accent);
 
       .back-arrow {
         transform: translateX(-3px);
@@ -399,14 +395,6 @@ function closeReportModal() {
 
     &:focus-visible {
       @include public-focus-visible;
-    }
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-
-      &:hover {
-        color: $public-accent-dark;
-      }
     }
   }
 
@@ -469,7 +457,7 @@ function closeReportModal() {
   font-weight: $public-font-weight-bold;
   letter-spacing: $public-letter-spacing-tight;
   line-height: $public-line-height-tight;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-lg 0;
 
   @include public-tablet-up {
@@ -478,10 +466,6 @@ function closeReportModal() {
 
   @include public-desktop-up {
     font-size: 48px;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
   }
 }
 
@@ -509,24 +493,16 @@ function closeReportModal() {
 .about-heading {
   font-size: $public-font-size-md;
   font-weight: $public-font-weight-semibold;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-md 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .event-description {
   font-size: $public-font-size-md;
   line-height: $public-line-height-relaxed;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-xl 0;
   white-space: pre-line;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 .categories-section {
@@ -538,12 +514,8 @@ function closeReportModal() {
   font-weight: $public-font-weight-semibold;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-sm 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .category-badges {
@@ -559,12 +531,8 @@ function closeReportModal() {
   transition: $public-transition-fast;
 
   &:hover {
-    background-color: $public-accent-hover-light;
+    background-color: var(--pav-accent-hover);
     transform: translateY(-1px);
-
-    @include public-dark-mode {
-      background-color: $public-accent-hover-dark;
-    }
   }
 
   &:focus-visible {
@@ -594,12 +562,8 @@ function closeReportModal() {
 }
 
 .card-icon {
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   flex-shrink: 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .card-heading {
@@ -607,35 +571,23 @@ function closeReportModal() {
   font-weight: $public-font-weight-semibold;
   text-transform: uppercase;
   letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 // Location card
 .location-name {
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-medium;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0 0 $public-space-xs 0;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 .location-address {
   font-size: $public-font-size-sm;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 // Accessibility card — layered Venue (Place) + Space subsections.
@@ -649,24 +601,16 @@ function closeReportModal() {
 .accessibility-subheading {
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-semibold;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   margin: 0 0 $public-space-xs 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .accessibility-info {
   font-size: $public-font-size-base;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   margin: 0;
   white-space: pre-line;
   line-height: $public-line-height-relaxed;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
 }
 
 // ================================================================
@@ -692,11 +636,7 @@ function closeReportModal() {
 footer {
   margin-top: $public-space-xl;
   padding-top: $public-space-lg;
-  border-top: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-top-color: $public-border-subtle-dark;
-  }
+  border-top: 1px solid var(--pav-border-subtle);
 
   .series-link-wrapper {
     display: flex;
@@ -706,18 +646,14 @@ footer {
     font-size: $public-font-size-sm;
 
     .series-label {
-      color: $public-text-secondary-light;
+      color: var(--pav-text-secondary);
       font-weight: $public-font-weight-medium;
-
-      @include public-dark-mode {
-        color: $public-text-secondary-dark;
-      }
     }
   }
 }
 
 .event-series-link {
-  color: $public-accent-light;
+  color: var(--pav-accent);
   text-decoration: none;
   font-weight: $public-font-weight-medium;
   transition: $public-transition-fast;
@@ -729,10 +665,6 @@ footer {
   &:focus-visible {
     @include public-focus-visible;
   }
-
-  @include public-dark-mode {
-    color: $public-accent-dark;
-  }
 }
 
 .report-link {
@@ -742,26 +674,18 @@ footer {
   min-height: 44px;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
-  color: $public-text-tertiary-light;
+  color: var(--pav-text-muted);
   cursor: pointer;
   transition: $public-transition-fast;
   text-decoration: underline;
   text-underline-offset: 2px;
 
   &:hover {
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-
-    &:hover {
-      color: $public-text-secondary-dark;
-    }
   }
 }
 
