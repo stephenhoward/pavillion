@@ -6,6 +6,7 @@ import {
   detectSource,
   detect,
   collectThemeFiles,
+  DEFAULT_ROOTS,
   main,
   isNonColourVariable,
   NON_COLOUR_FAMILIES,
@@ -144,7 +145,6 @@ describe('check-theme-tokens: Rule 2, one dark declaration site', () => {
   });
 
   it('fails a public-theme-tokens mixin defined in another file', () => {
-    expect(rulesOf(tokenLayer(), SITE_PARTIAL).length).toBeGreaterThan(0);
     expect(new Set(rulesOf(tokenLayer(), SITE_PARTIAL))).toEqual(new Set(['Rule 2']));
   });
 
@@ -191,6 +191,29 @@ describe('check-theme-tokens: Rule 3, token-layer include sites', () => {
     const code = vueFile({ styles: ['#app {\n  @include public-theme-tokens;\n}'] });
     expect(rulesOf(code, SITE_COMPONENT)).toEqual(['Rule 3']);
   });
+
+  it.each([
+    ['#app', WIDGET_APP],
+    ['.widget-container', WIDGET_APP],
+    ['.widget-root', SITE_STYLE],
+  ])('fails an include on %s in %s, whose named selector is the other one', (selector, file) => {
+    const style = `${selector} {\n  @include public-theme-tokens;\n}`;
+    const source = file.endsWith('.vue') ? vueFile({ styles: [style] }) : style;
+    expect(rulesOf(source, file)).toEqual(['Rule 3']);
+  });
+
+  it('fails an include on the named selector when that rule is nested in another', () => {
+    const code = scssFile('.x {', '  #app {', '    @include public-theme-tokens;', '  }', '}');
+    expect(rulesOf(code, SITE_STYLE)).toEqual(['Rule 3']);
+  });
+
+  it('keys the include sites and the token layer on a whole path segment', () => {
+    const site = scssFile('#app {', '  @include public-theme-tokens;', '}');
+    expect(rulesOf(site, `x${SITE_STYLE}`)).toEqual(['Rule 3']);
+    expect(rulesOf(site, `/repo/${SITE_STYLE}`)).toEqual([]);
+    expect(rulesOf(tokenLayer(), `x${MIXINS}`).length).toBeGreaterThan(0);
+    expect(rulesOf(tokenLayer(), `/repo/${MIXINS}`)).toEqual([]);
+  });
 });
 
 describe('check-theme-tokens: Rule 4, token prefix spelling', () => {
@@ -213,6 +236,16 @@ describe('check-theme-tokens: comments', () => {
   it('keeps scanning the rest of a line after url(http://x)', () => {
     const code = '.a { background: url(http://x/a.png); color: $public-text-primary-light; }';
     expect(rulesOf(code, SITE_PARTIAL)).toEqual(['Rule 1']);
+  });
+
+  it('keeps scanning after a quoted url() holding ) and //', () => {
+    const code = '.a { background: url("data:image/svg+xml,fill=\'rgb(0,0,0)\' xmlns=\'http://x\'"); color-scheme: dark; }';
+    expect(rulesOf(code, SITE_PARTIAL)).toEqual(['Rule 2']);
+  });
+
+  it('keeps scanning after a protocol-relative url(//...)', () => {
+    const code = '.a { background: url(//cdn/x.png); color-scheme: dark; }';
+    expect(rulesOf(code, SITE_PARTIAL)).toEqual(['Rule 2']);
   });
 
   it('keeps scanning the rest of a line after a // inside a string', () => {
@@ -307,7 +340,7 @@ describe('check-theme-tokens: directory scan + CLI exit code', () => {
  */
 describe('check-theme-tokens: live scan (CI safety net)', () => {
   it('reports zero violations against the current tree', () => {
-    const files = collectThemeFiles(['src/site', 'src/widget', 'src/common/ui'].map(dir => path.resolve(dir)));
+    const files = collectThemeFiles(DEFAULT_ROOTS.map(dir => path.resolve(dir)));
     const relative = files.map(file => path.relative(process.cwd(), file).split(path.sep).join('/'));
 
     expect(relative).toEqual(expect.arrayContaining([MIXINS, SITE_STYLE, WIDGET_APP]));

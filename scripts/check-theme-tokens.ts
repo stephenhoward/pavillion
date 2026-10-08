@@ -25,10 +25,11 @@
  *     tokens. No other dark class exists in the tree, so none is banned
  *     speculatively.
  *   Rule 3, token-layer include sites. `@include ...public-theme-tokens` only
- *     on `#app` in src/site/assets/style.scss and on `.widget-root` in
- *     src/widget/components/app.vue. A second include on another selector in
- *     the same file re-declares the tokens below the root and shadows a
- *     runtime accent override written on the root (pv-nskn).
+ *     directly inside a top-level `#app` rule in src/site/assets/style.scss
+ *     and a top-level `.widget-root` rule in src/widget/components/app.vue
+ *     (`.x { #app { ... } }` is not the root). A second include on another
+ *     selector in the same file re-declares the tokens below the root and
+ *     shadows a runtime accent override written on the root (pv-nskn).
  *   Rule 4, token prefix spelling. A custom property spelled `--Pav-`,
  *     `--PAV-` or `--pav_` names nothing the token layer declares; custom
  *     property names are case-sensitive, so it is an unset read or a dead
@@ -65,7 +66,8 @@
  *     says what it holds is the contract.
  *   - Rule 3 reads the enclosing selector textually. A selector built with
  *     `#{...}` interpolation, or an include reached through another mixin, is
- *     not resolved.
+ *     not resolved; a top-level selector list (`#app, .x`) is not a named
+ *     site and fails.
  *   - A literal colour written straight into a component (no variable, no
  *     dark rule) is not this guard's business; it renders the same in both
  *     themes, and the warn-only raw-literal guard is a separate bead.
@@ -139,25 +141,40 @@ const SITE_LIST = INCLUDE_SITES.map(site => `${site.selector} in ${site.file}`).
 
 const DARK_SITE = `dark values are declared only in the public-theme-tokens / _public-theme-dark-values mixins in ${MIXINS_FILE}; read a --pav-* token instead`;
 
+/** An `@include` of mixin `name`, bare or through a module namespace. */
+function includeOf(name: string): RegExp {
+  return new RegExp(`@include\\s+(?:[\\w-]+\\.)?${name}(?![\\w-])`, 'g');
+}
+
 /** Rule 2's patterns, each with the name it is reported under. */
 const DARK_PATTERNS: { pattern: RegExp; what: string }[] = [
   { pattern: /prefers-color-scheme/g, what: 'prefers-color-scheme query' },
   { pattern: /\[\s*data-theme\b/g, what: 'data-theme attribute selector' },
-  { pattern: /@include\s+(?:[\w-]+\.)?public-dark-mode(?![\w-])/g, what: '@include public-dark-mode' },
-  { pattern: /@include\s+(?:[\w-]+\.)?_public-theme-dark-values(?![\w-])/g, what: '@include _public-theme-dark-values' },
+  { pattern: includeOf('public-dark-mode'), what: '@include public-dark-mode' },
+  { pattern: includeOf('_public-theme-dark-values'), what: '@include _public-theme-dark-values' },
   { pattern: /(?<![\w-])color-scheme\s*:/g, what: 'color-scheme declaration' },
   { pattern: /(?<![\w-])light-dark\s*\(/g, what: 'light-dark()' },
   { pattern: /\.widget-theme-(?:light|dark)(?![\w-])/g, what: 'retired .widget-theme-light/-dark class' },
 ];
 
 const PUBLIC_VARIABLE = /\$public[-_][\w-]*/g;
-const TOKEN_LAYER_INCLUDE = /@include\s+(?:[\w-]+\.)?public-theme-tokens(?![\w-])/g;
+const TOKEN_LAYER_INCLUDE = includeOf('public-theme-tokens');
 const MISSPELT_PREFIX = /(?<![\w-])--pav[-_]/gi;
 
 /** Whether `fileName`, normalised to `/`, ends with the repo-relative `suffix`. */
 function hasPathSuffix(fileName: string, suffix: string): boolean {
   const normalised = fileName.split(path.sep).join('/');
   return normalised === suffix || normalised.endsWith(`/${suffix}`);
+}
+
+/** How many blocks enclose `index`: braces opened before it and not yet closed. */
+function depthAt(text: string, index: number): number {
+  let depth = 0;
+  for (let i = 0; i < index; i++) {
+    if (text[i] === '{') depth++;
+    if (text[i] === '}') depth--;
+  }
+  return depth;
 }
 
 /** 1-indexed line of `index` in `text`. */
@@ -227,7 +244,9 @@ export function detectSource(code: string, fileName: string): Violation[] {
   // Rule 3
   for (const match of style.matchAll(TOKEN_LAYER_INCLUDE)) {
     const selector = enclosingSelector(style, match.index!);
-    const allowed = INCLUDE_SITES.some(site => hasPathSuffix(fileName, site.file) && selector === site.selector);
+    const atRoot = depthAt(style, match.index!) === 1;
+    const allowed = atRoot
+      && INCLUDE_SITES.some(site => hasPathSuffix(fileName, site.file) && selector === site.selector);
     if (!allowed) {
       report(match.index!, `Rule 3: @include public-theme-tokens on "${selector || '(top level)'}" is not a named include site; the token layer is included only on ${SITE_LIST}`);
     }
