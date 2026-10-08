@@ -383,7 +383,8 @@ function unrecordedReads(style: string, recorded: Set<string>): string[] {
  * colour and no theme selector. Every other `public-*` mixin in
  * assets/mixins.scss carries colour as `--pav-*` reads made inside the mixin
  * body, where the TOKENS.md check below cannot see them, so it is out: the
- * names it reads are not held to the shared tier. Widen this list only with a mixin whose body meets the same bar.
+ * names it reads are not held to the shared tier. Widen this list only with
+ * a mixin whose body meets the same bar.
  */
 const LAYOUT_ONLY_MIXINS = [
   'public-mobile-only',

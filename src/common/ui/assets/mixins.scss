@@ -109,8 +109,8 @@ $public-radius-full: 9999px;
   --pav-text-muted: rgba(255, 255, 255, 0.45);
 
   --pav-border-subtle: rgba(255, 255, 255, 0.12);
-  --pav-border-medium: rgba(255, 255, 255, 0.20);
-  --pav-border-strong: rgba(255, 255, 255, 0.30);
+  --pav-border-medium: rgba(255, 255, 255, 0.2);
+  --pav-border-strong: rgba(255, 255, 255, 0.3);
 
   --pav-interactive-hover: rgba(255, 255, 255, 0.08);
   --pav-interactive-active: rgba(255, 255, 255, 0.12);
@@ -200,6 +200,9 @@ $public-radius-full: 9999px;
   color-scheme: light;
 
   // Fixed-mode accent values — the runtime override surface.
+  // The hover values are the default accent shifted 5% in lightness (darker
+  // for light, lighter for dark), written out so the token layer needs no
+  // Sass colour module.
   --pav-accent-light: #ff9131;
   --pav-accent-light-hover: rgb(255, 131.3834951456, 23.5);
   --pav-accent-dark: #C86002;
@@ -235,7 +238,7 @@ $public-radius-full: 9999px;
   --pav-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
   --pav-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --pav-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.04);
-  --pav-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --pav-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
   --pav-shadow-xl: 0 8px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.15);
 
   // Shared tier, minted: the client declares these names too.
