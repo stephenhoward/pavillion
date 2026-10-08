@@ -385,8 +385,9 @@ defineExpose({ open, close });
 // ================================================================
 // A modal dialog for anonymous visitors to report an event.
 // Uses the native <dialog> element for built-in accessibility.
-// Uses the public site mixin-based design system for theming.
-// Only component-specific layout styles remain here.
+// Colours and shadows read the runtime --pav-* theme tokens, which
+// switch between light and dark themselves; the shared mixins supply
+// layout and base styles (inputs, buttons, focus, error state).
 // ================================================================
 
 .report-dialog {
