@@ -420,7 +420,7 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.id).toBe('https://example.com/activities/accept/1');
     });
 
-    it('should properly serialize nested FollowActivity with @context', () => {
+    it('serializes the embedded Follow as a reduced reference', () => {
       // Create a FollowActivity
       const followActivity = new FollowActivity(
         'https://beta.example.com/calendars/bx_6ztiy',
@@ -444,21 +444,79 @@ describe('Activity Model fromObject Null Checks', () => {
         { pavillion: 'https://pavillion.social/ns/activitypub#' },
       ]);
 
-      // Verify the nested Follow object also has @context, not context
-      expect(serialized.object).toHaveProperty('@context');
-      expect(serialized.object['@context']).toEqual([
-        'https://www.w3.org/ns/activitystreams',
-        'https://w3id.org/fep/8a8e',
-        { pavillion: 'https://pavillion.social/ns/activitypub#' },
-      ]);
-
-      // Verify context property does NOT exist on nested object
+      // The embedded Follow is reduced to its identity reference
+      expect(serialized.object).toEqual({
+        id: followActivity.id,
+        type: 'Follow',
+        actor: 'https://beta.example.com/calendars/bx_6ztiy',
+        object: 'https://alpha.example.com/calendars/ax_5eggn',
+      });
+      expect(serialized.object).not.toHaveProperty('@context');
       expect(serialized.object).not.toHaveProperty('context');
+    });
 
-      // Verify the nested Follow has correct structure
-      expect(serialized.object.type).toBe('Follow');
-      expect(serialized.object.actor).toBe('https://beta.example.com/calendars/bx_6ztiy');
-      expect(serialized.object.object).toBe('https://alpha.example.com/calendars/ax_5eggn');
+    it('constructor given a FollowActivity instance keeps exactly id, type, actor and object', () => {
+      const followActivity = new FollowActivity(
+        'https://beta.example.com/calendars/bx_6ztiy',
+        'https://alpha.example.com/calendars/ax_5eggn',
+      );
+      const accept = new AcceptActivity('https://alpha.example.com/calendars/ax_5eggn', followActivity);
+
+      expect(Object.keys(accept.toObject().object).sort()).toEqual(['actor', 'id', 'object', 'type']);
+    });
+
+    // The persisted inbox row is the whole outcome of an inbound Accept, so
+    // fromObject keeps only the fields a consumer reads — never the peer's
+    // full embedded payload.
+    it('reduces an embedded Follow to id, type, actor and object', () => {
+      const result = AcceptActivity.fromObject({
+        actor: 'https://remote.example/calendars/theirs',
+        id: 'https://remote.example/calendars/theirs/accepts/1',
+        object: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          id: 'https://example.com/calendars/mycal/follows/1',
+          type: 'Follow',
+          actor: 'https://example.com/calendars/mycal',
+          object: 'https://remote.example/calendars/theirs',
+          to: ['https://remote.example/calendars/theirs'],
+          summary: 'x'.repeat(10_000),
+          nested: { deep: {} },
+        },
+      });
+      expect(result?.object).toEqual({
+        id: 'https://example.com/calendars/mycal/follows/1',
+        type: 'Follow',
+        actor: 'https://example.com/calendars/mycal',
+        object: 'https://remote.example/calendars/theirs',
+      });
+    });
+
+    it('reduces an embedded Flag to id, type and actor, dropping a non-string object', () => {
+      const result = AcceptActivity.fromObject({
+        actor: 'https://remote.example/calendars/theirs',
+        object: {
+          id: 'https://example.com/flags/1',
+          type: 'Flag',
+          actor: 'https://example.com/calendars/mycal',
+          object: { id: 'https://remote.example/events/1', type: 'Event' },
+          content: 'report text',
+          tag: [{ type: 'Hashtag', name: '#spam' }],
+          summary: 'summary',
+        },
+      });
+      expect(result?.object).toEqual({
+        id: 'https://example.com/flags/1',
+        type: 'Flag',
+        actor: 'https://example.com/calendars/mycal',
+      });
+    });
+
+    it('keeps a bare URI object as-is', () => {
+      const result = AcceptActivity.fromObject({
+        actor: 'https://remote.example/calendars/theirs',
+        object: 'https://example.com/calendars/mycal/follows/1',
+      });
+      expect(result?.object).toBe('https://example.com/calendars/mycal/follows/1');
     });
   });
 
