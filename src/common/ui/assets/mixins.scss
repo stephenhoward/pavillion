@@ -240,11 +240,12 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
 // The one declaration site of the public surfaces' --pav-* custom properties
 // and of their color-scheme. The base block holds the light values and
 // `color-scheme: light`; `_public-theme-dark-values` above holds the dark
-// ones. Existing tokens carry the $public-*-light / -dark pairs above; tokens
-// minted for the site and widget alone are literals. Names follow the client's
-// theme layer where it has a token of the same meaning; ../TOKENS.md records
-// both tiers (shared and public-only), and test/public-theme-tokens.test.ts
-// fails if a pair goes unemitted.
+// ones. Existing tokens carry the $public-*-light / -dark pairs above; newly
+// minted tokens are literals, except the three field tokens, which are var()
+// references to the surface tiers (an approved exception). Names follow the
+// client's theme layer where it has a token of the same meaning;
+// ../TOKENS.md records both tiers (shared and public-only), and
+// test/public-theme-tokens.test.ts fails if a pair goes unemitted.
 //
 // color-scheme is emitted here, beside the tokens, so native controls inside
 // the app (date inputs, selects, autofill, scrollbars of scrolling elements)

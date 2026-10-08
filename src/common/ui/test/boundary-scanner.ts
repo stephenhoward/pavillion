@@ -1,5 +1,6 @@
 /**
- * The import classifier behind boundary.test.ts.
+ * The import classifier behind boundary.test.ts, and the heading-scoped
+ * TOKENS.md section parser the token tests share.
  *
  * Kept apart from the test so every branch can be driven by an inline fixture
  * rather than only by whatever the live tree happens to contain. No function

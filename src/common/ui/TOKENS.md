@@ -21,11 +21,22 @@ In the widget, `.widget-root` owns the token layer because it is also where `wid
 
 ### color-scheme
 
-`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
+`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. Until the widget's own `.widget-root` color-scheme block in `src/widget/components/app.vue` is removed, that block comes later in source and still decides the widget's value. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
 
 ### Naming rule
 
-Where the client's theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and the shadow scale in `tokens/_shadows.scss`) has a token of the same meaning, the client's name wins and the token is shared. A value with no client counterpart takes its own name under the `--pav-` prefix. The rule compares against the theme tier only — the semantic tokens those files declare — not the `--pav-color-*` palette primitives beneath them, which is why `--pav-accent` and `--pav-success` keep public names even though the client mappings below put them on palette values.
+Apply these in order when a theme-varying value needs a token:
+
+1. **The client's meaning wins.** If the client's theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and the shadow scale in `tokens/_shadows.scss`) has a token of the same meaning, use its name even when the values differ. The token is shared, because the client already declares it. The comparison is against the theme tier only — the semantic tokens those files declare — not the `--pav-color-*` palette primitives beneath them, which is why `--pav-accent` and `--pav-success` keep public names even though the client mappings below put them on palette values.
+2. **Reuse an existing public token only for the same role and the same value.** A value that matches an existing token but plays a different role gets its own token: a coincidence of value is not a mapping.
+3. **Otherwise mint a public-only token.**
+   - Use the type-first grammar `--pav-<surface|text|border|shadow|interactive>-<role>[-state]`, such as `--pav-surface-popover` or `--pav-border-picker-hover`.
+   - Badge and pill groups may be named after their component, as `--pav-source-pill-*` is, with the client's `-bg` / `-text` suffixes. The legacy `--pav-source-pill-color` keeps its name.
+   - Field colours use the type-first grammar with a `field` role (`--pav-surface-field`). Never use `--pav-control-*`: the client's `--pav-control-box-size` already occupies that family.
+   - A non-colour token names what it holds, such as `--pav-vignette-gain`.
+   - Never name a token by its alpha.
+4. **No collisions.** A public-only name may not equal any name the client declares anywhere, in its theme tier or under `tokens/`.
+5. **Promotion.** A public-only token becomes shared by declaring it in the client's theme layer and moving its row to the shared table. Until then, a shared component never reads it.
 
 The four fixed-mode accent properties — `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` — are in neither tier. They are the widget's runtime override surface and keep their names; existing site and widget components read them directly. New call sites should read the theme-switched `--pav-accent` / `--pav-accent-hover` instead.
 
@@ -89,13 +100,13 @@ Declared by `public-theme-tokens` only, and read only by site and widget compone
 | `--pav-shadow-picker` | public — picker role | the trigger's resting elevation; matches no step of the shadow scale |
 | `--pav-shadow-picker-hover` | public — picker role | the trigger's hover elevation; matches no scale step |
 | `--pav-shadow-picker-focus` | public — picker role | a decorative halo beside the accent focus outline, not a focus indicator, so not the client's `--pav-shadow-focus` |
-| `--pav-shadow-selected` | public | the elevation of a selected accent control (an active date filter or date pill) |
+| `--pav-shadow-selected` | public — the "selected" state of an accent control | the elevation of a selected accent control (an active date filter or date pill) |
 | `--pav-filter-pill-hover-bg` | public — the filter-pill group, after `--pav-source-pill-*` | the hovered filter pill's fill, also the clear button's resting fill |
 | `--pav-filter-pill-hover-text` | public — filter-pill group | the hovered filter pill's ink |
 | `--pav-border-filter-pill-focus` | public — filter-pill group | the filter pills' focus outline; `--pav-border-strong` is too faint for it |
-| `--pav-surface-scroll-arrow-hover` | public | the category scroller's arrow on hover; `--pav-interactive-hover` equals that arrow's resting fill |
+| `--pav-surface-scroll-arrow-hover` | public — the category scroller's arrow role | the category scroller's arrow on hover; `--pav-interactive-hover` equals that arrow's resting fill |
 | `--pav-recurrence-badge-bg` | public — the badge group | a translucent scrim over event media, not a status tint, so not a client `--pav-badge-*` fill |
-| `--pav-vignette-gain` | public — named in the design | non-colour, see below |
+| `--pav-vignette-gain` | public — names what it holds | non-colour: the multiplier on the event-image vignette's alpha, `1` in light and `2.5` in dark (see below) |
 | `--pav-loading-pulse-gradient` | public — names what it holds | the image-loading placeholder, recorded as a whole value the way shadows are |
 
 ### --pav-vignette-gain
@@ -104,7 +115,7 @@ The event-image vignette darkens more in dark mode, and every dark alpha is exac
 
 ## Client mappings
 
-The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` fails if a shared token is declared nowhere in those files.
+The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` checks that the client declares them, but today only for the shared tokens derived from a `$public-*` pair; the check becomes driven by the shared table in the next change.
 
 A shared token whose name source is **client** is the client's own theme token. The client's components do not use the shared tokens with a **public** name source, so the theme layer declares them only for shared components, each mapped onto an existing client value. None of these mappings changes a value the client already declared.
 
