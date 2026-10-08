@@ -202,6 +202,7 @@ export default class EventInstanceService {
           CalendarEntity,
         ],
       }],
+      order: [['start_time', 'ASC'], ['id', 'ASC']],
     });
 
     const instances = eventInstances.map((instanceEntity) => {
@@ -288,6 +289,7 @@ export default class EventInstanceService {
     // Build the query for event instances
     const queryOptions: any = {
       where: { event_id: { [Op.in]: visibleEventIds } },
+      order: [['start_time', 'ASC'], ['id', 'ASC']],
       include: [
         {
           model: EventEntity,

@@ -413,6 +413,47 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
   });
 
   /**
+   * The public listing is ordered by start time, then id, on both the
+   * filtered and unfiltered branches. Events are inserted out of start order
+   * so the database's natural (insertion) order would fail the assertion.
+   * Past-dated single events materialize their lone instance at creation.
+   */
+  describe('calendar listing orders instances by start time', () => {
+    const expectedStarts = [
+      '2021-06-01T16:00:00.000Z',
+      '2021-06-01T18:00:00.000Z',
+      '2021-06-01T20:00:00.000Z',
+    ];
+    let eventIds: string[];
+
+    beforeAll(async () => {
+      const late = await createOneShotEvent('2021-06-01T20:00:00Z', '2021-06-01T21:00:00Z', 'Ordering Late');
+      const early = await createOneShotEvent('2021-06-01T16:00:00Z', '2021-06-01T17:00:00Z', 'Ordering Early');
+      const middle = await createOneShotEvent('2021-06-01T18:00:00Z', '2021-06-01T19:00:00Z', 'Ordering Middle');
+      eventIds = [late, early, middle];
+    });
+
+    it('returns ascending start times on the date-filtered listing', async () => {
+      const response = await request(env.app)
+        .get('/api/public/v1/calendar/instancecal/events?startDate=2021-06-01&endDate=2021-06-01');
+
+      expect(response.status).toBe(200);
+      expect(response.body.map((i: any) => i.start)).toEqual(expectedStarts);
+    });
+
+    it('returns ascending start times on the unfiltered listing', async () => {
+      const response = await request(env.app)
+        .get('/api/public/v1/calendar/instancecal/events');
+
+      expect(response.status).toBe(200);
+      const starts = response.body
+        .filter((i: any) => eventIds.includes(i.event?.id))
+        .map((i: any) => i.start);
+      expect(starts).toEqual(expectedStarts);
+    });
+  });
+
+  /**
    * Hidden cancellation (hideFromPublic=true): the cancel handler does not
    * rebuild instances, so the materialized row survives. Every public read
    * path must drop it — listing omits it and the detail endpoint 404s — and

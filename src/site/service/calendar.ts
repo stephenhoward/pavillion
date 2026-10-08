@@ -114,22 +114,6 @@ export default class CalendarService {
   }
 
 
-  async loadCalendarEventsByDay(calendarUrlName: string): Promise<Record<string, CalendarEventInstance[]>> {
-    const events = await this.loadCalendarEvents(calendarUrlName);
-    const eventsByDay: Record<string,CalendarEventInstance[]> = {};
-    events.forEach((instance: CalendarEventInstance) => {
-      const dateKey = instance.start.toISODate();
-      if ( dateKey ) {
-        if (!eventsByDay[dateKey]) {
-          eventsByDay[dateKey] = [];
-        }
-        console.debug('Adding event to day:', dateKey, instance);
-        eventsByDay[dateKey].push(instance);
-      }
-    });
-    return eventsByDay;
-  }
-
   /**
    * Load a single event instance by its parent event id and UTC start time.
    *
