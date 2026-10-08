@@ -257,7 +257,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .category-pill-selector-wrapper {
   position: relative;

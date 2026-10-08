@@ -1,4 +1,0 @@
-// Moved to src/common/ui/assets/mixins.scss, the shared UI module. This shim
-// keeps the existing `@use '../assets/mixins'` / `@use '@/site/assets/mixins'`
-// call sites working; new call sites should use the shared path directly.
-@forward '@/common/ui/assets/mixins';

@@ -26,17 +26,17 @@ Scope is this module only; the existing widget → site and site → client impo
 
 ## Styling stance
 
-**A shared component reads `--pav-*` custom properties, and only the names recorded in [TOKENS.md](TOKENS.md).** It never reads a `$public-*` SCSS variable and never includes a `public-*` mixin that does. A `$public-*` value is resolved at build time: a component compiled against `$public-text-primary-light` carries that value in its CSS and cannot take on another app's theme. A `--pav-*` property is resolved in the browser, against whichever app mounts the component.
+**A shared component reads `--pav-*` custom properties, and only the names recorded in [TOKENS.md](TOKENS.md).** It never reads a `$public-*` SCSS variable and never includes a `public-*` mixin that does. A `$public-*` value is resolved at build time: a component compiled against one carries that value in its CSS and cannot take on another app's value. A `--pav-*` property is resolved in the browser, against whichever app mounts the component.
 
 The rule covers colours and shadows — what TOKENS.md holds. Spacing and type sizes have no shared runtime token yet (the client's `--pav-space-*` and `--pav-font-size-*` scales are not declared by the site or widget), so a shared component writes those as plain `rem` values.
 
-A shared component writes no dark-mode rule. Each token already carries its light and dark value and switches under the app's theme selector, so `var(--pav-text-primary)` is correct in both themes as written. A shared component that needs `public-dark-mode`, `[data-theme="dark"]`, or `prefers-color-scheme` is reading the wrong value.
+A shared component writes no dark-mode rule. Each token already carries its light and dark value and switches under the app's theme selector, so `var(--pav-text-primary)` is correct in both themes as written. A shared component that needs `[data-theme="dark"]` or `prefers-color-scheme` is reading the wrong value.
 
 A shared component puts no text and no focus indicator on or in `--pav-accent`. The accent is decoration (rules, rings, borders) and never the only carrier of a state, because the widget's accent is owner-configurable and TOKENS.md has no ink paired with it. The tests below check token names, not pairings, so this one is held by review. When pv-8l49 adds an on-accent text pair, the rule relaxes to "text on the accent reads that pair".
 
 Each app supplies the tokens its own way:
 
-- **Site and widget** — the `public-theme-tokens` mixin in `assets/mixins.scss`, included on `#app` in the site and on `.widget-root` in the widget. It emits each `$public-*` light/dark pair as one `--pav-*` property with the public palette's values.
+- **Site and widget** — the `public-theme-tokens` mixin in `assets/mixins.scss`, included on `#app` in the site and on `.widget-root` in the widget. It declares every recorded name with the public palette's light and dark values.
 - **Client** — its theme layer (`src/client/assets/style/themes/_light.scss`, `_dark.scss`, and `tokens/_shadows.scss`) declares every recorded name natively, most as the client's own tokens and the rest mapped onto existing client values.
 
 TOKENS.md records which names each app declares and from what source. A name shared by all three apps does not mean a shared value: each app keeps its own palette behind the name.
@@ -45,7 +45,7 @@ TOKENS.md records which names each app declares and from what source. A name sha
 
 `assets/mixins.scss` remains the site and widget's own design system — the `$public-*` variables and `public-*` mixins their app components still use while they migrate to `--pav-*`. It also carries a block of unprefixed aliases (`filter-container`, `input-base`, the `$spacing-*` scale, and others) kept for call sites that predate the `public-*` naming; those are compatibility surface, not the design system. None of it belongs in a shared component. Some `public-*` mixins already read `--pav-*` properties instead of `$public-*` variables — `public-focus-visible`, `public-button-primary`, `public-sticky-date-heading` and others; so, like any `--pav-*` reader, they only render correctly under an element that declares the tokens (`#app` in the site, `.widget-root` in the widget), per TOKENS.md.
 
-`assets/mixins.scss` is the canonical copy; `src/site/assets/mixins.scss` is a one-line `@forward` shim kept for the existing call sites. New call sites should `@use '@/common/ui/assets/mixins'` directly.
+Site and widget style loads it as `@use '@/common/ui/assets/mixins'`.
 
 Breakpoints that a component must branch on in script live in `assets/breakpoints.ts`, mirroring the `public-tablet-up` and `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `test/breakpoints.test.ts` fails when the two drift apart.
 

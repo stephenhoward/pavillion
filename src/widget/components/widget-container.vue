@@ -258,7 +258,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '@/site/assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .widget-container {
   display: flex;

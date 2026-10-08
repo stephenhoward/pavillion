@@ -381,11 +381,9 @@ function unrecordedReads(style: string, recorded: Set<string>): string[] {
  * `public-*` mixins a shared component may include: each emits only layout,
  * a media query around the caller's own `@content`, or an alpha mask — no
  * colour and no theme selector. Every other `public-*` mixin in
- * assets/mixins.scss carries colour, either as a compile-time `$public-*`
- * value or as `--pav-*` reads made inside the mixin body, where the TOKENS.md
- * check below cannot see them; a colour-bearing mixin that reads only runtime
- * tokens is still out, because the names it reads are not held to the shared
- * tier. Widen this list only with a mixin whose body meets the same bar.
+ * assets/mixins.scss carries colour as `--pav-*` reads made inside the mixin
+ * body, where the TOKENS.md check below cannot see them, so it is out: the
+ * names it reads are not held to the shared tier. Widen this list only with a mixin whose body meets the same bar.
  */
 const LAYOUT_ONLY_MIXINS = [
   'public-mobile-only',

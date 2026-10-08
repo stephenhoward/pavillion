@@ -163,7 +163,7 @@ watch(() => route.fullPath, (newPath) => {
 </template>
 
 <style scoped lang="scss">
-@use '@/site/assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // No viewport-relative height: the root's height is the height reported to
 // the embedding page (see the ResizeObserver above).
@@ -172,8 +172,8 @@ watch(() => route.fullPath, (newPath) => {
   display: flex;
   flex-direction: column;
 
-  // Last among the declarations: the mixin ends in a nested dark-mode rule,
-  // and a declaration after a nested rule makes Sass split this one.
+  // Last among the declarations: the mixin ends in its nested dark-branch
+  // rules, and a declaration after a nested rule makes Sass split this one.
   @include public-theme-tokens;
 }
 

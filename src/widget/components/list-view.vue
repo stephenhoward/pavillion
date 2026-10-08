@@ -98,7 +98,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 </template>
 
 <style scoped lang="scss">
-@use '@/site/assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .list-view {
   flex: 1;

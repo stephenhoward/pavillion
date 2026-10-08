@@ -14,8 +14,6 @@
  * - Every `var(--pav-*)` the site, widget or shared components read is a name
  *   the token layer declares, so a typo or a client-only name fails here
  *   rather than rendering as an unset property.
- * - Until the `$public-*` colour pairs are retired, each pair still reaches
- *   runtime as one token carrying its light and dark halves.
  *
  * No colour value is asserted anywhere in this file: the tests check names and
  * structure, and the parity probe owns what the values look like.
@@ -135,15 +133,6 @@ function enclosingSelector(source: string, index: number): string {
   return '';
 }
 
-/** Bases that have both a `$public-<base>-light` and a `$public-<base>-dark`. */
-function paletteBases(source: string): string[] {
-  const declared = (mode: string) => new Set(
-    [...source.matchAll(new RegExp(`^\\$public-([a-z0-9-]+)-${mode}\\s*:`, 'gm'))].map(m => m[1]),
-  );
-  const dark = declared('dark');
-  return [...declared('light')].filter(base => dark.has(base)).sort();
-}
-
 const relative = (file: string): string => path.relative(process.cwd(), file);
 
 /**
@@ -259,53 +248,6 @@ describe('public-theme-tokens', () => {
       expect(darkBlock.get('--pav-accent')).toBe('var(--pav-accent-dark)');
       expect(darkBlock.get('--pav-accent-hover')).toBe('var(--pav-accent-dark-hover)');
       expect(FIXED_ACCENT_PROPERTIES.filter(token => darkBlock.has(token))).toEqual([]);
-    });
-  });
-
-  /**
-   * Retired with the `$public-*` colour pairs: every `$public-<base>-light` /
-   * `-dark` pair must reach runtime as one `--pav-*` token, light half in the
-   * base block and dark half in the helper.
-   */
-  describe('$public-* pairs', () => {
-    const bases = paletteBases(mixins);
-
-    /**
-     * A declaration's value with one `var(--pav-*)` hop followed into the base
-     * block — the theme-switched accent tokens read the fixed accent
-     * properties so the widget's runtime override reaches them.
-     */
-    const resolve = (value: string): string => {
-      const hop = value.match(/^var\((--pav-[a-z0-9-]+)\)$/);
-      return (hop && lightBlock.get(hop[1])) ?? value;
-    };
-
-    const carriers = (block: Declarations, variable: string): string[] =>
-      [...block.entries()]
-        .filter(([, value]) => resolve(value).includes(`#{${variable}}`))
-        .map(([name]) => name);
-
-    it('finds the palette pairs it guards', () => {
-      expect(bases).toContain('accent');
-      expect(bases).toContain('bg-primary');
-      expect(bases).toContain('shadow-xl');
-      // $public-font-weight-light is a weight, not half of a light/dark pair.
-      expect(bases).not.toContain('font-weight');
-    });
-
-    it('emits every pair as one --pav-* property in the base block and the dark helper', () => {
-      const problems: string[] = [];
-      for (const base of bases) {
-        const inDark = carriers(darkBlock, `$public-${base}-dark`);
-        if (inDark.length !== 1) {
-          problems.push(`${base}: expected one dark-helper property, found [${inDark.join(', ')}]`);
-          continue;
-        }
-        if (!carriers(lightBlock, `$public-${base}-light`).includes(inDark[0])) {
-          problems.push(`${base}: ${inDark[0]} is not declared with $public-${base}-light in the base block`);
-        }
-      }
-      expect(problems).toEqual([]);
     });
   });
 

@@ -7,6 +7,11 @@
 // widget). The design emphasizes welcoming accessibility, refined
 // minimalism, and smooth interactions.
 //
+// Colour and shadow live only in the runtime --pav-* token layer
+// (`public-theme-tokens`), which carries each light and dark value. The
+// $public-* Sass variables are the non-colour constants: type, spacing,
+// radius, motion and layout breakpoints.
+//
 // Philosophy:
 // - Welcoming over administrative
 // - Content first (events are the focus)
@@ -15,65 +20,6 @@
 //
 // Created: 2025-12-14
 // ================================================================
-
-@use 'sass:color';
-
-// ===== COLOR TOKENS =====
-
-// Primary brand accent (warmer, more welcoming)
-$public-accent-light: #ff9131;
-$public-accent-dark: #C86002;
-$public-accent-hover-light: color.adjust(#ff9131, $lightness: -5%);
-$public-accent-hover-dark: color.adjust(#C86002, $lightness: 5%);
-
-// Background layers (lighter, airier than client)
-$public-bg-primary-light: #ffffff;
-$public-bg-primary-dark: #1a1a1e;
-$public-bg-secondary-light: rgba(0, 0, 0, 0.02);
-$public-bg-secondary-dark: rgba(255, 255, 255, 0.05);
-$public-bg-tertiary-light: rgba(0, 0, 0, 0.04);
-$public-bg-tertiary-dark: rgba(255, 255, 255, 0.08);
-
-// Text hierarchy (refined opacity levels)
-$public-text-primary-light: rgba(0, 0, 0, 0.9);
-$public-text-primary-dark: rgba(255, 255, 255, 0.95);
-$public-text-secondary-light: rgba(0, 0, 0, 0.6);
-$public-text-secondary-dark: rgba(255, 255, 255, 0.65);
-$public-text-tertiary-light: rgba(0, 0, 0, 0.4);
-$public-text-tertiary-dark: rgba(255, 255, 255, 0.45);
-
-// Border system (subtle, refined)
-$public-border-subtle-light: rgba(0, 0, 0, 0.08);
-$public-border-subtle-dark: rgba(255, 255, 255, 0.12);
-$public-border-medium-light: rgba(0, 0, 0, 0.15);
-$public-border-medium-dark: rgba(255, 255, 255, 0.20);
-$public-border-strong-light: rgba(0, 0, 0, 0.25);
-$public-border-strong-dark: rgba(255, 255, 255, 0.30);
-
-// State colors (semantic)
-$public-error-light: #dc2626;
-$public-error-dark: #fca5a5;
-$public-error-bg-light: #fef2f2;
-$public-error-bg-dark: #7f1d1d;
-
-$public-success-light: #16a34a;
-$public-success-dark: #86efac;
-$public-success-bg-light: #f0fdf4;
-$public-success-bg-dark: #14532d;
-
-// Source calendar pill (blue accent for federated origin)
-$public-source-pill-bg-light: rgba(59, 130, 246, 0.1);
-$public-source-pill-color-light: #2563eb;
-$public-source-pill-hover-bg-light: rgba(59, 130, 246, 0.2);
-$public-source-pill-bg-dark: rgba(96, 165, 250, 0.15);
-$public-source-pill-color-dark: #93bbfd;
-$public-source-pill-hover-bg-dark: rgba(96, 165, 250, 0.25);
-
-// Interactive states
-$public-hover-overlay-light: rgba(0, 0, 0, 0.04);
-$public-hover-overlay-dark: rgba(255, 255, 255, 0.08);
-$public-active-overlay-light: rgba(0, 0, 0, 0.08);
-$public-active-overlay-dark: rgba(255, 255, 255, 0.12);
 
 // ===== TYPOGRAPHY TOKENS =====
 
@@ -140,22 +86,6 @@ $public-radius-xl: 20px;
 $public-radius-2xl: 24px;
 $public-radius-full: 9999px;
 
-// ===== SHADOW TOKENS =====
-
-// Light mode shadows
-$public-shadow-xs-light: 0 1px 2px rgba(0, 0, 0, 0.04);
-$public-shadow-sm-light: 0 1px 3px rgba(0, 0, 0, 0.08);
-$public-shadow-md-light: 0 2px 4px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.04);
-$public-shadow-lg-light: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
-$public-shadow-xl-light: 0 8px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.15);
-
-// Dark mode shadows (deeper, higher contrast)
-$public-shadow-xs-dark: 0 1px 2px rgba(0, 0, 0, 0.2);
-$public-shadow-sm-dark: 0 1px 3px rgba(0, 0, 0, 0.3);
-$public-shadow-md-dark: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
-$public-shadow-lg-dark: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
-$public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.6);
-
 // ===== RUNTIME THEME TOKENS =====
 
 // The dark half of the token layer: every token `public-theme-tokens`
@@ -170,35 +100,35 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
   --pav-accent: var(--pav-accent-dark);
   --pav-accent-hover: var(--pav-accent-dark-hover);
 
-  --pav-surface-primary: #{$public-bg-primary-dark};
-  --pav-surface-secondary: #{$public-bg-secondary-dark};
-  --pav-surface-tertiary: #{$public-bg-tertiary-dark};
+  --pav-surface-primary: #1a1a1e;
+  --pav-surface-secondary: rgba(255, 255, 255, 0.05);
+  --pav-surface-tertiary: rgba(255, 255, 255, 0.08);
 
-  --pav-text-primary: #{$public-text-primary-dark};
-  --pav-text-secondary: #{$public-text-secondary-dark};
-  --pav-text-muted: #{$public-text-tertiary-dark};
+  --pav-text-primary: rgba(255, 255, 255, 0.95);
+  --pav-text-secondary: rgba(255, 255, 255, 0.65);
+  --pav-text-muted: rgba(255, 255, 255, 0.45);
 
-  --pav-border-subtle: #{$public-border-subtle-dark};
-  --pav-border-medium: #{$public-border-medium-dark};
-  --pav-border-strong: #{$public-border-strong-dark};
+  --pav-border-subtle: rgba(255, 255, 255, 0.12);
+  --pav-border-medium: rgba(255, 255, 255, 0.20);
+  --pav-border-strong: rgba(255, 255, 255, 0.30);
 
-  --pav-interactive-hover: #{$public-hover-overlay-dark};
-  --pav-interactive-active: #{$public-active-overlay-dark};
+  --pav-interactive-hover: rgba(255, 255, 255, 0.08);
+  --pav-interactive-active: rgba(255, 255, 255, 0.12);
 
-  --pav-text-error: #{$public-error-dark};
-  --pav-surface-error: #{$public-error-bg-dark};
-  --pav-success: #{$public-success-dark};
-  --pav-success-bg: #{$public-success-bg-dark};
+  --pav-text-error: #fca5a5;
+  --pav-surface-error: #7f1d1d;
+  --pav-success: #86efac;
+  --pav-success-bg: #14532d;
 
-  --pav-source-pill-bg: #{$public-source-pill-bg-dark};
-  --pav-source-pill-color: #{$public-source-pill-color-dark};
-  --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-dark};
+  --pav-source-pill-bg: rgba(96, 165, 250, 0.15);
+  --pav-source-pill-color: #93bbfd;
+  --pav-source-pill-hover-bg: rgba(96, 165, 250, 0.25);
 
-  --pav-shadow-xs: #{$public-shadow-xs-dark};
-  --pav-shadow-sm: #{$public-shadow-sm-dark};
-  --pav-shadow-md: #{$public-shadow-md-dark};
-  --pav-shadow-lg: #{$public-shadow-lg-dark};
-  --pav-shadow-xl: #{$public-shadow-xl-dark};
+  --pav-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --pav-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --pav-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+  --pav-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --pav-shadow-xl: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.6);
 
   // Shared tier, minted: the client declares these names too.
   --pav-badge-sky-bg: rgba(12, 74, 110, 0.3);
@@ -241,12 +171,12 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
 // The one declaration site of the public surfaces' --pav-* custom properties
 // and of their color-scheme. The base block holds the light values and
 // `color-scheme: light`; `_public-theme-dark-values` above holds the dark
-// ones. Existing tokens carry the $public-*-light / -dark pairs above; newly
-// minted tokens are literals, except the three field tokens, which are var()
-// references to the surface tiers (an approved exception). Names follow the
-// client's theme layer where it has a token of the same meaning;
-// ../TOKENS.md records both tiers (shared and public-only), and
-// test/public-theme-tokens.test.ts fails if a pair goes unemitted.
+// ones. Every value is a literal written here and nowhere else, except the
+// three field tokens, which are var() references to the surface tiers (an
+// approved exception). Names follow the client's theme layer where it has a
+// token of the same meaning; ../TOKENS.md records both tiers (shared and
+// public-only), and test/public-theme-tokens.test.ts fails if a recorded
+// token goes undeclared in either half.
 //
 // color-scheme is emitted here, beside the tokens, so native controls inside
 // the app (date inputs, selects, autofill, scrollbars of scrolling elements)
@@ -270,43 +200,43 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
   color-scheme: light;
 
   // Fixed-mode accent values — the runtime override surface.
-  --pav-accent-light: #{$public-accent-light};
-  --pav-accent-light-hover: #{$public-accent-hover-light};
-  --pav-accent-dark: #{$public-accent-dark};
-  --pav-accent-dark-hover: #{$public-accent-hover-dark};
+  --pav-accent-light: #ff9131;
+  --pav-accent-light-hover: rgb(255, 131.3834951456, 23.5);
+  --pav-accent-dark: #C86002;
+  --pav-accent-dark-hover: rgb(225.2475247525, 108.1188118812, 2.2524752475);
 
   --pav-accent: var(--pav-accent-light);
   --pav-accent-hover: var(--pav-accent-light-hover);
 
-  --pav-surface-primary: #{$public-bg-primary-light};
-  --pav-surface-secondary: #{$public-bg-secondary-light};
-  --pav-surface-tertiary: #{$public-bg-tertiary-light};
+  --pav-surface-primary: #ffffff;
+  --pav-surface-secondary: rgba(0, 0, 0, 0.02);
+  --pav-surface-tertiary: rgba(0, 0, 0, 0.04);
 
-  --pav-text-primary: #{$public-text-primary-light};
-  --pav-text-secondary: #{$public-text-secondary-light};
-  --pav-text-muted: #{$public-text-tertiary-light};
+  --pav-text-primary: rgba(0, 0, 0, 0.9);
+  --pav-text-secondary: rgba(0, 0, 0, 0.6);
+  --pav-text-muted: rgba(0, 0, 0, 0.4);
 
-  --pav-border-subtle: #{$public-border-subtle-light};
-  --pav-border-medium: #{$public-border-medium-light};
-  --pav-border-strong: #{$public-border-strong-light};
+  --pav-border-subtle: rgba(0, 0, 0, 0.08);
+  --pav-border-medium: rgba(0, 0, 0, 0.15);
+  --pav-border-strong: rgba(0, 0, 0, 0.25);
 
-  --pav-interactive-hover: #{$public-hover-overlay-light};
-  --pav-interactive-active: #{$public-active-overlay-light};
+  --pav-interactive-hover: rgba(0, 0, 0, 0.04);
+  --pav-interactive-active: rgba(0, 0, 0, 0.08);
 
-  --pav-text-error: #{$public-error-light};
-  --pav-surface-error: #{$public-error-bg-light};
-  --pav-success: #{$public-success-light};
-  --pav-success-bg: #{$public-success-bg-light};
+  --pav-text-error: #dc2626;
+  --pav-surface-error: #fef2f2;
+  --pav-success: #16a34a;
+  --pav-success-bg: #f0fdf4;
 
-  --pav-source-pill-bg: #{$public-source-pill-bg-light};
-  --pav-source-pill-color: #{$public-source-pill-color-light};
-  --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-light};
+  --pav-source-pill-bg: rgba(59, 130, 246, 0.1);
+  --pav-source-pill-color: #2563eb;
+  --pav-source-pill-hover-bg: rgba(59, 130, 246, 0.2);
 
-  --pav-shadow-xs: #{$public-shadow-xs-light};
-  --pav-shadow-sm: #{$public-shadow-sm-light};
-  --pav-shadow-md: #{$public-shadow-md-light};
-  --pav-shadow-lg: #{$public-shadow-lg-light};
-  --pav-shadow-xl: #{$public-shadow-xl-light};
+  --pav-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --pav-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --pav-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.04);
+  --pav-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --pav-shadow-xl: 0 8px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.15);
 
   // Shared tier, minted: the client declares these names too.
   --pav-badge-sky-bg: #e0f2fe;
@@ -693,32 +623,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 @mixin public-wide-up {
   @media (min-width: 1280px) {
     @content;
-  }
-}
-
-// Dark mode mixin — being retired. Emits its content under the same two
-// dark selectors as `public-theme-tokens` (see the comment on its branches
-// for what each matches and why neither may be wrapped in `:global()`).
-// Remaining call sites move their dark values into the token layer and drop
-// the include; do not add new call sites.
-//
-// Usage:
-//   .my-component {
-//     color: $public-text-primary-light;
-//
-//     @include public-dark-mode {
-//       color: $public-text-primary-dark;
-//     }
-//   }
-@mixin public-dark-mode {
-  [data-theme="dark"] & {
-    @content;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :where(:root:not([data-theme="light"])) & {
-      @content;
-    }
   }
 }
 
