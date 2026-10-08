@@ -29,3 +29,8 @@ jobs:
       - name: Raw SQL guard
         run: npm run lint:sql
         if: ${{ !cancelled() }}
+
+      # Theme guard: one dark declaration site, no colour $public-* (see scripts/check-theme-tokens.ts).
+      - name: Theme token guard
+        run: npm run lint:theme
+        if: ${{ !cancelled() }}

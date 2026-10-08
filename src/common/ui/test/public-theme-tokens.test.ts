@@ -24,7 +24,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
-import { styleBlocks, tokenSection } from './boundary-scanner';
+import { enclosingSelector, namedBlock, stripStyleComments, styleBlocks, tokenSection } from './boundary-scanner';
 
 const MIXINS_PATH = path.join(process.cwd(), 'src/common/ui/assets/mixins.scss');
 const TOKENS_PATH = path.join(process.cwd(), 'src/common/ui/TOKENS.md');
@@ -65,45 +65,14 @@ type Declarations = Map<string, string>;
 const DECLARATION = /(--pav-[a-z0-9-]+)\s*:\s*([^;]+);/g;
 const DARK_HELPER_INCLUDE = /@include\s+_public-theme-dark-values\s*;/;
 
-function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-}
-
-/**
- * Finds the block opened by `header` at the start of a line in `source` and
- * returns its body plus the span of the whole block. Anchoring to the line
- * start keeps a mention of the header in prose from matching. `#{...}`
- * interpolations are balanced, so brace counting is enough. Throws rather than
- * returning an empty body, so a renamed mixin or branch fails loudly instead of
- * passing vacuously. `where` names `source` in that error.
- */
-function namedBlock(source: string, header: string, where: string): { body: string; start: number; end: number } {
-  const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const found = new RegExp(`^[ \\t]*${escaped}\\s*\\{`, 'm').exec(source);
-  if (!found) {
-    throw new Error(`No "${header} {" found at the start of a line in ${where}`);
-  }
-  const start = found.index;
-  const open = start + found[0].length - 1;
-  let depth = 0;
-  for (let i = open; i < source.length; i++) {
-    if (source[i] === '{') depth++;
-    if (source[i] === '}') depth--;
-    if (depth === 0) {
-      return { body: source.slice(open + 1, i), start, end: i + 1 };
-    }
-  }
-  throw new Error(`Unbalanced braces in "${header}" in ${where}`);
-}
-
 /** Every `--pav-*` name a block declares, once per declaration. */
 function declaredNames(block: string): string[] {
-  return [...stripComments(block).matchAll(DECLARATION)].map(match => match[1]);
+  return [...stripStyleComments(block).matchAll(DECLARATION)].map(match => match[1]);
 }
 
 function customProperties(block: string): Declarations {
   const declarations: Declarations = new Map();
-  for (const match of stripComments(block).matchAll(DECLARATION)) {
+  for (const match of stripStyleComments(block).matchAll(DECLARATION)) {
     declarations.set(match[1], match[2].trim());
   }
   return declarations;
@@ -111,26 +80,6 @@ function customProperties(block: string): Declarations {
 
 function duplicates(names: string[]): string[] {
   return names.filter((name, index) => names.indexOf(name) !== index);
-}
-
-/**
- * The selector of the rule enclosing `index`: scan back to the unmatched `{`,
- * then back again to the previous `;`, `{` or `}`.
- */
-function enclosingSelector(source: string, index: number): string {
-  let depth = 0;
-  for (let i = index - 1; i >= 0; i--) {
-    if (source[i] === '}') depth++;
-    if (source[i] === '{') {
-      if (depth === 0) {
-        const head = source.slice(0, i);
-        const from = Math.max(head.lastIndexOf(';'), head.lastIndexOf('{'), head.lastIndexOf('}'));
-        return head.slice(from + 1).trim();
-      }
-      depth--;
-    }
-  }
-  return '';
 }
 
 const relative = (file: string): string => path.relative(process.cwd(), file);
@@ -150,11 +99,11 @@ function styleFiles(dirs: string[]): string[] {
 /** A file's style, comments stripped: the whole of a `.scss`, the `<style>` blocks of a `.vue`. */
 function styleOf(file: string): string {
   const source = readFileSync(file, 'utf-8');
-  return stripComments(file.endsWith('.vue') ? styleBlocks(source) : source);
+  return stripStyleComments(file.endsWith('.vue') ? styleBlocks(source) : source);
 }
 
 describe('public-theme-tokens', () => {
-  const mixins = stripComments(readFileSync(MIXINS_PATH, 'utf-8'));
+  const mixins = stripStyleComments(readFileSync(MIXINS_PATH, 'utf-8'));
   const mixin = namedBlock(mixins, '@mixin public-theme-tokens', MIXINS_PATH);
   const helper = namedBlock(mixins, '@mixin _public-theme-dark-values', MIXINS_PATH);
   const osBranch = namedBlock(mixin.body, '@media (prefers-color-scheme: dark)', 'the public-theme-tokens mixin');
@@ -282,7 +231,7 @@ describe('public-theme-tokens', () => {
 
   it('is included only below the document root, where its dark branch can match', () => {
     const includeSites = styleFiles(APP_STYLE_DIRS).flatMap((file) => {
-      const source = stripComments(readFileSync(file, 'utf-8'));
+      const source = stripStyleComments(readFileSync(file, 'utf-8'));
       return [...source.matchAll(/@include\s+public-theme-tokens\b/g)]
         .map(match => ({ file: relative(file), selector: enclosingSelector(source, match.index!) }));
     });
