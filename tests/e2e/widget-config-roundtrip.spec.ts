@@ -8,6 +8,7 @@ import {
   expectColorSide,
   expectThemedSurface,
   expectThemedIcon,
+  expectColorScheme,
   MIN_NORMAL_TEXT_CONTRAST,
 } from './helpers/color-mode';
 
@@ -371,6 +372,9 @@ test('list view and event detail paint with the saved accent', async ({ page, br
 // see pv-ezc7) could leave the attribute set while the actual cascade was
 // broken. The background is classified by
 // the shared `expectColorSide` helper rather than matched to a token value.
+// Each scenario also pins the computed `color-scheme` on `.widget-root`, which
+// the token layer sets beside the tokens so native controls follow the
+// resolved theme rather than the OS.
 
 test('color mode "light" overrides system dark preference', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
@@ -388,11 +392,12 @@ test('color mode "light" overrides system dark preference', async ({ page, brows
   // data-theme="light" regardless of the system preference.
   await expect(iframe.locator('html[data-theme="light"]')).toHaveCount(1, { timeout: 20000 });
 
-  // Visual cascade: the guarded dark-mode media query must stand down under
-  // data-theme="light", leaving `.widget-container` light even though the OS
-  // prefers dark.
+  // Visual cascade: the token layer's dark media-query branch must stand down
+  // under data-theme="light", leaving `.widget-container` light even though
+  // the OS prefers dark.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
   await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'light');
+  await expectColorScheme(iframe, '.widget-root', 'light');
 
   await cleanup();
 });
@@ -415,6 +420,7 @@ test('color mode "dark" overrides system light preference', async ({ page, brows
   // `.widget-container` to a dark value even though the OS prefers light.
   await expect(iframe.locator('.widget-container')).toBeVisible({ timeout: 20000 });
   await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
+  await expectColorScheme(iframe, '.widget-root', 'dark');
 
   await cleanup();
 });
@@ -437,17 +443,20 @@ test('color mode "auto" follows system preference and reacts to changes', async 
   await expect(iframe.locator('html[data-theme]')).toHaveCount(0);
 
   await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
+  await expectColorScheme(iframe, '.widget-root', 'dark');
 
   // Flip the OS preference to light without reloading. The media query
   // re-evaluates live; no JavaScript listener is involved.
   await embedPage.emulateMedia({ colorScheme: 'light' });
 
   await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'light');
+  await expectColorScheme(iframe, '.widget-root', 'light');
 
   // Flip back to dark — auto should react again.
   await embedPage.emulateMedia({ colorScheme: 'dark' });
 
   await expectColorSide(iframe, '.widget-container', 'backgroundColor', 'dark');
+  await expectColorScheme(iframe, '.widget-root', 'dark');
 
   await cleanup();
 });
@@ -461,8 +470,9 @@ test('color mode "auto" follows system preference and reacts to changes', async 
 // dark rule had no hand-paired light override: the footer and its logo, the
 // shared filter label, the date popover, and the not-found page. Each one is
 // asserted here in both mismatched directions (forced light on a dark OS,
-// forced dark on a light OS), so a regression in the `public-dark-mode` guard
-// fails CI rather than surfacing as a support report.
+// forced dark on a light OS), so a regression in the token layer's dark
+// branches fails CI rather than surfacing as a support report. Every step also
+// pins the computed `color-scheme` on `.widget-root` to the forced mode.
 //
 // The colour classification (ink vs surface side, 3:1 text contrast floor)
 // lives in helpers/color-mode.ts, shared with the site colour-mode spec.
@@ -510,6 +520,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
         await gotoInWidgetFrame(embedPage, env.baseURL, `/widget/test_calendar?view=${view}`);
         await expect(iframe.locator(`.${view}-view`)).toBeVisible({ timeout: 20000 });
         await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1);
+        await expectColorScheme(iframe, '.widget-root', colorMode);
 
         // The footer sits outside the themed container and paints its own
         // surface, so its text and logo must be legible on that surface
@@ -530,6 +541,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
     await test.step('list view: date popover and custom date inputs', async () => {
       await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
       await expect(iframe.locator('.list-view')).toBeVisible({ timeout: 20000 });
+      await expectColorScheme(iframe, '.widget-root', colorMode);
 
       // The date-range button is list-view only; unselected, it is ink on
       // the widget surface.
@@ -580,6 +592,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
       await iframe.locator('.list-view .event-title-link').first().click();
       await expect(iframe.locator('.instance-back-header .back-link')).toBeVisible({ timeout: 20000 });
+      await expectColorScheme(iframe, '.widget-root', colorMode);
       await expectColorSide(iframe, '.event-detail-overlay', 'backgroundColor', colorMode);
       await expectThemedText(iframe, '.instance-back-header .back-link', colorMode);
     });
@@ -591,6 +604,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       await embedPage.route(eventsRoute, route => route.fulfill({ json: [] }));
       await gotoInWidgetFrame(embedPage, env.baseURL, '/widget/test_calendar?view=list');
       await expect(iframe.locator('.ui-empty-state')).toBeVisible({ timeout: 20000 });
+      await expectColorScheme(iframe, '.widget-root', colorMode);
       await expectThemedText(iframe, '.ui-empty-state p', colorMode);
       await embedPage.unroute(eventsRoute);
     });
@@ -607,6 +621,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
         '/widget/test_calendar/events/00000000-0000-4000-8000-000000000000/20260101-1200',
       );
       await expect(iframe.locator('.error-container .error')).toBeVisible({ timeout: 20000 });
+      await expectColorScheme(iframe, '.widget-root', colorMode);
       await expectThemedSurface(iframe, '.error-container .error', colorMode);
       await expectThemedText(iframe, '.error-container .error', colorMode);
       await expectThemedText(iframe, '.error-container .back-button', colorMode);
@@ -624,6 +639,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
       );
       await expect(iframe.locator('.not-found h1')).toBeVisible({ timeout: 20000 });
       await expect(iframe.locator(`html[data-theme="${colorMode}"]`)).toHaveCount(1);
+      await expectColorScheme(iframe, '.widget-root', colorMode);
       await expectThemedText(iframe, '.not-found h1', colorMode);
       await expectThemedText(iframe, '.not-found p', colorMode);
     });

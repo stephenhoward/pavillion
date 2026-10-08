@@ -1191,6 +1191,15 @@ onUnmounted(() => {
             &:hover {
               opacity: 0.8;
             }
+
+            // Forced colors paint the icon in the user's system ink; the
+            // resting dim would undo the contrast they chose.
+            @media (forced-colors: active) {
+              &,
+              &:hover {
+                opacity: 1;
+              }
+            }
           }
         }
 
