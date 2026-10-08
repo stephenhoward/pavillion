@@ -1,5 +1,6 @@
 import { TranslatedModel } from './model.js';
 import { EventSeriesContent } from './event_series_content.js';
+import { Media } from '@/common/model/media';
 import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
 
 /**
@@ -13,6 +14,8 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
   mediaFocalPointY: number = 0.5;
   /** Zoom level for media display (1.0 = no zoom). */
   mediaZoom: number = 1.0;
+  /** Hydrated media record for the series image, when loaded. */
+  media: Media | null = null;
 
   constructor(
     id: string,
@@ -59,6 +62,7 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
       mediaFocalPointX: this.mediaFocalPointX,
       mediaFocalPointY: this.mediaFocalPointY,
       mediaZoom: this.mediaZoom,
+      media: this.media?.toObject() ?? null,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, content]: [string, EventSeriesContent]) => [language, content.toObject()]),
@@ -80,6 +84,7 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
     series.mediaFocalPointX = obj.mediaFocalPointX ?? 0.5;
     series.mediaFocalPointY = obj.mediaFocalPointY ?? 0.5;
     series.mediaZoom = obj.mediaZoom ?? 1.0;
+    series.media = obj.media ? Media.fromObject(obj.media) : null;
 
     if (obj.content) {
       for (const [language, contentObj] of Object.entries(obj.content)) {

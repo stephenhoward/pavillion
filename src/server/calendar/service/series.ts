@@ -9,6 +9,7 @@ import { EventSeriesContent } from '@/common/model/event_series_content';
 import { CalendarEvent } from '@/common/model/events';
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarNotFoundError, EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import {
   SeriesNotFoundError,
@@ -160,7 +161,7 @@ class SeriesService {
    */
   async getSeries(seriesId: string, calendarId?: string): Promise<EventSeries> {
     const seriesEntity = await EventSeriesEntity.findByPk(seriesId, {
-      include: [EventSeriesContentEntity],
+      include: [EventSeriesContentEntity, MediaEntity],
     });
 
     if (!seriesEntity) {
@@ -186,7 +187,7 @@ class SeriesService {
   async getSeriesByUrlName(calendarId: string, urlName: string): Promise<EventSeries> {
     const seriesEntity = await EventSeriesEntity.findOne({
       where: { calendar_id: calendarId, url_name: urlName },
-      include: [EventSeriesContentEntity],
+      include: [EventSeriesContentEntity, MediaEntity],
     });
 
     if (!seriesEntity) {
@@ -205,7 +206,7 @@ class SeriesService {
   async getSeriesForCalendar(calendarId: string): Promise<EventSeries[]> {
     const entities = await EventSeriesEntity.findAll({
       where: { calendar_id: calendarId },
-      include: [EventSeriesContentEntity],
+      include: [EventSeriesContentEntity, MediaEntity],
       order: [['created_at', 'ASC']],
     });
 

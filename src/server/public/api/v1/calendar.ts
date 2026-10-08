@@ -66,7 +66,9 @@ function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Recor
  * pass nested series shapes through transparently.
  *
  * Allow-listed fields: id, urlName, mediaFocalPointX, mediaFocalPointY,
- * mediaZoom, content. Drops the internal FKs `calendarId` and `mediaId`.
+ * mediaZoom, content, plus `media` → `{ id, mimeType }` (the same nested
+ * shape `toPublicEventObject` emits; `null` when the series has no image).
+ * Drops the internal FKs `calendarId` and `mediaId`.
  *
  * Per DEC-003 the canonical `EventSeries.toObject()` shape is unchanged;
  * the privacy boundary is a property of the audience, not the data
@@ -77,6 +79,7 @@ function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record
   return {
     id: obj.id,
     urlName: obj.urlName,
+    media: obj.media ? { id: obj.media.id, mimeType: obj.media.mimeType } : null,
     mediaFocalPointX: obj.mediaFocalPointX,
     mediaFocalPointY: obj.mediaFocalPointY,
     mediaZoom: obj.mediaZoom,

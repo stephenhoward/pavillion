@@ -2,6 +2,8 @@ import { describe, test, expect, beforeEach } from 'vitest';
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { Media } from '@/common/model/media';
+import { MediaEntity } from '@/server/media/entity/media';
 
 describe('EventSeriesEntity', () => {
   let sampleData: any;
@@ -51,6 +53,33 @@ describe('EventSeriesEntity', () => {
     const model = entity.toModel();
 
     expect(model.mediaId).toBe('media-789');
+  });
+
+  test('converts a loaded media association to model.media', () => {
+    const entity = EventSeriesEntity.build({ ...sampleData, media_id: 'media-789' });
+    entity.content = [];
+    entity.media = MediaEntity.build({
+      id: 'media-789',
+      calendar_id: 'cal-456',
+      sha256: 'sha',
+      original_filename: 'photo.jpg',
+      mime_type: 'image/jpeg',
+      file_size: 100,
+      status: 'approved',
+    });
+
+    const model = entity.toModel();
+
+    expect(model.media).toBeInstanceOf(Media);
+    expect(model.media?.id).toBe('media-789');
+    expect(model.media?.mimeType).toBe('image/jpeg');
+  });
+
+  test('leaves model.media null when no media association is loaded', () => {
+    const entity = EventSeriesEntity.build(sampleData);
+    entity.content = [];
+
+    expect(entity.toModel().media).toBeNull();
   });
 
   test('creates entity from model correctly', () => {
