@@ -250,7 +250,7 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // SERIES DETAIL PAGE
@@ -279,13 +279,13 @@ onBeforeMount(async () => {
       display: inline-flex;
       align-items: center;
       gap: $public-space-sm;
-      color: $public-text-secondary-light;
+      color: var(--pav-text-secondary);
       text-decoration: none;
       font-weight: $public-font-weight-medium;
       transition: $public-transition-fast;
 
       &:hover {
-        color: $public-accent-light;
+        color: var(--pav-accent);
 
         .back-arrow {
           transform: translateX(-3px);
@@ -294,14 +294,6 @@ onBeforeMount(async () => {
 
       &:focus-visible {
         @include public-focus-visible;
-      }
-
-      @include public-dark-mode {
-        color: $public-text-secondary-dark;
-
-        &:hover {
-          color: $public-accent-dark;
-        }
       }
     }
 
@@ -321,14 +313,10 @@ onBeforeMount(async () => {
     h1 {
       margin: 0;
       line-height: $public-line-height-tight;
-      color: $public-text-primary-light;
+      color: var(--pav-text-primary);
       font-size: $public-font-size-2xl;
       font-weight: $public-font-weight-bold;
       letter-spacing: $public-letter-spacing-tight;
-
-      @include public-dark-mode {
-        color: $public-text-primary-dark;
-      }
 
       @include public-mobile-only {
         font-size: $public-font-size-xl;
@@ -339,12 +327,8 @@ onBeforeMount(async () => {
   // No-image variant: stronger typographic header
   &:not(:has(.event-image)) .series-meta {
     padding-top: $public-space-lg;
-    border-top: 4px solid $public-accent-light;
+    border-top: 4px solid var(--pav-accent);
     max-width: 80%;
-
-    @include public-dark-mode {
-      border-top-color: $public-accent-dark;
-    }
 
     @include public-mobile-only {
       max-width: 100%;
@@ -361,13 +345,9 @@ onBeforeMount(async () => {
   .series-description {
     font-size: $public-font-size-md;
     line-height: $public-line-height-relaxed;
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
     margin: 0 0 $public-space-xl 0;
     white-space: pre-wrap;
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
   }
 }
 
@@ -375,15 +355,10 @@ onBeforeMount(async () => {
   h2 {
     font-size: $public-font-size-lg;
     font-weight: $public-font-weight-semibold;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     margin: 0 0 $public-space-md 0;
     padding-top: $public-space-lg;
-    border-top: 1px solid $public-border-subtle-light;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-      border-top-color: $public-border-subtle-dark;
-    }
+    border-top: 1px solid var(--pav-border-subtle);
   }
 }
 
@@ -398,11 +373,7 @@ onBeforeMount(async () => {
 
 .series-event-item {
   padding: $public-space-sm 0;
-  border-bottom: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-bottom-color: $public-border-subtle-dark;
-  }
+  border-bottom: 1px solid var(--pav-border-subtle);
 
   &:last-child {
     border-bottom: none;
@@ -411,7 +382,7 @@ onBeforeMount(async () => {
 
 .series-event-link {
   display: block;
-  color: $public-text-primary-light;
+  color: var(--pav-text-primary);
   text-decoration: none;
   font-size: $public-font-size-md;
   font-weight: $public-font-weight-medium;
@@ -419,31 +390,19 @@ onBeforeMount(async () => {
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-accent-light;
+    color: var(--pav-accent);
   }
 
   &:focus-visible {
     @include public-focus-visible;
   }
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-
-    &:hover {
-      color: $public-accent-dark;
-    }
-  }
 }
 
 .series-no-events {
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   font-size: $public-font-size-md;
   font-style: italic;
   margin: $public-space-md 0;
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
 }
 
 .series-pagination {
@@ -453,28 +412,24 @@ onBeforeMount(async () => {
   gap: $public-space-md;
   margin-top: $public-space-xl;
   padding-top: $public-space-lg;
-  border-top: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-top-color: $public-border-subtle-dark;
-  }
+  border-top: 1px solid var(--pav-border-subtle);
 
   .prev-page,
   .next-page {
     background: none;
-    border: 1px solid $public-border-medium-light;
+    border: 1px solid var(--pav-border-medium);
     border-radius: $public-radius-sm;
     padding: $public-space-xs $public-space-md;
     font-family: $public-font-family;
     font-size: $public-font-size-sm;
     font-weight: $public-font-weight-medium;
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
     cursor: pointer;
     transition: $public-transition-fast;
 
     &:hover:not(:disabled) {
-      border-color: $public-accent-light;
-      color: $public-accent-light;
+      border-color: var(--pav-accent);
+      color: var(--pav-accent);
     }
 
     &:disabled {
@@ -485,25 +440,11 @@ onBeforeMount(async () => {
     &:focus-visible {
       @include public-focus-visible;
     }
-
-    @include public-dark-mode {
-      border-color: $public-border-medium-dark;
-      color: $public-text-primary-dark;
-
-      &:hover:not(:disabled) {
-        border-color: $public-accent-dark;
-        color: $public-accent-dark;
-      }
-    }
   }
 
   .page-info {
     font-size: $public-font-size-sm;
-    color: $public-text-secondary-light;
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-    }
+    color: var(--pav-text-secondary);
   }
 }
 </style>
