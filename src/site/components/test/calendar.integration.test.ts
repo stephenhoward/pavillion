@@ -921,7 +921,7 @@ describe('calendar.vue - calendar views', () => {
     expect(wrapper.find('.month-view').exists()).toBe(false);
     expect(wrapper.find('.week-view').exists()).toBe(false);
     expect(wrapper.find('.date-range-section').exists()).toBe(true);
-    expect(wrapper.find('[role="radio"][aria-checked="true"]').text()).toBe('view_list');
+    expect(wrapper.find('[role="radio"][aria-checked="true"]').attributes('aria-label')).toBe('view_list');
   });
 
   it('fetches a deep-linked month once, for the month window', async () => {
@@ -943,7 +943,7 @@ describe('calendar.vue - calendar views', () => {
     const store = usePublicCalendarStore();
     vi.mocked(ModelService.listModels).mockClear();
 
-    const monthRadio = wrapper.findAll('[role="radio"]').find(radio => radio.text() === 'view_month');
+    const monthRadio = wrapper.findAll('[role="radio"]').find(radio => radio.attributes('aria-label') === 'view_month');
     await monthRadio!.trigger('click');
     await flushPromises();
 
@@ -1002,7 +1002,7 @@ describe('calendar.vue - calendar views', () => {
     });
     vi.mocked(ModelService.listModels).mockClear();
 
-    const listRadio = wrapper.findAll('[role="radio"]').find(radio => radio.text() === 'view_list');
+    const listRadio = wrapper.findAll('[role="radio"]').find(radio => radio.attributes('aria-label') === 'view_list');
     await listRadio!.trigger('click');
     await flushPromises();
 

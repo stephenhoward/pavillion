@@ -141,7 +141,10 @@ test.describe('Calendar view switcher at 800px', () => {
     await page.setViewportSize({ width: 800, height: 900 });
     await openCalendar(page);
 
-    const radios = page.getByRole('radiogroup', { name: 'Calendar view' }).getByRole('radio');
-    await expect(radios).toHaveText(['List', 'Month']);
+    const group = page.getByRole('radiogroup', { name: 'Calendar view' });
+    await expect(group.getByRole('radio')).toHaveCount(2);
+    await expect(group.getByRole('radio', { name: 'List' })).toBeVisible();
+    await expect(group.getByRole('radio', { name: 'Month' })).toBeVisible();
+    await expect(group.getByRole('radio', { name: 'Week' })).toHaveCount(0);
   });
 });

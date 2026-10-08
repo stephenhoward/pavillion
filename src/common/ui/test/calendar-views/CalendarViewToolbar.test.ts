@@ -59,13 +59,32 @@ describe('CalendarViewToolbar', () => {
     it('lists only the available views, labelled from the ui namespace', () => {
       const wrapper = mountToolbar({ availableViews: ['list', 'week'] });
 
-      expect(radios(wrapper).map(radio => radio.text())).toEqual(['List', 'Week']);
+      expect(radios(wrapper).map(radio => radio.attributes('aria-label'))).toEqual(['List', 'Week']);
     });
 
     it('labels the month view from the ui namespace', () => {
       const wrapper = mountToolbar();
 
-      expect(radios(wrapper).map(radio => radio.text())).toEqual(['List', 'Week', 'Month']);
+      expect(radios(wrapper).map(radio => radio.attributes('aria-label'))).toEqual(['List', 'Week', 'Month']);
+    });
+
+    it('shows each view as an icon the screen reader skips, with the label as a tooltip', () => {
+      const wrapper = mountToolbar();
+
+      for (const radio of radios(wrapper)) {
+        expect(radio.text()).toBe('');
+        expect(radio.find('svg').attributes('aria-hidden')).toBe('true');
+        expect(radio.attributes('title')).toBeTruthy();
+        expect(radio.attributes('title')).toBe(radio.attributes('aria-label'));
+      }
+    });
+
+    it('gives each view a different icon', () => {
+      const wrapper = mountToolbar();
+
+      const icons = radios(wrapper).map(radio => radio.find('svg').html());
+
+      expect(new Set(icons).size).toBe(ALL_VIEWS.length);
     });
 
     it('renders nothing when only one view is available', () => {
@@ -227,6 +246,15 @@ describe('CalendarViewToolbar', () => {
       expect(wrapper.find('[aria-label="Next"]').exists()).toBe(true);
       expect(wrapper.find('.ui-view-toolbar__today').text()).toBe('Today');
       expect(wrapper.find('[aria-live="polite"]').text()).toBe('October 2026');
+    });
+
+    it.each(['week', 'month'] as const)('head the %s view with the period, ahead of the view switcher', (viewMode) => {
+      const wrapper = mountToolbar({ viewMode });
+      const heading = wrapper.find('h2.ui-view-toolbar__label');
+
+      expect(heading.text()).toBe('October 2026');
+      expect(heading.element.compareDocumentPosition(wrapper.find('[role="radiogroup"]').element))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
     it('emit prev, today and next', async () => {
