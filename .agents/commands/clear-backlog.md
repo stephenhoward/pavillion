@@ -144,6 +144,28 @@ Tier C silently parks work, which the run's own report cannot surface.
 Everything pulled goes into the **"needs your decision"** list for the final
 report (with the reason). Do not silently skip — surface it.
 
+**Spec in flight.** Separately, drop any candidate that carries a `spec:*`
+label, or whose parent does. Those labels mean `/plan --scheduled` owns the
+root — drafting, awaiting approval, or decomposing it — and shipping a leaf
+now would bypass the reviewed design. The parent's labels are embedded in the
+child's JSON, so one call per candidate prints any hit:
+
+```bash
+for id in <candidate-ids>; do
+  bd show "$id" --json | jq -r --arg id "$id" '.[0]
+    | [((.labels // [])[] | "self " + .),
+       ((.dependencies // [])[] | select(.dependency_type == "parent-child")
+         | .id as $p | (.labels // [])[] | "parent \($p) " + .)]
+    | map(select(test(" spec:"))) | select(length > 0)
+    | "\($id): " + join(", ")'
+done
+```
+
+These are not duds and need no decision: list them under **"spec in
+flight"** (bead + the label that matched), never under "needs your decision",
+and do not tag them `needs-human`. This check runs in every mode,
+`--triage-only` included.
+
 ### PHASE 3: Execute Tier A (default)
 
 Dispatch one **lightweight implementer** subagent per surviving Tier A bead.
@@ -205,6 +227,8 @@ Emit a final report (in `--scheduled` mode, written to the report file — see
   reason) and every design-fork (with its written recommendation). For
   `needs-human`-class blockers, tag the bead so a future run skips it:
   `bd update <id> --labels needs-human` (and a `--notes` explaining why).
+- **Spec in flight** list: every bead Phase 2 dropped for a `spec:*` label on
+  itself or its parent, with the matching label. No tagging — `/plan` owns them.
 - **Tally**: open beads before → after; PRs opened (and how many already
   merged, if the user merged as you went).
 - **Suggested next**: what's left and why it's not for this command.
@@ -258,6 +282,7 @@ missing). Contents:
 - the **shipped** table: PR number and a one-line what
 - every **Tier-B decision** with the advisor's rationale
 - the **needs-decision** and **deferred (Tier-B cap)** lists, with reasons
+- the **spec in flight** list, with the matching label
 - the before/after open-bead tally
 
 The report is local and gitignored, so bead IDs are allowed there — they
