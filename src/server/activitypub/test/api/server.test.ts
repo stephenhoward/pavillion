@@ -499,6 +499,12 @@ describe('addToInbox', () => {
   });
 
   it('should succeed with a valid Accept activity', async () => {
+    const embeddedFollow = {
+      type: 'Follow',
+      id: 'https://local.example.com/calendars/testuser/follows/789',
+      actor: 'https://local.example.com/calendars/testuser',
+      object: 'https://remote.example.com/calendars/remote',
+    };
     let req = {
       params: { urlname: 'testuser' },
       body: {
@@ -506,12 +512,7 @@ describe('addToInbox', () => {
         type: 'Accept',
         id: 'https://remote.example.com/activities/accept-456',
         actor: 'https://remote.example.com/calendars/remote',
-        object: {
-          type: 'Follow',
-          id: 'https://local.example.com/calendars/testuser/follows/789',
-          actor: 'https://local.example.com/calendars/testuser',
-          object: 'https://remote.example.com/calendars/remote',
-        },
+        object: { ...embeddedFollow, summary: 'x'.repeat(1000) },
       },
     };
     let res = { status: sinon.stub(), send: sinon.stub() };
@@ -526,6 +527,11 @@ describe('addToInbox', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Message received')).toBe(true);
+
+    // Only the fields a consumer reads are kept; the peer's extra payload is
+    // not persisted with the inbox row.
+    const message = inboxMock.firstCall.args[1] as any;
+    expect(message.object).toEqual(embeddedFollow);
   });
 
   it('should succeed with a valid Ignore activity and record http_signature auth', async () => {
