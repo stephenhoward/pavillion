@@ -286,7 +286,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .language-switcher {
   position: relative;
@@ -303,41 +303,26 @@ onUnmounted(() => {
   padding: 6px 12px;
   min-height: 44px;
   background: transparent;
-  border: 1px solid $public-border-medium-light;
+  border: 1px solid var(--pav-border-medium);
   border-radius: $public-radius-full;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-regular;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   cursor: pointer;
   transition: $public-transition-fast;
   user-select: none;
   white-space: nowrap;
 
   &:hover {
-    border-color: $public-border-strong-light;
-    color: $public-text-primary-light;
-    background: $public-hover-overlay-light;
+    border-color: var(--pav-border-strong);
+    color: var(--pav-text-primary);
+    background: var(--pav-interactive-hover);
   }
 
   &:focus-visible {
-    outline: 2px solid $public-accent-light;
+    outline: 2px solid var(--pav-accent);
     outline-offset: 2px;
-  }
-
-  @include public-dark-mode {
-    border-color: $public-border-medium-dark;
-    color: $public-text-secondary-dark;
-
-    &:hover {
-      border-color: $public-border-strong-dark;
-      color: $public-text-primary-dark;
-      background: $public-hover-overlay-dark;
-    }
-
-    &:focus-visible {
-      outline-color: $public-accent-dark;
-    }
   }
 }
 
@@ -375,16 +360,11 @@ onUnmounted(() => {
   z-index: 50;
   min-width: 180px;
   padding: 6px;
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-popover);
   border-radius: $public-radius-md;
-  box-shadow: $public-shadow-lg-light;
+  box-shadow: var(--pav-shadow-lg);
+  backdrop-filter: var(--pav-popover-backdrop-filter);
   outline: none;
-
-  @include public-dark-mode {
-    background: rgba(30, 30, 35, 0.98);
-    box-shadow: $public-shadow-lg-dark;
-    backdrop-filter: blur(20px);
-  }
 }
 
 // ===== Option =====
@@ -402,36 +382,21 @@ onUnmounted(() => {
   outline: none;
 
   &:hover {
-    background: $public-bg-tertiary-light;
+    background: var(--pav-surface-tertiary);
   }
 
   &:focus-visible {
-    background: $public-bg-tertiary-light;
-    outline: 2px solid $public-accent-light;
+    background: var(--pav-surface-tertiary);
+    outline: 2px solid var(--pav-accent);
     outline-offset: -2px;
-  }
-
-  @include public-dark-mode {
-    &:hover {
-      background: $public-bg-tertiary-dark;
-    }
-
-    &:focus-visible {
-      background: $public-bg-tertiary-dark;
-      outline-color: $public-accent-dark;
-    }
   }
 }
 
 .language-switcher__option--selected {
-  background: $public-bg-secondary-light;
+  background: var(--pav-surface-secondary);
 
   .language-switcher__native-name {
     font-weight: $public-font-weight-medium;
-  }
-
-  @include public-dark-mode {
-    background: $public-bg-secondary-dark;
   }
 }
 
@@ -439,20 +404,12 @@ onUnmounted(() => {
   flex: 1;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
-  color: $public-text-primary-light;
-
-  @include public-dark-mode {
-    color: $public-text-primary-dark;
-  }
+  color: var(--pav-text-primary);
 }
 
 .language-switcher__checkmark {
   flex-shrink: 0;
-  color: $public-accent-light;
-
-  @include public-dark-mode {
-    color: $public-accent-dark;
-  }
+  color: var(--pav-accent);
 }
 
 // ===== Dropdown animation =====

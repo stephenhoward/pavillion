@@ -159,7 +159,7 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // EVENT INSTANCE PAGE — SHELL
@@ -176,12 +176,8 @@ onBeforeMount(async () => {
 
 .instance-back-header {
   padding: $public-space-md $public-space-lg;
-  border-bottom: 1px solid $public-border-subtle-light;
+  border-bottom: 1px solid var(--pav-border-subtle);
   margin-bottom: $public-space-2xl;
-
-  @include public-dark-mode {
-    border-bottom-color: $public-border-subtle-dark;
-  }
 
   .breadcrumb {
     margin: 0;
@@ -192,13 +188,13 @@ onBeforeMount(async () => {
     display: inline-flex;
     align-items: center;
     gap: $public-space-sm;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     text-decoration: none;
     font-weight: $public-font-weight-medium;
     transition: $public-transition-fast;
 
     &:hover {
-      color: $public-accent-light;
+      color: var(--pav-accent);
 
       .back-arrow {
         transform: translateX(-3px);
@@ -207,14 +203,6 @@ onBeforeMount(async () => {
 
     &:focus-visible {
       @include public-focus-visible;
-    }
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-
-      &:hover {
-        color: $public-accent-dark;
-      }
     }
   }
 
@@ -251,7 +239,7 @@ onBeforeMount(async () => {
   max-width: 72rem;
   margin: $public-space-xl auto 0 auto;
   padding: $public-space-lg $public-space-lg 0 $public-space-lg;
-  border-top: 1px solid $public-border-subtle-light;
+  border-top: 1px solid var(--pav-border-subtle);
 
   @include public-tablet-up {
     padding: $public-space-lg $public-space-xl 0 $public-space-xl;
@@ -259,10 +247,6 @@ onBeforeMount(async () => {
 
   @include public-desktop-up {
     padding: $public-space-lg $public-space-2xl 0 $public-space-2xl;
-  }
-
-  @include public-dark-mode {
-    border-top-color: $public-border-subtle-dark;
   }
 
   .series-link-wrapper {
@@ -273,18 +257,14 @@ onBeforeMount(async () => {
     font-size: $public-font-size-sm;
 
     .series-label {
-      color: $public-text-secondary-light;
+      color: var(--pav-text-secondary);
       font-weight: $public-font-weight-medium;
-
-      @include public-dark-mode {
-        color: $public-text-secondary-dark;
-      }
     }
   }
 }
 
 .event-series-link {
-  color: $public-accent-light;
+  color: var(--pav-accent);
   text-decoration: none;
   font-weight: $public-font-weight-medium;
   transition: $public-transition-fast;
@@ -295,10 +275,6 @@ onBeforeMount(async () => {
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-accent-dark;
   }
 }
 
@@ -318,26 +294,18 @@ onBeforeMount(async () => {
   min-height: 44px;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
-  color: $public-text-tertiary-light;
+  color: var(--pav-text-muted);
   cursor: pointer;
   transition: $public-transition-fast;
   text-decoration: underline;
   text-underline-offset: 2px;
 
   &:hover {
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-
-    &:hover {
-      color: $public-text-secondary-dark;
-    }
   }
 }
 </style>
