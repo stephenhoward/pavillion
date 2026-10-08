@@ -7,7 +7,7 @@ Conventions for design token usage in Pavillion stylesheets.
 
 ## Established Convention
 
-All visual values (colors, spacing, typography, borders, shadows) must use CSS custom properties from the `--pav-*` token system. Tokens are globally available -- no imports needed.
+In the client (`src/client`), all visual values (colors, spacing, typography, borders, shadows) must use CSS custom properties from the `--pav-*` token system. Tokens are globally available -- no imports needed. The site and widget follow a narrower rule; see [Site and widget](#site-and-widget). The categories and examples below are the client's.
 
 ### Token Categories
 
@@ -33,6 +33,14 @@ All visual values (colors, spacing, typography, borders, shadows) must use CSS c
   font-size: var(--pav-font-size-base);
 }
 ```
+
+## Site and Widget
+
+The public site and the widget do not use the client's full token system. They follow [DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md) rules 7 and 10: **a value that varies by theme or by host is a runtime token; a value that does not is a compile-time constant.**
+
+- **Colour, shadow and `color-scheme`** come only from `--pav-*` tokens. `src/common/ui/TOKENS.md` lists them in two tiers: **shared** names, which every app declares and which are the only names a shared component under `src/common/ui` may read, and **public-only** names, which only the site and widget declare. Look a name up there instead of guessing it. The site and widget declare every token in one place, the `public-theme-tokens` mixin in `src/common/ui/assets/mixins.scss`, included only on `#app` (site) and `.widget-root` (widget).
+- **Spacing, type, radius, motion and breakpoints** are compile-time `$public-*` constants in the same file. The site and widget do not declare `--pav-space-*` or `--pav-font-size-*`; the client's tokens of those names carry different values. A shared component, which may not read `$public-*`, writes these as plain `rem`.
+- `scripts/check-theme-tokens.ts` (part of `npm run lint`) fails on a colour `$public-*` variable, on a dark selector, `prefers-color-scheme` or `color-scheme` outside the token layer, and on an include of `public-theme-tokens` anywhere else.
 
 ## Anti-Patterns
 
@@ -80,4 +88,3 @@ All visual values (colors, spacing, typography, borders, shadows) must use CSS c
 
 - Some older components still use hardcoded `px` values for spacing and font sizes
 - A few components use raw hex colors instead of semantic tokens
-- The `site/` app may have components that predate the token system
