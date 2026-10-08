@@ -123,6 +123,33 @@ export function classify(filePath: string, specifier: string): Target {
   return { kind: 'package', name: packageRoot(specifier) };
 }
 
+/**
+ * The token names TOKENS.md records under one `## <heading>`: the backticked
+ * `--pav-*` first cell of every table row between that heading and the next
+ * `## ` heading.
+ *
+ * Scoped by heading rather than by row shape, so a tier is read as a tier and
+ * a row moved between sections changes the answer. Throws when the heading is
+ * absent, so a renamed section fails loudly instead of reading as an empty
+ * tier that every check passes against.
+ */
+export function tokenSection(docText: string, heading: string): string[] {
+  const lines = docText.split('\n');
+  const start = lines.findIndex(line => line.trim() === `## ${heading}`);
+  if (start === -1) {
+    throw new Error(`TOKENS.md has no "## ${heading}" section`);
+  }
+
+  const rest = lines.slice(start + 1);
+  const next = rest.findIndex(line => /^## /.test(line));
+  const section = next === -1 ? rest : rest.slice(0, next);
+
+  return section
+    .map(line => line.match(/^\|\s*`(--pav-[a-z0-9-]+)`\s*\|/))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .map(match => match[1]);
+}
+
 /** Whether a file is one of this module's own tests. */
 function isModuleTest(filePath: string): boolean {
   return filePath.startsWith(UI_TEST_ROOT + path.sep);
