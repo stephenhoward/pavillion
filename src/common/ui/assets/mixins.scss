@@ -469,32 +469,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 }
 
-// ===== DROPDOWN COMPONENT =====
-
-// Dropdown animation mixins
-@mixin public-dropdown-enter-animation {
-  transition: all $public-duration-slow $public-ease-spring;
-}
-
-@mixin public-dropdown-leave-animation {
-  transition: all $public-duration-normal $public-ease-in;
-}
-
-@mixin public-dropdown-enter-from {
-  opacity: 0;
-  transform: translateY(-12px) scale(0.95);
-}
-
-@mixin public-dropdown-enter-to {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-@mixin public-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px) scale(0.96);
-}
-
 // ===== INPUT COMPONENT =====
 
 @mixin public-input-base {
@@ -743,19 +717,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     :where(:root:not([data-theme="light"])) & {
       @content;
     }
-  }
-}
-
-// Compatibility shim: emits nothing. `public-dark-mode` now stands down on
-// its own under a forced light theme, so the light values re-stated here were
-// redundant with each component's base style. Existing call sites still
-// compile and are deleted as each caller migrates to --pav-* tokens; the
-// remainder go when the mixin is retired. Do not add new call sites.
-@mixin public-light-mode-override {
-  // Sass only accepts a caller's content block when the mixin mentions
-  // `@content`; this branch never emits it.
-  @if false {
-    @content;
   }
 }
 
