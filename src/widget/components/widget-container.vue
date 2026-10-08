@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, onMounted, onUnmounted, inject, ref, computed, watch } from 'vue';
-import { useRoute, type RouteLocationRaw } from 'vue-router';
+import { reactive, onBeforeMount, onMounted, onUnmounted, inject, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useWidgetStore } from '../stores/widgetStore';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
@@ -14,16 +14,8 @@ import {
   isValidWidgetColorMode,
   isValidWidgetAccentColor,
 } from '@/common/model/widget_config';
-import {
-  LIST_END_DATE_QUERY_KEY,
-  LIST_START_DATE_QUERY_KEY,
-  calendarViewQuery,
-} from '@/common/routing/calendar-view-query';
 import { CalendarViewToolbar, MonthView, WeekView } from '@/common/ui/calendar-views';
-import { periodLabel } from '@/common/ui/calendar-views/calendar-grid';
-import { useCalendarViewState } from '@/common/ui/calendar-views/useCalendarViewState';
-import { useCalendarWindowSync } from '@/common/ui/calendar-views/useCalendarWindowSync';
-import { useContainerWidth } from '@/common/ui/composables/useContainerWidth';
+import { useCalendarViewContainer } from '@/common/ui/calendar-views/useCalendarViewContainer';
 import { useLocale } from '@/common/ui/composables/useLocale';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type Config from '@/client/service/config';
@@ -78,94 +70,43 @@ const state = reactive({
  */
 const configuredView = computed<CalendarViewMode>(() => widgetStore.configuredView);
 
-const root = ref<HTMLElement | null>(null);
-const { tier, width } = useContainerWidth(root);
-
-// `window` is the global this component posts and listens on; the view
-// state's fetch window goes by another name.
 const {
+  root,
   effectiveViewMode,
   anchorDate,
-  window: fetchWindow,
   availableViews,
   setView,
   goPrev,
   goNext,
   goToday,
-  setTier,
-} = useCalendarViewState({ defaultView: configuredView });
-
-// Forward the tier only once the root has been measured. Before mount the
-// width reads 0 (tier `narrow`); passing that on would collapse a configured
-// week or month to the list during setup, so the first fetch would be the
-// list's range and the measured tier would immediately fetch again.
-watch([tier, width], ([nextTier, nextWidth]) => {
-  if (nextWidth > 0) {
-    setTier(nextTier);
-  }
-}, { immediate: true });
-
-// The view window outlives this component in the store (back-navigation from
-// event detail keeps it); start from none so a list never fetches a
-// previous visit's month.
-publicCalendarStore.setViewWindow(null, null);
-
-// The first fetch belongs to the mount sequence: SearchFilterPublic reloads
-// on mount (or once calendar settings load), by which point the window sync
-// below has already set the view window during setup.
-let isMounted = false;
-
-useCalendarWindowSync(fetchWindow, {
-  setViewWindow: (start, end) => publicCalendarStore.setViewWindow(start, end),
-  reloadWithFilters: () => {
-    const isReady = isMounted
-      && publicCalendarStore.isCalendarSettingsLoaded
-      && publicCalendarStore.currentCalendarUrlName === calendarUrlName;
-    return isReady ? publicCalendarStore.reloadWithFilters() : Promise.resolve();
-  },
-});
-
-const currentPeriodLabel = computed(() => effectiveViewMode.value === 'list'
-  ? ''
-  : periodLabel(effectiveViewMode.value, anchorDate.value, currentLocale.value));
-
-const gridIsLoading = computed(() => state.isLoading
-  || publicCalendarStore.isLoadingEvents
-  || !publicCalendarStore.hasLoadedEvents);
-
-/** An event chip opens the widget's event detail for that occurrence. */
-function eventRoute(instance: CalendarEventInstance): RouteLocationRaw {
-  return {
+  currentPeriodLabel,
+  gridIsLoading,
+  eventRoute,
+  dayRoute,
+} = useCalendarViewContainer({
+  defaultView: configuredView,
+  target: publicCalendarStore,
+  isReady: () => publicCalendarStore.isCalendarSettingsLoaded
+    && publicCalendarStore.currentCalendarUrlName === calendarUrlName,
+  isLoading: () => state.isLoading
+    || publicCalendarStore.isLoadingEvents
+    || !publicCalendarStore.hasLoadedEvents,
+  locale: currentLocale,
+  // An event chip opens the widget's event detail for that occurrence.
+  eventRoute: (instance: CalendarEventInstance) => ({
     name: 'widget-event-detail',
     params: {
       urlName: calendarUrlName,
       eventId: instance.event.id,
       startTime: formatInstanceSlug(instance.start),
     },
-  };
-}
-
-/**
- * A day number (or a cell's overflow link) opens the list filtered to that
- * day. The widget's default is often week or month, so the view MUST be
- * emitted through calendarViewQuery: a link without it would land on the
- * default view, where startDate/endDate are ignored. Other filters are kept.
- */
-function dayRoute(isoDate: string): RouteLocationRaw {
-  const merged: Record<string, unknown> = {
-    ...route.query,
-    ...calendarViewQuery('list', anchorDate.value, configuredView.value),
-    [LIST_START_DATE_QUERY_KEY]: isoDate,
-    [LIST_END_DATE_QUERY_KEY]: isoDate,
-  };
-  const query = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined));
-
-  return {
+  }),
+  calendarRoute: query => ({
     name: 'widget-calendar',
     params: { urlName: calendarUrlName },
-    query: query as Record<string, string>,
-  };
-}
+    query,
+  }),
+});
 
 const calendarService = new CalendarService();
 
@@ -250,8 +191,6 @@ onBeforeMount(async () => {
 });
 
 onMounted(() => {
-  isMounted = true;
-
   // Listen for configuration updates from parent window
   window.addEventListener('message', handleMessage);
 });
