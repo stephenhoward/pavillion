@@ -2,6 +2,7 @@ import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, UpdatedAt, Belon
 import { EventSeries } from '@/common/model/event_series';
 import { CalendarEntity } from './calendar';
 import { EventSeriesContentEntity } from './event_series_content';
+import { MediaEntity } from '@/server/media/entity/media';
 import db from '@/server/common/entity/db';
 
 /**
@@ -63,6 +64,13 @@ class EventSeriesEntity extends Model {
   @BelongsTo(() => CalendarEntity)
   declare calendar: CalendarEntity;
 
+  /**
+   * No `@ForeignKey` and `constraints: false`: `media_id` has no database
+   * constraint (migration 0006) and this association must not add one.
+   */
+  @BelongsTo(() => MediaEntity, { foreignKey: 'media_id', constraints: false })
+  declare media: MediaEntity;
+
   @HasMany(() => EventSeriesContentEntity)
   declare content: EventSeriesContentEntity[];
 
@@ -79,6 +87,9 @@ class EventSeriesEntity extends Model {
     model.mediaFocalPointX = this.media_focal_point_x;
     model.mediaFocalPointY = this.media_focal_point_y;
     model.mediaZoom = this.media_zoom;
+    if (this.media) {
+      model.media = this.media.toModel();
+    }
 
     if (this.content && this.content.length > 0) {
       for (const content of this.content) {

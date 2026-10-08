@@ -153,7 +153,7 @@ onBeforeMount(async () => {
         </a>
       </p>
       <EventImage
-        :media="state.series.mediaId ? { id: state.series.mediaId } : null"
+        :media="state.series.media"
         context="feature"
         :alt="localizedField(state.series, 'imageAlt')"
         :focal-point-x="state.series.mediaFocalPointX"

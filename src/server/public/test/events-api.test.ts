@@ -420,7 +420,8 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
   /**
    * Public Series projection contract: the response must allow-list only
-   * `{ id, urlName, mediaFocalPointX, mediaFocalPointY, mediaZoom, content }`.
+   * `{ id, urlName, media, mediaFocalPointX, mediaFocalPointY, mediaZoom, content }`,
+   * with `media` projected to `{ id, mimeType }` exactly as on events.
    * Internal FKs (`calendarId`, `mediaId`) must never appear on the public
    * surface — they identify internal database rows and have no Tier 1
    * anonymous-public use case.
@@ -438,8 +439,10 @@ describe('Public API - toPublicEventObject shape contract', () => {
     expect(seriesBody.content.en.name).toBe('Yoga Classes');
     // The public projection must contain only the allow-listed keys.
     expect(Object.keys(seriesBody).sort()).toEqual(
-      ['content', 'id', 'mediaFocalPointX', 'mediaFocalPointY', 'mediaZoom', 'urlName'],
+      ['content', 'id', 'media', 'mediaFocalPointX', 'mediaFocalPointY', 'mediaZoom', 'urlName'],
     );
+    // toEqual (not toMatchObject) proves internal Media fields are absent.
+    expect(seriesBody.media).toEqual({ id: 'media-99', mimeType: 'image/jpeg' });
     // Spell out the disallowed internal FKs for clarity / future regressions.
     expect(seriesBody.calendarId).toBeUndefined();
     expect(seriesBody.mediaId).toBeUndefined();
@@ -450,6 +453,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
     series.mediaFocalPointX = 0.4;
     series.mediaFocalPointY = 0.6;
     series.mediaZoom = 1.2;
+    series.media = new Media('media-99', 'cal-id', 'sha', 'photo.jpg', 'image/jpeg', 100, 'approved');
     series.addContent(new EventSeriesContent('en', 'Yoga Classes', 'Weekly yoga.'));
     return series;
   }
@@ -1349,6 +1353,28 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(events).toEqual([]);
       expect(pagination).toBeDefined();
       assertSeriesProjection(seriesBody);
+    });
+
+    it('getSeries: projects media to null when the series has no image', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const series = new EventSeries('series-2', 'cal-id', 'no-image');
+      series.addContent(new EventSeriesContent('en', 'No Image', 'Plain series.'));
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(calendar);
+      apiSandbox.stub(publicInterface, 'getSeriesByUrlName').resolves(series);
+      apiSandbox.stub(publicInterface, 'getSeriesEvents').resolves({ events: [], total: 0 });
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        req.params.seriesUrlName = 'no-image';
+        routes.getSeries(req, res);
+      });
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.media).toBeNull();
+      expect(response.body.mediaId).toBeUndefined();
     });
 
     it('listSeries: returns the series allow-list on each row, augmented with eventCount; calendarId and mediaId absent', async () => {

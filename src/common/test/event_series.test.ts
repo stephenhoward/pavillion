@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { Media } from '@/common/model/media';
 
 describe('EventSeries', () => {
   it('creates a valid series model', () => {
@@ -300,5 +301,29 @@ describe('EventSeries.mediaFocalPoint', () => {
     expect(restored.mediaFocalPointX).toBe(0.1);
     expect(restored.mediaFocalPointY).toBe(0.9);
     expect(restored.mediaZoom).toBe(1.5);
+  });
+});
+
+describe('EventSeries.media', () => {
+  it('defaults media to null and serializes it as null', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts');
+
+    expect(series.media).toBeNull();
+    expect(series.toObject().media).toBeNull();
+    expect(EventSeries.fromObject(series.toObject()).media).toBeNull();
+  });
+
+  it('round-trips media through toObject/fromObject', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts', 'media-789');
+    series.media = new Media('media-789', 'cal-456', 'sha', 'photo.jpg', 'image/jpeg', 100, 'approved');
+
+    const obj = series.toObject();
+    expect(obj.media).toMatchObject({ id: 'media-789', mimeType: 'image/jpeg' });
+
+    const restored = EventSeries.fromObject(obj);
+    expect(restored.media).toBeInstanceOf(Media);
+    expect(restored.media?.id).toBe('media-789');
+    expect(restored.media?.mimeType).toBe('image/jpeg');
+    expect(restored.mediaId).toBe('media-789');
   });
 });

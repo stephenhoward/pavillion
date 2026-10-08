@@ -228,11 +228,12 @@ describe('Public Series API', () => {
       expect(response.status).toBe(200);
       expect(response.body.content.en.imageAlt).toBe('A class stretching on mats');
       expect(response.body.content.fr.imageAlt).toBe('Un cours qui s\'étire sur des tapis');
-      // No other projection change: the series-root allow-list is untouched.
+      // Alt text rides on content; the series-root allow-list is unchanged by it.
       expect(Object.keys(response.body).sort()).toEqual([
         'content',
         'events',
         'id',
+        'media',
         'mediaFocalPointX',
         'mediaFocalPointY',
         'mediaZoom',

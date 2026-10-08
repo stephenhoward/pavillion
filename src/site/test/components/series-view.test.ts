@@ -146,13 +146,13 @@ function makeSeries(
   urlName: string,
   name: string,
   description: string = '',
-  opts: { mediaId?: string | null; imageAlt?: string } = {},
+  opts: { media?: { id: string; mimeType: string } | null; imageAlt?: string } = {},
 ) {
   return {
     id: `series-${urlName}`,
     urlName,
     calendarId: 'cal-id',
-    mediaId: opts.mediaId ?? null,
+    media: opts.media ?? null,
     mediaFocalPointX: 0.5,
     mediaFocalPointY: 0.5,
     mediaZoom: 1.0,
@@ -252,11 +252,42 @@ describe('SeriesView', () => {
     });
   });
 
+  describe('series hero image', () => {
+    it('passes the projected series media to the hero image', async () => {
+      mockSeriesResult = {
+        series: makeSeries('yoga-classes', 'Yoga Classes', '', {
+          media: { id: 'media-1', mimeType: 'image/jpeg' },
+        }),
+        events: [],
+        pagination: { total: 0, limit: 20, offset: 0 },
+      };
+
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
+
+      expect(wrapper.findComponent(EventImage).props('media'))
+        .toEqual({ id: 'media-1', mimeType: 'image/jpeg' });
+      wrapper.unmount();
+    });
+
+    it('passes null media to the hero image when the series has no image', async () => {
+      mockSeriesResult = {
+        series: makeSeries('yoga-classes', 'Yoga Classes'),
+        events: [],
+        pagination: { total: 0, limit: 20, offset: 0 },
+      };
+
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
+
+      expect(wrapper.findComponent(EventImage).props('media')).toBeNull();
+      wrapper.unmount();
+    });
+  });
+
   describe('series image alt text', () => {
     it('describes the series image with the series alt text', async () => {
       mockSeriesResult = {
         series: makeSeries('yoga-classes', 'Yoga Classes', '', {
-          mediaId: 'media-1',
+          media: { id: 'media-1', mimeType: 'image/jpeg' },
           imageAlt: 'A mat unrolled in a sunlit studio',
         }),
         events: [],
@@ -272,7 +303,7 @@ describe('SeriesView', () => {
 
     it('renders a decorative series image when the series has no alt text', async () => {
       mockSeriesResult = {
-        series: makeSeries('yoga-classes', 'Yoga Classes', '', { mediaId: 'media-1' }),
+        series: makeSeries('yoga-classes', 'Yoga Classes', '', { media: { id: 'media-1', mimeType: 'image/jpeg' } }),
         events: [],
         pagination: { total: 0, limit: 20, offset: 0 },
       };
