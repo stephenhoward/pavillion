@@ -1772,6 +1772,14 @@ describe('EventInstanceService.listEventInstancesWithFilters — search predicat
     sandbox.restore();
   });
 
+  it('orders by start_time then id', async () => {
+    const findAllStub = sandbox.stub(EventInstanceEntity, 'findAll').resolves([]);
+
+    await service.listEventInstancesWithFilters(testCalendar, {});
+
+    expect(findAllStub.lastCall.args[0].order).toEqual([['start_time', 'ASC'], ['id', 'ASC']]);
+  });
+
   it('builds a parameterized Op.or predicate, not a Sequelize.literal, for the search filter', async () => {
     const findAllStub = sandbox.stub(EventInstanceEntity, 'findAll').resolves([]);
 
