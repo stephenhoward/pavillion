@@ -787,7 +787,7 @@ onUnmounted(() => {
 
 // Colours come from the --pav-* tokens, which switch with the theme on their
 // own, so every state rule outranks its base rule the same way in both
-// themes. The white ink on the accent fills is the same in both themes.
+// themes.
 
 .search-filter-public {
   @include filter-container;
@@ -990,10 +990,6 @@ onUnmounted(() => {
       &:hover {
         background-color: var(--pav-accent-hover);
         border-color: var(--pav-accent-hover);
-      }
-
-      .dropdown-icon {
-        color: white;
       }
     }
 

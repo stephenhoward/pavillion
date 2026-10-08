@@ -234,6 +234,7 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
 
   --pav-recurrence-badge-bg: rgba(30, 30, 35, 0.85);
   --pav-vignette-gain: 2.5;
+  // The default 0%/100% stops are omitted on purpose: the minified literal this replaced had none.
   --pav-loading-pulse-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
 }
 
@@ -338,7 +339,7 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
 
   --pav-filter-pill-hover-bg: rgba(0, 0, 0, 0.08);
   --pav-filter-pill-hover-text: rgba(0, 0, 0, 0.75);
-  --pav-border-filter-pill-focus: rgba(0, 0, 0, 0.4);
+  --pav-border-filter-pill-focus: rgba(0, 0, 0, 0.5);
   --pav-surface-scroll-arrow-hover: rgba(0, 0, 0, 0.1);
 
   --pav-recurrence-badge-bg: rgba(255, 255, 255, 0.9);
@@ -346,6 +347,7 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
   // vignette step is exactly 2.5x its light one, so components keep their
   // own base alphas and geometry and read only the gain.
   --pav-vignette-gain: 1;
+  // The default 0%/100% stops are omitted on purpose: the minified literal this replaced had none.
   --pav-loading-pulse-gradient: linear-gradient(135deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.02));
 
   // The dark values, under two selectors:
