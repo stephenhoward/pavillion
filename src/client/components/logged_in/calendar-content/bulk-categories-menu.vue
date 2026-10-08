@@ -54,7 +54,7 @@ const deselectAll = () => {
             :aria-label="t('merge_categories_label')"
           >
             <ArrowRightLeft :size="16" :stroke-width="2" />
-            Merge
+            {{ t('merge_categories') }}
           </button>
           <button
             type="button"
@@ -63,7 +63,7 @@ const deselectAll = () => {
             @click="deselectAll"
             :aria-label="t('deselect_all_label')"
           >
-            Deselect
+            {{ t('deselect_all') }}
           </button>
         </div>
       </div>
