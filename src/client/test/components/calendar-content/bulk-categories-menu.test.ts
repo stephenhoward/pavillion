@@ -38,3 +38,22 @@ describe('BulkCategoriesMenu selection caption', () => {
     expect(wrapper.find('.selection-text').text()).toBe(expected);
   });
 });
+
+describe('BulkCategoriesMenu action buttons', () => {
+  let wrapper: ReturnType<typeof createWrapper> | undefined;
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = undefined;
+  });
+
+  it.each([
+    ['merge-categories-btn', 'calendars:bulk_category_operations.merge_categories'],
+    ['deselect-all-btn', 'calendars:bulk_category_operations.deselect_all'],
+  ])('renders the translated label on %s', (testId, key) => {
+    wrapper = createWrapper(2);
+
+    expect(i18next.exists(key)).toBe(true);
+    expect(wrapper.find(`[data-testid="${testId}"]`).text()).toBe(i18next.t(key));
+  });
+});
