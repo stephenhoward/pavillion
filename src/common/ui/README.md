@@ -22,7 +22,7 @@ The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/ser
 
 `test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. It deliberately carries no "the client imports nothing from here" assertion: the client is a consumer like the other two apps. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary.
 
-Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-z1in.
+Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-ese5. The decision behind this module, including that boundary, is [DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md).
 
 ## Styling stance
 
@@ -31,6 +31,8 @@ Scope is this module only; the existing widget → site and site → client impo
 The rule covers colours and shadows — what TOKENS.md holds. Spacing and type sizes have no shared runtime token yet (the client's `--pav-space-*` and `--pav-font-size-*` scales are not declared by the site or widget), so a shared component writes those as plain `rem` values.
 
 A shared component writes no dark-mode rule. Each token already carries its light and dark value and switches under the app's theme selector, so `var(--pav-text-primary)` is correct in both themes as written. A shared component that needs `public-dark-mode`, `[data-theme="dark"]`, or `prefers-color-scheme` is reading the wrong value.
+
+A shared component puts no text and no focus indicator on or in `--pav-accent`. The accent is decoration (rules, rings, borders) and never the only carrier of a state, because the widget's accent is owner-configurable and TOKENS.md has no ink paired with it. The tests below check token names, not pairings, so this one is held by review. When pv-8l49 adds an on-accent text pair, the rule relaxes to "text on the accent reads that pair".
 
 Each app supplies the tokens its own way:
 
@@ -57,7 +59,7 @@ This is the home for any string a shared component renders, whichever app mounts
 
 ## Composable placement
 
-`composables/` holds composables that are useful across features — `useLocale`, `useLocalizedContent`. A composable that only makes sense alongside one feature's state belongs in that feature's folder, next to the components it serves, not here.
+`composables/` holds composables that are useful across features — `useLocale`, `useLocalizedContent`, `useContainerWidth`. A composable that only makes sense alongside one feature's state belongs in that feature's folder, next to the components it serves, not here.
 
 ## Tests
 
