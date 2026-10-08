@@ -403,61 +403,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 // COMPONENT MIXINS
 // ================================================================
 
-// ===== EVENT CARD COMPONENT =====
-
-@mixin public-event-card {
-  display: flex;
-  flex-direction: column;
-  padding: $public-space-md;
-  background: $public-bg-primary-light;
-  border-radius: $public-radius-md;
-  box-shadow: $public-shadow-md-light;
-  transition: $public-transition-normal;
-  cursor: pointer;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: $public-shadow-lg-light;
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    box-shadow: $public-shadow-md-dark;
-
-    &:hover {
-      box-shadow: $public-shadow-lg-dark;
-    }
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-    box-shadow: $public-shadow-md-light;
-
-    &:hover {
-      box-shadow: $public-shadow-lg-light;
-    }
-  }
-}
-
-@mixin public-event-card-compact {
-  @include public-event-card;
-
-  padding: $public-space-sm;
-  width: 150px;
-  flex-shrink: 0;
-}
-
-@mixin public-event-card-featured {
-  @include public-event-card;
-
-  padding: $public-space-xl;
-  border-radius: $public-radius-2xl;
-}
-
 // ===== FILTER PILL COMPONENT =====
 
 @mixin public-filter-pill {
@@ -483,8 +428,8 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   box-shadow: var(--pav-shadow-xs);
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.08);
-    color: rgba(0, 0, 0, 0.75);
+    background-color: var(--pav-filter-pill-hover-bg);
+    color: var(--pav-filter-pill-hover-text);
     box-shadow: var(--pav-shadow-sm);
   }
 
@@ -522,53 +467,9 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
       background-color: var(--pav-accent-hover);
     }
   }
-
-  // The hover fill and ink are the pill's own translucent literals, which no
-  // token carries. Because this block outranks the states above, the absent
-  // and selected rules it would otherwise override are restated after it.
-  @include public-dark-mode {
-    &:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.8);
-    }
-
-    &.absent {
-      &:hover,
-      &:focus {
-        background-color: var(--pav-surface-tertiary);
-        color: var(--pav-text-muted);
-      }
-    }
-
-    &.selected:hover {
-      background-color: var(--pav-accent-hover);
-    }
-  }
 }
 
 // ===== DROPDOWN COMPONENT =====
-
-@mixin public-dropdown-container {
-  position: absolute;
-  z-index: 20;
-  min-width: 320px;
-  padding: $public-space-md;
-  background: $public-bg-primary-light;
-  border-radius: $public-radius-md;
-  box-shadow: $public-shadow-lg-light;
-
-  @include public-dark-mode {
-    background: rgba(30, 30, 35, 0.98);
-    box-shadow: $public-shadow-lg-dark;
-    backdrop-filter: blur(20px);
-  }
-
-  @include public-light-mode-override {
-    background: $public-bg-primary-light;
-    box-shadow: $public-shadow-lg-light;
-    backdrop-filter: none;
-  }
-}
 
 // Dropdown animation mixins
 @mixin public-dropdown-enter-animation {
@@ -603,7 +504,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   font-size: $public-font-size-base;
   font-weight: $public-font-weight-regular;
   color: var(--pav-text-primary);
-  background: var(--pav-surface-primary);
+  background: var(--pav-surface-field);
   border: 1px solid var(--pav-border-subtle);
   border-radius: $public-radius-xl;
   transition: $public-transition-fast;
@@ -614,32 +515,14 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 
   &:hover {
     border-color: var(--pav-border-medium);
-    background: var(--pav-surface-secondary);
+    background: var(--pav-surface-field-hover);
   }
 
   &:focus {
     outline: 2px solid var(--pav-accent);
     outline-offset: 0;
     border-color: transparent;
-    background: var(--pav-surface-primary);
-  }
-
-  // The dark theme lifts the field one surface tier above the page, where
-  // the light theme sets it on the page surface itself — a shift the
-  // light/dark token pairs cannot express on their own.
-  @include public-dark-mode {
-    background: var(--pav-surface-secondary);
-
-    // The border is restated because this rule outranks `&:focus`: a hovered
-    // field keeps its hover border while focused in the dark theme.
-    &:hover {
-      border-color: var(--pav-border-medium);
-      background: var(--pav-surface-tertiary);
-    }
-
-    &:focus {
-      background: rgba(255, 255, 255, 0.1);
-    }
+    background: var(--pav-surface-field-focus);
   }
 }
 
@@ -747,19 +630,11 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   justify-content: center;
   text-align: center;
   padding: $public-space-3xl $public-space-xl;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
 
   p {
     margin: 0 0 $public-space-lg 0;
     font-size: $public-font-size-md;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-  }
-
-  @include public-light-mode-override {
-    color: $public-text-secondary-light;
   }
 }
 
@@ -893,18 +768,8 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border-radius: $public-radius-lg;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
-  background-color: #e0f2fe;
-  color: #0369a1;
-
-  @include public-dark-mode {
-    background-color: rgba(12, 74, 110, 0.3);
-    color: #7dd3fc;
-  }
-
-  @include public-light-mode-override {
-    background-color: #e0f2fe;
-    color: #0369a1;
-  }
+  background-color: var(--pav-badge-sky-bg);
+  color: var(--pav-badge-sky-text);
 }
 
 // ===== SOURCE CALENDAR PILL COMPONENT =====
