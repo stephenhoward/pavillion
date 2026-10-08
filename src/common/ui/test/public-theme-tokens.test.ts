@@ -77,13 +77,13 @@ function stripComments(text: string): string {
  * start keeps a mention of the header in prose from matching. `#{...}`
  * interpolations are balanced, so brace counting is enough. Throws rather than
  * returning an empty body, so a renamed mixin or branch fails loudly instead of
- * passing vacuously.
+ * passing vacuously. `where` names `source` in that error.
  */
-function namedBlock(source: string, header: string): { body: string; start: number; end: number } {
+function namedBlock(source: string, header: string, where: string): { body: string; start: number; end: number } {
   const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const found = new RegExp(`^[ \\t]*${escaped}\\s*\\{`, 'm').exec(source);
   if (!found) {
-    throw new Error(`No "${header} {" found at the start of a line in ${MIXINS_PATH}`);
+    throw new Error(`No "${header} {" found at the start of a line in ${where}`);
   }
   const start = found.index;
   const open = start + found[0].length - 1;
@@ -95,7 +95,7 @@ function namedBlock(source: string, header: string): { body: string; start: numb
       return { body: source.slice(open + 1, i), start, end: i + 1 };
     }
   }
-  throw new Error(`Unbalanced braces in "${header}" in ${MIXINS_PATH}`);
+  throw new Error(`Unbalanced braces in "${header}" in ${where}`);
 }
 
 /** Every `--pav-*` name a block declares, once per declaration. */
@@ -144,12 +144,18 @@ function paletteBases(source: string): string[] {
   return [...declared('light')].filter(base => dark.has(base)).sort();
 }
 
-/** Every `.scss` and `.vue` file under `dirs`, test directories excluded. */
+const relative = (file: string): string => path.relative(process.cwd(), file);
+
+/**
+ * Every `.scss` and `.vue` file under `dirs`, test directories excluded. The
+ * test-directory check reads the repo-relative path, so a checkout that itself
+ * sits under a directory named `test` still scans its files.
+ */
 function styleFiles(dirs: string[]): string[] {
   return dirs
     .flatMap(dir => (readdirSync(dir, { recursive: true }) as string[]).map(file => path.join(dir, file)))
     .filter(file => /\.(scss|vue)$/.test(file))
-    .filter(file => !file.split(path.sep).includes('test'));
+    .filter(file => !relative(file).split(path.sep).includes('test'));
 }
 
 /** A file's style, comments stripped: the whole of a `.scss`, the `<style>` blocks of a `.vue`. */
@@ -161,16 +167,15 @@ function styleOf(file: string): string {
   return stripComments(style);
 }
 
-const relative = (file: string): string => path.relative(process.cwd(), file);
-
 describe('public-theme-tokens', () => {
   const mixins = stripComments(readFileSync(MIXINS_PATH, 'utf-8'));
-  const mixin = namedBlock(mixins, '@mixin public-theme-tokens');
-  const helper = namedBlock(mixins, '@mixin _public-theme-dark-values');
+  const mixin = namedBlock(mixins, '@mixin public-theme-tokens', MIXINS_PATH);
+  const helper = namedBlock(mixins, '@mixin _public-theme-dark-values', MIXINS_PATH);
+  const osBranch = namedBlock(mixin.body, '@media (prefers-color-scheme: dark)', 'the public-theme-tokens mixin');
   const darkBranches = {
-    forced: namedBlock(mixin.body, '[data-theme="dark"] &'),
-    os: namedBlock(namedBlock(mixin.body, '@media (prefers-color-scheme: dark)').body,
-      ':where(:root:not([data-theme="light"])) &'),
+    forced: namedBlock(mixin.body, '[data-theme="dark"] &', 'the public-theme-tokens mixin'),
+    os: namedBlock(osBranch.body, ':where(:root:not([data-theme="light"])) &',
+      'the prefers-color-scheme branch of public-theme-tokens'),
   };
   // The dark branches declare nothing themselves (asserted below), so every
   // declaration in the mixin body belongs to its base block.
@@ -226,7 +231,10 @@ describe('public-theme-tokens', () => {
     });
 
     it('has no public-only token declared anywhere in the client style tree', () => {
-      const clashes = styleFiles([CLIENT_DIR]).flatMap(file =>
+      const clientFiles = styleFiles([CLIENT_DIR]);
+      expect(clientFiles.map(relative)).toContain(relative(CLIENT_THEME_FILES[0]));
+
+      const clashes = clientFiles.flatMap(file =>
         declaredNames(styleOf(file))
           .filter(token => publicOnly.includes(token))
           .map(token => `${relative(file)}: ${token}`));
@@ -246,18 +254,6 @@ describe('public-theme-tokens', () => {
     it('writes each token once in the base block and once in the dark helper', () => {
       expect(duplicates(declaredNames(mixin.body))).toEqual([]);
       expect(duplicates(declaredNames(helper.body))).toEqual([]);
-    });
-
-    it('declares no --pav-* property in site, widget or shared style outside the token layer', () => {
-      const tokenLayerSpans = [mixin, helper].sort((a, b) => b.start - a.start);
-      const outside = styleFiles(PUBLIC_STYLE_DIRS).flatMap((file) => {
-        const style = file === MIXINS_PATH
-          ? tokenLayerSpans.reduce((text, span) => text.slice(0, span.start) + text.slice(span.end), mixins)
-          : styleOf(file);
-        return declaredNames(style).map(token => `${relative(file)}: ${token}`);
-      });
-
-      expect(outside).toEqual([]);
     });
 
     it('switches the accent through the fixed accent properties', () => {
@@ -316,10 +312,29 @@ describe('public-theme-tokens', () => {
     });
   });
 
+  /**
+   * The single-sourcing half the blocks above cannot see: a dark value written
+   * in a component, or in another mixin, would override the token layer from
+   * outside it.
+   */
+  it('declares no --pav-* property in site, widget or shared style outside the token layer', () => {
+    // Cut the two token-layer mixins out of mixins.scss, last span first, so
+    // removing one does not shift the offsets of the other.
+    const tokenLayerSpans = [mixin, helper].sort((a, b) => b.start - a.start);
+    const outside = styleFiles(PUBLIC_STYLE_DIRS).flatMap((file) => {
+      const style = file === MIXINS_PATH
+        ? tokenLayerSpans.reduce((text, span) => text.slice(0, span.start) + text.slice(span.end), mixins)
+        : styleOf(file);
+      return declaredNames(style).map(token => `${relative(file)}: ${token}`);
+    });
+
+    expect(outside).toEqual([]);
+  });
+
   it('declares every var(--pav-*) that site, widget and shared style read', () => {
     const declared = new Set([...lightBlock.keys(), ...UNDECLARED_READS_ALLOWED]);
     const reads = styleFiles(PUBLIC_STYLE_DIRS).flatMap(file =>
-      [...styleOf(file).matchAll(/var\(\s*(--pav-[a-z0-9-]+)/g)].map(match => ({ file, token: match[1] })));
+      [...styleOf(file).matchAll(/var\(\s*(--pav-[^\s,)]*)/g)].map(match => ({ file, token: match[1] })));
 
     expect(reads.length).toBeGreaterThan(0);
     expect(reads.filter(read => !declared.has(read.token)).map(read => `${relative(read.file)}: ${read.token}`))
