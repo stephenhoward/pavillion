@@ -413,7 +413,10 @@ function disallowedMixinIncludes(style: string): string[] {
  * Every theme selector or colour-scheme query in a style block. A shared
  * component's tokens already switch under the mounting app's theme selector,
  * so any of these is a shared component reading the wrong value. Like the
- * import scan, this does not strip comments.
+ * import scan, this does not strip comments. It deliberately checks a subset
+ * (data-theme and prefers-color-scheme, in shared components only);
+ * scripts/check-theme-tokens.ts is the canonical tree-wide check, and also
+ * covers color-scheme and light-dark().
  */
 function themeSelectors(style: string): string[] {
   return [...style.matchAll(/data-theme|prefers-color-scheme/g)].map(match => match[0]);

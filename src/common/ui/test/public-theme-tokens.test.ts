@@ -16,7 +16,9 @@
  *   rather than rendering as an unset property.
  *
  * No colour value is asserted anywhere in this file: the tests check names and
- * structure, and the parity probe owns what the values look like.
+ * structure. What the values look like is covered end to end by the colour-mode
+ * and forced-colors e2e specs (tests/e2e/site-color-mode.spec.ts and
+ * tests/e2e/forced-colors.spec.ts).
  *
  * Like breakpoints.test.ts, this reads the SCSS as text rather than compiling it.
  */
@@ -51,10 +53,11 @@ const FIXED_ACCENT_PROPERTIES = [
 
 /**
  * `var(--pav-*)` reads in site, widget and shared-component style that the
- * token layer does not declare. Only two kinds of name may go here, each with
- * a comment saying which it is and where it is written: an accent override
- * written inline from script, and a component-local custom property the same
- * component declares. A client-only name never goes here — it is the unset read
+ * token layer does not declare. Only one kind of name may go here, with a
+ * comment saying where it is written: an accent override written inline from
+ * script. (A component-local custom property cannot qualify: any `--pav-*`
+ * declared outside the token layer already fails below.) A client-only name
+ * never goes here — it is the unset read
  * this check exists to catch. Promote it to a token, or keep the read only with
  * an inline `var()` fallback and a comment citing pv-ese5.
  */

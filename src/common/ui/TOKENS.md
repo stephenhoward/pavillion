@@ -38,7 +38,7 @@ Apply these in order when a theme-varying value needs a token:
 4. **No collisions.** A public-only name may not equal any name the client declares anywhere, in its theme tier or under `tokens/`.
 5. **Promotion.** A public-only token becomes shared by declaring it in the client's theme layer and moving its row to the shared table. Until then, a shared component never reads it.
 
-The four fixed-mode accent properties — `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` — are in neither tier. They are the widget's runtime override surface and keep their names; existing site and widget components read them directly. New call sites should read the theme-switched `--pav-accent` / `--pav-accent-hover` instead.
+The four fixed-mode accent properties — `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` — are in neither tier. They are the widget's runtime override surface and keep their names. Only the token layer (which declares their compiled defaults and reads them into `--pav-accent` / `--pav-accent-hover`) and `widgetStore.injectAccentColor` (which writes them inline) touch them; components read the theme-switched `--pav-accent` / `--pav-accent-hover`.
 
 ## Shared tokens
 
