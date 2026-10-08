@@ -49,6 +49,8 @@ TOKENS.md records which names each app declares and from what source. A name sha
 
 Breakpoints that a component must branch on in script live in `assets/breakpoints.ts`, mirroring the `public-tablet-up` and `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `test/breakpoints.test.ts` fails when the two drift apart.
 
+The Creato Display typeface lives in `assets/fonts/`, and `assets/fonts.scss` declares its `@font-face` rules. The site and widget global stylesheets each `@use` it: the widget renders in an iframe, which inherits no fonts from the embedding page. The client declares its own faces over the same files in `src/client/assets/style/base/_fonts.scss`.
+
 ## i18n
 
 A shared component owns its translation keys, and those keys live in the `ui` namespace. Apps register the bundle; they do not define or override the keys a shared component reads. This is what keeps a component's copy the same wherever it is mounted, and keeps an app from having to know which keys its dependencies happen to need.

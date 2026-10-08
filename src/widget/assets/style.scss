@@ -18,7 +18,7 @@
 // ================================================================
 
 @use '@/common/ui/assets/mixins' as *;
-@use '@/client/assets/fonts';
+@use '@/common/ui/assets/fonts';
 
 * {
   font-family: $public-font-family;

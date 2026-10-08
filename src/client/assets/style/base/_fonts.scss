@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Thin.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Thin.otf') format('opentype');
   font-weight: 100;
   font-style: normal;
   font-display: swap; /* Optimize loading performance */
@@ -17,7 +17,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Light.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Light.otf') format('opentype');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -26,7 +26,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Regular.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -35,7 +35,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Medium.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Medium.otf') format('opentype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -44,7 +44,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Bold.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Bold.otf') format('opentype');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -53,7 +53,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ExtraBold.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-ExtraBold.otf') format('opentype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -62,7 +62,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Black.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Black.otf') format('opentype');
   font-weight: 800;
   font-style: normal;
   font-display: swap;
@@ -73,7 +73,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ThinItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-ThinItalic.otf') format('opentype');
   font-weight: 100;
   font-style: italic;
   font-display: swap;
@@ -82,7 +82,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-LightItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-LightItalic.otf') format('opentype');
   font-weight: 300;
   font-style: italic;
   font-display: swap;
@@ -91,7 +91,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-RegularItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-RegularItalic.otf') format('opentype');
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -100,7 +100,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-MediumItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-MediumItalic.otf') format('opentype');
   font-weight: 500;
   font-style: italic;
   font-display: swap;
@@ -109,7 +109,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-BoldItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-BoldItalic.otf') format('opentype');
   font-weight: 600;
   font-style: italic;
   font-display: swap;
@@ -118,7 +118,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ExtraBoldItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-ExtraBoldItalic.otf') format('opentype');
   font-weight: 700;
   font-style: italic;
   font-display: swap;
@@ -127,7 +127,7 @@
 
 @font-face {
   font-family: 'Creato Display';
-  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-BlackItalic.otf') format('opentype');
+  src: url('/src/common/ui/assets/fonts/creato_display/CreatoDisplay-BlackItalic.otf') format('opentype');
   font-weight: 800;
   font-style: italic;
   font-display: swap;
@@ -141,9 +141,9 @@
 /* These should be added to the HTML head for production */
 
 /*
-<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Regular.otf" as="font" type="font/otf" crossorigin>
-<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Medium.otf" as="font" type="font/otf" crossorigin>
-<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Bold.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Regular.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Medium.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/src/common/ui/assets/fonts/creato_display/CreatoDisplay-Bold.otf" as="font" type="font/otf" crossorigin>
 */
 
 /* ===== FONT FEATURE SETTINGS ===== */
