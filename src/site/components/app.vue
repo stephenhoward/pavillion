@@ -21,7 +21,7 @@ const { t } = useTranslation('system');
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 footer {
   display: flex;
@@ -41,24 +41,16 @@ footer {
   .site-footer-login {
     font-size: $public-font-size-sm;
     font-weight: $public-font-weight-regular;
-    color: $public-text-secondary-light;
+    color: var(--pav-text-secondary);
     text-decoration: none;
 
     &:hover {
-      color: $public-text-primary-light;
+      color: var(--pav-text-primary);
       text-decoration: underline;
     }
 
     &:focus-visible {
       @include public-focus-visible;
-    }
-
-    @include public-dark-mode {
-      color: $public-text-secondary-dark;
-
-      &:hover {
-        color: $public-text-primary-dark;
-      }
     }
   }
 }

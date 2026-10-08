@@ -783,13 +783,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // Colours come from the --pav-* tokens, which switch with the theme on their
-// own. The public-dark-mode blocks that remain hold this component's own
-// translucent literals, which no token carries. The accent restated inside
-// the .active / .has-filter dark blocks is different: it is there only so
-// those states outrank the generic dark block that follows them.
+// own, so every state rule outranks its base rule the same way in both
+// themes. The white ink on the accent fills is the same in both themes.
 
 .search-filter-public {
   @include filter-container;
@@ -918,15 +916,15 @@ onUnmounted(() => {
     padding: 8px;
     border: none;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.08);
-    color: rgba(0, 0, 0, 0.5);
+    background: var(--pav-filter-pill-hover-bg);
+    color: var(--pav-text-picker-subtle);
     cursor: pointer;
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.15);
-      color: rgba(0, 0, 0, 0.8);
+      background: var(--pav-surface-picker-clear-hover);
+      color: var(--pav-text-picker-clear-hover);
     }
 
     &:focus-visible {
@@ -941,16 +939,6 @@ onUnmounted(() => {
     svg {
       display: block;
     }
-
-    @include public-dark-mode {
-      background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.5);
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.2);
-        color: rgba(255, 255, 255, 0.8);
-      }
-    }
   }
 
   // Date Filter Button (Main Collapsible Button)
@@ -960,88 +948,52 @@ onUnmounted(() => {
     gap: 8px;
     padding: 8px 16px;
     min-height: 44px;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--pav-border-picker);
     border-radius: 20px;
-    background: white;
+    background: var(--pav-surface-picker);
     font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
     font-size: 14px;
     font-weight: $font-regular;
-    color: rgba(0, 0, 0, 0.85);
+    color: var(--pav-text-picker);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--pav-shadow-picker);
 
     &:hover {
-      border-color: rgba(0, 0, 0, 0.2);
-      background: rgba(0, 0, 0, 0.02);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+      border-color: var(--pav-border-picker-hover);
+      background: var(--pav-surface-field-hover);
+      box-shadow: var(--pav-shadow-picker-hover);
     }
 
     &:focus-visible {
       outline: 2px solid var(--pav-accent);
       outline-offset: 1px;
-      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+      box-shadow: var(--pav-shadow-picker-focus);
     }
 
-    // The accent is restated in the dark block below because the generic
-    // dark block later in this rule would otherwise outrank the base state.
+    // Popover open. Its shadow is the same in both themes.
     &.active {
       border-color: var(--pav-accent);
-      background: rgba(0, 0, 0, 0.02);
+      background: var(--pav-surface-secondary);
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-
-      @include public-dark-mode {
-        border-color: var(--pav-accent);
-        background: rgba(255, 255, 255, 0.05);
-      }
     }
 
     // Active filter state - match category pill styling
-    // As with .active, the accent is restated in the dark block to outrank
-    // the generic dark block below.
     &.has-filter {
       background-color: var(--pav-accent);
       color: white;
       font-weight: $font-medium;
       border-color: var(--pav-accent);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--pav-shadow-selected);
 
       &:hover {
         background-color: var(--pav-accent-hover);
         border-color: var(--pav-accent-hover);
       }
 
-      @include public-dark-mode {
-        background-color: var(--pav-accent);
-        border-color: var(--pav-accent);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-
-        &:hover {
-          background-color: var(--pav-accent-hover);
-          border-color: var(--pav-accent-hover);
-        }
-      }
-
       .dropdown-icon {
         color: white;
-      }
-    }
-
-    @include public-dark-mode {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: rgba(255, 255, 255, 0.9);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-
-      &:hover {
-        border-color: rgba(255, 255, 255, 0.25);
-        background: rgba(255, 255, 255, 0.08);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      }
-
-      &:focus-visible {
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
       }
     }
 
@@ -1078,21 +1030,10 @@ onUnmounted(() => {
     z-index: 20;
     min-width: 320px;
     padding: $spacing-md;
-    background: white;
+    background: var(--pav-surface-popover);
     border-radius: 16px;
-    box-shadow:
-      0 4px 6px rgba(0, 0, 0, 0.05),
-      0 10px 24px rgba(0, 0, 0, 0.1),
-      0 0 0 1px rgba(0, 0, 0, 0.04);
-
-    @include public-dark-mode {
-      background: rgba(30, 30, 35, 0.98);
-      box-shadow:
-        0 4px 6px rgba(0, 0, 0, 0.3),
-        0 10px 24px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(20px);
-    }
+    box-shadow: var(--pav-shadow-lg);
+    backdrop-filter: var(--pav-popover-backdrop-filter);
 
     @include mobile-only {
       right: 0;
@@ -1133,64 +1074,35 @@ onUnmounted(() => {
       user-select: none;
 
       // Unselected state - subtle and refined
-      background-color: rgba(0, 0, 0, 0.04);
-      color: rgba(0, 0, 0, 0.6);
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      background-color: var(--pav-surface-tertiary);
+      color: var(--pav-text-secondary);
+      box-shadow: var(--pav-shadow-xs);
 
       &:hover:not(.active) {
-        background-color: rgba(0, 0, 0, 0.08);
-        color: rgba(0, 0, 0, 0.75);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        background-color: var(--pav-filter-pill-hover-bg);
+        color: var(--pav-filter-pill-hover-text);
+        box-shadow: var(--pav-shadow-sm);
       }
 
       &:focus-visible {
-        outline: 2px solid rgba(0, 0, 0, 0.5);
+        outline: 2px solid var(--pav-border-filter-pill-focus);
         outline-offset: 1px;
-        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+        box-shadow: var(--pav-shadow-picker-focus);
       }
 
       &:active:not(.active) {
         transform: scale(0.97);
       }
 
-      // Selected state. The accent is restated in the dark block because
-      // the unselected dark block below would otherwise outrank it.
+      // Selected state
       &.active {
         background-color: var(--pav-accent);
         color: white;
         font-weight: $font-medium;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--pav-shadow-selected);
 
         &:hover {
           background-color: var(--pav-accent-hover);
-        }
-
-        @include public-dark-mode {
-          background-color: var(--pav-accent);
-          color: white;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-
-          &:hover {
-            background-color: var(--pav-accent-hover);
-          }
-        }
-      }
-
-      // Dark mode unselected state
-      @include public-dark-mode {
-        background-color: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.6);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-
-        &:hover:not(.active) {
-          background-color: rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.8);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        }
-
-        &:focus-visible {
-          outline-color: rgba(255, 255, 255, 0.5);
-          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
         }
       }
 
@@ -1221,11 +1133,7 @@ onUnmounted(() => {
   .custom-dates-section {
     margin-top: $spacing-md;
     padding-top: $spacing-md;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-
-    @include public-dark-mode {
-      border-top-color: rgba(255, 255, 255, 0.1);
-    }
+    border-top: 1px solid var(--pav-border-picker-divider);
 
     .date-inputs-grid {
       display: grid;
@@ -1247,11 +1155,7 @@ onUnmounted(() => {
           font-weight: $font-medium;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          color: rgba(0, 0, 0, 0.5);
-
-          @include public-dark-mode {
-            color: rgba(255, 255, 255, 0.5);
-          }
+          color: var(--pav-text-picker-subtle);
         }
 
         .date-input {
@@ -1262,38 +1166,23 @@ onUnmounted(() => {
           font-size: 13px;
           min-height: 36px;
           border-radius: 8px;
-          border: 1px solid rgba(0, 0, 0, 0.12);
-          background-color: rgba(0, 0, 0, 0.02);
-          color: rgba(0, 0, 0, 0.85);
+          border: 1px solid var(--pav-border-picker);
+          background-color: var(--pav-surface-secondary);
+          color: var(--pav-text-picker);
           font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
           font-weight: $font-regular;
           transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 
           &:hover {
-            border-color: rgba(0, 0, 0, 0.2);
-            background-color: rgba(0, 0, 0, 0.04);
+            border-color: var(--pav-border-picker-hover);
+            background-color: var(--pav-surface-tertiary);
           }
 
           &:focus {
             outline: 2px solid var(--pav-accent);
             outline-offset: 0;
             border-color: transparent;
-            background-color: white;
-          }
-
-          @include public-dark-mode {
-            border-color: rgba(255, 255, 255, 0.15);
-            background-color: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.9);
-
-            &:hover {
-              border-color: rgba(255, 255, 255, 0.25);
-              background-color: rgba(255, 255, 255, 0.08);
-            }
-
-            &:focus {
-              background-color: rgba(255, 255, 255, 0.1);
-            }
+            background-color: var(--pav-surface-field-focus);
           }
 
           // Style the calendar picker icon
@@ -1314,12 +1203,8 @@ onUnmounted(() => {
 
         .date-format-hint {
           font-size: 10px;
-          color: rgba(0, 0, 0, 0.4);
+          color: var(--pav-text-picker-hint);
           letter-spacing: 0.02em;
-
-          @include public-dark-mode {
-            color: rgba(255, 255, 255, 0.4);
-          }
         }
       }
     }

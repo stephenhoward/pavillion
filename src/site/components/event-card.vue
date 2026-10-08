@@ -308,7 +308,7 @@ function navigateToDetail(event: MouseEvent): void {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .event-card {
   @include public-event-card-stacked;
@@ -367,15 +367,10 @@ function navigateToDetail(event: MouseEvent): void {
   border-radius: $public-radius-full;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--pav-recurrence-badge-bg);
   color: var(--pav-text-primary);
   backdrop-filter: blur(4px);
   white-space: nowrap;
-
-  // The translucent scrim over the image has no token.
-  @include public-dark-mode {
-    background: rgba(30, 30, 35, 0.85);
-  }
 }
 
 // ================================================================
