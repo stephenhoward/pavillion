@@ -49,7 +49,7 @@ TOKENS.md records which names each app declares and from what source. A name sha
 
 Breakpoints that a component must branch on in script live in `assets/breakpoints.ts`, mirroring the `public-tablet-up` and `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `test/breakpoints.test.ts` fails when the two drift apart.
 
-The Creato Display typeface lives in `assets/fonts/`, and `assets/fonts.scss` declares its `@font-face` rules. The site and widget global stylesheets each `@use` it: the widget renders in an iframe, which inherits no fonts from the embedding page. The client declares its own faces over the same files in `src/client/assets/style/base/_fonts.scss`.
+The Creato Display typeface lives in `assets/fonts/`, and `assets/fonts.scss` declares its `@font-face` rules. All three apps load it from their global stylesheets (the client through `src/client/assets/style/base/_fonts.scss`), so the faces are declared once. The widget needs it as much as the others: it renders in an iframe, which inherits no fonts from the embedding page.
 
 ## i18n
 
