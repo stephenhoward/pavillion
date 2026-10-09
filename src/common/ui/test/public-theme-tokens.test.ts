@@ -3,13 +3,12 @@
  * palette it bridges to runtime.
  *
  * Every `$public-<base>-light` / `$public-<base>-dark` pair in mixins.scss must
- * reach the site and widget as one `--pav-*` custom property: redeclared with
- * the dark value inside the mixin's `public-dark-mode` block, and declared
- * under the same name with the light value in its base block. A pair added to
- * the palette without a token, or a token whose light and dark halves carry
+ * reach the site and widget as one `--pav-*` custom property: declared with
+ * the dark value in the private `_public-theme-dark-values` helper, and under
+ * the same name with the light value in the mixin's base block. A pair added
+ * to the palette without a token, or a token whose light and dark halves carry
  * different names, fails here instead of silently leaving a gap in the runtime
- * set. TOKENS.md is the lookup table later migrations read, so it is held to
- * the same mapping.
+ * set.
  *
  * Like breakpoints.test.ts, this reads the SCSS as text rather than compiling it.
  */
@@ -18,7 +17,6 @@ import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 
 const MIXINS_PATH = path.join(process.cwd(), 'src/common/ui/assets/mixins.scss');
-const TOKENS_DOC_PATH = path.join(process.cwd(), 'src/common/ui/TOKENS.md');
 const APP_STYLE_DIRS = ['src/site', 'src/widget'].map(dir => path.join(process.cwd(), dir));
 const CLIENT_THEME_FILES = [
   'src/client/assets/style/themes/_light.scss',
@@ -95,9 +93,14 @@ function paletteBases(source: string): string[] {
 describe('public-theme-tokens', () => {
   const mixins = readFileSync(MIXINS_PATH, 'utf-8');
   const mixin = namedBlock(mixins, '@mixin public-theme-tokens');
-  const dark = namedBlock(mixin.body, '@include public-dark-mode');
-  const lightBlock = customProperties(mixin.body.slice(0, dark.start) + mixin.body.slice(dark.end));
-  const darkBlock = customProperties(dark.body);
+  // The base block is the mixin body less its two dark branches, each of
+  // which only includes the helper that carries the dark values.
+  const forcedDark = namedBlock(mixin.body, '[data-theme="dark"] &');
+  const osDark = namedBlock(mixin.body, '@media (prefers-color-scheme: dark)');
+  const lightBlock = customProperties([forcedDark, osDark]
+    .sort((a, b) => a.start - b.start)
+    .reduceRight((body, branch) => body.slice(0, branch.start) + body.slice(branch.end), mixin.body));
+  const darkBlock = customProperties(namedBlock(mixins, '@mixin _public-theme-dark-values').body);
   const bases = paletteBases(mixins);
 
   /**
@@ -147,15 +150,6 @@ describe('public-theme-tokens', () => {
     expect(lightBlock.get('--pav-accent-light-hover')).toBe('#{$public-accent-hover-light}');
     expect(lightBlock.get('--pav-accent-dark')).toBe('#{$public-accent-dark}');
     expect(lightBlock.get('--pav-accent-dark-hover')).toBe('#{$public-accent-hover-dark}');
-  });
-
-  it('records every base-to-token mapping in TOKENS.md', () => {
-    const doc = readFileSync(TOKENS_DOC_PATH, 'utf-8');
-    const unrecorded = bases
-      .map(base => ({ base, token: tokenFor(base) }))
-      .filter(({ base, token }) => !new RegExp(`^\\|\\s*\`${base}\`\\s*\\|\\s*\`${token}\`\\s*\\|`, 'm').test(doc))
-      .map(({ base, token }) => `${base} -> ${token}`);
-    expect(unrecorded).toEqual([]);
   });
 
   /**

@@ -158,23 +158,116 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
 
 // ===== RUNTIME THEME TOKENS =====
 
-// The one declaration site of the public surfaces' --pav-* custom properties:
-// every $public-*-light / -dark pair above, emitted with its light value here
-// and redeclared with its dark value under `public-dark-mode`'s dual selector.
-// Names follow the client's theme layer where it has a token of the same
-// meaning; ../TOKENS.md is the mapping table, and
+// The dark half of the token layer: every token `public-theme-tokens`
+// declares that changes in dark mode, with its dark value, plus
+// `color-scheme: dark`. It carries no selector of its own, so each dark value
+// is written once here and `public-theme-tokens` places it under both of its
+// dark branches. The leading underscore keeps it private to this module:
+// nothing outside the token layer may emit dark values.
+@mixin _public-theme-dark-values {
+  color-scheme: dark;
+
+  --pav-accent: var(--pav-accent-dark);
+  --pav-accent-hover: var(--pav-accent-dark-hover);
+
+  --pav-surface-primary: #{$public-bg-primary-dark};
+  --pav-surface-secondary: #{$public-bg-secondary-dark};
+  --pav-surface-tertiary: #{$public-bg-tertiary-dark};
+
+  --pav-text-primary: #{$public-text-primary-dark};
+  --pav-text-secondary: #{$public-text-secondary-dark};
+  --pav-text-muted: #{$public-text-tertiary-dark};
+
+  --pav-border-subtle: #{$public-border-subtle-dark};
+  --pav-border-medium: #{$public-border-medium-dark};
+  --pav-border-strong: #{$public-border-strong-dark};
+
+  --pav-interactive-hover: #{$public-hover-overlay-dark};
+  --pav-interactive-active: #{$public-active-overlay-dark};
+
+  --pav-text-error: #{$public-error-dark};
+  --pav-surface-error: #{$public-error-bg-dark};
+  --pav-success: #{$public-success-dark};
+  --pav-success-bg: #{$public-success-bg-dark};
+
+  --pav-source-pill-bg: #{$public-source-pill-bg-dark};
+  --pav-source-pill-color: #{$public-source-pill-color-dark};
+  --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-dark};
+
+  --pav-shadow-xs: #{$public-shadow-xs-dark};
+  --pav-shadow-sm: #{$public-shadow-sm-dark};
+  --pav-shadow-md: #{$public-shadow-md-dark};
+  --pav-shadow-lg: #{$public-shadow-lg-dark};
+  --pav-shadow-xl: #{$public-shadow-xl-dark};
+
+  // Shared tier, minted: the client declares these names too.
+  --pav-badge-sky-bg: rgba(12, 74, 110, 0.3);
+  --pav-badge-sky-text: #7dd3fc;
+  --pav-border-error: #fca5a5;
+
+  // Public-only tier, minted.
+  --pav-surface-popover: rgba(30, 30, 35, 0.98);
+  --pav-popover-backdrop-filter: blur(20px);
+
+  --pav-surface-field: var(--pav-surface-secondary);
+  --pav-surface-field-hover: var(--pav-surface-tertiary);
+  --pav-surface-field-focus: rgba(255, 255, 255, 0.1);
+
+  --pav-surface-picker: rgba(255, 255, 255, 0.06);
+  --pav-border-picker: rgba(255, 255, 255, 0.15);
+  --pav-border-picker-hover: rgba(255, 255, 255, 0.25);
+  --pav-border-picker-divider: rgba(255, 255, 255, 0.1);
+  --pav-text-picker: rgba(255, 255, 255, 0.9);
+  --pav-text-picker-subtle: rgba(255, 255, 255, 0.5);
+  --pav-text-picker-hint: rgba(255, 255, 255, 0.4);
+  --pav-surface-picker-clear-hover: rgba(255, 255, 255, 0.2);
+  --pav-text-picker-clear-hover: rgba(255, 255, 255, 0.8);
+  --pav-shadow-picker: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --pav-shadow-picker-hover: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --pav-shadow-picker-focus: 0 0 0 3px rgba(255, 255, 255, 0.08);
+  --pav-shadow-selected: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+  --pav-filter-pill-hover-bg: rgba(255, 255, 255, 0.1);
+  --pav-filter-pill-hover-text: rgba(255, 255, 255, 0.8);
+  --pav-border-filter-pill-focus: rgba(255, 255, 255, 0.4);
+  --pav-surface-scroll-arrow-hover: rgba(255, 255, 255, 0.14);
+
+  --pav-recurrence-badge-bg: rgba(30, 30, 35, 0.85);
+  --pav-vignette-gain: 2.5;
+  --pav-loading-pulse-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+}
+
+// The one declaration site of the public surfaces' --pav-* custom properties
+// and of their color-scheme. The base block holds the light values and
+// `color-scheme: light`; `_public-theme-dark-values` above holds the dark
+// ones. Existing tokens carry the $public-*-light / -dark pairs above; newly
+// minted tokens are literals, except the three field tokens, which are var()
+// references to the surface tiers (an approved exception). Names follow the
+// client's theme layer where it has a token of the same meaning;
+// ../TOKENS.md records both tiers (shared and public-only), and
 // test/public-theme-tokens.test.ts fails if a pair goes unemitted.
+//
+// color-scheme is emitted here, beside the tokens, so native controls inside
+// the app (date inputs, selects, autofill, scrollbars of scrolling elements)
+// switch with the same selector that switches the colours around them. It
+// lands on the include element, not the document root: the viewport
+// scrollbar and the page canvas follow `:root` and are left alone.
 //
 // Include it once, on the element the app's runtime overrides are written to:
 // `#app` on the site, `.widget-root` in the widget, where
 // `widgetStore.injectAccentColor` sets --pav-accent-light / --pav-accent-dark
 // inline. Declaring the theme-switched --pav-accent tokens on that same
 // element is what lets them resolve through the override; declared on an
-// ancestor they would inherit the compiled default instead. Never include it
-// on `:root` or `html`: the dark branch is an ancestor selector
-// (`[data-theme="dark"] &`), which nothing above the document root can match,
-// so the tokens would silently stay light in both themes.
+// ancestor they would inherit the compiled default instead, and re-included
+// on a descendant of `.widget-root` they would shadow the owner's accent.
+// Never include it on `:root`, `html` or `body`: the dark branch is an
+// ancestor selector (`[data-theme="dark"] &`), which nothing above the
+// document root can match, so the tokens would silently stay light in both
+// themes. Keep the include the last declaration in its block: the mixin ends
+// in nested rules, and a declaration after a nested rule makes Sass split it.
 @mixin public-theme-tokens {
+  color-scheme: light;
+
   // Fixed-mode accent values — the runtime override surface.
   --pav-accent-light: #{$public-accent-light};
   --pav-accent-light-hover: #{$public-accent-hover-light};
@@ -214,39 +307,74 @@ $public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0,
   --pav-shadow-lg: #{$public-shadow-lg-light};
   --pav-shadow-xl: #{$public-shadow-xl-light};
 
-  @include public-dark-mode {
-    --pav-accent: var(--pav-accent-dark);
-    --pav-accent-hover: var(--pav-accent-dark-hover);
+  // Shared tier, minted: the client declares these names too.
+  --pav-badge-sky-bg: #e0f2fe;
+  --pav-badge-sky-text: #0369a1;
+  --pav-border-error: #dc2626;
 
-    --pav-surface-primary: #{$public-bg-primary-dark};
-    --pav-surface-secondary: #{$public-bg-secondary-dark};
-    --pav-surface-tertiary: #{$public-bg-tertiary-dark};
+  // Public-only tier, minted. The field tokens are tier references, not
+  // literals: a field sits on the page surface in light and one tier up in
+  // dark, and reading the tiers keeps that relation through palette changes.
+  --pav-surface-popover: #ffffff;
+  --pav-popover-backdrop-filter: none;
 
-    --pav-text-primary: #{$public-text-primary-dark};
-    --pav-text-secondary: #{$public-text-secondary-dark};
-    --pav-text-muted: #{$public-text-tertiary-dark};
+  --pav-surface-field: var(--pav-surface-primary);
+  --pav-surface-field-hover: var(--pav-surface-secondary);
+  --pav-surface-field-focus: var(--pav-surface-primary);
 
-    --pav-border-subtle: #{$public-border-subtle-dark};
-    --pav-border-medium: #{$public-border-medium-dark};
-    --pav-border-strong: #{$public-border-strong-dark};
+  --pav-surface-picker: #ffffff;
+  --pav-border-picker: rgba(0, 0, 0, 0.12);
+  --pav-border-picker-hover: rgba(0, 0, 0, 0.2);
+  --pav-border-picker-divider: rgba(0, 0, 0, 0.08);
+  --pav-text-picker: rgba(0, 0, 0, 0.85);
+  --pav-text-picker-subtle: rgba(0, 0, 0, 0.5);
+  --pav-text-picker-hint: rgba(0, 0, 0, 0.4);
+  --pav-surface-picker-clear-hover: rgba(0, 0, 0, 0.15);
+  --pav-text-picker-clear-hover: rgba(0, 0, 0, 0.8);
+  --pav-shadow-picker: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --pav-shadow-picker-hover: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --pav-shadow-picker-focus: 0 0 0 3px rgba(0, 0, 0, 0.05);
+  --pav-shadow-selected: 0 2px 4px rgba(0, 0, 0, 0.15);
 
-    --pav-interactive-hover: #{$public-hover-overlay-dark};
-    --pav-interactive-active: #{$public-active-overlay-dark};
+  --pav-filter-pill-hover-bg: rgba(0, 0, 0, 0.08);
+  --pav-filter-pill-hover-text: rgba(0, 0, 0, 0.75);
+  --pav-border-filter-pill-focus: rgba(0, 0, 0, 0.4);
+  --pav-surface-scroll-arrow-hover: rgba(0, 0, 0, 0.1);
 
-    --pav-text-error: #{$public-error-dark};
-    --pav-surface-error: #{$public-error-bg-dark};
-    --pav-success: #{$public-success-dark};
-    --pav-success-bg: #{$public-success-bg-dark};
+  --pav-recurrence-badge-bg: rgba(255, 255, 255, 0.9);
+  // A multiplier on the vignette's black alpha, not a colour: every dark
+  // vignette step is exactly 2.5x its light one, so components keep their
+  // own base alphas and geometry and read only the gain.
+  --pav-vignette-gain: 1;
+  --pav-loading-pulse-gradient: linear-gradient(135deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.02) 100%);
 
-    --pav-source-pill-bg: #{$public-source-pill-bg-dark};
-    --pav-source-pill-color: #{$public-source-pill-color-dark};
-    --pav-source-pill-hover-bg: #{$public-source-pill-hover-bg-dark};
+  // The dark values, under two selectors:
+  //
+  //   1. `[data-theme="dark"] &` — a forced dark theme. The widget sets
+  //      `data-theme` on its own iframe document's `<html>` for an explicit
+  //      Light/Dark color mode (`widgetStore.applyColorMode()`).
+  //   2. `:where(:root:not([data-theme="light"])) &` inside
+  //      `@media (prefers-color-scheme: dark)` — the OS preference, unless a
+  //      light theme was forced. The public site never sets `data-theme`, so
+  //      there this always matches and the site follows the OS.
+  //
+  // `:where()` keeps the guard at zero specificity, so the media-query branch
+  // weighs exactly what a bare `&` would.
+  //
+  // NOTE: Do NOT wrap either selector in `:global(...)`. Vue's scoped-style
+  // compiler drops the descendant combinator when `:global()` is followed by
+  // `&`, producing a bare `[data-theme="dark"]{...}` rule with no descendant
+  // (the pv-ezc7 bug class). The plain form correctly emits
+  // `[data-theme="dark"] .widget-root[data-v-xxx]`, because the ancestor is
+  // not the scoped target.
+  [data-theme="dark"] & {
+    @include _public-theme-dark-values;
+  }
 
-    --pav-shadow-xs: #{$public-shadow-xs-dark};
-    --pav-shadow-sm: #{$public-shadow-sm-dark};
-    --pav-shadow-md: #{$public-shadow-md-dark};
-    --pav-shadow-lg: #{$public-shadow-lg-dark};
-    --pav-shadow-xl: #{$public-shadow-xl-dark};
+  @media (prefers-color-scheme: dark) {
+    :where(:root:not([data-theme="light"])) & {
+      @include _public-theme-dark-values;
+    }
   }
 }
 
@@ -717,30 +845,11 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 }
 
-// Dark mode mixin — self-guarding against a forced light theme.
-//
-// Emits the dark values under two selectors:
-//
-//   1. `[data-theme="dark"] &` — a forced dark theme. The widget sets
-//      `data-theme` on its own iframe document's `<html>` for an explicit
-//      Light/Dark color mode (`widgetStore.applyColorMode()`).
-//   2. `:where(:root:not([data-theme="light"])) &` inside
-//      `@media (prefers-color-scheme: dark)` — the OS preference, unless a
-//      light theme was forced. The public site never sets `data-theme`, so
-//      there this always matches and the site follows the OS as before.
-//
-// Because the guard lives here, a component states its light values once as
-// its base style and its dark values once in this block; a forced light
-// theme on a dark OS needs no per-component override. `:where()` keeps the
-// guard at zero specificity, so the media-query branch weighs exactly what a
-// bare `&` did and existing cascades are unchanged.
-//
-// NOTE: Do NOT wrap either selector in `:global(...)`. Vue's scoped-style
-// compiler drops the descendant combinator when `:global()` is followed by
-// `&`, producing a bare `[data-theme="dark"]{...}` rule with no descendant
-// (the pv-ezc7 bug class). The plain form correctly emits
-// `[data-theme="dark"] .my-component[data-v-xxx]`, because the ancestor is
-// not the scoped target.
+// Dark mode mixin — being retired. Emits its content under the same two
+// dark selectors as `public-theme-tokens` (see the comment on its branches
+// for what each matches and why neither may be wrapped in `:global()`).
+// Remaining call sites move their dark values into the token layer and drop
+// the include; do not add new call sites.
 //
 // Usage:
 //   .my-component {

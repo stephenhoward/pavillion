@@ -33,6 +33,7 @@ import {
   classify,
   isPermittedOutsideSource,
   parseReferences,
+  tokenSection,
   type Reference,
 } from './boundary-scanner';
 
@@ -282,13 +283,13 @@ function sharedComponents(): string[] {
 }
 
 /**
- * Token names in TOKENS.md's `$public-*` base → token table: rows whose first
- * cell is a bare base name, which the client table's `--pav-*` first cells are not.
+ * Token names in TOKENS.md's shared tier: the only names every app declares,
+ * and so the only ones a shared component may read.
  */
 function recordedTokens(): Set<string> {
   const doc = readFileSync(path.join(UI_ROOT, 'TOKENS.md'), 'utf-8');
 
-  return new Set([...doc.matchAll(/^\|\s*`[a-z0-9][a-z0-9-]*`\s*\|\s*`(--pav-[a-z0-9-]+)`\s*\|/gm)].map(match => match[1]));
+  return new Set(tokenSection(doc, 'Shared tokens'));
 }
 
 /**
