@@ -10,10 +10,13 @@
  * Usage (from the repo root, after `npm run build` on the commit to probe):
  *
  *   npx tsx tests/theme-parity/probe.ts capture [out.json] [--base-url URL] [--screenshots DIR]
+ *   npx tsx tests/theme-parity/probe.ts capture-base [out.json] [--sha SHA]
  *   npx tsx tests/theme-parity/probe.ts diff <baseline.json> <candidate.json>
  *
  * `capture` starts its own isolated server (built dist/, NODE_ENV=e2e,
  * freshly seeded database) unless `--base-url` points at a running one.
+ * `capture-base` captures BASE_SHA today in a throwaway worktree: seed dates
+ * shift relative to today, so a same-day base is the authoritative reference.
  * `diff` exits non-zero only on real deviations; differences in a colour's
  * alpha within ALPHA_EPSILON are reported separately.
  *
@@ -21,6 +24,7 @@
  */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from '@playwright/test';
 import { startTestServer, type TestEnvironment } from '../e2e/helpers/test-server';
@@ -51,6 +55,9 @@ const PROPERTIES = [
  * reading it per element would flag every descendant for one change.
  */
 const ROOT_PROPERTIES = ['color-scheme'] as const;
+
+/** The commit the baseline was captured on: the last one before the theme-token migration. */
+const BASE_SHA = '266a0baf';
 
 /** Tolerance on a colour's alpha channel, from calc() serialisation. */
 const ALPHA_EPSILON = 0.005;
@@ -1156,8 +1163,7 @@ function gitState(): { sha: string; dirty: boolean } {
 
 async function capture(outFile: string, baseUrlArg: string | null, screenshotDir: string | null): Promise<void> {
   let env: TestEnvironment | null = null;
-  const baseURL = baseUrlArg ?? (env = await startTestServer({ startupTimeout: 60000 })).baseURL;
-  const browser = await chromium.launch();
+  let browser: Browser | null = null;
   const result: Capture = {
     meta: {
       ...gitState(),
@@ -1171,44 +1177,54 @@ async function capture(outFile: string, baseUrlArg: string | null, screenshotDir
   const missing: string[] = [];
 
   try {
+    const baseURL = baseUrlArg ?? (env = await startTestServer({ startupTimeout: 60000 })).baseURL;
+    browser = await chromium.launch();
     const paths = await discoverPaths(baseURL);
     for (const scenario of SCENARIOS) {
       for (const mode of scenario.modes) {
         for (const step of scenario.steps) {
           const key = `${scenario.app}/${step.name}|${mode.name}`;
           const context = await newContext(browser, mode, step.viewport);
-          const page = await context.newPage();
-          const cdp = await context.newCDPSession(page);
-          await cdp.send('DOM.enable');
-          await cdp.send('CSS.enable');
+          try {
+            const page = await context.newPage();
+            const cdp = await context.newCDPSession(page);
+            await cdp.send('DOM.enable');
+            await cdp.send('CSS.enable');
 
-          await step.setup({ page, baseURL, mode, paths });
-          await page.mouse.move(0, 0);
+            await step.setup({ page, baseURL, mode, paths });
+            await page.mouse.move(0, 0);
 
-          const captured: PageCapture = {};
-          for (const probe of step.probes) {
-            const value = await readProbe(page, cdp, probe);
-            captured[probeKey(probe)] = value;
-            if (value === null) {
-              missing.push(`${key} ${probeKey(probe)}`);
+            const captured: PageCapture = {};
+            for (const probe of step.probes) {
+              const value = await readProbe(page, cdp, probe);
+              captured[probeKey(probe)] = value;
+              if (value === null) {
+                missing.push(`${key} ${probeKey(probe)}`);
+              }
+            }
+            result.pages[key] = captured;
+
+            if (screenshotDir && step.screenshot?.modes.includes(mode.name)) {
+              fs.mkdirSync(screenshotDir, { recursive: true });
+              await page.locator(step.screenshot.selector).first().screenshot({
+                path: path.join(screenshotDir, step.screenshot.file(mode.name)),
+              });
             }
           }
-          result.pages[key] = captured;
-
-          if (screenshotDir && step.screenshot?.modes.includes(mode.name)) {
-            fs.mkdirSync(screenshotDir, { recursive: true });
-            await page.locator(step.screenshot.selector).first().screenshot({
-              path: path.join(screenshotDir, step.screenshot.file(mode.name)),
-            });
+          catch (err) {
+            throw new Error(`Step ${key} failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
           }
-
-          await context.close();
+          finally {
+            await context.close();
+          }
         }
       }
     }
   }
   finally {
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
     if (env) {
       await env.cleanup();
     }
@@ -1220,6 +1236,29 @@ async function capture(outFile: string, baseUrlArg: string | null, screenshotDir
   console.log(`Wrote ${outFile}: ${pages} page/mode captures, ${reads} element reads (${result.meta.sha}${result.meta.dirty ? ', src dirty' : ''})`);
   if (missing.length) {
     console.log(`Absent (recorded as null):\n  ${missing.join('\n  ')}`);
+  }
+}
+
+/**
+ * Capture the base commit today. Seed dates shift relative to the server's
+ * today, so a candidate is compared against a base captured the same day.
+ * Builds BASE_SHA in a throwaway git worktree, runs this probe there, and
+ * removes the worktree.
+ */
+function captureBase(outFile: string, sha: string): void {
+  const out = path.resolve(outFile);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'theme-parity-base-'));
+  const run = (command: string, cwd: string) => execSync(command, { cwd, stdio: 'inherit' });
+  try {
+    run(`git worktree add --detach "${dir}" ${sha}`, process.cwd());
+    run('npm ci', dir);
+    run('npm run build', dir);
+    fs.mkdirSync(path.join(dir, 'tests/theme-parity'), { recursive: true });
+    fs.copyFileSync(new URL(import.meta.url).pathname, path.join(dir, 'tests/theme-parity/probe.ts'));
+    run(`npx tsx tests/theme-parity/probe.ts capture "${out}"`, dir);
+  }
+  finally {
+    run(`git worktree remove --force "${dir}"`, process.cwd());
   }
 }
 
@@ -1256,7 +1295,9 @@ function equalWithinAlphaEpsilon(a: string, b: string): boolean {
     const cb = colorsB[i];
     return ca !== null && cb !== null
       && ca[0] === cb[0] && ca[1] === cb[1] && ca[2] === cb[2]
-      && Math.abs(ca[3] - cb[3]) <= ALPHA_EPSILON;
+      // The float slack keeps a gap of exactly ALPHA_EPSILON inside it
+      // (0.065 - 0.06 is 0.0050000000000000044 in binary floating point).
+      && Math.abs(ca[3] - cb[3]) <= ALPHA_EPSILON + 1e-9;
   });
 }
 
@@ -1280,6 +1321,7 @@ function diff(baselineFile: string, candidateFile: string): number {
   const candidate: Capture = JSON.parse(fs.readFileSync(candidateFile, 'utf8'));
   const real: Deviation[] = [];
   const epsilon: Deviation[] = [];
+  const absentInBoth: string[] = [];
 
   const pageKeys = new Set([...Object.keys(baseline.pages), ...Object.keys(candidate.pages)]);
   for (const pageKey of pageKeys) {
@@ -1294,7 +1336,10 @@ function diff(baselineFile: string, candidateFile: string): number {
       const be = bp[element];
       const ce = cp[element];
       if (!be || !ce) {
-        if (describe(be) !== describe(ce)) {
+        if (be === null && ce === null) {
+          absentInBoth.push(`[${pageKey}] ${element}`);
+        }
+        else if (describe(be) !== describe(ce)) {
           real.push({ page: pageKey, element, property: '*', baseline: describe(be), candidate: describe(ce) });
         }
         continue;
@@ -1325,6 +1370,10 @@ function diff(baselineFile: string, candidateFile: string): number {
   };
   console.log(`baseline ${baseline.meta.sha} vs candidate ${candidate.meta.sha}${candidate.meta.dirty ? ' (src dirty)' : ''}`);
   print(`Alpha-epsilon-only differences (<= ${ALPHA_EPSILON})`, epsilon);
+  console.log(`\n## Absent in both captures (not compared): ${absentInBoth.length}`);
+  for (const key of absentInBoth) {
+    console.log(`- ${key}`);
+  }
   print('Real deviations', real);
   return real.length > 0 ? 1 : 0;
 }
@@ -1352,11 +1401,16 @@ async function main(): Promise<void> {
     await capture(args[0] ?? 'theme-parity-capture.json', baseUrl, screenshots);
     return;
   }
+  if (command === 'capture-base') {
+    const sha = takeFlag(args, '--sha') ?? BASE_SHA;
+    captureBase(args[0] ?? 'theme-parity-base.json', sha);
+    return;
+  }
   if (command === 'diff' && args.length === 2) {
     process.exitCode = diff(args[0], args[1]);
     return;
   }
-  console.error('Usage:\n  probe.ts capture [out.json] [--base-url URL] [--screenshots DIR]\n  probe.ts diff <baseline.json> <candidate.json>');
+  console.error('Usage:\n  probe.ts capture [out.json] [--base-url URL] [--screenshots DIR]\n  probe.ts capture-base [out.json] [--sha SHA]\n  probe.ts diff <baseline.json> <candidate.json>');
   process.exitCode = 2;
 }
 
