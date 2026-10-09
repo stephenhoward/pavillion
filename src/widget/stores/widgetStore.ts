@@ -176,10 +176,11 @@ export const useWidgetStore = defineStore('widget', {
      * Writes `--pav-accent-light` and `--pav-accent-dark` from the user-chosen
      * value, and derives `--pav-accent-light-hover` / `--pav-accent-dark-hover`
      * from it: 10% towards black for the light theme and 10% towards white for
-     * the dark theme, the same direction the compiled defaults take
-     * (`$public-accent-hover-*` shift lightness by 5% each way). Left unwritten,
-     * the hover variants would stay at those compiled defaults, so a hovered
-     * button or link would snap to the default orange.
+     * the dark theme, the same direction the compiled defaults take (the
+     * `public-theme-tokens` hover values sit 5% darker and 5% lighter than
+     * their accents). Left unwritten, the hover variants would stay at those
+     * compiled defaults, so a hovered button or link would snap to the
+     * default orange.
      *
      * SECURITY: The accent color MUST reach the DOM only via
      * `element.style.setProperty(...)`. Never interpolate the value into a
@@ -208,9 +209,10 @@ export const useWidgetStore = defineStore('widget', {
     /**
      * Apply the color mode as `data-theme` on the widget document's root.
      *
-     * `light` and `dark` set `<html data-theme="…">`, which the self-guarding
-     * `public-dark-mode` mixin reads: `[data-theme="dark"]` forces the dark
-     * branch, and `[data-theme="light"]` suppresses its OS media-query branch.
+     * `light` and `dark` set `<html data-theme="…">`, which the
+     * `public-theme-tokens` token layer reads: `[data-theme="dark"]` forces
+     * the dark tokens and color-scheme, and `[data-theme="light"]` suppresses
+     * its OS media-query branch.
      * `auto` removes the attribute so that media query follows the visitor's
      * OS preference live, with no JavaScript listener involved.
      *

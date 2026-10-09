@@ -6,18 +6,21 @@ import {
   expectThemedText,
   expectColorSide,
   expectThemedSurface,
+  expectColorScheme,
 } from './helpers/color-mode';
 
 /**
  * E2E Tests: Public site colour mode
  *
- * The public site never sets `data-theme`, so the self-guarding
- * `public-dark-mode` mixin must leave it following the visitor's OS
- * preference exactly as it did before the widget's forced colour mode moved
- * onto `data-theme` (pv-l3my Phase 1). These scenarios pin that: every
- * surface below is asserted in both OS modes, on the calendar page, an event
- * page, the not-found page and the discovery empty state (the shared
- * EmptyState component, whose colours come from the --pav-* token layer).
+ * The public site never sets `data-theme`, so the token layer's dark
+ * branches must leave it following the visitor's OS preference exactly as it
+ * did before the widget's forced colour mode moved onto `data-theme` (pv-l3my
+ * Phase 1). These scenarios pin that: every surface below is asserted in both
+ * OS modes, on the calendar page, an event page, a series page, the open
+ * language switcher, the not-found page and the discovery empty state (the
+ * shared EmptyState component, whose colours come from the --pav-* token
+ * layer). Every step also pins the computed `color-scheme` on `#app`, which
+ * the token layer sets so native controls follow the theme.
  *
  * The `public-*` mixins that read --pav-* tokens (sticky date heading,
  * focus ring, primary button, sidebar card, loading state) each get one
@@ -90,6 +93,7 @@ for (const osScheme of ['light', 'dark'] as const) {
       await expect(page.locator('html[data-theme]')).toHaveCount(0);
 
       await expectThemedSurface(page, '#app', osScheme);
+      await expectColorScheme(page, '#app', osScheme);
       await expectThemedText(page, '.calendar-title', osScheme);
       await expectThemedText(page, '.category-filter-section .filter-label', osScheme);
       // The search/filter bar: the search icon, and the date-range button's
@@ -117,6 +121,7 @@ for (const osScheme of ['light', 'dark'] as const) {
       await expect(page.locator('.instance-title')).toBeVisible({ timeout: 15000 });
 
       await expectThemedSurface(page, '#app', osScheme);
+      await expectColorScheme(page, '#app', osScheme);
       await expectThemedText(page, '.instance-title', osScheme);
       await expectThemedText(page, '.back-link', osScheme);
 
@@ -131,10 +136,33 @@ for (const osScheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape');
     });
 
+    await test.step('series page', async () => {
+      await page.goto(env.baseURL + '/test_calendar/series/summer_festival');
+      await expect(page.locator('.series-header h1')).toBeVisible({ timeout: 15000 });
+
+      await expectColorScheme(page, '#app', osScheme);
+      await expectThemedSurface(page, '.series-detail', osScheme);
+      await expectThemedText(page, '.series-header h1', osScheme);
+    });
+
+    await test.step('language switcher open', async () => {
+      await page.goto(env.baseURL + '/test_calendar');
+      await expect(page.locator('.calendar-title')).toBeVisible({ timeout: 15000 });
+      await page.locator('.language-switcher__trigger').click();
+      await expect(page.locator('.language-switcher__dropdown')).toBeVisible({ timeout: 15000 });
+
+      await expectColorScheme(page, '#app', osScheme);
+      // The dropdown paints its own popover surface over the footer.
+      await expectThemedSurface(page, '.language-switcher__dropdown', osScheme);
+      await expectThemedText(page, '.language-switcher__native-name', osScheme);
+      await page.keyboard.press('Escape');
+    });
+
     await test.step('not-found page', async () => {
       await page.goto(env.baseURL + '/test_calendar/events/00000000-0000-4000-8000-000000000000/20260101-1200');
       await expect(page.locator('.not-found h1')).toBeVisible({ timeout: 15000 });
 
+      await expectColorScheme(page, '#app', osScheme);
       await expectThemedText(page, '.not-found h1', osScheme);
       await expectThemedText(page, '.not-found p', osScheme);
     });
@@ -151,6 +179,7 @@ for (const osScheme of ['light', 'dark'] as const) {
       await page.goto(env.baseURL + '/test_calendar');
       await expect(page.locator('.loading')).toBeVisible({ timeout: 15000 });
 
+      await expectColorScheme(page, '#app', osScheme);
       await expectThemedText(page, '.loading', osScheme);
 
       // Let the held request through and wait for it to land before
@@ -167,6 +196,7 @@ for (const osScheme of ['light', 'dark'] as const) {
       await page.goto(env.baseURL + '/discover');
       await expect(page.locator('.discovery-empty')).toBeVisible({ timeout: 15000 });
 
+      await expectColorScheme(page, '#app', osScheme);
       await expectThemedText(page, '.discovery-empty .ui-empty-state__heading', osScheme);
       await expectThemedText(page, '.discovery-empty p', osScheme);
       await page.unroute(calendarsRoute);

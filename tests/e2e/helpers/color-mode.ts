@@ -128,6 +128,42 @@ export async function expectColorSide(
   ).toBe(side);
 }
 
+/**
+ * Assert that a computed colour of `selector` stands out from the opaque
+ * surface it is painted on by at least `minContrast`, whichever side of
+ * mid-grey either falls. For palettes the page does not choose, such as an
+ * OS forced-colors (high-contrast) theme, where only legibility is ours to
+ * assert.
+ */
+export async function expectLegible(
+  root: LocatorRoot,
+  selector: string,
+  property: 'color' | 'borderTopColor' = 'color',
+  minContrast: number = MIN_TEXT_CONTRAST,
+): Promise<void> {
+  await expect.poll(
+    async () => {
+      const probe = await probeColors(root, selector);
+      const surface = surfaceOf(probe.backdrop);
+      return surface ? contrastRatio(probe[property], surface) : 0;
+    },
+    { message: `${selector} ${property} contrast against its surface`, ...POLL },
+  ).toBeGreaterThanOrEqual(minContrast);
+}
+
+/**
+ * Assert the computed `color-scheme` of `selector`, which the token layer
+ * sets so native controls (scrollbars, date pickers) follow the theme.
+ */
+export async function expectColorScheme(root: LocatorRoot, selector: string, scheme: Theme): Promise<void> {
+  const element = root.locator(selector).first();
+  await expect(element).toBeAttached({ timeout: 15000 });
+  await expect.poll(
+    () => element.evaluate(el => getComputedStyle(el).colorScheme),
+    { message: `${selector} color-scheme`, ...POLL },
+  ).toBe(scheme);
+}
+
 /** Assert the opaque surface under `selector` belongs to `theme`. */
 export async function expectThemedSurface(root: LocatorRoot, selector: string, theme: Theme): Promise<void> {
   await expect.poll(

@@ -33,6 +33,7 @@ import {
   classify,
   isPermittedOutsideSource,
   parseReferences,
+  styleBlocks,
   tokenSection,
   type Reference,
 } from './boundary-scanner';
@@ -241,6 +242,75 @@ describe('src/common/ui boundary: isPermittedOutsideSource', () => {
 });
 
 /**
+ * A TOKENS.md stand-in with both tiers, a subsection under the shared one, and
+ * a fenced example, so the tier checks below never lean on the live document.
+ */
+const FENCE = '```';
+const TOKENS_FIXTURE = [
+  '# Runtime theme tokens',
+  '',
+  FENCE,
+  '## Shared tokens',
+  '| `--pav-fixture-fenced` | client |',
+  FENCE,
+  '',
+  '## Shared tokens',
+  '',
+  '| Token | Name source |',
+  '|---|---|',
+  '| `--pav-fixture-shared` | client |',
+  '| `--pav-fixture-shared-hover` | public |',
+  '',
+  '### A note under the shared tier',
+  '',
+  '## Public-only tokens',
+  '',
+  '| Token | Name source | Reason |',
+  '|---|---|---|',
+  '| `--pav-fixture-public` | public | read only by the site and widget |',
+].join('\n');
+
+describe('src/common/ui boundary: tokenSection', () => {
+  it('reads each tier as the rows under its own heading', () => {
+    expect(tokenSection(TOKENS_FIXTURE, 'Shared tokens')).toEqual(['--pav-fixture-shared', '--pav-fixture-shared-hover']);
+    expect(tokenSection(TOKENS_FIXTURE, 'Public-only tokens')).toEqual(['--pav-fixture-public']);
+  });
+
+  it('ignores a heading and rows inside a code fence', () => {
+    const fencedOnly = [FENCE, '## Shared tokens', '| `--pav-fixture-fenced` | client |', FENCE].join('\n');
+
+    expect(tokenSection(TOKENS_FIXTURE, 'Shared tokens')).not.toContain('--pav-fixture-fenced');
+    expect(() => tokenSection(fencedOnly, 'Shared tokens')).toThrow('no "## Shared tokens" section');
+  });
+
+  it('ends a tier at a demoted heading rather than folding the next tier into it', () => {
+    const demoted = TOKENS_FIXTURE.replace('## Public-only tokens', '### Public-only tokens')
+      .replace('### A note under the shared tier', '');
+
+    expect(tokenSection(demoted, 'Shared tokens')).not.toContain('--pav-fixture-public');
+    expect(() => tokenSection(demoted, 'Public-only tokens')).toThrow('no "## Public-only tokens" section');
+  });
+
+  it('throws on a tier whose heading is present but which records no token', () => {
+    const empty = TOKENS_FIXTURE.replace(/\| `--pav-fixture-public` [^\n]*/, '');
+
+    expect(() => tokenSection(empty, 'Public-only tokens')).toThrow('records no token');
+  });
+});
+
+describe('src/common/ui boundary: styleBlocks', () => {
+  it('returns the text of every <style> block and nothing outside them', () => {
+    const source = [
+      '<template><p style="color: red">x</p></template>',
+      '<style scoped lang="scss">.a { color: var(--pav-text-primary); }</style>',
+      '<style>.b { margin: 0; }</style>',
+    ].join('\n');
+
+    expect(styleBlocks(source)).toBe('.a { color: var(--pav-text-primary); }\n.b { margin: 0; }');
+  });
+});
+
+/**
  * CI safety net: the same rules run against the real src/common/ui and
  * src/server trees. Kept apart from the fixture blocks above, which are what
  * pin each branch; this is what catches a real violation landing.
@@ -270,11 +340,9 @@ describe('src/common/ui boundary: live scan (CI safety net)', () => {
   });
 });
 
-/** The text of every `<style>` block in a `.vue` file. */
-function styleBlocks(filePath: string): string {
-  const source = readFileSync(filePath, 'utf-8');
-
-  return [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(match => match[1]).join('\n');
+/** The text of every `<style>` block in a `.vue` file on disk. */
+function styleOfComponent(filePath: string): string {
+  return styleBlocks(readFileSync(filePath, 'utf-8'));
 }
 
 /** The shared components: every `.vue` file under src/common/ui. */
@@ -282,25 +350,41 @@ function sharedComponents(): string[] {
   return sourceFiles(UI_ROOT).filter(filePath => path.extname(filePath) === '.vue');
 }
 
-/**
- * Token names in TOKENS.md's shared tier: the only names every app declares,
- * and so the only ones a shared component may read.
- */
-function recordedTokens(): Set<string> {
-  const doc = readFileSync(path.join(UI_ROOT, 'TOKENS.md'), 'utf-8');
+/** The live TOKENS.md, for the checks over the real tree. */
+function tokensDoc(): string {
+  return readFileSync(path.join(UI_ROOT, 'TOKENS.md'), 'utf-8');
+}
 
-  return new Set(tokenSection(doc, 'Shared tokens'));
+/**
+ * Token names in a TOKENS.md text's shared tier: the only names every app
+ * declares, and so the only ones a shared component may read. The public-only
+ * tier is never read here — the site and widget declare those names and the
+ * client does not, so a shared component reading one renders unset in the
+ * client. Throws, through tokenSection, when the shared heading is absent.
+ */
+function recordedTokens(docText: string): Set<string> {
+  return new Set(tokenSection(docText, 'Shared tokens'));
+}
+
+/**
+ * Every `var(--pav-*)` a style block reads that `recorded` does not hold, once
+ * per read. The name is captured whole, so a misspelling with an uppercase
+ * letter or an underscore is reported rather than skipped.
+ */
+function unrecordedReads(style: string, recorded: Set<string>): string[] {
+  return [...style.matchAll(/var\(\s*(--pav-[^\s,)]*)/g)]
+    .map(match => match[1])
+    .filter(name => !recorded.has(name));
 }
 
 /**
  * `public-*` mixins a shared component may include: each emits only layout,
  * a media query around the caller's own `@content`, or an alpha mask — no
  * colour and no theme selector. Every other `public-*` mixin in
- * assets/mixins.scss reads a compile-time `$public-*` colour, writes a
- * dark-mode rule (`public-dark-mode`, `public-light-mode-override`), or reads
- * `--pav-*` names from inside the mixin, where the TOKENS.md check below
- * cannot see them. Widen this list only with a mixin whose body meets the
- * same bar.
+ * assets/mixins.scss carries colour as `--pav-*` reads made inside the mixin
+ * body, where the TOKENS.md check below cannot see them, so it is out: the
+ * names it reads are not held to the shared tier. Widen this list only with
+ * a mixin whose body meets the same bar.
  */
 const LAYOUT_ONLY_MIXINS = [
   'public-mobile-only',
@@ -329,7 +413,10 @@ function disallowedMixinIncludes(style: string): string[] {
  * Every theme selector or colour-scheme query in a style block. A shared
  * component's tokens already switch under the mounting app's theme selector,
  * so any of these is a shared component reading the wrong value. Like the
- * import scan, this does not strip comments.
+ * import scan, this does not strip comments. It deliberately checks a subset
+ * (data-theme and prefers-color-scheme, in shared components only);
+ * scripts/check-theme-tokens.ts is the canonical tree-wide check, and also
+ * covers color-scheme and light-dark().
  */
 function themeSelectors(style: string): string[] {
   return [...style.matchAll(/data-theme|prefers-color-scheme/g)].map(match => match[0]);
@@ -339,29 +426,35 @@ function themeSelectors(style: string): string[] {
  * A shared component is compiled once and mounted by every app, so its styles
  * may only read values each app supplies at runtime. A `$public-*` variable is
  * resolved at build time to the site and widget palette and cannot follow the
- * client's theme; a `--pav-*` name missing from TOKENS.md is one some app does
- * not declare.
+ * client's theme; a `--pav-*` name missing from TOKENS.md's shared tier is one
+ * some app does not declare.
+ *
+ * The tree-wide theme guard, scripts/check-theme-tokens.ts, is the canonical
+ * check for colour variables and theme selectors across the site, widget and
+ * this module, and it overlaps the checks below on purpose. This file keeps
+ * its module-specific checks — shared-tier token names, the layout-only mixin
+ * allowlist, no `$public-*` variable of any family, no theme selector — because
+ * a shared component is held to a tighter contract than the rest of the tree:
+ * what the guard permits a site component, it may still forbid here.
  */
 describe('src/common/ui styling contract', () => {
   it('finds the shared components it guards', () => {
     expect(sharedComponents().length).toBeGreaterThan(0);
-    expect(recordedTokens()).toContain('--pav-text-primary');
+    expect(recordedTokens(tokensDoc())).toContain('--pav-text-primary');
   });
 
   it('reads no $public-* variable in a shared component style block', () => {
     const offenders = sharedComponents()
-      .filter(filePath => styleBlocks(filePath).includes('$public-'))
+      .filter(filePath => styleOfComponent(filePath).includes('$public-'))
       .map(filePath => path.relative(SOURCE_ROOT, filePath));
 
     expect(offenders).toEqual([]);
   });
 
-  it('reads only --pav-* names recorded in TOKENS.md', () => {
-    const recorded = recordedTokens();
+  it('reads only --pav-* names recorded in TOKENS.md\'s shared tier', () => {
+    const recorded = recordedTokens(tokensDoc());
     const offenders = sharedComponents().flatMap(filePath =>
-      [...styleBlocks(filePath).matchAll(/var\(\s*(--pav-[a-z0-9-]+)/g)]
-        .map(match => match[1])
-        .filter(name => !recorded.has(name))
+      unrecordedReads(styleOfComponent(filePath), recorded)
         .map(name => `${path.relative(SOURCE_ROOT, filePath)} -> ${name}`));
 
     expect(offenders).toEqual([]);
@@ -369,7 +462,7 @@ describe('src/common/ui styling contract', () => {
 
   it('includes no public-* mixin outside the layout-only allowlist', () => {
     const offenders = sharedComponents().flatMap(filePath =>
-      disallowedMixinIncludes(styleBlocks(filePath))
+      disallowedMixinIncludes(styleOfComponent(filePath))
         .map(name => `${path.relative(SOURCE_ROOT, filePath)} -> @include ${name}`));
 
     expect(offenders).toEqual([]);
@@ -377,19 +470,42 @@ describe('src/common/ui styling contract', () => {
 
   it('writes no dark-mode rule', () => {
     const offenders = sharedComponents().flatMap(filePath =>
-      themeSelectors(styleBlocks(filePath))
+      themeSelectors(styleOfComponent(filePath))
         .map(selector => `${path.relative(SOURCE_ROOT, filePath)} -> ${selector}`));
 
     expect(offenders).toEqual([]);
   });
 
   describe('detectors, against injected violations', () => {
-    it('flag a public-* colour or dark-mode mixin however it is namespaced', () => {
+    it('read the shared tier only, and throw without its heading', () => {
+      const recorded = recordedTokens(TOKENS_FIXTURE);
+
+      expect([...recorded]).toEqual(['--pav-fixture-shared', '--pav-fixture-shared-hover']);
+      expect(recorded.has('--pav-fixture-public')).toBe(false);
+      expect(() => recordedTokens(TOKENS_FIXTURE.replace(/^## Shared tokens$/gm, '## Common tokens')))
+        .toThrow('no "## Shared tokens" section');
+    });
+
+    it('flag a public-only name in a shared component and let a shared name through', () => {
+      const style = '.a { color: var(--pav-fixture-shared); background: var( --pav-fixture-public, transparent); }';
+
+      expect(unrecordedReads(style, recordedTokens(TOKENS_FIXTURE))).toEqual(['--pav-fixture-public']);
+    });
+
+    it('flag a misspelled read whatever characters it uses', () => {
+      const style = '.a { color: var(--pav-Fixture-shared); border-color: var(--pav-fixture_shared); }';
+
+      expect(unrecordedReads(style, recordedTokens(TOKENS_FIXTURE)))
+        .toEqual(['--pav-Fixture-shared', '--pav-fixture_shared']);
+    });
+
+    it('flag a non-layout public-* mixin however it is namespaced or called', () => {
       expect(disallowedMixinIncludes('.a { @include public-empty-state; }')).toEqual(['public-empty-state']);
       expect(disallowedMixinIncludes('.a { @include mixins.public-button-base; }')).toEqual(['public-button-base']);
-      expect(disallowedMixinIncludes('.a { @include public-dark-mode { color: red; } }')).toEqual(['public-dark-mode']);
-      expect(disallowedMixinIncludes('.a { @include public-light-mode-override { color: red; } }'))
-        .toEqual(['public-light-mode-override']);
+      expect(disallowedMixinIncludes('.a { @include public-fixture-colour { color: red; } }'))
+        .toEqual(['public-fixture-colour']);
+      expect(disallowedMixinIncludes('.a { @include mixins.public-fixture-colour { color: red; } }'))
+        .toEqual(['public-fixture-colour']);
     });
 
     it('let every allowlisted layout mixin through', () => {

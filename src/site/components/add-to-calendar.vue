@@ -49,7 +49,7 @@ function handleDownload() {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .add-to-calendar-btn {
   display: flex;

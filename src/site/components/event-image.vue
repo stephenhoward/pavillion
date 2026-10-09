@@ -183,7 +183,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // IMAGE COMPONENT
@@ -218,12 +218,7 @@ onUnmounted(() => {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
-
-    // No token carries the inset vignette; it deepens in dark mode.
-    @include public-dark-mode {
-      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.15);
-    }
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, calc(0.06 * var(--pav-vignette-gain)));
   }
 }
 
@@ -273,12 +268,7 @@ onUnmounted(() => {
 
   .image-vignette {
     border-radius: $public-radius-lg;
-    box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.08);
-
-    // No token carries the inset vignette; it deepens in dark mode.
-    @include public-dark-mode {
-      box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.2);
-    }
+    box-shadow: inset 0 0 60px rgba(0, 0, 0, calc(0.08 * var(--pav-vignette-gain)));
   }
 
   @include public-mobile-only {
@@ -303,12 +293,7 @@ onUnmounted(() => {
 
   .image-vignette {
     border-radius: $public-radius-xl;
-    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.1);
-
-    // No token carries the inset vignette; it deepens in dark mode.
-    @include public-dark-mode {
-      box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.25);
-    }
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, calc(0.1 * var(--pav-vignette-gain)));
   }
 
   @include public-mobile-only {
@@ -339,21 +324,8 @@ onUnmounted(() => {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: linear-gradient(
-      135deg,
-      rgba(0, 0, 0, 0.06) 0%,
-      rgba(0, 0, 0, 0.02) 100%
-    );
+    background: var(--pav-loading-pulse-gradient);
     animation: gentle-pulse 1.8s ease-in-out infinite;
-
-    // No token carries the pulse gradient; it lightens in dark mode.
-    @include public-dark-mode {
-      background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.08) 0%,
-        rgba(255, 255, 255, 0.03) 100%
-      );
-    }
   }
 }
 

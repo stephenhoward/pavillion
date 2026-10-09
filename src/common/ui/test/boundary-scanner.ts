@@ -1,13 +1,19 @@
 /**
- * The import classifier behind boundary.test.ts, and the heading-scoped
- * TOKENS.md section parser the token tests share.
+ * The import classifier behind boundary.test.ts, plus the style-text helpers
+ * the token tests and the tree-wide theme guard (scripts/check-theme-tokens.ts)
+ * share: the heading-scoped TOKENS.md section parser, the `.vue` style-block
+ * extractors, the Sass comment stripper, the brace-matched block extractor and
+ * the enclosing-selector reader.
  *
  * Kept apart from the test so every branch can be driven by an inline fixture
  * rather than only by whatever the live tree happens to contain. No function
  * here reads a file: a path is only resolved against SOURCE_ROOT (fixed from
  * the working directory at load), so a fixture may name a file that does not
- * exist. It backs that one guard and nothing else, which is why it lives beside
- * the test rather than under scripts/ as a CLI.
+ * exist.
+ *
+ * The text helpers live here rather than in the guard because this module's
+ * tests may not import from outside `src/` (the relative-escape rule below),
+ * while scripts/ is not boundary-scanned and may import from here.
  */
 import path from 'path';
 
@@ -124,31 +130,205 @@ export function classify(filePath: string, specifier: string): Target {
   return { kind: 'package', name: packageRoot(specifier) };
 }
 
+/** A Markdown code-fence delimiter line. */
+const FENCE_LINE = /^\s*(```|~~~)/;
+
+/** `lines` with every fenced code block, delimiters included, removed. */
+function unfenced(lines: string[]): string[] {
+  let inFence = false;
+
+  return lines.filter(line => {
+    if (FENCE_LINE.test(line)) {
+      inFence = !inFence;
+      return false;
+    }
+    return !inFence;
+  });
+}
+
 /**
  * The token names TOKENS.md records under one `## <heading>`: the backticked
  * `--pav-*` first cell of every table row between that heading and the next
- * `## ` heading.
+ * heading of any level. A tier's table sits directly under its heading, ahead
+ * of any subsection.
  *
  * Scoped by heading rather than by row shape, so a tier is read as a tier and
- * a row moved between sections changes the answer. Throws when the heading is
- * absent, so a renamed section fails loudly instead of reading as an empty
- * tier that every check passes against.
+ * a row moved between sections changes the answer. Every way the scoping can
+ * go wrong fails closed rather than open:
+ *
+ * - The heading absent, renamed, or demoted below `##` throws, so a renamed
+ *   section does not read as an empty tier that every check passes against.
+ * - The section ends at a heading of any level, so a demoted next-tier heading
+ *   cuts this tier short — which the tier-coverage checks catch — instead of
+ *   folding the next tier's rows into it.
+ * - Fenced code is skipped, so an example in a fence can neither stand in for
+ *   the heading nor add rows.
+ * - A section that records no token throws, as an absent one does.
  */
 export function tokenSection(docText: string, heading: string): string[] {
-  const lines = docText.split('\n');
+  const lines = unfenced(docText.split('\n'));
   const start = lines.findIndex(line => line.trim() === `## ${heading}`);
   if (start === -1) {
     throw new Error(`TOKENS.md has no "## ${heading}" section`);
   }
 
   const rest = lines.slice(start + 1);
-  const next = rest.findIndex(line => /^## /.test(line));
+  const next = rest.findIndex(line => /^#{1,6}\s/.test(line));
   const section = next === -1 ? rest : rest.slice(0, next);
 
-  return section
+  const tokens = section
     .map(line => line.match(/^\|\s*`(--pav-[a-z0-9-]+)`\s*\|/))
     .filter((match): match is RegExpMatchArray => match !== null)
     .map(match => match[1]);
+  if (tokens.length === 0) {
+    throw new Error(`TOKENS.md's "## ${heading}" section records no token`);
+  }
+
+  return tokens;
+}
+
+/** A `.vue` `<style>` block: the opening tag, then the block's text in group 1. */
+const STYLE_BLOCK = /(<style\b[^>]*>)([\s\S]*?)<\/style>/g;
+
+/**
+ * The text of every `<style>` block in a `.vue` source, joined by newlines.
+ * Script and template are dropped, so a style check never reads them.
+ */
+export function styleBlocks(source: string): string {
+  return [...source.matchAll(STYLE_BLOCK)].map(match => match[2]).join('\n');
+}
+
+/**
+ * A `.vue` source with everything outside its `<style>` blocks blanked: every
+ * character but a newline becomes a space. Script, template and the style tags
+ * themselves read as whitespace, while every style character keeps its offset
+ * and line, so a match can be reported at its line in the file.
+ */
+export function styleBlocksInPlace(source: string): string {
+  const blank = (text: string) => text.replace(/[^\n]/g, ' ');
+  let result = '';
+  let cursor = 0;
+  for (const match of source.matchAll(STYLE_BLOCK)) {
+    const bodyStart = match.index! + match[1].length;
+    result += blank(source.slice(cursor, bodyStart)) + match[2];
+    cursor = bodyStart + match[2].length;
+  }
+  return result + blank(source.slice(cursor));
+}
+
+/**
+ * Sass source with its comments blanked: `/* *\/` and `//`-to-end-of-line
+ * become spaces, newlines kept, so offsets and line numbers survive. A quoted
+ * string and the inside of an unquoted `url(...)` are copied as they are, so
+ * `url(http://x)` or `content: "//"` does not swallow the rest of its line.
+ */
+export function stripStyleComments(source: string): string {
+  const blank = (text: string) => text.replace(/[^\n]/g, ' ');
+  let out = '';
+  let i = 0;
+
+  /** Copies the quoted string opening at `i`, escapes included. */
+  const copyString = () => {
+    const quote = source[i];
+    let j = i + 1;
+    while (j < source.length && source[j] !== quote && source[j] !== '\n') {
+      j += source[j] === '\\' ? 2 : 1;
+    }
+    out += source.slice(i, j + 1);
+    i = j + 1;
+  };
+
+  while (i < source.length) {
+    const char = source[i];
+    const next = source[i + 1];
+    if (char === '/' && next === '*') {
+      const close = source.indexOf('*/', i + 2);
+      const end = close === -1 ? source.length : close + 2;
+      out += blank(source.slice(i, end));
+      i = end;
+    }
+    else if (char === '/' && next === '/') {
+      const newline = source.indexOf('\n', i);
+      const end = newline === -1 ? source.length : newline;
+      out += blank(source.slice(i, end));
+      i = end;
+    }
+    else if (char === '"' || char === '\'') {
+      copyString();
+    }
+    else if (/^url\(/i.test(source.slice(i, i + 4)) && !/[\w-]/.test(source[i - 1] ?? '')) {
+      out += source.slice(i, i + 4);
+      i += 4;
+      while (i < source.length && source[i] !== ')') {
+        if (source[i] === '"' || source[i] === '\'') {
+          copyString();
+        }
+        else {
+          out += source[i++];
+        }
+      }
+    }
+    else {
+      out += char;
+      i++;
+    }
+  }
+  return out;
+}
+
+/** A brace-delimited block: its body, and the span of the whole block. */
+export interface NamedBlock {
+  body: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Finds the block opened by `header` at the start of a line in `source` and
+ * returns its body plus the span of the whole block. Anchoring to the line
+ * start keeps a mention of the header in prose from matching. Pass source with
+ * comments stripped: `#{...}` interpolations are balanced, so brace counting is
+ * then enough. Throws rather than returning an empty body, so a renamed mixin
+ * or branch fails loudly instead of passing vacuously. `where` names `source`
+ * in that error.
+ */
+export function namedBlock(source: string, header: string, where: string): NamedBlock {
+  const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const found = new RegExp(`^[ \\t]*${escaped}\\s*\\{`, 'm').exec(source);
+  if (!found) {
+    throw new Error(`No "${header} {" found at the start of a line in ${where}`);
+  }
+  const start = found.index;
+  const open = start + found[0].length - 1;
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    if (source[i] === '}') depth--;
+    if (depth === 0) {
+      return { body: source.slice(open + 1, i), start, end: i + 1 };
+    }
+  }
+  throw new Error(`Unbalanced braces in "${header}" in ${where}`);
+}
+
+/**
+ * The selector of the rule enclosing `index`: scan back to the unmatched `{`,
+ * then back again to the previous `;`, `{` or `}`. Empty at the top level.
+ */
+export function enclosingSelector(source: string, index: number): string {
+  let depth = 0;
+  for (let i = index - 1; i >= 0; i--) {
+    if (source[i] === '}') depth++;
+    if (source[i] === '{') {
+      if (depth === 0) {
+        const head = source.slice(0, i);
+        const from = Math.max(head.lastIndexOf(';'), head.lastIndexOf('{'), head.lastIndexOf('}'));
+        return head.slice(from + 1).trim();
+      }
+      depth--;
+    }
+  }
+  return '';
 }
 
 /** Whether a file is one of this module's own tests. */

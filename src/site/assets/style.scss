@@ -8,7 +8,7 @@
 // Created: 2025-12-14
 // ================================================================
 
-@use './mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 @use '@/common/ui/assets/fonts';
 
 // ===== GLOBAL RESETS =====
@@ -53,17 +53,12 @@ button.primary {
   flex-direction: column;
   justify-content: flex-start;
   min-height: 100vh;
-  background: $public-bg-primary-light;
-  color: $public-text-primary-light;
+  background: var(--pav-surface-primary);
+  color: var(--pav-text-primary);
 
-  // Last among the declarations: the mixin ends in a nested dark-mode rule,
+  // Last among the declarations: the mixin ends in its two dark-branch rules,
   // and a declaration after a nested rule makes Sass split this one.
   @include public-theme-tokens;
-
-  @media (prefers-color-scheme: dark) {
-    background: $public-bg-primary-dark;
-    color: $public-text-primary-dark;
-  }
 
   & > div {
     padding: $public-space-md;
@@ -89,11 +84,7 @@ button.primary {
   footer {
     padding: $public-space-md;
     flex: 0 0 auto;
-    border-top: 1px solid $public-border-subtle-light;
-
-    @media (prefers-color-scheme: dark) {
-      border-top-color: $public-border-subtle-dark;
-    }
+    border-top: 1px solid var(--pav-border-subtle);
 
     div.logo {
       display: flex;
@@ -101,7 +92,7 @@ button.primary {
       justify-content: center;
       font-size: $public-font-size-sm;
       text-align: center;
-      color: $public-text-secondary-light;
+      color: var(--pav-text-secondary);
 
       a {
         color: inherit;
@@ -110,31 +101,19 @@ button.primary {
         gap: $public-space-sm;
 
         &:hover {
-          color: $public-accent-hover-light;
-        }
-      }
-
-      @media (prefers-color-scheme: dark) {
-        color: $public-text-secondary-dark;
-
-        a:hover {
-          color: $public-accent-hover-dark;
+          color: var(--pav-accent-hover);
         }
       }
     }
 
     div.pavillion-logo {
       display: inline-block;
-      background-color: $public-text-primary-light;
+      background-color: var(--pav-text-primary);
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-image: url('../../client/assets/pavillion-logo.svg');
       width: 24px;
       height: 24px;
-
-      @media (prefers-color-scheme: dark) {
-        background-color: $public-text-primary-dark;
-      }
     }
 
     @include public-tablet-up {
@@ -153,11 +132,7 @@ h5,
 h6 {
   font-family: $public-font-family;
   margin-top: 0;
-  color: $public-text-primary-light;
-
-  @media (prefers-color-scheme: dark) {
-    color: $public-text-primary-dark;
-  }
+  color: var(--pav-text-primary);
 }
 
 h1 {
@@ -193,31 +168,19 @@ p {
   font-weight: $public-font-weight-regular;
   font-size: $public-font-size-base;
   line-height: $public-line-height-relaxed;
-  color: $public-text-primary-light;
-
-  @media (prefers-color-scheme: dark) {
-    color: $public-text-primary-dark;
-  }
+  color: var(--pav-text-primary);
 }
 
 // ===== LINK STYLES =====
 
 a {
-  color: $public-accent-light;
+  color: var(--pav-accent);
   text-decoration: none;
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-accent-hover-light;
+    color: var(--pav-accent-hover);
     text-decoration: underline;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: $public-accent-dark;
-
-    &:hover {
-      color: $public-accent-hover-dark;
-    }
   }
 }
 

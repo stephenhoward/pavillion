@@ -257,7 +257,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .category-pill-selector-wrapper {
   position: relative;
@@ -292,21 +292,12 @@ onUnmounted(() => {
   z-index: 2;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: var(--pav-surface-scroll-arrow-hover);
     color: var(--pav-text-primary);
   }
 
   &:active {
     transform: scale(0.95);
-  }
-
-  // No token carries this hover fill: --pav-interactive-hover resolves to the
-  // same value as the arrow's resting --pav-surface-tertiary, so using it would
-  // erase the hover feedback.
-  @include public-dark-mode {
-    &:hover {
-      background-color: rgba(255, 255, 255, 0.14);
-    }
   }
 }
 
@@ -347,7 +338,7 @@ onUnmounted(() => {
   gap: $public-space-xs;
 
   &:focus:not(:disabled) {
-    outline: 2px solid rgba(0, 0, 0, 0.4);
+    outline: 2px solid var(--pav-border-filter-pill-focus);
     outline-offset: 1px;
     z-index: 1;
   }
@@ -372,13 +363,6 @@ onUnmounted(() => {
     font-weight: $public-font-weight-bold;
     line-height: 1;
     opacity: 0.9;
-  }
-
-  // No token carries this focus outline: --pav-border-strong is fainter.
-  @include public-dark-mode {
-    &:focus:not(:disabled) {
-      outline-color: rgba(255, 255, 255, 0.4);
-    }
   }
 }
 

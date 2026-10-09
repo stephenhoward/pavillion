@@ -23,7 +23,7 @@ Theme support spans two distinct authoring layers, and each layer has its own pa
 
 | Layer | Where it lives | Pattern |
 | --- | --- | --- |
-| **Token-definition layer** | `src/client/assets/style/tokens/*.scss`, `src/client/assets/style/themes/*.scss` | **Dual mechanism**: `:root` + `[data-theme="dark"]` + `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` |
+| **Token-definition layer** | Client: `src/client/assets/style/tokens/*.scss`, `src/client/assets/style/themes/*.scss`. Site and widget: `public-theme-tokens` in `src/common/ui/assets/mixins.scss` (see [Site and Widget](#site-and-widget)) | **Dual mechanism**. Client: `:root` + `[data-theme="dark"]` + `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])`. Site and widget: the base block on the include element (`#app` / `.widget-root`) + `[data-theme="dark"] &` + `@media (prefers-color-scheme: dark) { :where(:root:not([data-theme="light"])) & }`, both dark branches including `_public-theme-dark-values` |
 | **Component-style layer** | `src/client/assets/style/components/*.scss`, `.vue` `<style>` blocks | `var(--pav-*)` references only -- **no `@media` blocks** |
 
 The rest of this doc is split along that boundary: the token-definition section documents the dual mechanism, and the component-style section (Correct Usage + Anti-Patterns) documents the "semantic tokens only, no `@media`" rule.
@@ -167,8 +167,13 @@ No `@media (prefers-color-scheme: dark)` blocks needed when using semantic token
 }
 ```
 
+## Site and Widget
+
+The site and widget have their own token-definition layer, under [DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md) rule 10. Every dark value lives in one place: the private `_public-theme-dark-values` mixin in `src/common/ui/assets/mixins.scss`. The `public-theme-tokens` mixin declares the light values and `color-scheme: light`, and it includes the helper under the same dual selector as the client (`[data-theme="dark"]`, and `prefers-color-scheme: dark` unless `data-theme="light"`). It is included only on `#app` (site) and `.widget-root` (widget). It also emits `color-scheme`, so native controls switch with the colours around them.
+
+Site and widget components are component-style layer only. They read `var(--pav-*)` (names in `src/common/ui/TOKENS.md`) and write no `[data-theme]` selector, `prefers-color-scheme` query, `color-scheme` declaration or `light-dark(`. `scripts/check-theme-tokens.ts`, part of `npm run lint`, fails on any of them outside the token layer. A new theme-varying value means adding a token to TOKENS.md and to both halves of the token layer, not a dark block in the component.
+
 ## Known Drift
 
 - Some components may use base color tokens (e.g., `--pav-color-gray-*`) instead of semantic surface/text tokens
 - Older components that predate the theme system may have hardcoded colors
-- The site app may have components that don't fully support dark mode

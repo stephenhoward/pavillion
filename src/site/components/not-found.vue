@@ -14,7 +14,7 @@ const { t } = useTranslation('system');
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .not-found {
   display: flex;

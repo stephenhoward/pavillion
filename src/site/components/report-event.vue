@@ -378,15 +378,16 @@ defineExpose({ open, close });
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // REPORT EVENT DIALOG (Site / Anonymous)
 // ================================================================
 // A modal dialog for anonymous visitors to report an event.
 // Uses the native <dialog> element for built-in accessibility.
-// Uses the public site mixin-based design system for theming.
-// Only component-specific layout styles remain here.
+// Colours and shadows read the runtime --pav-* theme tokens, which
+// switch between light and dark themselves; the shared mixins supply
+// layout and base styles (inputs, buttons, focus, error state).
 // ================================================================
 
 .report-dialog {
@@ -399,6 +400,7 @@ defineExpose({ open, close });
   margin: 0;
   border: none;
   background: transparent;
+  color: var(--pav-text-primary);
   overflow: auto;
 
   &::backdrop {
@@ -413,14 +415,9 @@ defineExpose({ open, close });
   padding: $public-space-xl;
   width: 100%;
   max-width: 480px;
-  background: $public-bg-primary-light;
+  background: var(--pav-surface-primary);
   border-radius: $public-radius-md;
-  box-shadow: $public-shadow-xl-light;
-
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    box-shadow: $public-shadow-xl-dark;
-  }
+  box-shadow: var(--pav-shadow-xl);
 
   @include public-mobile-only {
     margin: $public-space-lg;
@@ -434,21 +431,13 @@ defineExpose({ open, close });
   align-items: center;
   margin-block-end: $public-space-xl;
   padding-block-end: $public-space-md;
-  border-block-end: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-block-end-color: $public-border-subtle-dark;
-  }
+  border-block-end: 1px solid var(--pav-border-subtle);
 
   h2 {
     margin: 0;
     font-size: $public-font-size-lg;
     font-weight: $public-font-weight-semibold;
-    color: $public-text-primary-light;
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
+    color: var(--pav-text-primary);
   }
 }
 
@@ -457,7 +446,7 @@ defineExpose({ open, close });
   border: none;
   font-size: $public-font-size-xl;
   line-height: 1;
-  color: $public-text-secondary-light;
+  color: var(--pav-text-secondary);
   cursor: pointer;
   padding: $public-space-xs;
   min-width: 44px;
@@ -465,19 +454,11 @@ defineExpose({ open, close });
   transition: $public-transition-fast;
 
   &:hover {
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
   }
 
   &:focus-visible {
     @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-
-    &:hover {
-      color: $public-text-primary-dark;
-    }
   }
 }
 
@@ -493,13 +474,9 @@ defineExpose({ open, close });
 
   p {
     font-size: $public-font-size-md;
-    color: $public-success-light;
+    color: var(--pav-success);
     margin: 0 0 $public-space-xl 0;
     line-height: $public-line-height-relaxed;
-
-    @include public-dark-mode {
-      color: $public-success-dark;
-    }
   }
 }
 
@@ -510,19 +487,11 @@ defineExpose({ open, close });
     display: block;
     font-size: $public-font-size-sm;
     font-weight: $public-font-weight-medium;
-    color: $public-text-primary-light;
+    color: var(--pav-text-primary);
     margin-block-end: $public-space-xs;
 
     span {
-      color: $public-error-light;
-
-      @include public-dark-mode {
-        color: $public-error-dark;
-      }
-    }
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
+      color: var(--pav-text-error);
     }
   }
 
@@ -534,21 +503,12 @@ defineExpose({ open, close });
     box-sizing: border-box;
 
     &[aria-invalid="true"] {
-      border-color: $public-error-light;
-      outline-color: $public-error-light;
+      border-color: var(--pav-border-error);
+      outline-color: var(--pav-border-error);
 
       &:focus {
-        outline-color: $public-error-light;
+        outline-color: var(--pav-border-error);
         border-color: transparent;
-      }
-
-      @include public-dark-mode {
-        border-color: $public-error-dark;
-        outline-color: $public-error-dark;
-
-        &:focus {
-          outline-color: $public-error-dark;
-        }
       }
     }
   }
@@ -568,40 +528,24 @@ defineExpose({ open, close });
   display: block;
   margin-block-start: $public-space-xs;
   font-size: $public-font-size-xs;
-  color: $public-error-light;
-
-  @include public-dark-mode {
-    color: $public-error-dark;
-  }
+  color: var(--pav-text-error);
 }
 
 .report-dialog__help {
   margin: $public-space-xs 0 0 0;
   font-size: $public-font-size-xs;
-  color: $public-text-tertiary-light;
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-  }
+  color: var(--pav-text-muted);
 }
 
 .report-dialog__char-counter {
   margin: $public-space-xs 0 0 0;
   font-size: $public-font-size-xs;
-  color: $public-text-tertiary-light;
+  color: var(--pav-text-muted);
   text-align: end;
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-  }
 }
 
 .report-dialog__char-counter--warning {
-  color: $public-error-light;
-
-  @include public-dark-mode {
-    color: $public-error-dark;
-  }
+  color: var(--pav-text-error);
 }
 
 .report-dialog__actions {
@@ -610,11 +554,7 @@ defineExpose({ open, close });
   gap: $public-space-md;
   margin-block-start: $public-space-xl;
   padding-block-start: $public-space-lg;
-  border-block-start: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-block-start-color: $public-border-subtle-dark;
-  }
+  border-block-start: 1px solid var(--pav-border-subtle);
 }
 
 .report-dialog__btn {

@@ -5,11 +5,11 @@ The `--pav-*` custom properties the frontend apps declare at runtime, in two tie
 - **Shared tokens** are declared by every app — the site and widget through `public-theme-tokens`, the client through its own theme layer. They are the only names a shared component under `src/common/ui` may read (`test/boundary.test.ts` enforces that).
 - **Public-only tokens** are declared by `public-theme-tokens` alone, for the site's and widget's own components. A shared component may not read them: the client does not declare them, so the component would render unstyled there.
 
-Look a name up here when moving a call site off `$public-*` or off a literal dark block, and do not guess it. A value that varies by theme or by host is a runtime token; a value that does not stays a compile-time `$public-*` constant in `assets/mixins.scss`.
+Look a name up here before writing a theme-varying value, and do not guess it. A value that varies by theme or by host is a runtime token; a value that does not stays a compile-time `$public-*` constant in `assets/mixins.scss` ([DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md) rule 10, enforced by `scripts/check-theme-tokens.ts`).
 
 ## Site and widget
 
-`public-theme-tokens` in `assets/mixins.scss` is the one site/widget declaration site. Its base block declares every token with its light value, plus `color-scheme: light`. The private `_public-theme-dark-values` mixin beside it declares every dark value, plus `color-scheme: dark`, with no selector of its own; `public-theme-tokens` includes it under both dark branches — `[data-theme="dark"]`, and `prefers-color-scheme: dark` unless `data-theme="light"` — the same dual selector the client's theme layer uses. Each dark value is therefore written once. `test/public-theme-tokens.test.ts` fails if a `$public-<base>-light` / `-dark` pair has no token.
+`public-theme-tokens` in `assets/mixins.scss` is the one site/widget declaration site. Its base block declares every token with its light value, plus `color-scheme: light`. The private `_public-theme-dark-values` mixin beside it declares every dark value, plus `color-scheme: dark`, with no selector of its own; `public-theme-tokens` includes it under both dark branches — `[data-theme="dark"]`, and `prefers-color-scheme: dark` unless `data-theme="light"` — the same dual selector the client's theme layer uses. Each dark value is therefore written once. `test/public-theme-tokens.test.ts` fails if a row of either table below is missing from the base block or the helper, if the base block declares a name neither table records (the four fixed accent properties apart), if a dark value is written anywhere but the helper or either dark branch stops including it, or if site, widget or shared style reads a `var(--pav-*)` the base block does not declare.
 
 ### Where the tokens live
 
@@ -21,7 +21,7 @@ In the widget, `.widget-root` owns the token layer because it is also where `wid
 
 ### color-scheme
 
-`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. Until the widget's own `.widget-root` color-scheme block in `src/widget/components/app.vue` is removed, that block comes later in source and still decides the widget's value. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
+`color-scheme` is emitted by the token layer, beside the tokens, so native controls inside `#app` and `.widget-root` — date inputs, selects, autofill, the scrollbars of scrolling elements — switch under the same selector that switches the colours around them. It lands on the include element, not the document root, so the viewport scrollbar and the page canvas follow `:root` and stay light; that is not a regression. The token layer is the only place in the site, the widget and `src/common/ui` that may set it.
 
 ### Naming rule
 
@@ -38,7 +38,7 @@ Apply these in order when a theme-varying value needs a token:
 4. **No collisions.** A public-only name may not equal any name the client declares anywhere, in its theme tier or under `tokens/`.
 5. **Promotion.** A public-only token becomes shared by declaring it in the client's theme layer and moving its row to the shared table. Until then, a shared component never reads it.
 
-The four fixed-mode accent properties — `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` — are in neither tier. They are the widget's runtime override surface and keep their names; existing site and widget components read them directly. New call sites should read the theme-switched `--pav-accent` / `--pav-accent-hover` instead.
+The four fixed-mode accent properties — `--pav-accent-light`, `--pav-accent-light-hover`, `--pav-accent-dark`, `--pav-accent-dark-hover` — are in neither tier. They are the widget's runtime override surface and keep their names. Only the token layer (which declares their compiled defaults and reads them into `--pav-accent` / `--pav-accent-hover`) and `widgetStore.injectAccentColor` (which writes them inline) touch them; components read the theme-switched `--pav-accent` / `--pav-accent-hover`.
 
 ## Shared tokens
 
@@ -115,7 +115,7 @@ The event-image vignette darkens more in dark mode, and every dark alpha is exac
 
 ## Client mappings
 
-The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` checks that the client declares them, but today only for the shared tokens derived from a `$public-*` pair; the check becomes driven by the shared table in the next change.
+The client does not use the mixin. Its theme layer declares every shared token: `themes/_light.scss` in `:root`, `themes/_dark.scss` under the same dual selector, and the shadow scale in `tokens/_shadows.scss`. `test/public-theme-tokens.test.ts` checks that it declares every row of the shared table, and that no public-only name is declared anywhere in the client's style tree.
 
 A shared token whose name source is **client** is the client's own theme token. The client's components do not use the shared tokens with a **public** name source, so the theme layer declares them only for shared components, each mapped onto an existing client value. None of these mappings changes a value the client already declared.
 

@@ -313,7 +313,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
 </template>
 
 <style scoped lang="scss">
-@use '@/site/assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 // ================================================================
 // EVENT DETAIL BODY
@@ -366,16 +366,11 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   gap: $public-space-sm;
   padding: $public-space-xs $public-space-md;
   border-radius: $public-radius-full;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: var(--pav-recurrence-badge-bg);
   color: var(--pav-text-primary);
   font-size: $public-font-size-sm;
   font-weight: $public-font-weight-medium;
   margin-bottom: $public-space-md;
-
-  // The translucent badge fill has no token.
-  @include public-dark-mode {
-    background-color: rgba(30, 30, 35, 0.85);
-  }
 }
 
 // ================================================================

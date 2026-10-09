@@ -185,7 +185,7 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/site/assets/mixins' as *;
+@use '@/common/ui/assets/mixins' as *;
 
 .event-detail-overlay {
   background: var(--pav-surface-primary);
