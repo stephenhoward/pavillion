@@ -1181,7 +1181,8 @@ onUnmounted(() => {
             background-color: var(--pav-surface-field-focus);
           }
 
-          // Style the calendar picker icon
+          // Style the calendar picker icon. Its ink follows the color-scheme
+          // the token layer sets, so dark mode needs no filter here.
           &::-webkit-calendar-picker-indicator {
             cursor: pointer;
             opacity: 0.5;
@@ -1189,10 +1190,6 @@ onUnmounted(() => {
 
             &:hover {
               opacity: 0.8;
-            }
-
-            @include public-dark-mode {
-              filter: invert(1);
             }
           }
         }

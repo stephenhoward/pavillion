@@ -220,18 +220,4 @@ watch(() => route.fullPath, (newPath) => {
     height: 16px;
   }
 }
-
-// Native controls follow the widget's color mode: the OS preference under
-// `auto` (no data-theme), the forced mode otherwise.
-.widget-root {
-  color-scheme: light dark;
-
-  [data-theme="light"] & {
-    color-scheme: light;
-  }
-
-  [data-theme="dark"] & {
-    color-scheme: dark;
-  }
-}
 </style>
