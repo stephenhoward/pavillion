@@ -74,7 +74,7 @@ export interface DeltaFinding {
   severity: Severity;
   kind: Finding['kind'];
   title: string;
-  /** Scan label the finding came from (`repository`, `image`). */
+  /** Scan label the finding came from (`repository`, `image:main`, `image:latest`). */
   scan: string;
   target: string;
   targetClass: TargetClass;
@@ -201,7 +201,7 @@ export interface DeltaInputs {
   /**
    * The scan labels this run must see before it may treat absence as
    * resolution — the same labels the CLI shell passes to `readReports()`
-   * (`repository`, `image`).
+   * (`repository`, `image:main`, `image:latest`).
    *
    * A scan that failed shows up in `scan_errors`; a scan that was never
    * attempted shows up nowhere at all, which is why the expected set has to be
@@ -1220,7 +1220,8 @@ export function checkReportUsability(reports: ReportInput[]): ReportInput[] {
  */
 const SCAN_FILES = [
   ['repository', 'trivy-fs.json'],
-  ['image', 'trivy-image.json'],
+  ['image:main', 'trivy-image-main.json'],
+  ['image:latest', 'trivy-image-latest.json'],
 ] as const;
 
 const EXPECTED_SCANS: string[] = SCAN_FILES.map(([label]) => label);
@@ -1462,7 +1463,7 @@ function runMetadata(run: GhRunRow): DeltaMetadata {
  * error on every expected scan, so the delta says "the scan did not happen" —
  * which suppresses resolution — instead of an empty delta that reads as
  * "nothing was found". That is the fail-safe the spec names, and it only holds
- * if `scanFailure()` covers *both* `SCAN_FILES` entries: a report label that
+ * if `scanFailure()` covers *every* `SCAN_FILES` entry: a report label that
  * silently went missing would instead be an unexplained gap.
  */
 export function interpretScan(outcome: ScanOutcome): Scan {
