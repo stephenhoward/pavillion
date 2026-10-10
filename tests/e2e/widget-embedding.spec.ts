@@ -401,6 +401,33 @@ test.describe('Widget Embedding', () => {
     expect(loaded).toBeGreaterThan(0);
   });
 
+  test('event detail address link is styled, not the browser default', async ({ page }) => {
+    // Not every seeded event has an address, so give the detail one.
+    await page.route('**/api/public/v1/events/*/instances/*', async (route) => {
+      const response = await route.fetch();
+      const instance = await response.json();
+      instance.event.location = { ...(instance.event.location ?? {}), name: 'Town Hall', address: '1 Main St' };
+      await route.fulfill({ response, json: instance });
+    });
+
+    await page.goto(`${env.baseURL}/widget/test_calendar`);
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await page.locator('article.event-card .event-title-link').first().click();
+
+    const link = page.locator('.location-address a');
+    await expect(link).toBeVisible({ timeout: 10000 });
+    const { linkColor, addressColor, decoration } = await link.evaluate((el) => ({
+      linkColor: getComputedStyle(el).color,
+      addressColor: getComputedStyle(el.parentElement!).color,
+      decoration: getComputedStyle(el).textDecorationLine,
+    }));
+
+    // UA default link blue (#0000EE) means no stylesheet reached the anchor.
+    expect(linkColor).not.toBe('rgb(0, 0, 238)');
+    expect(linkColor).toBe(addressColor);
+    expect(decoration).toContain('underline');
+  });
+
   test('postMessage resize events reach the embedding page', async ({ page }) => {
     await page.goto(embeddingUrl());
 

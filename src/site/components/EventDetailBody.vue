@@ -580,6 +580,21 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   color: var(--pav-text-secondary);
   margin: 0;
   line-height: $public-line-height-relaxed;
+
+  // Styled here rather than by an app-wide `a` rule: the widget loads no
+  // such rule, and the site's colours links with the owner-configurable
+  // accent, which has no paired ink. The link takes the address's own
+  // text token and keeps its underline, so it never relies on colour.
+  a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:hover {
+      color: var(--pav-text-primary);
+      text-decoration-thickness: 2px;
+    }
+  }
 }
 
 // Accessibility card — layered Venue (Place) + Space subsections.
