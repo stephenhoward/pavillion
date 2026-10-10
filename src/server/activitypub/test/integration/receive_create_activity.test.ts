@@ -12,6 +12,8 @@ import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import { createFollowingRelationship } from '@/server/common/test/helpers/database';
 import AccountService from '@/server/accounts/service/account';
+import AccountsInterface from '@/server/accounts/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import {
   ActivityPubInboxMessageEntity,
@@ -41,6 +43,8 @@ describe('ActivityPub Create Activity', async () => {
   let env: TestEnvironment;
   let account: Account;
   let calendar: Calendar;
+  let otherCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
   const calendarName: string = 'testcalendar';
   const userEmail: string = 'testcalendar@pavillion.dev';
   const userPassword: string = 'testpassword';
@@ -51,7 +55,11 @@ describe('ActivityPub Create Activity', async () => {
     await env.init();
 
     const eventBus = new EventEmitter();
-    const calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface = new CalendarInterface(eventBus);
+    // listEvents reads shared-event links through the AP interface.
+    calendarInterface.setActivityPubInterface(
+      new ActivityPubInterface(eventBus, calendarInterface, new AccountsInterface()),
+    );
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
@@ -61,6 +69,9 @@ describe('ActivityPub Create Activity', async () => {
 
     // Create CalendarService instance
     calendar = await calendarInterface.createCalendar(account,calendarName);
+
+    // A second local calendar for a peer to target with a wire calendarId.
+    otherCalendar = await calendarInterface.createCalendar(account, 'othercalendar');
   });
 
   afterEach(() => {
@@ -197,5 +208,108 @@ describe('ActivityPub Create Activity', async () => {
     });
     expect(announce,"repost was queued in the outbox as an Announce").not.toBeNull();
     expect((announce!.message as any).object,"Announce carries the canonical event IRI").toBe(remoteEventUrl);
+  });
+
+  it('createEvent: should ignore a calendarId supplied on the inbound event', async () => {
+    const remoteDomain = 'remotedomain.dev';
+    const remoteCalendar = 'injectcreate';
+    const remoteActorUri = `https://${remoteDomain}/calendars/${remoteCalendar}`;
+    const remoteEventUrl = `https://${remoteDomain}/api/v1/events/inject-create`;
+    const activityId = `${remoteEventUrl}/create`;
+
+    await createFollowingRelationship(calendar.id, remoteActorUri, false, false);
+
+    const inboxUrl = await findInboxForCalendar(calendarName, env.app);
+    const getStub = sandbox.stub(axios, 'get');
+    sandbox.stub(httpSignature, 'verifySignature').returns(true);
+    env.stubRemoteCalendar(getStub, remoteDomain, remoteCalendar);
+    getStub.withArgs(remoteEventUrl).resolves({
+      status: 200,
+      data: { id: remoteEventUrl, type: 'Event', attributedTo: remoteActorUri },
+    });
+
+    const response = await env.signedPost(
+      inboxUrl,
+      env.fakeRemoteAuth(remoteDomain, remoteCalendar),
+      {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: activityId,
+        type: 'Create',
+        actor: remoteActorUri,
+        object: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          id: remoteEventUrl,
+          type: 'Event',
+          attributedTo: remoteActorUri,
+          calendarId: otherCalendar.id,
+          content: { en: { name: 'Injected Create', description: 'x' } },
+        },
+      });
+    expect(response.status,"api call succeeded").toBe(200);
+
+    const inboxRow = await waitFor(async () => {
+      const row = await ActivityPubInboxMessageEntity.findByPk(activityId);
+      return row?.processed_status ? row : null;
+    });
+    expect(inboxRow?.processed_status,"inbox message admitted and processed").toBe('ok');
+
+    const entity = await EventEntity.findOne({ where: { event_source_url: remoteEventUrl } });
+    expect(entity,"found the ingested event in the database").not.toBeNull();
+    expect(entity!.calendar_id,"wire calendarId is not stored").toBeNull();
+
+    const otherEvents = await calendarInterface.listEvents(otherCalendar);
+    expect(otherEvents.find(e => e.id === entity!.id),"event is not listed on the targeted calendar").toBeUndefined();
+  });
+
+  it('announce: should ignore a calendarId supplied on the fetched event', async () => {
+    const remoteDomain = 'remotedomain.dev';
+    const remoteCalendar = 'injectannounce';
+    const remoteActorUri = `https://${remoteDomain}/calendars/${remoteCalendar}`;
+    const remoteEventUrl = `https://${remoteDomain}/api/v1/events/inject-announce`;
+    const activityId = `${remoteActorUri}/activities/announce-inject`;
+
+    await createFollowingRelationship(calendar.id, remoteActorUri, false, false);
+
+    const inboxUrl = await findInboxForCalendar(calendarName, env.app);
+    const getStub = sandbox.stub(axios, 'get');
+    sandbox.stub(httpSignature, 'verifySignature').returns(true);
+    env.stubRemoteCalendar(getStub, remoteDomain, remoteCalendar);
+    // processShareEvent fetches the announced object from its origin; serve
+    // an Event that claims to belong to another local calendar.
+    getStub.withArgs(remoteEventUrl).resolves({
+      status: 200,
+      data: {
+        id: remoteEventUrl,
+        type: 'Event',
+        attributedTo: remoteActorUri,
+        calendarId: otherCalendar.id,
+        content: { en: { name: 'Injected Announce', description: 'x' } },
+      },
+    });
+
+    const response = await env.signedPost(
+      inboxUrl,
+      env.fakeRemoteAuth(remoteDomain, remoteCalendar),
+      {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: activityId,
+        type: 'Announce',
+        actor: remoteActorUri,
+        object: remoteEventUrl,
+      });
+    expect(response.status,"api call succeeded").toBe(200);
+
+    const inboxRow = await waitFor(async () => {
+      const row = await ActivityPubInboxMessageEntity.findByPk(activityId);
+      return row?.processed_status ? row : null;
+    });
+    expect(inboxRow?.processed_status,"inbox message admitted and processed").toBe('ok');
+
+    const entity = await EventEntity.findOne({ where: { event_source_url: remoteEventUrl } });
+    expect(entity,"found the ingested event in the database").not.toBeNull();
+    expect(entity!.calendar_id,"wire calendarId is not stored").toBeNull();
+
+    const otherEvents = await calendarInterface.listEvents(otherCalendar);
+    expect(otherEvents.find(e => e.id === entity!.id),"event is not listed on the targeted calendar").toBeUndefined();
   });
 });
