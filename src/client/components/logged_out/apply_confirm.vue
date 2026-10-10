@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue';
+import { reactive, inject, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import axios from 'axios';
+
+import type AuthenticationService from '@/client/service/authn';
 
 const { t } = useTranslation('registration', {
   keyPrefix: 'apply_confirm',
 });
 
 const route = useRoute();
+const authn = inject('authn') as AuthenticationService;
 
 /**
  * Render state for the confirmation page.
@@ -37,8 +39,8 @@ onMounted(async () => {
   }
 
   try {
-    const response = await axios.post(`/api/v1/applications/confirm/${token}`);
-    state.render = response?.data?.success === true ? 'success' : 'invalid';
+    const confirmed = await authn.confirmApplication(token);
+    state.render = confirmed ? 'success' : 'invalid';
   }
   catch {
     // Network or server failure: same anti-enumeration posture as the
