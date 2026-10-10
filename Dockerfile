@@ -96,8 +96,26 @@ FROM node:24-trixie-slim AS production
 #   (must match the postgres:17 server version; pulled from the pgdg apt repo,
 #   whose signing key comes from the pgdg-keyring stage)
 COPY --from=pgdg-keyring /usr/share/keyrings/postgresql-archive-keyring.gpg /usr/share/keyrings/
-RUN echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
+#
+# Security updates. Two separate defects kept fixed Debian packages out of the
+# image, and both fail silently:
+# - The RUN below is served from the build cache until the base image digest
+#   changes, so a rebuild re-ships whatever apt resolved the first time.
+#   APT_REFRESH busts that cache. It is caller-supplied, and CI passes the UTC
+#   date (release_docker_images.yaml): a daily value picks up a Debian fix
+#   within a day without paying a full apt round-trip, and re-running every
+#   later layer, on every commit. Leave it unset locally to keep the cache;
+#   pass any new value (e.g. --build-arg APT_REFRESH=$(date -u +%F)) to refresh.
+#   It must be declared in this stage: an ARG in another stage does not reach
+#   this layer's cache key, which is why the builder's BUILD_SHA never did.
+# - apt-get install only upgrades a package already in the base image when a
+#   requested package needs a newer one, so even an uncached build shipped
+#   stale base libraries (liblzma5, libpcre2-8-0). apt-get upgrade fixes that.
+ARG APT_REFRESH
+RUN echo "apt refresh: ${APT_REFRESH:-cached}" \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     ca-certificates \
     dumb-init \
     postgresql-client-17 \

@@ -29,6 +29,12 @@ jobs:
           platform=${{ matrix.platform }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
+      # Daily value for the Dockerfile's APT_REFRESH build arg, so the
+      # production apt layer re-resolves security updates once a day rather
+      # than on every commit (see the comment beside the ARG).
+      - name: Set apt refresh date
+        run: echo "APT_REFRESH=$(date -u +%F)" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -60,6 +66,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           build-args: |
             BUILD_SHA=${{ github.sha }}
+            APT_REFRESH=${{ env.APT_REFRESH }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
