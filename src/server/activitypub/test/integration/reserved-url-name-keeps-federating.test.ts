@@ -11,7 +11,7 @@
  * assert the fact underneath it.
  *
  * Every surface here funnels through `CalendarService.getCalendarByName`, which
- * gates on `CALENDAR_URL_NAME_RE` alone. If anyone adds an `isReservedRouteSegment`
+ * gates on `isResolvableCalendarUrlName` alone. If anyone adds an `isReservedRouteSegment`
  * check to that resolver — or to the actor, WebFinger or inbox routes above it —
  * an existing calendar named `admin` goes dark to the whole network: followers
  * stop resolving it, its handle stops answering, and inbound deliveries start

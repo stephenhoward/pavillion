@@ -287,7 +287,7 @@ describe('AddCalendarModal — mapping step', () => {
       // exists, and one issued before route segments were reserved may
       // legitimately be named `admin`. Mirrors the server's
       // ActivityPubService.normalizeIdentifier; fails if either end is
-      // tightened to the composite isValidCalendarUrlName.
+      // tightened to isClaimableCalendarUrlName.
       ['admin', true, 'bare urlName that is a reserved route segment'],
       ['discover', true, 'another reserved route segment'],
       ['', false, 'empty string'],

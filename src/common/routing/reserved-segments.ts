@@ -6,7 +6,7 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * Public calendar URLs live at the domain root, so any segment already routed
  * by the server or by one of the single-page apps would shadow — or be shadowed
  * by — a calendar of the same name. This is the single source of truth for one
- * question only: which names a calendar may not claim. `isValidCalendarUrlName`
+ * question only: which names a calendar may not claim. `isClaimableCalendarUrlName`
  * is its consumer, and via `SeriesService.isValidUrlName` — which delegates to
  * that same composite validator — the list gates series url names too, so an
  * entry added for root-routing reasons silently narrows the series namespace

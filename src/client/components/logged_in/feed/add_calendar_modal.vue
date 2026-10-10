@@ -8,7 +8,7 @@ import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mappi
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useFeedFollows } from '@/client/composables/useFeedFollows';
 import FeedService, { type RemoteCalendarPreview, type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
-import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
+import { isResolvableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import {
   InvalidRemoteCalendarIdentifierError,
   RemoteCalendarNotFoundError,
@@ -46,12 +46,7 @@ const pendingMappings = ref<CategoryMappingEntry[]>([]);
 const isSavingMappings = ref(false);
 const mappingStepRef = ref<HTMLElement | null>(null);
 
-// Mirrors server-side ActivityPubService.normalizeIdentifier.
-// Accepts `username@domain` for remote/qualified lookups, or a bare urlName
-// for a local lookup. The bare name is checked against the shape rule only,
-// not the composite isValidCalendarUrlName: this looks up a calendar that
-// already exists, and one created before route segments were reserved may
-// legitimately be named e.g. `admin`.
+// Mirrors ActivityPubService.normalizeIdentifier: `username@domain` for a qualified lookup, or a bare urlName checked with the resolvable (lookup) rule.
 const isValidIdentifier = computed(() => {
   const value = identifier.value.trim();
   if (!value) {
@@ -60,7 +55,7 @@ const isValidIdentifier = computed(() => {
   if (value.includes('@')) {
     return value.split('@').length === 2;
   }
-  return CALENDAR_URL_NAME_RE.test(value);
+  return isResolvableCalendarUrlName(value);
 });
 
 const canLookup = computed(() => {

@@ -25,7 +25,7 @@ import { sanitizePeerPageUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { looksLikeUuid } from "@/server/common/helper/uuid";
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
-import { CALENDAR_URL_NAME_RE } from "@/common/validation/calendarUrlName";
+import { isResolvableCalendarUrlName } from "@/common/validation/calendarUrlName";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidSharedEventUrlError,
@@ -88,7 +88,7 @@ class ActivityPubService {
   }
 
   static isValidUsername(username: string): boolean {
-    return CALENDAR_URL_NAME_RE.test(username);
+    return isResolvableCalendarUrlName(username);
   }
 
   static isValidOrgIdentifier(identifier: string): boolean {
@@ -118,15 +118,8 @@ class ActivityPubService {
       const [username, domain] = identifier.split('@');
       return `${username.toLowerCase()}@${domain.toLowerCase()}`;
     }
-    // Bare urlName: shape only, deliberately not the composite
-    // isValidCalendarUrlName. This is a lookup of a calendar that already
-    // exists, not a claim on a new name: a calendar created before route
-    // segments were reserved may legitimately be named e.g. `admin`, and it
-    // must stay followable. The client mirrors this in add_calendar_modal.vue
-    // so both ends accept exactly the same set of inputs, and the resolver a
-    // bare local name reaches — CalendarService.getCalendarByName — is gated
-    // on the same shape-only rule, so the loosening holds end to end.
-    if (!CALENDAR_URL_NAME_RE.test(identifier)) {
+    // Bare urlName: a lookup, so the resolvable rule — the same gate as getCalendarByName and the client's add_calendar_modal.vue.
+    if (!isResolvableCalendarUrlName(identifier)) {
       return null;
     }
     const localDomain = config.get('domain') as string;
