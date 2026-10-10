@@ -225,11 +225,9 @@ describe('ICS mapper: mapVEvent', () => {
       // under a lowercased key here, the mapper's allowlist lookup would miss
       // and this test would pass against a shape the real parser never emits.
       //
-      // Exercising the real parser from this test file is blocked by a
-      // temporal-polyfill ESM/CJS interop issue in the vitest vmThreads pool
-      // (see sync.ts:217-223 for the same constraint in production). Until
-      // that has a dedicated integration fixture, this comment is the primary
-      // guard: keep it in sync with any future node-ical upgrade.
+      // node-ical cannot be loaded in the vitest vmThreads pool, so the
+      // real-parser guard for this casing is mapper-captured-vevent.test.ts,
+      // which maps a VEVENT captured from node-ical's actual output.
       const value = {
         val: 'geo:37.7749,-122.4194',
         params: {
