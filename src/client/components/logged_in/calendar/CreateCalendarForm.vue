@@ -3,7 +3,7 @@ import { reactive, ref, watch, nextTick, onMounted, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { EmptyValueError, InvalidUrlNameError, UnauthenticatedError, UrlNameAlreadyExistsError } from '@/common/exceptions';
-import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { CALENDAR_URL_NAME_RE, isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import CalendarService from '@/client/service/calendar';
 
 const site_config = inject('site_config');
@@ -104,7 +104,7 @@ function validateCalendarName(calendarName: string): string | null {
   if (!CALENDAR_URL_NAME_RE.test(trimmed)) {
     return t('error_invalid_calendar_name');
   }
-  if (!isValidCalendarUrlName(trimmed)) {
+  if (!isClaimableCalendarUrlName(trimmed)) {
     return t('error_reserved_calendar_name');
   }
   return null;

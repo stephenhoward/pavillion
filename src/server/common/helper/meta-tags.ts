@@ -120,8 +120,8 @@ const EVENT_PAGE_RE = new RegExp(`^/([^/]{1,64})/events/([^/]{1,36})(?:/(${INSTA
  * reservation check does not fire on the encoded spelling and this function
  * returns `calendarUrlName: '%61dmin'` verbatim. What makes that harmless is one
  * layer up, not here: buildEventMetaTags hands the name to getCalendarByName,
- * which gates on CALENDAR_URL_NAME_RE and returns null before issuing a query,
- * so the request emits no meta tags and reaches no row. That regex in
+ * which gates on isResolvableCalendarUrlName and returns null before issuing a
+ * query, so the request emits no meta tags and reaches no row. That gate in
  * src/server/calendar/service/calendar.ts is load-bearing for this argument;
  * both halves are pinned by tests.
  *

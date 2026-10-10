@@ -379,7 +379,7 @@ describe('ActivityPubService.normalizeIdentifier', () => {
   });
 
   it('accepts a bare urlName with a trailing underscore', () => {
-    // Calendar urlNames may end in `_` per isValidCalendarUrlName; the
+    // Calendar urlNames may end in `_` per the shape rule; the
     // bare-urlName path must match that rule so client and server agree.
     expect(ActivityPubService.normalizeIdentifier('my_cal_')).toBe('my_cal_@pavillion.dev');
   });
@@ -403,8 +403,8 @@ describe('ActivityPubService.normalizeIdentifier', () => {
     (urlName) => {
       // Deliberate: this is a lookup of a calendar that already exists, not a
       // claim on a new name. A calendar issued before route segments were
-      // reserved must stay followable, so the bare-urlName path tests
-      // CALENDAR_URL_NAME_RE and never the composite isValidCalendarUrlName.
+      // reserved must stay followable, so the bare-urlName path uses
+      // isResolvableCalendarUrlName and never isClaimableCalendarUrlName.
       // If someone tightens it back up, this row fails.
       expect(ActivityPubService.normalizeIdentifier(urlName)).toBe(`${urlName}@pavillion.dev`);
     },
