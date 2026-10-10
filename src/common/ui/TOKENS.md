@@ -93,8 +93,7 @@ Declared by `public-theme-tokens` only, and read only by site and widget compone
 | `--pav-border-picker-hover` | public — picker role | that border on hover |
 | `--pav-border-picker-divider` | public — picker role | the popover's section divider; fainter than `--pav-border-subtle` in dark |
 | `--pav-text-picker` | public — picker role | the picker controls' text |
-| `--pav-text-picker-subtle` | public — picker role | subdued picker labels and the clear button's resting ink |
-| `--pav-text-picker-hint` | public — picker role | the date-format hint; fainter than `--pav-text-muted` in dark |
+| `--pav-text-picker-subtle` | public — picker role | the clear button's resting ink |
 | `--pav-surface-picker-clear-hover` | public — picker role | the clear button's hover fill; equal to `--pav-border-medium` by value but a fill, not a border |
 | `--pav-text-picker-clear-hover` | public — picker role | the clear button's hover ink |
 | `--pav-shadow-picker` | public — picker role | the trigger's resting elevation; matches no step of the shadow scale |
