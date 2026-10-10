@@ -17,7 +17,10 @@
  *   - Only CRITICAL and HIGH are itemized (the issue must stay actionable).
  *   - A malformed or missing report file is itself reported as a scan error
  *     rather than silently producing a clean-looking report — a scanner that
- *     did not run must never read as "no findings".
+ *     did not run must never read as "no findings". A `<report>.err` file
+ *     beside a missing report supplies the scanner's own reason.
+ *   - Every itemized row names its scan label, so scans of two image tags
+ *     (e.g. `image:main`, `image:latest`) stay distinguishable.
  *
  * Usage:
  *   tsx scripts/trivy-summary.ts <label>=<path.json> [...] [--out FILE]
@@ -188,15 +191,22 @@ function table(rows: string[][]): string {
   return [header, divider, ...rows.slice(1)].map(r => `| ${r.join(' | ')} |`).join('\n');
 }
 
+/**
+ * Every itemized row names the scan it came from. Two scans of the same image
+ * at different tags (in-flight `main`, released `latest`) report many of the
+ * same CVEs; a table that merged them would hide whether a finding is in
+ * something shipped or something not yet released.
+ */
 function findingRows(findings: Finding[], kind: Finding['kind']): string[][] | null {
   const subset = findings.filter(f => f.kind === kind);
   if (subset.length === 0) return null;
 
   if (kind === 'vulnerability') {
     return [
-      ['Severity', 'ID', 'Package', 'Installed', 'Fixed in', 'Target'],
+      ['Severity', 'Scan', 'ID', 'Package', 'Installed', 'Fixed in', 'Target'],
       ...subset.map(f => [
         f.severity,
+        f.scan,
         f.url ? `[${f.id}](${f.url})` : f.id,
         `\`${f.pkg}\``,
         f.installed ?? '',
@@ -206,9 +216,10 @@ function findingRows(findings: Finding[], kind: Finding['kind']): string[][] | n
     ];
   }
   return [
-    ['Severity', 'ID', 'Detail', 'Target'],
+    ['Severity', 'Scan', 'ID', 'Detail', 'Target'],
     ...subset.map(f => [
       f.severity,
+      f.scan,
       f.url ? `[${f.id}](${f.url})` : f.id,
       f.title,
       `\`${f.target}\``,
@@ -261,7 +272,31 @@ export function renderMarkdown(summary: Summary, meta: ReportMeta = {}): string 
   return lines.join('\n') + '\n';
 }
 
-/** Parse `label=path` CLI pairs into report inputs, reading each file. */
+/**
+ * The scanner's own failure reason, when the workflow left one beside the
+ * report as `<report>.err` (Trivy's stderr). Only the last non-empty line is
+ * kept — Trivy ends a failed run with its FATAL line, and the INFO chatter
+ * before it is noise in an issue body. Undefined when there is no usable log.
+ */
+function scannerError(file: string): string | undefined {
+  try {
+    const lines = fs.readFileSync(`${file}.err`, 'utf8').split('\n').map(line => line.trim()).filter(Boolean);
+    const last = lines.at(-1);
+    return last ? last.replace(/\s+/g, ' ').slice(0, 300) : undefined;
+  }
+  catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parse `label=path` CLI pairs into report inputs, reading each file.
+ *
+ * An unreadable report becomes an error input. When the scanner left a
+ * `<path>.err` log, its reason is reported instead of the bare read error, so
+ * a scan that failed for a stated reason — an image tag missing from the
+ * registry, say — says so in the issue rather than only "file not found".
+ */
 export function readReports(pairs: string[]): ReportInput[] {
   return pairs.map(pair => {
     const separator = pair.indexOf('=');
@@ -271,7 +306,12 @@ export function readReports(pairs: string[]): ReportInput[] {
       return { label, json: JSON.parse(fs.readFileSync(file, 'utf8')) };
     }
     catch (err) {
-      return { label, json: null, error: `could not read ${file} (${(err as Error).message})` };
+      const reason = scannerError(file);
+      return {
+        label,
+        json: null,
+        error: reason ? `scan failed: ${reason}` : `could not read ${file} (${(err as Error).message})`,
+      };
     }
   });
 }

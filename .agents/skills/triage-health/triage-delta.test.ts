@@ -1247,7 +1247,7 @@ describe('interpretScan', () => {
     const scan = interpretScan(outcome);
     return computeDelta(inputs({
       reports: scan.reports,
-      expectedScans: ['repository', 'image'],
+      expectedScans: ['repository', 'image:main', 'image:latest'],
       cveBeads: [trackedBead],
       watchBeads: [watchBead],
       metadata: scan.metadata,
@@ -1257,9 +1257,10 @@ describe('interpretScan', () => {
   it('turns a failed `gh run list` into an error on every expected scan', () => {
     const delta = deltaFor({ kind: 'run-list-failed', message: 'gh: not authenticated' });
 
-    expect(delta.scan_errors).toHaveLength(2);
+    expect(delta.scan_errors).toHaveLength(3);
     expect(delta.scan_errors[0]).toMatch(/^repository: could not list health\.weekly\.yaml runs/);
-    expect(delta.scan_errors[1]).toMatch(/^image: could not list health\.weekly\.yaml runs/);
+    expect(delta.scan_errors[1]).toMatch(/^image:main: could not list health\.weekly\.yaml runs/);
+    expect(delta.scan_errors[2]).toMatch(/^image:latest: could not list health\.weekly\.yaml runs/);
     expect(delta.scan_errors[0]).toContain('gh: not authenticated');
     expect(delta.resolution_suppressed).toBe(true);
     expect(delta.resolved).toEqual({ beads: [], watchEntries: [] });
@@ -1270,9 +1271,10 @@ describe('interpretScan', () => {
   it('turns "no successful run" into an error on every expected scan', () => {
     const delta = deltaFor({ kind: 'no-successful-run' });
 
-    expect(delta.scan_errors).toHaveLength(2);
+    expect(delta.scan_errors).toHaveLength(3);
     expect(delta.scan_errors[0]).toBe('repository: no successful health.weekly.yaml run to triage');
-    expect(delta.scan_errors[1]).toBe('image: no successful health.weekly.yaml run to triage');
+    expect(delta.scan_errors[1]).toBe('image:main: no successful health.weekly.yaml run to triage');
+    expect(delta.scan_errors[2]).toBe('image:latest: no successful health.weekly.yaml run to triage');
     expect(delta.resolution_suppressed).toBe(true);
     expect(delta.metadata).toEqual({});
   });
@@ -1280,7 +1282,7 @@ describe('interpretScan', () => {
   it('turns an expired artifact into an error on every expected scan, keeping the run metadata', () => {
     const delta = deltaFor({ kind: 'download-failed', run, runId: 42, message: 'no artifact matches trivy-reports' });
 
-    expect(delta.scan_errors).toHaveLength(2);
+    expect(delta.scan_errors).toHaveLength(3);
     expect(delta.scan_errors[0]).toMatch(/could not download the trivy-reports artifact from run 42/);
     expect(delta.scan_errors[0]).toContain('artifacts expire after 30 days');
     expect(delta.resolution_suppressed).toBe(true);
@@ -1305,13 +1307,14 @@ describe('interpretScan', () => {
     expect(delta.resolution_suppressed).toBe(true);
   });
 
-  it('suppresses nothing when both reports arrived with scan results — the other direction', () => {
+  it('suppresses nothing when every report arrived with scan results — the other direction', () => {
     const delta = deltaFor({
       kind: 'downloaded',
       run,
       reports: [
         repoReport([nodeResult([vuln()])]),
-        imageReport([{ Target: 'debian 12.5 (bookworm)' }]),
+        { ...imageReport([{ Target: 'debian 12.5 (bookworm)' }]), label: 'image:main' },
+        { ...imageReport([{ Target: 'debian 12.5 (bookworm)' }]), label: 'image:latest' },
       ],
     });
 
@@ -1754,7 +1757,7 @@ describe('fetchScan: which failing subprocess produces which outcome', () => {
 
     const scan = fetchScan('/tmp/does-not-matter', spawnFn);
 
-    expect(scan.reports.map(report => report.label)).toEqual(['repository', 'image']);
+    expect(scan.reports.map(report => report.label)).toEqual(['repository', 'image:main', 'image:latest']);
     for (const report of scan.reports) {
       expect(report.json).toBeNull();
       expect(report.error).toContain('could not list health.weekly.yaml runs');
@@ -1779,7 +1782,7 @@ describe('fetchScan: which failing subprocess produces which outcome', () => {
 
     const scan = fetchScan('/tmp/does-not-matter', spawnFn);
 
-    expect(scan.reports).toHaveLength(2);
+    expect(scan.reports).toHaveLength(3);
     for (const report of scan.reports) {
       expect(report.json).toBeNull();
       expect(report.error).toBe('no successful health.weekly.yaml run to triage');
@@ -1795,7 +1798,7 @@ describe('fetchScan: which failing subprocess produces which outcome', () => {
 
     const scan = fetchScan('/tmp/does-not-matter', spawnFn);
 
-    expect(scan.reports).toHaveLength(2);
+    expect(scan.reports).toHaveLength(3);
     expect(scan.reports[0].error).toContain('newest successful run has no usable databaseId');
     expect(scan.reports[0].error).toContain('"--help"');
     expect(scan.metadata).toEqual({});
@@ -1810,7 +1813,7 @@ describe('fetchScan: which failing subprocess produces which outcome', () => {
 
     const scan = fetchScan('/tmp/scan-dir', spawnFn);
 
-    expect(scan.reports).toHaveLength(2);
+    expect(scan.reports).toHaveLength(3);
     for (const report of scan.reports) {
       expect(report.json).toBeNull();
       expect(report.error).toContain('could not download the trivy-reports artifact from run 42');
