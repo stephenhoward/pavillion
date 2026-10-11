@@ -143,6 +143,29 @@ describe('trivy-summary: renderMarkdown', () => {
     expect(markdown).toContain('1.0.1');
   });
 
+  it('names the scan each itemized row came from, so two image tags never merge', () => {
+    const markdown = renderMarkdown(summarize([
+      { label: 'image:main', json: vulnReport('HIGH') },
+      { label: 'image:latest', json: vulnReport('HIGH') },
+    ]));
+
+    expect(markdown).toContain('| Severity | Scan | ID |');
+    const rows = markdown.split('\n').filter(line => line.includes('CVE-2026-0001'));
+    expect(rows).toHaveLength(2);
+    expect(rows.some(row => row.includes('| image:main |'))).toBe(true);
+    expect(rows.some(row => row.includes('| image:latest |'))).toBe(true);
+  });
+
+  it('shows a failed scan as a failed row in the summary table, not a zero row', () => {
+    const markdown = renderMarkdown(summarize([
+      { label: 'image:main', json: { Results: [] } },
+      { label: 'image:latest', json: null, error: 'trivy failed: MANIFEST_UNKNOWN' },
+    ]));
+
+    expect(markdown).toContain('| image:latest (failed) |');
+    expect(markdown).toContain('image:latest: trivy failed: MANIFEST_UNKNOWN');
+  });
+
   it('warns above the table when a scan failed', () => {
     const markdown = renderMarkdown(summarize([{ label: 'image', json: null, error: 'trivy exited 2' }]));
 
@@ -188,6 +211,32 @@ describe('trivy-summary: readReports and CLI', () => {
 
     expect(report.error).toContain('could not read');
     expect(report.json).toBeNull();
+  });
+
+  it('reports the scanner\'s own error when it left a .err log beside the missing report', () => {
+    const file = path.join(dir, 'image-latest.json');
+    fs.writeFileSync(`${file}.err`, [
+      '2026-10-12T07:01:02Z\tINFO\tDetected OS',
+      '2026-10-12T07:01:03Z\tFATAL\tFatal error\tMANIFEST_UNKNOWN: manifest unknown',
+      '',
+    ].join('\n'));
+
+    const [report] = readReports([`image:latest=${file}`]);
+
+    expect(report.label).toBe('image:latest');
+    expect(report.json).toBeNull();
+    expect(report.error).toContain('scan failed');
+    expect(report.error).toContain('MANIFEST_UNKNOWN: manifest unknown');
+    expect(report.error).not.toContain('Detected OS');
+  });
+
+  it('falls back to the read error when the .err log is empty', () => {
+    const file = path.join(dir, 'image-latest.json');
+    fs.writeFileSync(`${file}.err`, '\n');
+
+    const [report] = readReports([`image:latest=${file}`]);
+
+    expect(report.error).toContain('could not read');
   });
 
   it('exits 1 with usage when no reports are given', () => {

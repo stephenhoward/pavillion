@@ -23,7 +23,12 @@ permissions:
   issues: write
 
 env:
-  IMAGE: ghcr.io/stephenhoward/pavillion:main
+  IMAGE_REPO: ghcr.io/stephenhoward/pavillion
+  # Tags scanned, each reported as its own `image:<tag>` row: `main` is what is
+  # in flight, `latest` is the release that docker-compose.yml and
+  # docs/deployment.md default an operator to (PAVILLION_IMAGE_TAG=latest).
+  # Keep in step with SCAN_FILES in .agents/skills/triage-health/triage-delta.ts.
+  IMAGE_TAGS: main latest
   # Vendored code, build output, and agent worktrees are not this project's
   # attack surface; scanning them buys noise. Mirrors the skip list used by the
   # /trivy-scan command in the pavillion-security repo.
@@ -46,7 +51,7 @@ jobs:
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@v0.3.1
 
-      # Both scans keep going on failure: a scan that produced no report is
+      # Every scan keeps going on failure: a scan that produced no report is
       # reported as a scan error by trivy-summary.ts, never as a clean result.
       - name: Scan repository
         continue-on-error: true
@@ -58,24 +63,35 @@ jobs:
             --format json \
             --output trivy-fs.json
 
-      - name: Scan container image
+      # A tag that fails to scan — including one missing from the registry —
+      # leaves no report, only Trivy's stderr in <report>.err, which
+      # trivy-summary.ts turns into a visible failed row with the reason.
+      - name: Scan container images
         continue-on-error: true
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          trivy image "$IMAGE" \
-            --scanners vuln,secret \
-            --secret-config .trivy/secret.yaml \
-            --format json \
-            --output trivy-image.json
+          for tag in $IMAGE_TAGS; do
+            out="trivy-image-$tag.json"
+            if ! trivy image "$IMAGE_REPO:$tag" \
+                --scanners vuln,secret \
+                --secret-config .trivy/secret.yaml \
+                --format json \
+                --output "$out" \
+                2> >(tee "$out.err" >&2); then
+              # A partial report from a failed scan must not read as a result.
+              rm -f "$out"
+            fi
+          done
 
       - name: Build report
         id: report
         run: |
           npx tsx scripts/trivy-summary.ts \
             repository=trivy-fs.json \
-            image=trivy-image.json \
+            image:main=trivy-image-main.json \
+            image:latest=trivy-image-latest.json \
             --out report.md \
             --sha "$GITHUB_SHA" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
@@ -86,7 +102,8 @@ jobs:
           name: trivy-reports
           path: |
             trivy-fs.json
-            trivy-image.json
+            trivy-image-*.json
+            trivy-image-*.json.err
           if-no-files-found: warn
           retention-days: 30
 
