@@ -531,6 +531,36 @@ describe('confirmEmailChange', () => {
   });
 });
 
+describe('confirmApplication', () => {
+  it('posts the token as a path param and returns true on success', async () => {
+    let authentication = makeAuth();
+    const token = 'a'.repeat(32);
+    const axios_post = sandbox.stub(axios, 'post');
+    axios_post.resolves({ status: 200, data: { success: true } });
+
+    const result = await authentication.confirmApplication(token);
+
+    expect(result).toBe(true);
+    expect(axios_post.calledOnceWith('/api/v1/applications/confirm/' + token)).toBe(true);
+  });
+
+  it('returns false when the backend collapses to {valid:false}', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(axios, 'post').resolves({ status: 200, data: { valid: false } });
+
+    const result = await authentication.confirmApplication('b'.repeat(32));
+
+    expect(result).toBe(false);
+  });
+
+  it('propagates request failures to the caller', async () => {
+    let authentication = makeAuth();
+    sandbox.stub(axios, 'post').rejects(new Error('Network down'));
+
+    await expect(authentication.confirmApplication('c'.repeat(32))).rejects.toThrow('Network down');
+  });
+});
+
 describe('refreshToken', () => {
   it('returns false without hitting the network when no session is present', async () => {
     let authentication = makeAuth();

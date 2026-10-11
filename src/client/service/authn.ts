@@ -203,6 +203,20 @@ export default class AuthenticationService {
   }
 
   /**
+   * Confirms an account application's email address by consuming the
+   * confirmation token sent to the applicant.
+   *
+   * @param {string} token - Application confirmation token (path param)
+   * @returns {Promise<boolean>} true only when the server reports success
+   * @throws Will throw on a network or non-2xx failure; callers own the
+   *   anti-enumeration collapse of failures to a generic invalid state
+   */
+  async confirmApplication(token: string): Promise<boolean> {
+    const response = await axios.post( this._accountUrl('/applications/confirm/' + token) );
+    return response?.data?.success === true;
+  }
+
+  /**
    * Accepts an account invitation using the provided code and sets a password.
    *
    * @param {string} code - Invitation code
