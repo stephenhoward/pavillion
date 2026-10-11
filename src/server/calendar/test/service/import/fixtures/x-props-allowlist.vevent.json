@@ -1,0 +1,59 @@
+{
+  "type": "VEVENT",
+  "uid": "x-props-allowlist@example.test",
+  "dtstamp": {
+    "$date": "2026-03-15T14:00:00.000Z",
+    "tz": "Etc/UTC"
+  },
+  "start": {
+    "$date": "2026-03-15T14:00:00.000Z",
+    "tz": "Etc/UTC"
+  },
+  "datetype": "date-time",
+  "end": {
+    "$date": "2026-03-15T15:00:00.000Z",
+    "tz": "Etc/UTC"
+  },
+  "summary": "Allowlist Fixture Event",
+  "categories": [
+    "music",
+    "art"
+  ],
+  "geo": {
+    "lat": 37.7749,
+    "lon": -122.4194
+  },
+  "APPLE-STRUCTURED-LOCATION": {
+    "params": {
+      "VALUE": "URI",
+      "X-TITLE": "HQ"
+    },
+    "val": "geo:37.7749,-122.4194"
+  },
+  "conference": {
+    "params": {
+      "VALUE": "URI",
+      "LABEL": "Standup"
+    },
+    "val": "https://meet.example.test/abc"
+  },
+  "organizer": {
+    "params": {
+      "CN": "Host"
+    },
+    "val": "mailto:host@example.test"
+  },
+  "attendee": {
+    "params": {
+      "CN": "Guest"
+    },
+    "val": "mailto:guest@example.test"
+  },
+  "ALT-DESC": {
+    "params": {
+      "FMTTYPE": "text/html"
+    },
+    "val": "<p>Hello</p>"
+  },
+  "UNLISTED-PROP": "dropped"
+}

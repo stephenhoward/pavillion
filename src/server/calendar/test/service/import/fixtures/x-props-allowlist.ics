@@ -1,0 +1,19 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Pavillion//x-props allowlist fixture//EN
+BEGIN:VEVENT
+UID:x-props-allowlist@example.test
+DTSTAMP:20260315T140000Z
+DTSTART:20260315T140000Z
+DTEND:20260315T150000Z
+SUMMARY:Allowlist Fixture Event
+CATEGORIES:music,art
+GEO:37.7749;-122.4194
+X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-TITLE=HQ:geo:37.7749,-122.4194
+CONFERENCE;VALUE=URI;LABEL=Standup:https://meet.example.test/abc
+ORGANIZER;CN=Host:mailto:host@example.test
+ATTENDEE;CN=Guest:mailto:guest@example.test
+X-ALT-DESC;FMTTYPE=text/html:<p>Hello</p>
+X-UNLISTED-PROP:dropped
+END:VEVENT
+END:VCALENDAR
