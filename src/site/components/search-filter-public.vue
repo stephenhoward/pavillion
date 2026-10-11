@@ -1151,7 +1151,7 @@ onUnmounted(() => {
           font-weight: $font-medium;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          color: var(--pav-text-picker-subtle);
+          color: var(--pav-text-secondary);
         }
 
         .date-input {
@@ -1205,7 +1205,7 @@ onUnmounted(() => {
 
         .date-format-hint {
           font-size: 10px;
-          color: var(--pav-text-picker-hint);
+          color: var(--pav-text-secondary);
           letter-spacing: 0.02em;
         }
       }
