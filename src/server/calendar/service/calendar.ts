@@ -16,7 +16,7 @@ import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
-import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { isClaimableCalendarUrlName, isResolvableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { classifyReservedRouteSegment, type ReservedRouteSegmentReason } from '@/common/routing/reserved-segments';
 import { calendarPath } from '@/common/routing/public-paths';
 import { ValidationError } from '@/common/exceptions/base';
@@ -107,7 +107,7 @@ class CalendarService {
   }
 
   isValidUrlName(username: string): boolean {
-    return isValidCalendarUrlName(username);
+    return isClaimableCalendarUrlName(username);
   }
 
   async setUrlName(account: Account, calendar: Calendar, urlName: string): Promise<boolean> {
@@ -244,19 +244,15 @@ class CalendarService {
   }
 
   /**
-   * Resolve a calendar by its url name.
-   *
-   * Gated on the shape rule only, deliberately not the composite
-   * `isValidUrlName`. This is the single name->calendar resolver behind the
-   * public API, the widget, series and category reads, SSR meta tags and the
-   * whole ActivityPub surface (actor document, WebFinger, inbound inbox
-   * delivery), so it resolves calendars that already exist rather than
-   * policing names being claimed. An instance that issued a calendar named
-   * e.g. `admin` before route segments were reserved keeps serving it; the
-   * startup collision report tells the operator to rename it deliberately.
+   * Resolve a calendar by its url name. Gated on `isResolvableCalendarUrlName`,
+   * never `isValidUrlName`: this is the single resolver behind the public API,
+   * widget, SSR meta tags and the ActivityPub surface, and reservation governs
+   * claiming, not resolving (DEC-018 rule 4). Pinned by the reserved-name pair
+   * in src/server/calendar/test/calendar_service.test.ts and by
+   * src/server/activitypub/test/integration/reserved-url-name-keeps-federating.test.ts.
    */
   async getCalendarByName(name: string): Promise<Calendar|null> {
-    if (!name || ! CALENDAR_URL_NAME_RE.test(name)) {
+    if (!name || !isResolvableCalendarUrlName(name)) {
       return null;
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] });

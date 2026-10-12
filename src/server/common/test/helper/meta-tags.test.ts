@@ -5,7 +5,7 @@ import path from 'path';
 import { createRequire } from 'module';
 
 import { parseEventPageParams, buildEventMetaTags, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
-import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
+import { isResolvableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -638,13 +638,13 @@ describe('MetaTags Helper', () => {
     it('yields no meta tags for a percent-encoded calendar name', async () => {
       // The other half of the pin on parseEventPageParams' undecoded segment:
       // the parser hands '%61dmin' through verbatim, and this is where it stops.
-      // The stub reproduces the real resolver's gate -- getCalendarByName tests
-      // CALENDAR_URL_NAME_RE and returns null before querying -- so loosening
-      // that shared regex fails here rather than silently reaching a row.
+      // The stub reproduces the real resolver's gate -- getCalendarByName checks
+      // isResolvableCalendarUrlName and returns null before querying -- so
+      // loosening that shared gate fails here rather than silently reaching a row.
       const iface = createMockInterface();
 
       (iface.current!.getCalendarByName as sinon.SinonStub).callsFake(
-        async (name: string) => (CALENDAR_URL_NAME_RE.test(name) ? createMockCalendar() : null),
+        async (name: string) => (isResolvableCalendarUrlName(name) ? createMockCalendar() : null),
       );
       (iface.current!.getEventById as sinon.SinonStub).resolves(createMockEvent());
 
@@ -652,7 +652,7 @@ describe('MetaTags Helper', () => {
       const result = await buildEventMetaTags(iface, params, 'en', baseUrl);
 
       expect(result).toBeNull();
-      expect(CALENDAR_URL_NAME_RE.test('%61dmin')).toBe(false);
+      expect(isResolvableCalendarUrlName('%61dmin')).toBe(false);
       expect((iface.current!.getEventById as sinon.SinonStub).called).toBe(false);
     });
   });

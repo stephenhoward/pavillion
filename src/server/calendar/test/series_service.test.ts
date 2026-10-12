@@ -68,6 +68,7 @@ describe('SeriesService', () => {
       expect(seriesService.isValidUrlName('')).toBe(false);
       expect(seriesService.isValidUrlName('-leadhyphen')).toBe(false);
       expect(seriesService.isValidUrlName('trailhyphen-')).toBe(false);
+      expect(seriesService.isValidUrlName('admin')).toBe(false);
     });
   });
 

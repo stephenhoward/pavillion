@@ -364,11 +364,9 @@ describe('getCalendarByName', () => {
     expect(result).toBeNull();
   });
 
-  // getCalendarByName is the single name->calendar resolver behind the public
-  // API, the widget, series and category reads, SSR meta tags and the whole
-  // ActivityPub surface. It is gated on the shape rule only, so a calendar an
-  // instance issued before route segments were reserved keeps resolving --
-  // while the same name can no longer be claimed by a new calendar.
+  // getCalendarByName gates on isResolvableCalendarUrlName; createCalendar
+  // claims through isClaimableCalendarUrlName. Swap either predicate for the
+  // other and its half of the pair below fails.
   it.each(['admin', 'feed', 'discover', 'inbox'])(
     'should resolve a calendar stored under the reserved name %s',
     async (urlName) => {

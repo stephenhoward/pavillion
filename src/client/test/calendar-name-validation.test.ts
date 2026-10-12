@@ -4,9 +4,9 @@ import { CALENDAR_URL_NAME_RE } from '@/common/validation/calendarUrlName';
 /**
  * Calendar url-name shape rule tests.
  *
- * Exercises CALENDAR_URL_NAME_RE, the shape rule only. Reserved-name
- * rejection is a separate check (isValidCalendarUrlName) and is not
- * covered here.
+ * Exercises CALENDAR_URL_NAME_RE, the shape rule only; reservation is
+ * isClaimableCalendarUrlName's job, covered in
+ * src/common/test/validation/calendarUrlName.test.ts.
  *
  * Rules:
  *  - 3-24 characters long

@@ -8,7 +8,7 @@ import {
   classifyReservedRouteSegment,
   isReservedRouteSegment,
 } from '@/common/routing/reserved-segments';
-import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { buildSiteRoutes } from '@/site/routes';
 
 import { serverMountedSegments } from './server-mounts';
@@ -103,7 +103,7 @@ function clientRouterTopLevelSegments(): { segments: string[], unparseable: stri
  * delegation, the caller precondition, and the structural guarantees a consumer
  * relies on.
  *
- * How `isValidCalendarUrlName` composes this predicate with the shape rule is
+ * How `isClaimableCalendarUrlName` composes this predicate with the shape rule is
  * src/common/test/validation/calendarUrlName.test.ts's job. The one deliberate
  * overlap is the precondition block below, which asserts against both
  * predicates — that pairing is the point of the assertion, not duplication.
@@ -270,7 +270,7 @@ describe('reserved route segments', () => {
       'does not decode, trim, or normalize %o',
       (segment) => {
         expect(isReservedRouteSegment(segment)).toBe(false);
-        expect(isValidCalendarUrlName(segment)).toBe(false);
+        expect(isClaimableCalendarUrlName(segment)).toBe(false);
       },
     );
   });

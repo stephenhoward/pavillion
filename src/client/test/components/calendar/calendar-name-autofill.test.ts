@@ -1,5 +1,5 @@
 import { expect, describe, it } from 'vitest';
-import { CALENDAR_URL_NAME_RE, isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { CALENDAR_URL_NAME_RE, isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 
 /**
  * Unit Tests: Calendar Name Auto-fill Slug Generation
@@ -118,7 +118,7 @@ describe('Calendar Name Auto-fill Slug Generation', () => {
       const slug = slugify('Admin');
       expect(slug).toBe('admin');
       expect(CALENDAR_URL_NAME_RE.test(slug)).toBe(true);
-      expect(isValidCalendarUrlName(slug)).toBe(false);
+      expect(isClaimableCalendarUrlName(slug)).toBe(false);
     });
   });
 });

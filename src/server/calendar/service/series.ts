@@ -19,7 +19,7 @@ import {
 } from '@/common/exceptions/series';
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
-import { isValidCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 
 /**
@@ -55,7 +55,7 @@ class SeriesService {
    * @returns true if valid, false otherwise
    */
   isValidUrlName(urlName: string): boolean {
-    return isValidCalendarUrlName(urlName);
+    return isClaimableCalendarUrlName(urlName);
   }
 
   /**
