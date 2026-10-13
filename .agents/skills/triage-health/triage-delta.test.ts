@@ -1585,6 +1585,48 @@ describe('computeDelta: finding ids are canonicalized before any comparison', ()
     expect(parseCvesLine(`CVEs: CVE-2026-0001${ZERO_WIDTH}`)).toEqual(['CVE-2026-0001']);
     expect(parseWatchTable(`| CVE-2026-0001${ZERO_WIDTH} | CRITICAL |`)).toEqual(['CVE-2026-0001']);
   });
+
+  it.each([
+    ['a CVE id', imageReport([{
+      Target: 'debian 12.5 (bookworm)',
+      Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-0001', PkgName: 'perl', Severity: 'CRITICAL' })],
+    }]), 'image'],
+    ['a lower-case secret rule id', repoReport([{
+      Target: 'Dockerfile',
+      Secrets: [{ RuleID: 'aws-access-key-id', Severity: 'CRITICAL', Title: 'AWS key', StartLine: 42 }],
+    }]), 'repository'],
+  ])('round-trips %s copied verbatim onto a CVEs: line', (_label, report, scan) => {
+    // The `untrusted_content` note promises a usable id printed on a finding is
+    // safe to copy onto a bead verbatim. Copy it, and the next run over the
+    // same scan must see the finding as already tracked rather than new.
+    const first = computeDelta(inputs({ reports: [report], expectedScans: [scan] }));
+    const [finding] = first.new_actionable;
+
+    const second = computeDelta(inputs({
+      reports: [report],
+      expectedScans: [scan],
+      cveBeads: [{ id: 'pv-copy', status: 'open', notes: `CVEs: ${finding.id}` }],
+    }));
+
+    expect(second.new_actionable).toEqual([]);
+    expect(second.already_tracked.count).toBe(1);
+    expect(second.already_tracked.beadIds).toEqual(['pv-copy']);
+  });
+
+  it('documents that an unusableIds entry is not copy-safe, because copying one records a phantom id', () => {
+    // The interior zero-width character became a space, so the printed id
+    // splits into a fragment that names no real CVE. The note is what tells
+    // the agent not to copy it.
+    expect(parseCvesLine('CVEs: CVE-2026 -0001')).toEqual(['CVE-2026']);
+
+    const delta = computeDelta(inputs({
+      reports: [noFixReport(`CVE-2026${ZERO_WIDTH}-0001`)],
+      expectedScans: ['image'],
+    }));
+
+    expect(delta.scope_notes.unusableIds).toEqual(['CVE-2026 -0001']);
+    expect(sanitizeDelta(delta).untrusted_content.note).toMatch(/unusableIds/);
+  });
 });
 
 /**
@@ -1604,6 +1646,14 @@ describe('sanitizeText: invisible characters', () => {
     ['variation selector 16', 0xfe0f],
     ['mongolian vowel separator', 0x180e],
     ['hangul filler', 0x3164],
+    ['combining grapheme joiner', 0x034f],
+    ['khmer vowel inherent aq', 0x17b4],
+    ['khmer vowel inherent aa', 0x17b5],
+    ['khitan small script filler', 0x16fe4],
+    ['unassigned U+2065', 0x2065],
+    ['unassigned U+FFF0', 0xfff0],
+    ['noncharacter U+FFFE', 0xfffe],
+    ['unassigned tag U+E0000', 0xe0000],
   ])('strips %s out of an advisory title', (_label, code) => {
     expect(sanitizeText(`safe${at(code)}title`)).toBe('safe title');
   });
@@ -1642,6 +1692,25 @@ describe('redactDiagnostic', () => {
 
     expect(redacted).not.toContain('ghp_0123456789abcdef');
     expect(redacted).toContain('https://api.github.com/repos/o/r/actions');
+  });
+
+  it('drops a query-string value that no prefix or keyword rule would catch', () => {
+    // The test above is confounded: `ghp_` is also caught by the prefix rule.
+    // `sig` is neither a GitHub prefix nor a credential keyword, so only the
+    // query-string rule stands between this value and the public comment.
+    const redacted = redactDiagnostic('gh: HTTP 401 https://example.com/api?sig=0123456789abcdef');
+
+    expect(redacted).not.toContain('0123456789abcdef');
+    expect(redacted).toBe('gh: HTTP 401 https://example.com/api');
+  });
+
+  it.each([
+    ['GITHUB_TOKEN=abcd1234abcd1234abcd1234'],
+    ['X_API_KEY=abcd1234abcd1234abcd1234'],
+  ])('redacts an underscore-joined env name, %s', (line) => {
+    // `_` is a word character, so a bare `\btoken\b` never matches inside
+    // `GITHUB_TOKEN`.
+    expect(redactDiagnostic(line)).not.toContain('abcd1234abcd1234abcd1234');
   });
 
   it('redacts a bare token and caps the message', () => {
@@ -1777,6 +1846,24 @@ describe('fetchScan: which failing subprocess produces which outcome', () => {
     ]);
   });
 
+  it.each([
+    ['a space-separated credential', 'error: netrc password hunter2 rejected for user bob', 'hunter2'],
+    ['a PEM block', '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAx7Yq\n-----END RSA PRIVATE KEY-----', 'MIIEowIBAAKCAQEAx7Yq'],
+  ])('never quotes non-JSON `gh run list` stdout into a scan error: %s', (_label, stdout, secret) => {
+    // The error lands in `scan_errors`, which reaches the public health-report
+    // comment. Pattern-based redaction cannot catch arbitrary stdout, so the
+    // message carries only its size and the class of its first character.
+    const { spawnFn } = recordingSpawn(fakeSpawn(stdout));
+
+    const scan = fetchScan('/tmp/does-not-matter', spawnFn);
+
+    expect(scan.reports).toHaveLength(3);
+    for (const report of scan.reports) {
+      expect(report.error).toContain('did not return JSON');
+      expect(report.error).not.toContain(secret);
+    }
+  });
+
   it('turns an empty run list into "no successful run" rather than a clean scan', () => {
     const { spawnFn, calls } = recordingSpawn(fakeSpawn('[]'));
 
@@ -1894,6 +1981,7 @@ describe('listBeads: cardinality and shape of one `bd list` read', () => {
   it('aborts when the read is not JSON at all', () => {
     const { spawnFn } = recordingSpawn(fakeSpawn('bd: database is locked'));
 
-    expect(() => listBeads(['--label', 'cve'], spawnFn)).toThrow(/did not return JSON: bd: database is locked/);
+    expect(() => listBeads(['--label', 'cve'], spawnFn))
+      .toThrow(/did not return JSON \(22 bytes, starting with a letter\)$/);
   });
 });
