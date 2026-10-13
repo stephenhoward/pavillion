@@ -22,8 +22,8 @@ human-in-loop work. Do not force them through this command.
   report. No confirmation gate; Tier B/C are not touched.
 - `--confirm` — present the Tier A/B/C triage and ask which batch to run before
   dispatching anything (human-in-loop mode).
-- `--triage-only` / `--dry-run` — produce the tiered triage report and stop.
-  Zero changes.
+- `--triage-only` / `--dry-run` — run the settle step (Phase 0b), produce the
+  tiered triage report, and stop. No changes beyond what settle makes.
 - `--include-b` — after Tier A completes, also run Tier B (small + one
   decision). Implies the same per-bead dispatch flow, with the advisor gate:
   each Tier-B bead's decision is made by the advisor agent, the PR title
@@ -81,6 +81,37 @@ git fetch origin
 - Run in a worktree that has `node_modules` (lint/tests need it). Do **not**
   give implementers isolated git worktrees — a fresh worktree lacks
   `node_modules` and breaks `npm run lint` / vitest.
+
+### PHASE 0b: Settle shipped beads
+
+Runs at the start of **every** run, in every mode (`--triage-only`,
+`--bead-ids` and `--scheduled` included), before candidate selection and
+before the scheduled queue gate. A bead this command ships is held
+`in_progress` with a `PR: <url>` note rather than closed (see "Ship it"); this
+step is what closes it once the pull request merges.
+
+List every `in_progress` bead whose notes carry a
+`PR: https://github.com/.../pull/<n>` line written by this command:
+
+```bash
+bd list --status=in_progress --limit 0 --json --no-pager \
+  | jq -r '.[] | (.notes // "") as $n
+      | ($n | [scan("PR: https://github\\.com/[^\\s]+/pull/([0-9]+)")] | last) as $m
+      | select($m != null) | "\(.id) \($m[0])"'
+```
+
+For each `<id> <n>` pair, read `gh pr view <n> --json state,mergedAt`:
+
+- **MERGED**: `bd close <id> --reason "PR #<n> merged"`.
+- **CLOSED** without a merge: `bd update <id> --status open --append-notes
+  "PR #<n> closed unmerged on <date>"`, and list the bead in the report's
+  **needs your decision** section with that reason.
+- **OPEN**: leave it alone.
+
+A bead that is `in_progress` without such a note (for example the run's own
+tracking bead) is never touched by this step. Record every bead closed or
+reopened here, with its pull request number, for the report's **settled**
+list.
 
 ### PHASE 1: Survey & tier
 
@@ -222,15 +253,19 @@ Tier A implementer with the chosen option baked into its scope.
 Emit a final report (in `--scheduled` mode, written to the report file — see
 "Scheduled mode" — instead of awaiting a human):
 
-- **Shipped** table: `bead | PR # | one-line what`. Note each bead was closed.
+- **Shipped** table: `bead | PR # | one-line what`. Each bead is held
+  `in_progress` with its PR noted; a later run's settle step closes it once
+  the pull request merges.
+- **Settled** list: each bead Phase 0b closed (PR merged) or reopened (PR
+  closed unmerged), with its pull request number.
 - **Needs your decision** list: every dud/blocked/needs-human bead (with the
   reason) and every design-fork (with its written recommendation). For
   `needs-human`-class blockers, tag the bead so a future run skips it:
   `bd update <id> --labels needs-human` (and a `--notes` explaining why).
 - **Spec in flight** list: every bead Phase 2 dropped for a `spec:*` label on
   itself or its parent, with the matching label. No tagging — `/plan` owns them.
-- **Tally**: open beads before → after; PRs opened (and how many already
-  merged, if the user merged as you went).
+- **Tally**: open beads before → after; PRs opened this run; beads closed by
+  merge in Phase 0b, counted separately from PRs opened.
 - **Suggested next**: what's left and why it's not for this command.
 
 ## The Tier-B advisor
@@ -280,10 +315,13 @@ missing). Contents:
 
 - the queue-gate reading (counts and verdict, even when the run proceeded)
 - the **shipped** table: PR number and a one-line what
+- the **settled** list: each bead closed or reopened by Phase 0b, with its
+  pull request number
 - every **Tier-B decision** with the advisor's rationale
 - the **needs-decision** and **deferred (Tier-B cap)** lists, with reasons
 - the **spec in flight** list, with the matching label
-- the before/after open-bead tally
+- the before/after open-bead tally, with PRs opened and beads closed by
+  merge counted separately
 
 The report is local and gitignored, so bead IDs are allowed there — they
 remain forbidden in branches, commits, and PRs.
@@ -318,13 +356,16 @@ Dispatch a **general-purpose** subagent per bead. The prompt MUST include:
   `git-workflow` `pull-requests.md`/`stacking.md` (this command's beads are
   independent, so the single-branch path applies, not `gh stack`), then
   `gh pr edit <num> --title --body` (concise title/body, no bead ID), then
-  `bd update <id> --notes "PR: <url>"` and `bd close <id>` — **only if lint +
-  targeted tests passed.**
+  `bd update <id> --status in_progress --append-notes "PR: <url>"` — **only if
+  lint + targeted tests passed.** Do not close the bead: Phase 0b of a later
+  run closes it once the pull request merges. Candidate selection reads only
+  `--status=open`, so an in-progress bead is not picked up again.
 - **Refuse-and-report on blockers.** If the bead turns out NOT to be a small
   leaf chore (real ripples, ambiguous scope, premise doesn't match current
-  code, a needed dependency is missing), STOP: do not close the bead, leave the
-  tree recoverable, and report the blocker. Do not expand scope to make it work.
-- **Report back**: PR URL, branch, files changed, lint/test results; for
+  code, a needed dependency is missing), STOP: leave the bead open with no PR
+  note, leave the tree recoverable, and report the blocker. Do not expand scope to make it work.
+- **Report back**: PR URL, branch, files changed, lint/test results, and
+  confirmation the bead is `in_progress` with the PR noted (not closed); for
   stylesheet/token beads, flag any intentional hue/contrast shift and any
   `@media`-only vs `[data-theme]` token-pattern drift, and recommend a visual QA
   pass in both themes before merge.
@@ -350,14 +391,18 @@ This command has no automated tests. To sanity-check after an edit:
 1. `/clear-backlog --triage-only` on the live backlog — confirm it produces the
    three tiers + a design-fork/dud list and makes **zero** changes.
 2. `/clear-backlog --bead-ids <one-known-easy-win>` — confirm one branch/PR is
-   produced off `origin/main`, the bead is closed with the PR noted, and the
-   commit/branch/PR carry **no bead ID**.
+   produced off `origin/main`, the bead is `in_progress` (not closed) with the
+   PR noted, and the commit/branch/PR carry **no bead ID**.
 3. Confirm a deliberately-stale or `needs-human` bead is pulled by Phase 2 into
    the "needs your decision" list rather than dispatched.
 4. `/clear-backlog --include-b --triage-only` — confirm the triage names which
    Tier-B beads would go to the advisor and what each one's open decision is,
    with zero changes made.
-5. For `--scheduled`: with 10+ qualifying PRs open (or a stale one), confirm the
+5. Dry-read Phase 0b against three `in_progress` beads carrying `PR:` notes —
+   one whose PR is open, one merged, one closed unmerged — and confirm the
+   outcomes are in progress, closed, and reopened (listed under needs your
+   decision), each recorded in the **settled** list except the open one.
+6. For `--scheduled`: with 10+ qualifying PRs open (or a stale one), confirm the
    run stands down and writes a gate-reading report with zero dispatches; and
    confirm a normal run writes `reports/clear-backlog/<date>.md` and that the
    path is gitignored (`git check-ignore reports/clear-backlog/x.md`).
