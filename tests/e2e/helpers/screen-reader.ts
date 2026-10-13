@@ -5,9 +5,5 @@
  * via deep relative paths. The implementation lives in
  * `src/common/test-utils/screen-reader.ts` and is shared with the Vitest
  * variant.
- *
- * Design reference:
- *   `docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md`
- *   § Phase 2 (helpers/screen-reader.ts).
  */
 export { pageScreenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';

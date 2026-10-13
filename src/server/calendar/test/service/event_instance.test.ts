@@ -180,8 +180,8 @@ describe('EventInstanceService.generateInstances', () => {
     // findOrMaterializeInstanceWithDetails both rely on every stored
     // event_instance.start_time being minute-precise. Generation is the
     // single point where instance start timestamps are first materialized,
-    // so this is the guard site. See migration 0025 and spec
-    // @docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md.
+    // so this is the guard site. Migration 0025 adds the unique index on
+    // (event_id, start_time) that the invariant protects.
 
     it('truncates generated non-recurring instance start_time to minute precision', () => {
       const start = DateTime.fromISO('2026-04-10T10:00:42.123', { zone: 'utc' });

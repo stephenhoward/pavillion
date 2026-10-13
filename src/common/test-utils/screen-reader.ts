@@ -28,10 +28,6 @@
  * restore the previous language on teardown (via the returned `stop()`).
  * Individual tests do not need to manage locale.
  *
- * Design reference:
- *   `docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md`
- *   § Architecture, § Phase 1.
- *
  * happy-dom note: as of `@guidepup/virtual-screen-reader@0.32` and
  * `happy-dom@15`, the Vitest variant runs under the project's default
  * happy-dom environment — the Phase 1 spike confirmed VSR walks the
