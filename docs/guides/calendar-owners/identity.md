@@ -73,7 +73,7 @@ For the rules of what's translatable, how visitors land on the right language ve
 
 ## The default event image
 
-The default event image is an image that fills in for any event you publish without uploading one specifically for it. It appears in two places. The first is the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. The second is the link preview: when someone pastes a link to one of your calendar's event pages into a chat or a social post and the event has no image of its own, the preview shows your default. The event's own page shows only an image uploaded for that event, so a visitor who follows that link and opens an event that relies on the default sees no image there. Reposts don't carry it in either direction: when another calendar reposts your event, its list shows only the event's own image, and events you repost from other calendars don't pick up your default in your list either.
+The default event image is an image that fills in for any event you publish without uploading one specifically for it. It appears in two places. The first is the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. The second is the link preview: when someone pastes a link to one of your calendar's event pages into a chat or a social post and the event has no image of its own, the preview shows your default. The event's own page shows only an image uploaded for that event, so a visitor who follows that link and opens an event that relies on the default sees no image there. In a list, reposts never show a default in either direction: when another calendar reposts your event, its list shows only the event's own image, and events you repost from other calendars don't pick up your default in your list either. A link preview works differently: for an event without its own image, it shows the default of the calendar whose page the link points to — so a link to an event you reposted, on your calendar, previews with your default.
 
 The Settings tab lets you upload one image. Uploading replaces it; removing it leaves events without their own image to show no image at all.
 
@@ -85,7 +85,7 @@ Once the default is uploaded, the same **Image description for screen readers** 
 
 ## The default date filter
 
-The **Default Date Filter** sets how far ahead a visitor sees when they open your public calendar without choosing dates: the list starts today and runs for the window you pick. It applies to your public page and your embedded widget. Visitors can still widen or move the range with the date control at the top of the page; the filter only decides what they see first.
+The **Default Date Filter** sets how far ahead a visitor sees when they open your public calendar without choosing dates: the list starts today and runs for the window you pick. It applies to your public page and your embedded widget. Visitors can still widen or move the range with the date control at the top of the page; the filter only decides what they see first. The filter and the date control apply to the list view; a visitor looking at the week or month view sees that week or month instead.
 
 The choices are **1 week**, **2 weeks**, **1 month**, **3 months**, **6 months**, **9 months**, and **12 months**. Until you pick one, your public page uses your instance's default window — two weeks, unless your administrator has set another.
 
