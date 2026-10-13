@@ -92,6 +92,9 @@
             :disabled="state.isSaving"
             @change="saveSettings"
           >
+            <option v-if="state.defaultDateRange === ''" value="">
+              {{ t('default_date_range_instance') }}
+            </option>
             <option v-for="range in DEFAULT_DATE_RANGES" :key="range" :value="range">
               {{ t(`date_range_${range}`) }}
             </option>
@@ -308,7 +311,8 @@ const state = reactive<{
   isSavingAlt: boolean;
   error: string;
   success: string;
-  defaultDateRange: DefaultDateRange;
+  /** Empty while the calendar has no window of its own and uses the instance default. */
+  defaultDateRange: DefaultDateRange | '';
   defaultEventImage: Media | null;
   isDisabling: boolean;
   showDisableConfirm: boolean;
@@ -318,7 +322,7 @@ const state = reactive<{
   isSavingAlt: false,
   error: '',
   success: '',
-  defaultDateRange: '2weeks',
+  defaultDateRange: '',
   defaultEventImage: null,
   isDisabling: false,
   showDisableConfirm: false,
@@ -435,7 +439,7 @@ const loadSettings = async () => {
     const calendar = await calendarService.getCalendarById(props.calendarId);
     if (calendar) {
       localCalendar.value = calendar.clone();
-      state.defaultDateRange = calendar.defaultDateRange || '2weeks';
+      state.defaultDateRange = calendar.defaultDateRange || '';
       state.defaultEventImage = calendar.defaultEventImage || null;
 
       // Re-seed the composable's `languages` so its `availableLanguages`
@@ -502,8 +506,12 @@ const persistSettings = async () => {
     state.error = '';
     state.success = '';
 
+    // The window is sent only once the owner has chosen one. While it is unset
+    // the public site falls back to the instance default, and sending a value
+    // here on an unrelated save would replace that fallback with a choice the
+    // owner never made.
     await calendarService.updateCalendarSettings(props.calendarId, {
-      defaultDateRange: state.defaultDateRange,
+      ...(state.defaultDateRange ? { defaultDateRange: state.defaultDateRange } : {}),
       content: buildContentPayload(),
     });
 
