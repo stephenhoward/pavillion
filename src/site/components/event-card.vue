@@ -409,6 +409,13 @@ function navigateToDetail(event: MouseEvent): void {
 
   .card-content {
     opacity: 0.7;
+
+    // Forced colors paint the text in the user's system ink; the dim would
+    // undo the contrast they chose. The strike-through and badge still mark
+    // the card cancelled.
+    @media (forced-colors: active) {
+      opacity: 1;
+    }
   }
 
   .event-title-link {

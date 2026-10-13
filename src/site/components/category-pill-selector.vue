@@ -363,6 +363,12 @@ onUnmounted(() => {
     font-weight: $public-font-weight-bold;
     line-height: 1;
     opacity: 0.9;
+
+    // Under forced colors the checkmark is the selected pill's cue, since
+    // the accent fill is replaced; paint it in the full system ink.
+    @media (forced-colors: active) {
+      opacity: 1;
+    }
   }
 }
 

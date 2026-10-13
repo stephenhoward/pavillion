@@ -868,6 +868,12 @@ onUnmounted(() => {
     // Override font-size for better readability
     font-size: 12px;
     opacity: 0.6;
+
+    // Forced colors paint the label in the user's system ink; the dim would
+    // undo the contrast they chose.
+    @media (forced-colors: active) {
+      opacity: 1;
+    }
   }
 }
 
@@ -1099,6 +1105,17 @@ onUnmounted(() => {
 
         &:hover {
           background-color: var(--pav-accent-hover);
+        }
+
+        // Forced colors replace the accent fill with the system button
+        // face, so the selected pill needs a cue that is not colour. An
+        // inset outline leaves the layout alone and steps aside for the
+        // focus ring.
+        @media (forced-colors: active) {
+          &:not(:focus-visible) {
+            outline: 2px solid currentColor;
+            outline-offset: -2px;
+          }
         }
       }
 

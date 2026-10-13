@@ -333,6 +333,12 @@ onUnmounted(() => {
   .language-switcher__trigger:hover & {
     opacity: 1;
   }
+
+  // Forced colors paint the icon in the user's system ink; the dim would
+  // undo the contrast they chose.
+  @media (forced-colors: active) {
+    opacity: 1;
+  }
 }
 
 .language-switcher__label {
