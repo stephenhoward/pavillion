@@ -45,7 +45,13 @@ On instances that ask calendars to be [covered by a funding plan](funding.md) fo
 
 ## Choose the starting view
 
-The view you pick on the **Widget** tab — list, week or month — is the one visitors see when the widget first loads, not the only one: they can switch views themselves, and a narrow embed, like a phone screen, always opens on the list.
+The view you pick on the **Widget** tab — list, week or month — is the one visitors see when the widget first loads, not the only one: they can switch views themselves. Which views the widget offers depends on how much width it has on your page:
+
+- **Under 600 pixels**, like a phone screen: list only.
+- **600 to 1023 pixels**: list and month.
+- **1024 pixels and wider**: list, week and month.
+
+When your starting view isn't offered at the widget's width, it opens on the list instead. Most widgets sit in a page column narrower than 1024 pixels, where a week starting view shows up as the list. If yours sits in a column like that, choose list or month as the starting view.
 
 ## Planned scope
 
