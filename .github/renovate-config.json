@@ -12,6 +12,14 @@
   "major": {
     "dependencyDashboardApproval": true
   },
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "prCreation": "immediate",
+    "minimumReleaseAge": null,
+    "prConcurrentLimit": 0,
+    "branchConcurrentLimit": 0,
+    "labels": ["security"]
+  },
   "packageRules": [
     {
       "matchManagers": ["github-actions"],
