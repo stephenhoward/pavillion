@@ -10,8 +10,11 @@ class FundingEventEntity extends Model {
   declare id: string;
 
   /**
-   * NULL for provider events that arrive with no matching local plan. The row
-   * is still recorded so provider_event_id deduplication stops provider retries.
+   * The local funding plan the event applied to. FundingService writes a row
+   * only once a plan resolves, so new rows always carry one; the column stays
+   * nullable because the migrated schema declares it so (with a real
+   * REFERENCES constraint and ON DELETE CASCADE), and rows written before
+   * that rule may hold NULL.
    */
   @ForeignKey(() => FundingPlanEntity)
   @Column({ type: DataType.UUID, allowNull: true })

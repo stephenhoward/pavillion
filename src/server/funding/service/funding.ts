@@ -1663,22 +1663,23 @@ export default class FundingService {
         })
         : null;
 
-      // Log event for funding plan lifecycle events. When no local plan matches,
-      // funding_plan_id is NULL (never '' — Postgres rejects '' for a UUID column,
-      // which would abort this insert and leave the provider retrying forever).
-      // The row is still written so provider_event_id dedupe ends the retry loop.
+      // funding_event is a funding-plan lifecycle log, so an event that matches
+      // no local plan — including every provider event type the adapter does
+      // not parse — writes no row. None is needed for dedupe: this path has no
+      // side effects, so a redelivery is already a no-op, and the 200 response
+      // is what ends the provider's retries.
+      if (!fundingPlanRecord) {
+        return;
+      }
+
       const eventEntity = new FundingEventEntity();
       eventEntity.id = uuidv4();
-      eventEntity.funding_plan_id = fundingPlanRecord?.id ?? null;
+      eventEntity.funding_plan_id = fundingPlanRecord.id;
       eventEntity.event_type = event.eventType;
       eventEntity.provider_event_id = event.eventId;
       eventEntity.payload = this.summarizeProviderEvent(event.status ?? null);
       eventEntity.processed_at = new Date();
       await eventEntity.save({ transaction: t });
-
-      if (!fundingPlanRecord) {
-        return;
-      }
 
       // The cancellation boundary as it stood before this event, read before
       // any of the writes below can overwrite it. It is what the allocations
