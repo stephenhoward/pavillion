@@ -20,8 +20,8 @@ features:
     linkText: Administrator guides
   - title: For contributing developers
     details: Contribute to Pavillion itself — local development setup, architectural patterns, internationalization, testing conventions, and the contribution workflow.
-    link: /guides/developers
-    linkText: Developer guides
+    link: https://github.com/stephenhoward/pavillion/blob/main/docs/CONTRIBUTING.md
+    linkText: Contributing guide
 ---
 
 Pavillion is a federated, community-funded events calendar. Anyone can browse public events anonymously — accounts only exist for the people who organize and steward calendars. Federation happens over ActivityPub, so calendars on different instances can share, follow, and aggregate one another.

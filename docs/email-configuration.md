@@ -218,7 +218,7 @@ docker compose -f docker-compose.dev.yml up -d
 
 Once containers are running, open your browser to:
 
-**http://localhost:8025**
+**`http://localhost:8025`**
 
 ### Mailpit Web Interface Features
 
@@ -237,7 +237,7 @@ The Mailpit web UI provides:
 ### Email Testing Workflow
 
 1. **Start containers**: `docker compose -f docker-compose.dev.yml up`
-2. **Open Mailpit**: Navigate to http://localhost:8025
+2. **Open Mailpit**: Navigate to `http://localhost:8025`
 3. **Trigger email**: Perform an action in the app (password reset, invitation, etc.)
 4. **View email**: Email appears in Mailpit within seconds
 5. **Inspect content**: Check HTML rendering, links, and content
