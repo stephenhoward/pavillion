@@ -143,18 +143,19 @@ onBeforeMount(async () => {
 
 <template>
   <div class="event-detail-overlay" :data-loading="state.isLoading || undefined">
-    <!-- Loading State -->
-    <div v-if="state.isLoading" role="status" class="loading">
-      {{ t('loading_events') }}
+    <!-- Loading State: always in the DOM so assistive tech has a live region
+         to watch before loading begins. -->
+    <div class="loading" :class="{ 'is-idle': !state.isLoading }" role="status">
+      {{ state.isLoading ? t('loading_events') : '' }}
     </div>
 
     <!-- Not Found State -->
-    <div v-else-if="state.notFound">
+    <div v-if="!state.isLoading && state.notFound">
       <NotFound />
     </div>
 
     <!-- Error State -->
-    <div v-else-if="state.err" class="error-container">
+    <div v-else-if="!state.isLoading && state.err" class="error-container">
       <div class="error" role="alert">{{ state.err }}</div>
       <button type="button" class="back-button" @click="goBack">
         {{ t('back_to_calendar', { name: widgetStore.calendarUrlName || '' }) }}
@@ -162,7 +163,7 @@ onBeforeMount(async () => {
     </div>
 
     <!-- Event Detail Content -->
-    <div v-else-if="state.instance && state.calendar" class="event-detail-content">
+    <div v-else-if="!state.isLoading && state.instance && state.calendar" class="event-detail-content">
       <!-- Back link header -->
       <header class="instance-back-header">
         <button type="button"
@@ -269,6 +270,10 @@ onBeforeMount(async () => {
 
 .loading {
   @include public-loading-state;
+
+  &.is-idle {
+    padding: 0;
+  }
 }
 
 .error-container {

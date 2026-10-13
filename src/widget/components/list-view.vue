@@ -43,9 +43,12 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 <template>
   <div class="list-view">
     <!-- Events Display -->
+    <!-- Busy while a refresh replaces these results; the status below stays
+         outside so the busy region cannot silence it. -->
     <div
       v-if="Object.keys(filteredEventsByDay).length > 0"
       class="events-container"
+      :aria-busy="publicStore.isLoadingEvents"
     >
       <section
         v-for="day in Object.keys(filteredEventsByDay).sort()"
@@ -85,14 +88,14 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
       </p>
     </EmptyState>
 
-    <!-- Loading State -->
+    <!-- Loading State: always in the DOM so assistive tech has a live region
+         to watch before loading begins. -->
     <div
-      v-if="publicStore.isLoadingEvents"
       class="loading"
+      :class="{ 'is-idle': !publicStore.isLoadingEvents }"
       role="status"
-      aria-live="polite"
     >
-      {{ t('loading_events') }}
+      {{ publicStore.isLoadingEvents ? t('loading_events') : '' }}
     </div>
   </div>
 </template>
@@ -151,5 +154,9 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 // Loading and error states
 .loading {
   @include public-loading-state;
+
+  &.is-idle {
+    padding: 0;
+  }
 }
 </style>

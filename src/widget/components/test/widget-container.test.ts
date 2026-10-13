@@ -117,3 +117,54 @@ describe('widget-container mount ordering', () => {
     }
   });
 });
+
+describe('widget-container error and loading announcements', () => {
+  let wrapper: VueWrapper | null = null;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    useWidgetStore().configuredView = 'list';
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+    vi.restoreAllMocks();
+  });
+
+  it('announces a calendar load failure as an alert', async () => {
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName)
+      .mockRejectedValue(new Error('boom'));
+    wrapper = (await mountContainerAt(LIST_PATH)).wrapper;
+
+    const alerts = wrapper.findAll('[role="alert"]');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].text()).toBe('error_load_calendar');
+  });
+
+  it('announces an event load failure as an alert', async () => {
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName)
+      .mockResolvedValue(new Calendar('calendar-1', 'test_calendar'));
+    wrapper = (await mountContainerAt(LIST_PATH)).wrapper;
+
+    usePublicCalendarStore().eventError = 'Events failed';
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Events failed');
+  });
+
+  it('never marks <main> busy, so the toolbar controls stay outside any busy region', async () => {
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName)
+      .mockResolvedValue(new Calendar('calendar-1', 'test_calendar'));
+    wrapper = (await mountContainerAt(LIST_PATH)).wrapper;
+
+    usePublicCalendarStore().isLoadingEvents = true;
+    await flushPromises();
+
+    const main = wrapper.get('main');
+    expect(main.attributes('data-loading')).toBeDefined();
+    expect(main.attributes('aria-busy')).toBeUndefined();
+  });
+});

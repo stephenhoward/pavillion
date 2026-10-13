@@ -134,6 +134,70 @@ describe('Widget ListView', () => {
     });
   });
 
+  describe('loading announcements', () => {
+    const buildInstance = () => {
+      const start = DateTime.fromISO('2026-01-06T18:00:00.000Z', { zone: 'utc' });
+      return {
+        id: '1',
+        start: {
+          toLocal: () => ({ toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }),
+          toUTC: () => start.toUTC(),
+          toFormat: (fmt: string) => start.toUTC().toFormat(fmt),
+        },
+        end: null,
+        isCancelled: false,
+        event: {
+          id: 'e1',
+          content: () => ({ name: 'Event e1', description: '' }),
+          hasContent: () => true,
+          getLanguages: () => ['en'],
+          media: null,
+          categories: [],
+          location: null,
+          isRecurring: false,
+          repostStatus: 'none',
+          sourceCalendar: null,
+        },
+      };
+    };
+
+    it('marks only the results busy during a reload, with the status region outside them', async () => {
+      const publicStore = usePublicCalendarStore();
+      useWidgetStore().setCalendarUrlName('mycal');
+      publicStore.allEvents = [buildInstance()] as any;
+      publicStore.isLoadingEvents = true;
+
+      const wrapper = mount(ListView, {
+        global: { plugins: [[I18NextVue, { i18next }], router] },
+      });
+
+      const results = wrapper.get('.events-container');
+      expect(results.attributes('aria-busy')).toBe('true');
+
+      const status = wrapper.get('[role="status"]');
+      expect(status.text()).toBe('Loading events...');
+      expect(results.element.contains(status.element)).toBe(false);
+      expect(status.element.closest('[aria-busy="true"]')).toBeNull();
+    });
+
+    it('keeps the status region mounted and empty when not loading', async () => {
+      const publicStore = usePublicCalendarStore();
+      useWidgetStore().setCalendarUrlName('mycal');
+      publicStore.allEvents = [buildInstance()] as any;
+
+      const wrapper = mount(ListView, {
+        global: { plugins: [[I18NextVue, { i18next }], router] },
+      });
+
+      expect(wrapper.get('.events-container').attributes('aria-busy')).toBe('false');
+      expect(wrapper.get('[role="status"]').text()).toBe('');
+
+      publicStore.isLoadingEvents = true;
+      await flushPromises();
+      expect(wrapper.get('[role="status"]').text()).toBe('Loading events...');
+    });
+  });
+
   describe('openEvent slug navigation', () => {
     const today = DateTime.now().toISODate()!;
     // A known instant so we can assert the exact slug. 2026-05-08 18:00 UTC.
