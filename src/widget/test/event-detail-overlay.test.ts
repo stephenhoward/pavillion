@@ -238,6 +238,23 @@ describe('widget event-detail-overlay shell', () => {
     wrapper.unmount();
   });
 
+  it('announces loading through a status region that stays mounted after load', async () => {
+    let resolveEvents!: (events: unknown[]) => void;
+    loadCalendarEventsMock.mockImplementation(() => new Promise((resolve) => {
+      resolveEvents = resolve;
+    }));
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
+    const status = wrapper.get('[role="status"]');
+    expect(status.text()).toBe('Loading event...');
+    expect(wrapper.find('.event-detail-content').exists()).toBe(false);
+
+    resolveEvents([buildFallbackInstanceMock()]);
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toBe('');
+    expect(wrapper.find('.event-detail-content').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('renders the back button when an instance is loaded', async () => {
     const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
 
