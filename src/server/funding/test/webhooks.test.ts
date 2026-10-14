@@ -454,7 +454,7 @@ describe('Webhook Handling', () => {
         expect(loggedEvent?.funding_plan_id).not.toBe('sub_fk_test_456');
       });
 
-      it('should log event with null funding_plan_id when no matching FundingPlan exists', async () => {
+      it('should write no funding_event row when no matching FundingPlan exists', async () => {
         const webhookPayload = capturedStripeEventPayload('invoice.paid', {
           eventId: 'evt_unknown_sub',
           subscriptionId: 'sub_nonexistent_999',
@@ -469,19 +469,13 @@ describe('Webhook Handling', () => {
           .set('Content-Type', 'application/json')
           .send(webhookPayload);
 
+        // Acknowledged, so the provider stops delivering — but nothing is
+        // logged against a plan that does not exist.
         expect(response.status).toBe(200);
-
-        const loggedEvent = await FundingEventEntity.findOne({
-          where: { provider_event_id: 'evt_unknown_sub' },
-        });
-        expect(loggedEvent).toBeDefined();
-        // Must be SQL NULL, never '' — Postgres rejects '' for a UUID column,
-        // which would abort the insert and leave Stripe retrying forever.
-        expect(loggedEvent?.funding_plan_id).toBeNull();
-        expect(loggedEvent?.event_type).toBe('invoice.paid');
+        expect(await FundingEventEntity.count()).toBe(0);
       });
 
-      it('should dedupe a redelivered event that has no matching FundingPlan', async () => {
+      it('should treat a redelivered event with no matching FundingPlan as a no-op', async () => {
         const webhookPayload = capturedStripeEventPayload('invoice.paid', {
           eventId: 'evt_unknown_sub_redelivered',
           subscriptionId: 'sub_nonexistent_redelivered',
@@ -499,10 +493,9 @@ describe('Webhook Handling', () => {
           expect(response.status).toBe(200);
         }
 
-        const eventCount = await FundingEventEntity.count({
-          where: { provider_event_id: 'evt_unknown_sub_redelivered' },
-        });
-        expect(eventCount).toBe(1);
+        // No dedupe row is needed: the handler has no side effects to repeat.
+        expect(await FundingEventEntity.count()).toBe(0);
+        expect(await FundingPlanEntity.count()).toBe(0);
       });
     });
 
@@ -1145,10 +1138,10 @@ describe('Webhook Handling', () => {
         expect(JSON.parse(storedPayload)).toEqual({ status: 'past_due' });
       });
 
-      it('should record a null status for an event type the adapter does not parse', async () => {
+      it('should write no funding_event row for an event type the adapter does not parse', async () => {
         // The adapter only sets a status for the six lifecycle event types it
         // switches on. Endpoints are often subscribed to more than that, so
-        // any other delivery lands here carrying no status at all.
+        // any other delivery lands here carrying no status and no subscription.
         //
         // Hand-built by necessity: the fixture set covers exactly the types the
         // adapter handles, and this test needs one it does not.
@@ -1174,18 +1167,7 @@ describe('Webhook Handling', () => {
           .send(webhookPayload);
 
         expect(response.status).toBe(200);
-
-        const loggedEvent = await FundingEventEntity.findOne({
-          where: { provider_event_id: 'evt_unparsed_type' },
-        });
-        expect(loggedEvent).not.toBeNull();
-        expect(loggedEvent!.event_type).toBe('payment_intent.succeeded');
-
-        const storedPayload = loggedEvent!.toModel().payload;
-        expect(storedPayload).not.toContain('payer@example.com');
-        expect(storedPayload).not.toContain('A Payer');
-        expect(storedPayload).not.toContain('cus_unparsed');
-        expect(JSON.parse(storedPayload)).toEqual({ status: null });
+        expect(await FundingEventEntity.count()).toBe(0);
       });
 
       it('should not persist the raw provider payload on checkout completion', async () => {
