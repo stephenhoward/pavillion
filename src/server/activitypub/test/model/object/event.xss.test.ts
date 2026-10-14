@@ -370,11 +370,66 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Top-level allow-list. The parser builds its result only from the keys it
+  // normalizes; no other wire key reaches eventParams. A peer-supplied
+  // `calendarId`, `mediaId`, `locationId` or `repostStatus` would otherwise be
+  // read by CalendarEvent.fromObject and stored as local state.
+  // ---------------------------------------------------------------------------
+  describe('top-level allow-list', () => {
+    it('drops wire keys the parser does not normalize', () => {
+      const r = EventObject.parseInboundEvent({
+        name: 'X',
+        calendarId: 'some-uuid',
+        mediaId: 'm',
+        locationId: 'l',
+        repostStatus: 'auto',
+        evil: 'raw',
+      });
+      for (const key of ['calendarId', 'mediaId', 'locationId', 'repostStatus', 'evil', 'name']) {
+        expect(r).not.toHaveProperty(key);
+      }
+    });
+
+    it('emits exactly the normalized key set for a full-shape Pavillion object', () => {
+      const placeId = 'https://remote.example/places/p1';
+      const r = EventObject.parseInboundEvent({
+        id: 'https://remote.example/events/e1',
+        type: 'Event',
+        'pavillion:content': { en: { name: 'Festival' } },
+        'pavillion:categories': ['https://remote.example/categories/c1'],
+        'pavillion:series': 'https://remote.example/series/s1',
+        'pavillion:schedules': [{ start: '2030-01-01T10:00:00Z' }],
+        'pavillion:place': { id: placeId, content: { en: { name: 'Hall' } } },
+        'pavillion:space': { id: `${placeId}/spaces/s1`, content: { en: { name: 'Room' } } },
+        attachment: [{ type: 'Link', rel: 'external', href: 'https://tickets.example/e1' }],
+        'pavillion:urlPrompt': 'tickets',
+        published: '2029-12-01T00:00:00Z',
+        startTime: '2030-01-01T10:00:00Z',
+      });
+      expect(Object.keys(r).sort()).toEqual([
+        'categories',
+        'content',
+        'createdAt',
+        'date',
+        'externalUrl',
+        'location',
+        'schedules',
+        'series',
+        'space',
+        'urlPrompt',
+      ]);
+    });
+
+    it('does not pass a wire-supplied top-level date through', () => {
+      expect(EventObject.parseInboundEvent({ date: '2030-01-01' }).date).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Content shape guard. The allow-list above only protects content that
-  // reaches it. The parser spreads the wire object into its result, so a
-  // `content` value the resolution chain did not handle (an array, a raw
-  // string) used to survive verbatim — unsanitized names stored under language
-  // '0'. Malformed content now normalizes to absent; it never throws.
+  // reaches it. A `content` value the resolution chain does not handle (an
+  // array, a raw string) must not survive verbatim — unsanitized names stored
+  // under language '0'. Malformed content normalizes to absent; it never throws.
   // ---------------------------------------------------------------------------
   describe('content shape guard', () => {
     it('drops an array content instead of passing it through raw', () => {

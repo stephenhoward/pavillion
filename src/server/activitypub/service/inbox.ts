@@ -1049,8 +1049,9 @@ class ProcessInboxService {
     }
 
     // Create the event
-    // calendarId is intentionally omitted for calendar-actor federation;
-    // addRemoteEvent will set it to null for remote federated events.
+    // calendarId is null for calendar-actor federation: a remote event belongs
+    // to no local calendar, whatever the wire object claims. The Person-actor
+    // branch below assigns the receiving calendar afterwards.
     // Pass actorUri so parseInboundEvent can origin-gate privileged
     // schedule fields (hideFromPublic) — a remote Person editor cannot
     // forge cancellation state for an event on a non-matching origin.
@@ -1058,6 +1059,7 @@ class ProcessInboxService {
       ...EventObject.parseInboundEvent(message.object, { actorUri }),
       id: localEventId,
       eventSourceUrl: apObjectId,
+      calendarId: null,
     };
 
     // For Person actor creates, use the full event params from the object
@@ -2550,6 +2552,7 @@ class ProcessInboxService {
         ),
         id: localEventId,
         eventSourceUrl: apObjectId,
+        calendarId: null,
       };
 
       await this.calendarInterface.addRemoteEvent(calendar, eventParams);

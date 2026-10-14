@@ -49,18 +49,17 @@ function isLanguageKeyedMap(value: unknown): value is Record<string, unknown> {
  * {@link EventObject.parseInboundEvent} and consumed by
  * CalendarEvent.fromObject() via the calendar service layer.
  *
- * The parser is spread-first: the entire raw AP wire object is copied into
- * the result and only the handled keys below are overwritten. The index
- * signature reflects that passthrough of unhandled wire fields — it is not
- * looseness in the normalized fields themselves.
+ * The key set is closed: the parser builds its result only from the keys
+ * declared below, so no other wire key reaches eventParams. Local routing
+ * state (`calendarId`, `mediaId`, `locationId`, `repostStatus`, ...) is never
+ * taken from a peer; callers set what they need after parsing.
  */
 export interface RemoteEventParams {
   /**
    * Per-language content entries with HTML stripped. Either absent or a
    * non-empty map whose every entry is an object carrying only allow-listed,
-   * markup-stripped keys (see `EventObject._sanitizeContentObject`). The raw
-   * wire `content` never survives the top-level spread; malformed content
-   * normalizes to absent. Typed loosely because the Pavillion-format branch
+   * markup-stripped keys (see `EventObject._sanitizeContentObject`). Malformed
+   * content normalizes to absent. Typed loosely because the Pavillion-format branch
    * emits a different key set than the standard ActivityStreams branch.
    */
   content?: Record<string, any>;
@@ -81,17 +80,12 @@ export interface RemoteEventParams {
   schedules?: any;
   /** AP `published` mapped to the canonical publication timestamp. */
   createdAt?: Date;
-  /**
-   * `yyyy-MM-dd` string derived from `startTime`; a wire-supplied `date`
-   * passes through as-is.
-   */
+  /** `yyyy-MM-dd` string derived from `startTime`; a wire `date` is ignored. */
   date?: string;
   /** EventLocation-shaped object built from `pavillion:place` or flat AS location. */
   location?: Record<string, any>;
   /** EventLocationSpace-shaped object from `pavillion:space` (only when its parent path matches the place id). */
   space?: { originUri?: string; content?: Record<string, any> };
-  /** Passthrough of every unhandled raw wire field (spread-first normalization). */
-  [key: string]: any;
 }
 
 class EventObject extends ActivityPubObject {
@@ -432,17 +426,12 @@ class EventObject extends ActivityPubObject {
     apObject: Record<string, any>,
     options: { actorUri?: string } = {},
   ): RemoteEventParams {
-    // Spread entire input first; subsequent normalization overwrites handled
-    // keys. externalUrl/urlPrompt are seeded null to satisfy their
-    // non-optional typing; both are unconditionally re-assigned by the
-    // resolution block below, with any wire-supplied value discarded.
-    const result: RemoteEventParams = Object.assign(
-      { externalUrl: null, urlPrompt: null },
-      apObject,
-    );
-    // The resolution block below is the only writer of content: a wire value
-    // it does not handle (an array, a raw string) must not survive the spread.
-    delete result.content;
+    // Build the result from the normalized keys only — never a spread of the
+    // wire object, so an unhandled wire key cannot reach eventParams.
+    // externalUrl/urlPrompt are seeded null to satisfy their non-optional
+    // typing; both are unconditionally re-assigned by the resolution block
+    // below.
+    const result: RemoteEventParams = { externalUrl: null, urlPrompt: null };
 
     // --- Content resolution ---
     // Priority: pavillion:content > bare content (old format) > name/summary/nameMap/summaryMap
@@ -565,7 +554,7 @@ class EventObject extends ActivityPubObject {
       // otherwise render at the wrong local time). Only IANA-valid zone names
       // are honoured; a bare offset (or garbage) is ignored and the instant
       // passes through unchanged. displayEndTime / eventStatus are non-mapping
-      // FEP terms — they are tolerated (spread through, ignored downstream)
+      // FEP terms — they are tolerated (dropped by the closed key set)
       // rather than acted on; a remote EventCancelled is intentionally NOT
       // applied here (would require an origin-gated hide flow — follow-up).
       const inboundZone = typeof apObject.timezone === 'string' && IANAZone.isValidZone(apObject.timezone)
@@ -629,7 +618,7 @@ class EventObject extends ActivityPubObject {
     }
 
     // --- Date extraction from startTime ---
-    if (apObject.startTime && !result.date) {
+    if (apObject.startTime) {
       const parsed = DateTime.fromISO(apObject.startTime);
       if (parsed.isValid) {
         result.date = parsed.toFormat('yyyy-MM-dd');
