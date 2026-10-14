@@ -273,9 +273,7 @@ early. Every id in the group goes on the line, and nothing else does.
 ids did not survive canonicalization, so they are not valid matching keys — a bead carrying one
 will never match a future finding and will never close. The list holds each id in the same form the
 delta prints it on a finding, so deciding whether an id is listed is a plain literal comparison; an
-id that looks the same is the same. This carve-out holds despite the `untrusted_content` note's
-blanket claim that a printed id is safe to copy verbatim: that claim is true for ids inside
-findings, not for `unusableIds`, which the note also lists among its fields.
+id that looks the same is the same. The `untrusted_content` note states the same carve-out.
 
 Failing canonicalization also means they carry **no shape guarantee** — alone among the ids in the
 delta, an `unusableIds` entry may contain `$(…)`, a backtick or a quote. So they are equally barred
