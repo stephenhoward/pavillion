@@ -23,7 +23,7 @@
  * - /etc/hosts entries for alpha.federation.local and beta.federation.local
  *
  * Related bead: pv-xq9q.7
- * Design reference: docs/superpowers/specs/2026-04-11-unpost-reposted-events-design.md
+ * Behaviour is governed by DEC-008 (sticky per-calendar unpost dismissals).
  */
 
 import { test, expect } from '@playwright/test';

@@ -21,8 +21,9 @@ export class EventInstanceEntity extends Model {
   @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
-  // Compound unique index on (event_id, start_time) — matches migration 0025
-  // (see docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md).
+  // Compound unique index on (event_id, start_time) — matches migration 0025.
+  // start_time is stored at minute precision so the pair also identifies the
+  // instance behind its public yyyymmdd-hhmm slug.
   // Mirrors event_series.ts's compound-unique convention. Under the
   // single-producer model (pv-hr72) only the originating calendar materializes
   // a row per (event_id, start_time), so db.sync environments no longer collide

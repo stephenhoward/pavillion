@@ -1455,8 +1455,7 @@ export default class EventInstanceService {
       // exact equality against a minute-precise DateTime. RRule inherits
       // sub-minute precision from dtstart if present, so truncate here —
       // this is the single materialization point for every stored row.
-      // Enforced by migration 0025's unique index on (event_id, start_time)
-      // and spec @docs/superpowers/specs/2026-04-22-instance-timestamp-slug-design.md.
+      // Enforced by migration 0025's unique index on (event_id, start_time).
       const startDate = DateTime.fromJSDate(date).startOf('minute');
       // Duration is applied per-occurrence via the shared helper so that
       // findOrMaterializeInstanceWithDetails computes end times identically.
