@@ -505,6 +505,7 @@
     "calendar_description_placeholder": "A calendar of community events and activities...",
     "default_date_range_label": "Default Date Filter",
     "default_date_range_help": "When visitors view your public calendar without specifying a date range, events will be filtered to show this time period starting from today.",
+    "default_date_range_instance": "Instance default",
     "date_range_1week": "1 week",
     "date_range_2weeks": "2 weeks",
     "date_range_1month": "1 month",

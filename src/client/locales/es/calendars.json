@@ -505,6 +505,7 @@
     "calendar_description_placeholder": "Un calendario de eventos y actividades de la comunidad...",
     "default_date_range_label": "Filtro de fechas predeterminado",
     "default_date_range_help": "Cuando los visitantes vean tu calendario público sin especificar un intervalo de fechas, los eventos se filtrarán para mostrar este período de tiempo a partir de hoy.",
+    "default_date_range_instance": "Predeterminado de la instancia",
     "date_range_1week": "1 semana",
     "date_range_2weeks": "2 semanas",
     "date_range_1month": "1 mes",
