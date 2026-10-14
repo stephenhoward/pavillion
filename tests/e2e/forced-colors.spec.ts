@@ -18,7 +18,14 @@ import { Rgba, surfaceOf, contrastRatio } from '@/common/test-utils/color-contra
  * - sampled text clears the 4.5:1 normal-text floor against the surface it
  *   is painted on, and the custom date input's border the 3:1 non-text one;
  * - the custom date input's picker indicator, on the site and the widget, is
- *   painted at full strength rather than dimmed by its resting opacity.
+ *   painted at full strength rather than dimmed by its resting opacity;
+ * - other ink the page dims with opacity (the category filter label, the
+ *   language switcher's globe, a cancelled event card's content, a selected
+ *   category pill's checkmark) is painted at full strength, while the dim
+ *   stays outside forced colors;
+ * - selected states carried by a background fill keep a cue that is not
+ *   colour: an outline on the active date pill and the checked view, the
+ *   checkmark on a selected category pill.
  *
  * Both OS colour schemes are covered, since Chromium derives the emulated
  * system palette from the scheme (dark text on white, or white on black).
@@ -307,6 +314,135 @@ for (const { surface, path } of [
         () => peakRegionContrast(page, indicator),
         { message: 'picker indicator contrast against the field', timeout: 15000, intervals: [200, 500, 1000] },
       ).toBeGreaterThanOrEqual(textContrast * 0.9);
+    }
+    finally {
+      await cleanup();
+    }
+  });
+}
+
+/** The computed opacity of the first element matching `selector`. */
+async function opacityOf(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).first().evaluate(el => parseFloat(getComputedStyle(el).opacity));
+}
+
+/** The computed outline of the first element matching `selector`. */
+async function outlineOf(page: Page, selector: string): Promise<{ style: string; width: number }> {
+  return page.locator(selector).first().evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+  });
+}
+
+const hasOutline = (o: { style: string; width: number }) => o.style !== 'none' && o.width > 0;
+
+/** Move focus off whatever was clicked, so no focus ring stands in for a state cue. */
+async function blurActive(page: Page): Promise<void> {
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+/**
+ * Mark the first event card cancelled. The seed holds no cancelled event, and
+ * the card's cancelled styling hangs on this one class.
+ */
+async function markFirstCardCancelled(page: Page): Promise<void> {
+  await page.locator('article.event-card').first().evaluate(el => el.classList.add('is-cancelled'));
+}
+
+/** The dimmed elements on the site calendar page, once a category is selected. */
+const SITE_DIMMED = [
+  '.language-switcher__globe',
+  'article.event-card.is-cancelled .card-content',
+  '.category-pill.selected .checkmark',
+];
+
+/** Load the site calendar, select the first category and mark a card cancelled. */
+async function openDimmedCalendar(page: Page): Promise<void> {
+  await page.goto(env.baseURL + '/test_calendar');
+  await expect(page.locator('li.day-event-item').first()).toBeVisible({ timeout: 15000 });
+  await page.locator('button.category-pill:not(.absent):not(:disabled)').first().click();
+  await expect(page.locator('.category-pill.selected .checkmark')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+  await markFirstCardCancelled(page);
+}
+
+test('forced colors paint dimmed ink at full strength', async ({ browser }) => {
+  const { page, cleanup } = await openForcedColors(browser, 'dark');
+  try {
+    await test.step('site calendar', async () => {
+      await openDimmedCalendar(page);
+      for (const selector of SITE_DIMMED) {
+        expect(await opacityOf(page, selector), `${selector} opacity`).toBe(1);
+      }
+    });
+
+    await test.step('widget category filter label', async () => {
+      await page.goto(env.baseURL + '/widget/test_calendar?view=list');
+      await expect(page.locator('.category-filter-section .filter-label')).toBeVisible({ timeout: 20000 });
+      expect(await opacityOf(page, '.category-filter-section .filter-label')).toBe(1);
+    });
+  }
+  finally {
+    await cleanup();
+  }
+
+  // Outside forced colors the dim is the design, and stays.
+  const context = await browser.newContext({ colorScheme: 'light' });
+  const plain = await context.newPage();
+  try {
+    await openDimmedCalendar(plain);
+    for (const selector of SITE_DIMMED) {
+      expect(await opacityOf(plain, selector), `${selector} opacity without forced colors`).toBeLessThan(1);
+    }
+    await plain.goto(env.baseURL + '/widget/test_calendar?view=list');
+    await expect(plain.locator('.category-filter-section .filter-label')).toBeVisible({ timeout: 20000 });
+    expect(await opacityOf(plain, '.category-filter-section .filter-label')).toBeLessThan(1);
+  }
+  finally {
+    await context.close();
+  }
+});
+
+for (const osScheme of ['light', 'dark'] as const) {
+  test(`forced colors on a ${osScheme} OS keep a non-colour cue on selected states`, async ({ browser }) => {
+    const { page, cleanup } = await openForcedColors(browser, osScheme);
+    try {
+      // Wide enough for the view switcher to offer every view.
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.goto(env.baseURL + '/test_calendar');
+      await expect(page.locator('li.day-event-item').first()).toBeVisible({ timeout: 15000 });
+
+      await test.step('checked calendar view', async () => {
+        const checked = '.ui-view-toolbar__view[aria-checked="true"]';
+        const unchecked = '.ui-view-toolbar__view[aria-checked="false"]';
+        await expect(page.locator(checked)).toBeVisible({ timeout: 15000 });
+        expect(hasOutline(await outlineOf(page, checked)), 'the checked view is outlined').toBe(true);
+        expect(hasOutline(await outlineOf(page, unchecked)), 'an unchecked view is not outlined').toBe(false);
+      });
+
+      await test.step('active date pill', async () => {
+        await page.locator('.date-filter-button').click();
+        await expect(page.locator('.date-dropdown')).toBeVisible({ timeout: 15000 });
+        // A preset applies and closes the dropdown; reopen it to see the pill.
+        await page.locator('.date-dropdown button.date-pill').first().click();
+        await expect(page.locator('.date-dropdown')).toBeHidden({ timeout: 15000 });
+        await page.locator('.date-filter-button').click();
+        await expect(page.locator('.date-dropdown')).toBeVisible({ timeout: 15000 });
+        await blurActive(page);
+        await expect(page.locator('.date-pill.active')).toHaveCount(1);
+        expect(hasOutline(await outlineOf(page, '.date-pill.active')), 'the active date pill is outlined').toBe(true);
+        expect(hasOutline(await outlineOf(page, '.date-pill:not(.active)')), 'an inactive date pill is not outlined').toBe(false);
+      });
+
+      await test.step('selected category pill', async () => {
+        await page.locator('.date-filter-button').click();
+        await expect(page.locator('.date-dropdown')).toBeHidden({ timeout: 15000 });
+        await page.locator('button.category-pill:not(.absent):not(:disabled)').first().click();
+        await blurActive(page);
+        await expect(page.locator('.category-pill.selected .checkmark')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('.category-pill:not(.selected) .checkmark')).toHaveCount(0);
+        await expectLegibleText(page, '.category-pill.selected .checkmark');
+      });
     }
     finally {
       await cleanup();

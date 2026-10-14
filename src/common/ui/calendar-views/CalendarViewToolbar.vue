@@ -350,6 +350,16 @@ $touch-height: 2.75rem;
     background-color: var(--pav-surface-primary);
     color: var(--pav-text-primary);
     box-shadow: var(--pav-shadow-xs);
+
+    // Forced colors drop the surface and the shadow, which would leave the
+    // checked view unmarked. An inset outline leaves the layout alone and
+    // steps aside for the focus ring.
+    @media (forced-colors: active) {
+      &:not(:focus-visible) {
+        outline: 2px solid currentColor;
+        outline-offset: -2px;
+      }
+    }
   }
 }
 
