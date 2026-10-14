@@ -495,4 +495,4 @@ bin/deploy.sh  # Generate new secrets and restart
 - [Configuration Reference](configuration.md) - Full configuration options
 - [Secret Rotation Guide](secret-rotation.md) - How to rotate secrets
 - [Upgrading Guide](upgrading.md) - How to upgrade to new versions
-- [Contributing](CONTRIBUTING.md) - Get involved in development
+- [Contributing](https://github.com/stephenhoward/pavillion/blob/main/docs/CONTRIBUTING.md) - Get involved in development

@@ -4,7 +4,7 @@ description: Bring up a Pavillion instance from a clean Linux server to a federa
 
 # Quickstart
 
-This guide takes you from a clean Linux server to a Pavillion instance that's reachable on its domain, has one working admin account, and has successfully federated with one other Pavillion instance. It should take about thirty minutes if your DNS is already in place. There is a fully detailed [Installation](./installation) guide if you want to know the details of what is happening under the hood.
+This guide takes you from a clean Linux server to a Pavillion instance that's reachable on its domain, has one working admin account, and has successfully federated with one other Pavillion instance. It should take about thirty minutes if your DNS is already in place. There is a fully detailed [Installation](./deployment) guide if you want to know the details of what is happening under the hood.
 
 ## What you need before you start
 
@@ -107,7 +107,7 @@ You now have a working Pavillion instance with one admin account and confirmed f
 
 And to fill in what this guide glossed over:
 
-- **[Installation](./installation)** — what `bin/deploy.sh` actually did, container by container.
+- **[Installation](./deployment)** — what `bin/deploy.sh` actually did, container by container.
 - **[Configuration](./configuration)** — the settings worth tuning beyond the defaults.
 - **[Reverse proxy and TLS](./reverse-proxy-and-tls)** — the bring-your-own-proxy path, and what the bundled Caddy is doing on your behalf.
 

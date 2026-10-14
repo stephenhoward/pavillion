@@ -36,15 +36,18 @@ export default defineConfig({
   srcExclude: [
     'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',
-    'configuration.md',
-    'deployment.md',
-    'email-configuration.md',
     'federation-testing.md',
     'internationalization.md',
-    'secret-rotation.md',
+    'mission.md',
     'stripe-fixture-maintenance.md',
-    'upgrading.md',
   ],
+  rewrites: {
+    'configuration.md': 'guides/instance-administrators/configuration.md',
+    'deployment.md': 'guides/instance-administrators/deployment.md',
+    'email-configuration.md': 'guides/instance-administrators/email.md',
+    'secret-rotation.md': 'guides/instance-administrators/secret-rotation.md',
+    'upgrading.md': 'guides/instance-administrators/upgrading.md',
+  },
   themeConfig: {
     logo: '/pavillion-logo.svg',
     nav: [
@@ -67,7 +70,7 @@ export default defineConfig({
         {
           text: 'Get an instance running',
           items: [
-            { text: 'Install a Pavillion instance', link: '/guides/instance-administrators/installation' },
+            { text: 'Deploy a Pavillion instance', link: '/guides/instance-administrators/deployment' },
             { text: 'Configure your instance', link: '/guides/instance-administrators/configuration' },
             { text: 'Reverse proxy and TLS', link: '/guides/instance-administrators/reverse-proxy-and-tls' },
             { text: 'Email', link: '/guides/instance-administrators/email' },
@@ -191,7 +194,7 @@ export default defineConfig({
       ],
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/stephenhoward/pavilion' },
+      { icon: 'github', link: 'https://github.com/stephenhoward/pavillion' },
     ],
   },
 });
