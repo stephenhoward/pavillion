@@ -112,6 +112,16 @@ describe('logged-in root', () => {
       expect(router.currentRoute.value.name).toBe('calendars');
     });
 
+    it('stays put without throwing when the calendars fail to load', async () => {
+      sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded').rejects(new Error('network'));
+      sandbox.stub(console, 'error');
+
+      await expect((mountRoot().vm as unknown as RootVm).newEvent()).resolves.toBeUndefined();
+      await flushPromises();
+
+      expect(router.currentRoute.value.name).toBe('app');
+    });
+
     it('opens no calendar selector modal', async () => {
       stubCalendars([
         new CalendarInfo(new Calendar('o1', 'first'), 'owner'),
