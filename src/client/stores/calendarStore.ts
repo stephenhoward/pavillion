@@ -9,6 +9,8 @@ export const useCalendarStore = defineStore('calendars', {
       /** Every calendar the account owns or edits, with the relationship. */
       calendarInfos: [] as CalendarInfo[],
       loaded: false,
+      /** The account `calendarInfos` was loaded for, so an account switch can be detected. */
+      accountId: null as string | null,
       /**
        * The current calendar. The URL is the source of truth (a router guard
        * sets this from `:calendar`); the value persists so a bare route can
@@ -49,10 +51,11 @@ export const useCalendarStore = defineStore('calendars', {
     },
   },
   actions: {
-    /** Replace every calendar and mark the store loaded. */
-    setCalendarInfos(infos: CalendarInfo[]) {
+    /** Replace every calendar and mark the store loaded for `accountId`. */
+    setCalendarInfos(infos: CalendarInfo[], accountId: string | null = null) {
       this.calendarInfos = infos;
       this.loaded = true;
+      this.accountId = accountId;
     },
 
     /** Adds a calendar the account just created, so it is owned. */

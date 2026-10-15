@@ -7,8 +7,32 @@ import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar'
 
 interface JWTClaims {
   exp: number;
+  id: string;
   isAdmin: boolean;
   email: string;
+}
+
+/**
+ * The signed-in account's ID from the stored JWT claims, or null when there
+ * is no unexpired token. Reads the same storage AuthenticationService writes
+ * (`window.localStorage` in the app); never throws.
+ */
+export function currentAccountId(storage?: Storage): string | null {
+  try {
+    const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    const token = store?.getItem('jw_token');
+    if (!token) {
+      return null;
+    }
+    const claims: JWTClaims = JSON.parse(token);
+    if (claims.exp > Math.floor(Date.now() / 1000) && typeof claims.id === 'string') {
+      return claims.id;
+    }
+    return null;
+  }
+  catch {
+    return null;
+  }
 }
 
 interface PendingRequest {

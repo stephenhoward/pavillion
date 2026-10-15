@@ -10,6 +10,7 @@ import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFound
 import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
+import { currentAccountId } from '@/client/service/authn';
 
 import {
   BulkEventsNotFoundError,
@@ -47,10 +48,17 @@ export default class CalendarService {
   /**
    * Load every calendar the account owns or edits into the store, once.
    * Concurrent callers share the same request. Pass `forceLoad` after a
-   * change the store cannot apply locally.
+   * change the store cannot apply locally. A store loaded for a different
+   * account (another account signed in through the session-expired modal,
+   * with no logout between) is refetched and its selection cleared.
    * @returns Promise<Array<CalendarInfo>> The calendars with relationship info
    */
   async ensureCalendarsLoaded(forceLoad = false): Promise<CalendarInfo[]> {
+    const accountId = currentAccountId();
+    if (this.store.loaded && (this.store.accountId ?? null) !== accountId) {
+      this.store.clearSelectedCalendar();
+      forceLoad = true;
+    }
     if (!forceLoad && this.store.loaded) {
       return this.store.calendarInfos;
     }
@@ -58,7 +66,7 @@ export default class CalendarService {
     if (existing && !forceLoad) {
       return existing;
     }
-    const pending: Promise<CalendarInfo[]> = this.fetchCalendarInfos().finally(() => {
+    const pending: Promise<CalendarInfo[]> = this.fetchCalendarInfos(accountId).finally(() => {
       // A forced load may have replaced this entry; only clear our own.
       if (inFlightLoads.get(this.store) === pending) {
         inFlightLoads.delete(this.store);
@@ -71,11 +79,11 @@ export default class CalendarService {
   /**
    * Fetch the account's calendars with relationship and replace the store's list.
    */
-  private async fetchCalendarInfos(): Promise<CalendarInfo[]> {
+  private async fetchCalendarInfos(accountId: string | null): Promise<CalendarInfo[]> {
     try {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
       const infos = calendarsData.items.map((data) => CalendarInfo.fromObject(data));
-      this.store.setCalendarInfos(infos);
+      this.store.setCalendarInfos(infos, accountId);
       return infos;
     }
     catch (error) {

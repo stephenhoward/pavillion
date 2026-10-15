@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import axios from 'axios';
 
-import AuthenticationService from '@/client/service/authn';
+import AuthenticationService, { currentAccountId } from '@/client/service/authn';
 import { SessionExpiredError } from '@/common/exceptions/authentication';
 import { EmptyValueError } from '@/common/exceptions/base';
 import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
@@ -622,5 +622,28 @@ describe('current calendar entry', () => {
     await authentication._refresh_login(Math.floor(Date.now() / 1000) - 1);
 
     expect(store.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeUndefined();
+  });
+});
+
+describe('currentAccountId', () => {
+  const claims = (overrides: Record<string, unknown>) => JSON.stringify({
+    id: 'account-1', email: 'a@example.com', isAdmin: false, exp: Math.floor(Date.now() / 1000) + 60, ...overrides,
+  });
+
+  it('returns the id claim of an unexpired token', () => {
+    const store = new LocalStore();
+    store.setItem('jw_token', claims({}));
+    expect(currentAccountId(store)).toBe('account-1');
+  });
+
+  it('returns null for an expired token, no token, or unreadable claims', () => {
+    const expired = new LocalStore();
+    expired.setItem('jw_token', claims({ exp: Math.floor(Date.now() / 1000) - 1 }));
+    const garbled = new LocalStore();
+    garbled.setItem('jw_token', '{not json');
+
+    expect(currentAccountId(expired)).toBeNull();
+    expect(currentAccountId(new LocalStore())).toBeNull();
+    expect(currentAccountId(garbled)).toBeNull();
   });
 });

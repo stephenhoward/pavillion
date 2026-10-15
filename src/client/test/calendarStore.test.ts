@@ -140,6 +140,13 @@ describe('CalendarStore - calendar infos and persistence', () => {
     expect(store.calendars.map((c) => c.id)).toEqual(['e1', 'o1']);
   });
 
+  it('should record the account the list was loaded for', () => {
+    const store = useCalendarStore();
+    expect(store.accountId).toBeNull();
+    store.setCalendarInfos([owned], 'account-1');
+    expect(store.accountId).toBe('account-1');
+  });
+
   it('should look up by url name and return null for unknown', () => {
     const store = useCalendarStore();
     store.setCalendarInfos([owned]);
