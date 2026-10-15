@@ -385,6 +385,19 @@ describe('Navigation Integration - Task Group 4', () => {
       expect(guarded.currentRoute.value.name).toBe('login');
     });
 
+    it('checks admin again on a move between admin pages', async () => {
+      // Starting inside the admin section means only the destination's own
+      // guard runs on the second push, not the parent admin route's.
+      const session = { loggedIn: true, admin: true };
+      const guarded = routerFor(session);
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('admin_settings');
+
+      session.admin = false;
+      await guarded.push('/settings/admin/moderation/settings');
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
     it('lets an admin into the admin settings page', async () => {
       const guarded = routerFor({ loggedIn: true, admin: true });
       await guarded.push('/settings/admin/settings');

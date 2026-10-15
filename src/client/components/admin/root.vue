@@ -76,7 +76,8 @@ const isActive = (item: NavItem) => {
               :class="['admin-nav__badge', `admin-nav__badge--${alertLevel}`]"
             >
               <span aria-hidden="true">!</span>
-              <span class="sr-only">{{ t('needs_attention') }}</span>
+              <!-- Leading space keeps the link's accessible name "General Needs attention". -->
+              <span class="sr-only">{{ ` ${t('needs_attention')}` }}</span>
             </span>
           </RouterLink>
         </li>
