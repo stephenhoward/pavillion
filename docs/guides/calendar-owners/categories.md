@@ -22,11 +22,11 @@ Categories aren't strictly required; an event with no categories will still publ
 
 ## Create a category
 
-Open your calendar from the **Calendar** tab in the main navigation and find the **Categories** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; tap it to switch. The first time you visit, the list is empty.
+Open **Calendar** in the main navigation and find the **Categories** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; click it to switch. The first time you visit, the list is empty.
 
-Click <Btn>+ Add category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer days* — and click <Btn>Create</Btn>. The new category appears in the list with an event count of zero.
+Click <Btn>Add Category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer days* — and click <Btn>Create Category</Btn>. The new category appears in the list with an event count of zero.
 
-If your calendar publishes in more than one language, the editor lets you provide the category name in each — click <Btn>+ Add language</Btn>, pick the language, and fill in the translation. A *Workshop* category in English becomes *Atelier* for visitors browsing the page in French. The category itself is one thing with multiple labels, not multiple categories.
+If your calendar publishes in more than one language, the editor lets you provide the category name in each — click <Btn>+ Add Language</Btn>, pick the language, and fill in the translation. A *Workshop* category in English becomes *Atelier* for visitors browsing the page in French. The category itself is one thing with multiple labels, not multiple categories.
 
 Once a category exists, it shows up in three places:
 

@@ -20,7 +20,7 @@ Sign-up itself varies by instance: some accept open applications through the sit
 
 ## Step 1: Log in
 
-Go to `https://your-instance.example/` and sign in with the email address and password you set up. Because you don't have a calendar yet, the **Calendar** tab opens on an empty page with one button: <Btn>Create Your Calendar</Btn>. Click it to open the new-calendar form. (Once you have a calendar, signing in lands you on it; with several, on the one you used last. To add another later, tap the calendar name at the top of the page and choose **Create a new calendar**.)
+Go to `https://your-instance.example/` and sign in with the email address and password you set up. Because you don't have a calendar yet, the **Calendar** tab opens on an empty page with one button: <Btn>Create Your Calendar</Btn>. Click it to open the new-calendar form. (Once you have a calendar, signing in lands you on it; with several, on the one you last used in this browser. To add another later, click the calendar name at the top of the page and choose <Btn>Create a new calendar</Btn>.)
 
 ## Step 2: Create your calendar
 
@@ -39,7 +39,7 @@ Submit the form. You'll land on your new calendar's page. It's empty. We'll fix 
 
 The two things you just entered are the bare minimum to create the calendar. Before publishing an event, fill in the rest of the basics:
 
-1. Open **Settings** in the main navigation. Your calendar's name sits at the top, and its **Settings** tab holds the basics.
+1. Open **Settings** in the main navigation. The page opens on the **Editors** tab under your calendar's name; open the **Settings** tab beside it.
 2. Add a **description**. One or two sentences: who this calendar is for and what kinds of events it lists. Visitors to your public page will read this. So will other calendar owners deciding whether to follow your calendar.
 3. The **primary language** is set to your account's language by default. If you only plan to publish in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
 
@@ -55,7 +55,7 @@ Back on your calendar's page, look for the button to add an event (it lives near
 
 **Event details.** Give the event a title. Add a description — a short paragraph is fine, more if there's logistics worth spelling out. If accessibility info is relevant (wheelchair access, ASL interpretation, scent-free space), there's a dedicated field for it; visitors look for that information specifically and it shouldn't be buried in the description.
 
-**Location.** Click <Btn>Add location</Btn>. The location picker opens. You probably don't have any places saved yet, so choose <Btn>Create new place</Btn>, fill in the name and address, and confirm. The place is now reusable — for the next event you create at the same venue you will be able pick it from a list rather than re-typing the address.
+**Location.** Click <Btn>Add Location</Btn>. The location picker opens. You probably don't have any places saved yet, so choose <Btn>Create New</Btn>, fill in the name and address, and confirm. The place is now reusable — for the next event you create at the same venue you will be able pick it from a list rather than re-typing the address.
 
 ::: tip <Lightbulb /> A note on places.
 A "place" in Pavillion is its own thing — separate from the events that reference it. The address is stored once, on the place. Events point at the place. So when the venue changes its name or you correct a typo in the address, you fix it once and every event there is updated.
@@ -92,7 +92,7 @@ Open a new browser tab and go to `https://your-instance.example/your-handle`, re
 
 What you're looking at is what anyone on the internet sees. No login required. Your event should be there, with the place, the date, the description, and the category you chose. Click into the event to see its detail page — that's the URL you'd share for a single event.
 
-If you don't see it, the most likely reason is the date filter. The public page opens to a [default window](./identity#the-default-date-filter) — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from the **Settings** tab in **Settings** if two weeks isn't right for your community's rhythm.
+If you don't see it, the most likely reason is the date filter. The public page opens to a [default window](./identity#the-default-date-filter) — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from your calendar's **Settings** tab (open **Settings** in the main navigation) if two weeks isn't right for your community's rhythm.
 
 Paste your calendar's URL into a chat with a friend. Have them open it. Ask whether the event makes sense to them as someone who's never seen it before. That feedback — from a fresh pair of eyes who is the audience, not the organizer — is more useful than any checklist.
 

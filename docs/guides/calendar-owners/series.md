@@ -36,7 +36,7 @@ A few programs sit between the two — a weekly meditation group where the leade
 
 There are two ways to create a series: from the **Series** tab on your calendar's page, described here, or from inside the event editor while you're writing an event (see [Add events to a series](#add-events-to-a-series)). The Series tab is the one to use when you want to set everything up front, including the image.
 
-Open your calendar from the **Calendar** tab in the main navigation and find the **Series** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; tap it to switch. The first time you visit, the list is empty.
+Open **Calendar** in the main navigation and find the **Series** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; click it to switch. The first time you visit, the list is empty.
 
 Click <Btn>Add Series</Btn>. A full-page editor opens with the following fields:
 

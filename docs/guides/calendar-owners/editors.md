@@ -38,7 +38,7 @@ A separate per-editor toggle exists to let a specific editor review reports file
 
 ## Invite an editor
 
-Open **Settings** in the main navigation, check that the name at the top is the calendar you mean (tap it to switch), and find the **Editors** tab. The first time you visit, the list is empty.
+Open **Settings** in the main navigation, check that the name at the top is the calendar you mean (click it to switch), and find the **Editors** tab. The first time you visit, the list is empty.
 
 Click <Btn>Add Editor</Btn>, enter the email address of the person you want to add, and submit.
 
