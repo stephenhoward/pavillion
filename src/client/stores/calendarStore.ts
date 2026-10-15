@@ -18,25 +18,25 @@ export const useCalendarStore = defineStore('calendars', {
     };
   },
   getters: {
-    calendars: (state): Calendar[] => state.calendarInfos.map((info) => info.calendar),
-    ownedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info) => info.isOwner),
-    editedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info) => info.isEditor),
+    calendars: (state): Calendar[] => state.calendarInfos.map((info: CalendarInfo) => info.calendar),
+    ownedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isOwner),
+    editedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isEditor),
     hasCalendars: (state) => state.calendarInfos.length > 0,
     hasMultipleCalendars: (state) => state.calendarInfos.length > 1,
     getCalendarById: (state) => (id: string): Calendar | null => {
-      return state.calendarInfos.find((info) => info.calendar.id === id)?.calendar ?? null;
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === id)?.calendar ?? null;
     },
     getCalendarByUrlName: (state) => (urlName: string): Calendar | null => {
-      return state.calendarInfos.find((info) => info.calendar.urlName === urlName)?.calendar ?? null;
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName)?.calendar ?? null;
     },
     getCalendarInfoByUrlName: (state) => (urlName: string): CalendarInfo | null => {
-      return state.calendarInfos.find((info) => info.calendar.urlName === urlName) ?? null;
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName) ?? null;
     },
     selectedCalendar: (state): Calendar | null => {
       if (!state.selectedCalendarId) {
         return null;
       }
-      return state.calendarInfos.find((info) => info.calendar.id === state.selectedCalendarId)?.calendar ?? null;
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === state.selectedCalendarId)?.calendar ?? null;
     },
   },
   actions: {
@@ -48,7 +48,7 @@ export const useCalendarStore = defineStore('calendars', {
 
     /** Adds a calendar the account just created, so it is owned. */
     addCalendar(calendar: Calendar) {
-      const exists = this.calendarInfos.some((info) => info.calendar.id === calendar.id);
+      const exists = this.calendarInfos.some((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (!exists) {
         this.calendarInfos.push(new CalendarInfo(calendar, 'owner'));
       }
@@ -56,7 +56,7 @@ export const useCalendarStore = defineStore('calendars', {
 
     /** Replace the calendar inside its info, keeping the relationship; add as owned if absent. */
     updateCalendar(calendar: Calendar) {
-      const index = this.calendarInfos.findIndex((info) => info.calendar.id === calendar.id);
+      const index = this.calendarInfos.findIndex((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (index >= 0) {
         this.calendarInfos[index] = new CalendarInfo(calendar, this.calendarInfos[index].userRelationship);
       }
@@ -66,7 +66,7 @@ export const useCalendarStore = defineStore('calendars', {
     },
 
     removeCalendar(calendar: Calendar) {
-      const index = this.calendarInfos.findIndex((info) => info.calendar.id === calendar.id);
+      const index = this.calendarInfos.findIndex((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (index >= 0) {
         this.calendarInfos.splice(index, 1);
       }
