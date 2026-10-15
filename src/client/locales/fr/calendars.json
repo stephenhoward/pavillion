@@ -10,7 +10,6 @@
     "calendar_name_placeholder": "nom-de-votre-calendrier",
     "calendar_name_help": "Les noms de calendrier doivent contenir entre 3 et 24 caractères, commencer par une lettre ou un chiffre, et peuvent contenir des lettres, des chiffres, des tirets bas et des traits d'union (les traits d'union ne sont pas autorisés au début ni à la fin). Certains noms sont réservés par le site et ne peuvent pas être utilisés.",
     "create_new_calendar_header": "Créer un nouveau calendrier",
-    "create_new_calendar_button": "Nouveau calendrier",
     "aria_new_calendar_form": "Formulaire de nouveau calendrier",
     "legend_calendar_creation": "Création de calendrier",
     "label_calendar_name": "Nom du calendrier",
@@ -20,16 +19,6 @@
     "guide_link": "Comment créer un calendrier",
     "no_calendars_title": "Créez votre premier calendrier",
     "no_calendars_description": "Dans Pavillion, tout commence par un calendrier. Créez-en un pour ajouter des événements, suivre d'autres calendriers et partager le vôtre."
-  },
-  "selector": {
-    "select_calendar_title": "Sélectionner un calendrier",
-    "select_calendar_instructions": "Veuillez sélectionner un calendrier pour votre événement :",
-    "loading_calendars": "Chargement des calendriers...",
-    "no_calendars": "Vous n'avez aucun calendrier. Veuillez en créer un d'abord.",
-    "error_loading_calendars": "Erreur lors du chargement des calendriers",
-    "cancel_button": "Annuler",
-    "editor_badge": "Éditeur",
-    "last_used_badge": "Dernière utilisation"
   },
   "switcher": {
     "title": "Changer de calendrier",

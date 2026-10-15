@@ -10,7 +10,6 @@
     "calendar_name_placeholder": "your-calendar-name",
     "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at the beginning or end). Some names are reserved by the site and cannot be used.",
     "create_new_calendar_header": "Create New Calendar",
-    "create_new_calendar_button": "New Calendar",
     "aria_new_calendar_form": "New Calendar Form",
     "legend_calendar_creation": "Calendar Creation",
     "label_calendar_name": "Calendar Name",
@@ -20,16 +19,6 @@
     "guide_link": "How to create a calendar",
     "no_calendars_title": "Create your first calendar",
     "no_calendars_description": "Everything in Pavillion starts with a calendar. Create one to add events, follow other calendars and share yours."
-  },
-  "selector": {
-    "select_calendar_title": "Select Calendar",
-    "select_calendar_instructions": "Please select a calendar for your event:",
-    "loading_calendars": "Loading calendars...",
-    "no_calendars": "You don't have any calendars. Please create one first.",
-    "error_loading_calendars": "Error loading calendars",
-    "cancel_button": "Cancel",
-    "editor_badge": "Editor",
-    "last_used_badge": "Last Used"
   },
   "switcher": {
     "title": "Switch calendar",

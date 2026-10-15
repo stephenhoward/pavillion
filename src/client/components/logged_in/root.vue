@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useNotificationStore } from '@/client/stores/notificationStore';
-import CalendarSelector from '@/client/components/logged_in/calendar/calendar_selector.vue';
+import { resolveCurrentCalendar } from '@/client/service/current-calendar';
 import AppShell from '@/client/components/shell/app-shell.vue';
 import type { NavigationItem } from '@/client/components/shell/types';
 
@@ -13,7 +13,6 @@ import type { NavigationItem } from '@/client/components/shell/types';
 import { Calendar, Rss, Bell, Settings } from 'lucide-vue-next';
 
 const router = useRouter();
-const showCalendarSelector = ref(false);
 const { t } = useTranslation('system');
 const calendarService = new CalendarService();
 const calendarStore = useCalendarStore();
@@ -26,7 +25,7 @@ const notificationStore = useNotificationStore();
  */
 const navigationItems = computed<NavigationItem[]>(() => [
   {
-    id: 'calendars',
+    id: 'calendar',
     label: t('main_navigation.calendar_button'),
     icon: Calendar,
     to: '/calendar',
@@ -47,49 +46,30 @@ const navigationItems = computed<NavigationItem[]>(() => [
   },
   {
     id: 'settings',
-    label: t('main_navigation.profile_button'),
+    label: t('main_navigation.settings_button'),
     icon: Settings,
-    to: '/profile',
+    to: '/settings',
   },
 ]);
 
 /**
- * Handle new event creation via route-based navigation.
- * If user has one calendar, navigate directly to /event.
- * If user has multiple calendars, show calendar selector first.
+ * New Event always targets the current calendar. With none, go to the
+ * zero-calendar page so the user creates one first.
  */
 const newEvent = async () => {
   try {
-    const calendars = await calendarService.loadCalendars();
-
-    if (calendars.length === 0) {
+    const infos = await calendarService.ensureCalendarsLoaded();
+    const target = resolveCurrentCalendar(calendarStore.selectedCalendarId, infos);
+    if (!target) {
       router.push({ name: 'calendars' });
       return;
     }
-    else if (calendars.length === 1) {
-      calendarStore.setSelectedCalendar(calendars[0].id);
-      router.push({ name: 'event_new' });
-    }
-    else {
-      showCalendarSelector.value = true;
-    }
+    calendarStore.setSelectedCalendar(target.calendar.id);
+    router.push({ name: 'event_new' });
   }
   catch (error) {
     console.error('Error checking calendars:', error);
   }
-};
-
-/**
- * Handle calendar selection from selector modal.
- */
-const onCalendarSelected = (calendar: { id: string }) => {
-  showCalendarSelector.value = false;
-  calendarStore.setSelectedCalendar(calendar.id);
-  router.push({ name: 'event_new' });
-};
-
-const onCalendarSelectionCanceled = () => {
-  showCalendarSelector.value = false;
 };
 
 // Expose newEvent for child components that need to trigger event creation
@@ -142,13 +122,6 @@ onUnmounted(() => {
   <AppShell :navigation-items="navigationItems">
     <RouterView />
   </AppShell>
-
-  <!-- Calendar Selector Modal for New Event creation -->
-  <CalendarSelector
-    v-if="showCalendarSelector"
-    @select="onCalendarSelected"
-    @cancel="onCalendarSelectionCanceled"
-  />
 </template>
 
 <style lang="scss">
