@@ -273,8 +273,8 @@ describe('AutoEscalationNotificationEmail', () => {
 
     const mailData = email.buildMessage('en');
 
-    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/admin/moderation/reports/report-uuid-123`);
-    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/admin/moderation/reports/report-uuid-123`);
+    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/settings/admin/moderation/reports/report-uuid-123`);
+    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/settings/admin/moderation/reports/report-uuid-123`);
   });
 
   it('should pass the language to template rendering', () => {

@@ -341,6 +341,7 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
         login: 'client_index',
         policy: 'client_index',
         profile: 'client_index',
+        settings: 'client_index',
         setup: 'client_index',
         users: FALLS_THROUGH,
         widget: FALLS_THROUGH,

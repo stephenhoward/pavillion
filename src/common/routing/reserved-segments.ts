@@ -21,6 +21,13 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * array would exclude `discover` and `view` from exactly the handler that must
  * serve them.
  *
+ * A fifth kind exists since the client moved its profile, funding and admin
+ * pages under `settings`: **reserved but unrouted**. `profile`, `admin` and
+ * `funding` serve nothing and redirect nowhere, yet stay reserved, because
+ * releasing a name is irreversible once a calendar claims it and is a
+ * separate decision. The reserved list also gates series url names, so
+ * `settings` is unavailable as a series name too.
+ *
  * Entries are lower case; `classifyReservedRouteSegment` does the case folding
  * (and `isReservedRouteSegment` folds through it), which matches the case-insensitive route regexes in src/server/app_routes.ts. The
  * array is frozen so a consumer that builds a route regex alternation from it
@@ -30,7 +37,7 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * - server: the client catch-all exclusions and the dev asset/coverage
  *   redirects in src/server/app_routes.ts, the federation routers mounted at
  *   '/' in src/server/activitypub/api/v1.ts, and /health in src/server/server.ts
- * - client SPA: every top-level route in src/client/app.ts
+ * - client SPA: every top-level route in src/client/routes.ts
  * - public site: the discovery page, plus `view`, which stays reserved
  *   permanently so the redirects away from the old URL shape stay unambiguous
  *
@@ -64,6 +71,7 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = Object.freeze([
   'login',
   'policy',
   'profile',
+  'settings',
   'setup',
   'users',
   'view',
