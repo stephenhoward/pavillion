@@ -137,7 +137,7 @@ const loadCalendarData = async () => {
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
-    state.err = 'Failed to load calendar data';
+    state.err = t('load_error');
   }
   finally {
     state.isLoading = false;
@@ -161,7 +161,7 @@ const handleLoadEvents = async (filters) => {
   }
   catch (error) {
     console.error('Error loading filtered events:', error);
-    state.err = 'Failed to load events with current filters';
+    state.err = t('load_events_error');
   }
   finally {
     state.isLoading = false;
@@ -172,11 +172,13 @@ const handleLoadEvents = async (filters) => {
 <template>
   <div>
     <div v-if="state.err"
-         class="error alert"
+         class="error alert calendar-error"
          role="alert"
          aria-live="polite">
-      {{ state.err }}
-      <RouterLink :to="{ name: 'calendars' }">{{ t('back_to_calendar') }}</RouterLink>
+      <p>{{ state.err }}</p>
+      <p>
+        <RouterLink :to="{ name: 'calendars' }" class="calendar-error__link">{{ t('back_to_calendar') }}</RouterLink>
+      </p>
     </div>
     <div v-else>
       <header class="calendar-header">
@@ -379,6 +381,22 @@ const handleLoadEvents = async (filters) => {
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins/tabs' as *;
 @use '../../../assets/style/components/calendar-admin' as *;
+
+/* Message and recovery link stacked; the link takes the alert's text colour
+   and an underline so it reads as a link without relying on colour. */
+.calendar-error {
+  flex-direction: column;
+  gap: var(--pav-space-2);
+
+  p {
+    margin: 0;
+  }
+
+  &__link {
+    color: currentColor;
+    text-decoration: underline;
+  }
+}
 
 /* Calendar header with sticky blur effect */
 .calendar-header {

@@ -29,16 +29,17 @@ async function closeCreateSheet() {
 </script>
 
 <template>
-  <main role="main" :aria-label="t('aria_calendar_management')">
+  <div class="no-calendars">
     <EmptyState
       :title="t('no_calendars_title')"
       :description="t('no_calendars_description')"
       :guide="{ slug: 'guides/calendar-owners/quickstart', key: 'quickstart' }"
+      :guide-label="t('guide_link')"
     >
       <PillButton variant="primary" @click="openCreateSheet">
         {{ t('create_calendar_button') }}
       </PillButton>
     </EmptyState>
     <CreateCalendarSheet v-if="showCreateSheet" @close="closeCreateSheet" />
-  </main>
+  </div>
 </template>

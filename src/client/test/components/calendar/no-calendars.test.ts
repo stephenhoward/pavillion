@@ -17,10 +17,11 @@ describe('NoCalendars', () => {
     });
   }
 
-  it('renders the empty state inside a main landmark', () => {
+  it('renders the empty state without a landmark of its own, since the shell provides <main>', () => {
     const wrapper = mountPage();
-    expect(wrapper.find('main').exists()).toBe(true);
+    expect(wrapper.find('main').exists()).toBe(false);
     expect(wrapper.find('h2').text()).toBe('Create your first calendar');
+    expect(wrapper.find('.doc-link').text()).toBe('How to create a calendar');
   });
 
   it('offers only the create action and opens the create sheet', async () => {

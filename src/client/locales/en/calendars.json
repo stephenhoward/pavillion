@@ -1,7 +1,5 @@
 {
   "list": {
-    "my_calendars_header": "My Calendars",
-    "create_first_calendar_header": "Create your first calendar",
     "create_calendar_button": "Create Your Calendar",
     "creating_calendar": "Creating calendar...",
     "error_empty_calendar_name": "Calendar name cannot be empty",
@@ -11,26 +9,14 @@
     "error_create_calendar": "Error creating calendar",
     "calendar_name_placeholder": "your-calendar-name",
     "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can contain letters, numbers, underscores, and hyphens (hyphens not allowed at the beginning or end). Some names are reserved by the site and cannot be used.",
-    "aria_calendar_management": "Calendar Management",
-    "aria_my_calendars_navigation": "My Calendars Navigation",
     "create_new_calendar_header": "Create New Calendar",
     "create_new_calendar_button": "New Calendar",
-    "aria_create_new_calendar": "Create New Calendar",
     "aria_new_calendar_form": "New Calendar Form",
     "legend_calendar_creation": "Calendar Creation",
     "label_calendar_name": "Calendar Name",
     "label_calendar_title": "Calendar Title",
     "calendar_title_placeholder": "My Community Calendar",
     "calendar_title_help": "A human-readable title for your calendar",
-    "calendar_count_one": "{{count}} calendar you can edit",
-    "calendar_count_other": "{{count}} calendars you can edit",
-    "role_owner": "Owner",
-    "role_editor": "Editor",
-    "aria_navigate_calendar": "Navigate to calendar: {{calendarName}}, role: {{role}}",
-    "aria_view_public_calendar": "View public calendar: {{name}} (opens in new tab)",
-    "error_loading_calendars": "Failed to load calendars",
-    "menu_label": "Calendar list actions",
-    "documentation": "Documentation",
     "guide_link": "How to create a calendar",
     "no_calendars_title": "Create your first calendar",
     "no_calendars_description": "Everything in Pavillion starts with a calendar. Create one to add events, follow other calendars and share yours."
@@ -92,7 +78,9 @@
     "language_count": "{{count}} languages",
     "guide_link": "Create your first event",
     "not_found": "No calendar named {{name}} is yours to edit.",
-    "back_to_calendar": "Go to your calendar"
+    "back_to_calendar": "Go to your calendar",
+    "load_error": "Failed to load calendar data",
+    "load_events_error": "Failed to load events with the current filters"
   },
   "editors": {
     "title": "Calendar Editors",

@@ -383,10 +383,19 @@ describe('Calendar View Tabs', () => {
       const { wrapper, router } = await createWrapper({}, { calendar: 'not-mine' });
 
       expect(router.currentRoute.value.fullPath).toBe('/calendar/not-mine');
-      const alert = wrapper.find('[role="alert"]');
-      expect(alert.text()).toContain('not-mine');
-      expect(alert.find('a').attributes('href')).toBe('/calendars');
+      const paragraphs = wrapper.findAll('[role="alert"] p');
+      expect(paragraphs).toHaveLength(2);
+      expect(paragraphs[0].text()).toContain('not-mine');
+      expect(paragraphs[1].find('a').attributes('href')).toBe('/calendars');
       expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+    });
+
+    it('shows a translated error when the calendar fails to load', async () => {
+      (CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub).rejects(new Error('network'));
+
+      const { wrapper } = await createWrapper();
+
+      expect(wrapper.find('[role="alert"] p').text()).toBe('Failed to load calendar data');
     });
   });
 });

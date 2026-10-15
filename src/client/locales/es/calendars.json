@@ -1,7 +1,5 @@
 {
   "list": {
-    "my_calendars_header": "Mis calendarios",
-    "create_first_calendar_header": "Crea tu primer calendario",
     "create_calendar_button": "Crear tu calendario",
     "creating_calendar": "Creando calendario...",
     "error_empty_calendar_name": "El nombre del calendario no puede estar vacío",
@@ -11,26 +9,14 @@
     "error_create_calendar": "Error al crear el calendario",
     "calendar_name_placeholder": "nombre-de-tu-calendario",
     "calendar_name_help": "Los nombres de calendario deben tener entre 3 y 24 caracteres, comenzar con una letra o número, y pueden contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final). Algunos nombres están reservados por el sitio y no se pueden usar.",
-    "aria_calendar_management": "Gestión de calendarios",
-    "aria_my_calendars_navigation": "Navegación de mis calendarios",
     "create_new_calendar_header": "Crear nuevo calendario",
     "create_new_calendar_button": "Nuevo calendario",
-    "aria_create_new_calendar": "Crear nuevo calendario",
     "aria_new_calendar_form": "Formulario de nuevo calendario",
     "legend_calendar_creation": "Creación de calendario",
     "label_calendar_name": "Nombre del calendario",
     "label_calendar_title": "Título del calendario",
     "calendar_title_placeholder": "Mi calendario comunitario",
     "calendar_title_help": "Un título legible para tu calendario",
-    "calendar_count_one": "{{count}} calendario que puedes editar",
-    "calendar_count_other": "{{count}} calendarios que puedes editar",
-    "role_owner": "Propietario",
-    "role_editor": "Editor",
-    "aria_navigate_calendar": "Ir al calendario: {{calendarName}}, rol: {{role}}",
-    "aria_view_public_calendar": "Ver calendario público: {{name}} (se abre en una pestaña nueva)",
-    "error_loading_calendars": "Error al cargar los calendarios",
-    "menu_label": "Acciones de la lista de calendarios",
-    "documentation": "Documentación",
     "guide_link": "Cómo crear un calendario",
     "no_calendars_title": "Crea tu primer calendario",
     "no_calendars_description": "En Pavillion todo empieza con un calendario. Crea uno para añadir eventos, seguir otros calendarios y compartir el tuyo."
@@ -92,7 +78,9 @@
     "language_count": "{{count}} idiomas",
     "guide_link": "Crea tu primer evento",
     "not_found": "No tienes ningún calendario llamado {{name}} que puedas editar.",
-    "back_to_calendar": "Ir a tu calendario"
+    "back_to_calendar": "Ir a tu calendario",
+    "load_error": "No se pudieron cargar los datos del calendario",
+    "load_events_error": "No se pudieron cargar los eventos con los filtros actuales"
   },
   "editors": {
     "title": "Editores del calendario",
