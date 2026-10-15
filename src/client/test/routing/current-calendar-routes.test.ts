@@ -4,11 +4,8 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import {
-  createCurrentCalendarRedirect,
-  createCurrentCalendarSync,
-  CURRENT_CALENDAR_STORAGE_KEY,
-} from '@/client/service/current-calendar';
+import { createCurrentCalendarRedirect, createCurrentCalendarSync } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 const owned = (id: string, name: string) => new CalendarInfo(new Calendar(id, name), 'owner');
 const Stub = { template: '<div />' };

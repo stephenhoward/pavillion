@@ -11,6 +11,7 @@ import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
 
 type Pane = 'calendar' | 'account' | 'admin';
 
@@ -44,7 +45,8 @@ const label = computed(() => {
     return t('admin_row');
   }
   const urlName = currentUrlName.value ?? '';
-  return store.getCalendarByUrlName(urlName)?.content('en').name || urlName;
+  const calendar = store.getCalendarByUrlName(urlName);
+  return calendar ? calendarDisplayName(calendar) : urlName;
 });
 
 const isAdmin = computed(() => authn?.isAdmin?.() ?? false);

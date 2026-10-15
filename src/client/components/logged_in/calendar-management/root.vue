@@ -10,6 +10,7 @@ import ImportSourcesSection from './import-sources/ImportSourcesSection.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 import ModerationService from '@/client/service/moderation';
 import Config from '@/client/service/config';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -32,6 +33,7 @@ const { t } = useTranslation('calendars', {
 });
 
 const calendarService = new CalendarService();
+const calendarStore = useCalendarStore();
 const moderationService = new ModerationService();
 
 const state = reactive({
@@ -109,11 +111,8 @@ const openReportFromQuery = async () => {
 onBeforeMount(async () => {
   state.loading = true;
   try {
-    const calendarInfos = await calendarService.ensureCalendarsLoaded();
-    const found = calendarInfos.find(
-      (info) => info.calendar.urlName === calendarUrlName,
-    );
-    state.calendarInfo = found ?? null;
+    await calendarService.ensureCalendarsLoaded();
+    state.calendarInfo = calendarStore.getCalendarInfoByUrlName(calendarUrlName);
 
     // Restore tab from query param (e.g. after Stripe checkout redirect)
     const requestedTab = route.query.tab as string | undefined;

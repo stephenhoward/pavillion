@@ -3,7 +3,7 @@ import { ref, Ref } from 'vue';
 
 import { SessionExpiredError } from '@/common/exceptions/authentication';
 import { EmptyValueError } from '@/common/exceptions/base';
-import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 interface JWTClaims {
   exp: number;

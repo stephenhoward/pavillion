@@ -7,7 +7,7 @@ import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-c
 defineProps<{
   /** Text shown on the trigger: the calendar name, or the settings pane name. */
   label: string;
-  /** Named route the sheet navigates to with `{ calendar }` on pick. */
+  /** Named route the sheet navigates to with `{ calendar }` on pick, and a created calendar opens on. */
   routeName: string;
   /** Calendar the host page shows, or null. */
   currentUrlName: string | null;
@@ -76,7 +76,7 @@ function closeCreate() {
     <slot />
   </CalendarSwitcherSheet>
 
-  <CreateCalendarSheet v-if="createOpen" @close="closeCreate" />
+  <CreateCalendarSheet v-if="createOpen" :route-name="routeName" @close="closeCreate" />
 </template>
 
 <style scoped lang="scss">

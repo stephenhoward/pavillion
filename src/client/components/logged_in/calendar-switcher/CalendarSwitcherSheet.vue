@@ -5,6 +5,7 @@ import { CalendarPlus } from 'lucide-vue-next';
 import Sheet from '@/client/components/common/sheet.vue';
 import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
 import type { CalendarInfo } from '@/common/model/calendar_info';
 
 defineProps<{
@@ -24,7 +25,7 @@ const store = useCalendarStore();
 
 const rows = computed<CalendarInfo[]>(() => [...store.ownedCalendars, ...store.editedCalendars]);
 
-const nameOf = (info: CalendarInfo) => info.calendar.content('en').name || info.calendar.urlName;
+const nameOf = (info: CalendarInfo) => calendarDisplayName(info.calendar);
 
 // Revalidate on open: a no-op for the same account, while a different
 // signed-in account resets and refetches, so the sheet never lists a

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
 import { useToast } from '@/client/composables/useToast';
 import { useFeedEvents } from '@/client/composables/useFeedEvents';
 import { useFeedFollows } from '@/client/composables/useFeedFollows';
@@ -44,7 +45,7 @@ const addCalendarTriggerRef = ref(null);
  */
 const calendarUrlName = computed(() => (typeof route.params.calendar === 'string' ? route.params.calendar : ''));
 const calendar = computed(() => calendarStore.getCalendarByUrlName(calendarUrlName.value));
-const calendarName = computed(() => calendar.value?.content('en').name || calendarUrlName.value);
+const calendarName = computed(() => (calendar.value ? calendarDisplayName(calendar.value) : calendarUrlName.value));
 const isLoadingAny = computed(() =>
   isLoadingEvents.value || isLoadingFollows.value || isLoadingFollowers.value,
 );

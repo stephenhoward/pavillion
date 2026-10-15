@@ -16,6 +16,8 @@ const router = () => createRouter({
   routes: [
     { path: '/', component: Stub, name: 'home' },
     { path: '/calendar/:calendar', component: Stub, name: 'calendar' },
+    { path: '/feed/:calendar', component: Stub, name: 'feed' },
+    { path: '/settings/calendar/:calendar', component: Stub, name: 'calendar_management' },
   ],
 });
 
@@ -79,7 +81,7 @@ describe('CalendarSwitcher', () => {
     expect(wrapper.find('[data-testid="emit-create"]').exists()).toBe(false);
   });
 
-  describe('focus return', () => {
+  describe('with the real sheets', () => {
     let sandbox: sinon.SinonSandbox;
     let wrapper: VueWrapper | null = null;
     const { showModal, close } = HTMLDialogElement.prototype;
@@ -107,10 +109,16 @@ describe('CalendarSwitcher', () => {
       HTMLDialogElement.prototype.close = close;
     });
 
-    const openSheet = async (stubs: Record<string, unknown> = {}) => {
+    const openSheet = async (stubs: Record<string, unknown> = {}, mountProps = props, startPath = '/calendar/riverside') => {
       const r = router();
-      await r.push('/calendar/riverside');
-      wrapper = mountComponent(Switcher, r, { pinia, props, stubs, attachTo: document.body });
+      await r.push(startPath);
+      wrapper = mountComponent(Switcher, r, {
+        pinia,
+        props: mountProps,
+        stubs,
+        attachTo: document.body,
+        provide: { site_config: { settings: () => ({ domain: 'pavillion.dev' }) } },
+      });
       const trigger = wrapper.find<HTMLButtonElement>('button.calendar-switcher');
       trigger.element.focus();
       await trigger.trigger('click');
@@ -118,7 +126,7 @@ describe('CalendarSwitcher', () => {
       // useDialog moves initial focus into the sheet on a zero-delay timer.
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(document.activeElement).not.toBe(trigger.element);
-      return { wrapper, trigger: trigger.element };
+      return { wrapper, trigger: trigger.element, router: r };
     };
 
     it('returns focus to the trigger after a calendar is picked', async () => {
@@ -151,6 +159,24 @@ describe('CalendarSwitcher', () => {
 
       expect(w.find('[data-testid="close-create"]').exists()).toBe(false);
       expect(document.activeElement).toBe(trigger);
+    });
+
+    it.each([
+      ['feed', '/feed/riverside', '/feed/new-calendar'],
+      ['calendar_management', '/settings/calendar/riverside', '/settings/calendar/new-calendar'],
+      ['calendar', '/calendar/riverside', '/calendar/new-calendar'],
+    ])('lands a calendar created from the %s switcher on that route', async (routeName, startPath, expectedPath) => {
+      sandbox.stub(CalendarService.prototype, 'createCalendar').resolves(new Calendar('c3', 'new-calendar'));
+      const { wrapper: w, router: r } = await openSheet({}, { ...props, routeName }, startPath);
+
+      await w.find('[data-testid="switcher-create"]').trigger('click');
+      await flushPromises();
+      await w.find('#calendar-name').setValue('new-calendar');
+      await w.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(r.currentRoute.value.path).toBe(expectedPath);
+      expect(w.find('#calendar-name').exists()).toBe(false);
     });
   });
 });

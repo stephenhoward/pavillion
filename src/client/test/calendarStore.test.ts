@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
-import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 describe('CalendarStore - Selected Calendar', () => {
   beforeEach(() => {
@@ -156,6 +156,7 @@ describe('CalendarStore - calendar infos and persistence', () => {
     expect(store.loaded).toBe(false);
     expect(store.accountId).toBeNull();
     expect(store.selectedCalendarId).toBeNull();
+    expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeNull();
   });
 
   it('should look up by url name and return null for unknown', () => {
@@ -186,11 +187,11 @@ describe('CalendarStore - calendar infos and persistence', () => {
     expect(store.ownedCalendars).toEqual([]);
   });
 
-  it('should persist the selected id and clear it', () => {
+  it('should persist the selected id and remove it on null', () => {
     const store = useCalendarStore();
     store.setSelectedCalendar('o1');
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('o1');
-    store.clearSelectedCalendar();
+    store.setSelectedCalendar(null);
     expect(store.selectedCalendarId).toBeNull();
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeNull();
   });

@@ -22,16 +22,10 @@ const itemsWithActiveState = computed<NavigationItemWithState[]>(() =>
 );
 
 /**
- * Check if a navigation item is active for the current route.
- * If the route defines a meta.activeNav string, it takes precedence over
- * the path-based matching so that routes living under a different URL prefix
- * (e.g. /calendar/:id/following/:id/category-mappings) can still highlight
- * the correct sidebar item (e.g. "feed").
+ * Check if a navigation item is active for the current route: the route's
+ * path starts with the item's path.
  */
 function isRouteActive(item: NavigationItem): boolean {
-  if (route.meta.activeNav && typeof route.meta.activeNav === 'string') {
-    return route.meta.activeNav === item.id;
-  }
   const path = typeof item.to === 'string' ? item.to : (item.to as { path?: string }).path || '';
   return route.path.startsWith(path);
 }

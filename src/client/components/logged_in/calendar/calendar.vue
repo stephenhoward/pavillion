@@ -6,6 +6,7 @@ import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
 import { ExternalLink, BookOpenText, Settings } from 'lucide-vue-next';
 import ActionsMenu from '@/client/components/common/actions-menu.vue';
 import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
@@ -40,7 +41,7 @@ const calendarStore = useCalendarStore();
 // the loaded snapshot covers a calendar the store does not hold.
 const calendarName = computed(() => {
   const calendar = calendarStore.getCalendarByUrlName(String(calendarUrlName.value ?? '')) ?? state.calendar;
-  return calendar?.content('en').name || calendar?.urlName || '';
+  return calendar ? calendarDisplayName(calendar) : '';
 });
 const calendarService = new CalendarService();
 

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
-import { readPersistedCalendarId, writePersistedCalendarId } from '@/client/service/current-calendar';
+import { readPersistedCalendarId, writePersistedCalendarId } from '@/client/service/current-calendar-storage';
 
 export const useCalendarStore = defineStore('calendars', {
   state: () => {
@@ -26,10 +26,6 @@ export const useCalendarStore = defineStore('calendars', {
     ownedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isOwner),
     /** Calendars the account edits but does not own. */
     editedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isEditor),
-    /** Check if the user has any calendars. */
-    hasCalendars: (state) => state.calendarInfos.length > 0,
-    /** Check if the user has multiple calendars. */
-    hasMultipleCalendars: (state) => state.calendarInfos.length > 1,
     /** Get a calendar by ID, or null if the account has none with that ID. */
     getCalendarById: (state) => (id: string): Calendar | null => {
       return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === id)?.calendar ?? null;
@@ -85,16 +81,10 @@ export const useCalendarStore = defineStore('calendars', {
       }
     },
 
-    /** Set and persist the current calendar. */
+    /** Set and persist the current calendar; null forgets it in memory and in storage. */
     setSelectedCalendar(calendarId: string | null) {
       this.selectedCalendarId = calendarId;
       writePersistedCalendarId(calendarId);
-    },
-
-    /** Forget the current calendar in memory and in storage. */
-    clearSelectedCalendar() {
-      this.selectedCalendarId = null;
-      writePersistedCalendarId(null);
     },
 
     /** Drop the cached list, its account and the current calendar, so the next load starts clean. */
@@ -102,7 +92,7 @@ export const useCalendarStore = defineStore('calendars', {
       this.calendarInfos = [];
       this.loaded = false;
       this.accountId = null;
-      this.clearSelectedCalendar();
+      this.setSelectedCalendar(null);
     },
   },
 });

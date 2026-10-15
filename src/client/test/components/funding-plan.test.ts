@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { createPinia } from 'pinia';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import FundingSettings from '@/client/components/admin/funding.vue';
 import FundingPlanManagement from '@/client/components/account/funding-plan.vue';
+import FundingService from '@/client/service/funding';
 
 /**
  * Test suite for funding plan UI components
@@ -16,18 +17,18 @@ describe('Funding Plan UI Components', () => {
   let router: any;
 
   beforeEach(() => {
-    // Mock funding service
+    // The components construct their own FundingService, so stub its
+    // prototype: every load on mount resolves in-process, and flushPromises
+    // settles it without reaching the network.
     mockFundingService = {
-      getSettings: vi.fn(),
-      updateSettings: vi.fn(),
-      getProviders: vi.fn(),
-      connectProvider: vi.fn(),
-      disconnectProvider: vi.fn(),
-      getOptions: vi.fn(),
-      startPlan: vi.fn(),
-      getStatus: vi.fn(),
-      cancel: vi.fn(),
-      getPortalUrl: vi.fn(),
+      getSettings: vi.spyOn(FundingService.prototype, 'getSettings').mockResolvedValue({
+        enabled: false, monthlyPrice: 0, yearlyPrice: 0, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7,
+      } as any),
+      getProviders: vi.spyOn(FundingService.prototype, 'getProviders').mockResolvedValue([]),
+      listFundingPlans: vi.spyOn(FundingService.prototype, 'listFundingPlans')
+        .mockResolvedValue({ fundingPlans: [], pagination: { totalCount: 0 } }),
+      getOptions: vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({ enabled: false } as any),
+      getStatus: vi.spyOn(FundingService.prototype, 'getStatus').mockResolvedValue(null),
     };
 
     // Create router for component testing
@@ -73,7 +74,7 @@ describe('Funding Plan UI Components', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   /**
@@ -100,7 +101,7 @@ describe('Funding Plan UI Components', () => {
 
     // Wait for component to load data
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Switch to settings sub-tab where the pricing form lives
     (wrapper.vm as any).activeSubTab = 'settings';
@@ -129,7 +130,7 @@ describe('Funding Plan UI Components', () => {
     });
 
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify provider section exists (structure test)
     expect(wrapper.html()).toBeTruthy();
@@ -154,7 +155,7 @@ describe('Funding Plan UI Components', () => {
     });
 
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify component renders (structure test)
     expect(wrapper.html()).toBeTruthy();
@@ -171,7 +172,7 @@ describe('Funding Plan UI Components', () => {
     });
 
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify component renders funding options
     expect(wrapper.html()).toBeTruthy();
@@ -188,7 +189,7 @@ describe('Funding Plan UI Components', () => {
     });
 
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify component shows funding plan status
     expect(wrapper.html()).toBeTruthy();
@@ -205,7 +206,7 @@ describe('Funding Plan UI Components', () => {
     });
 
     await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify cancel button would be present (structure test)
     expect(wrapper.html()).toBeTruthy();

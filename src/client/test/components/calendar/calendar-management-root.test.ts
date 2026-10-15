@@ -11,6 +11,7 @@ import CalendarManagementRoot from '@/client/components/logged_in/calendar-manag
 import CalendarService from '@/client/service/calendar';
 import ModerationService from '@/client/service/moderation';
 import { useModerationStore } from '@/client/stores/moderation-store';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
@@ -48,6 +49,16 @@ const mountRootComponent = async (
   return { wrapper, router };
 };
 
+/**
+ * Stub the load as the real service behaves: it fills the calendar store,
+ * which the component reads, and returns the list.
+ */
+const stubLoadedCalendars = (infos: CalendarInfo[]) =>
+  vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockImplementation(async () => {
+    useCalendarStore().setCalendarInfos(infos);
+    return infos;
+  });
+
 const makeCalendarInfo = (urlName: string, role: 'owner' | 'editor'): CalendarInfo => {
   const calendar = new Calendar('cal-uuid-1', urlName);
   return new CalendarInfo(calendar, role);
@@ -58,7 +69,7 @@ describe('CalendarManagementRoot', () => {
 
   beforeEach(() => {
     // Default: no calendars loaded
-    vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([]);
+    stubLoadedCalendars([]);
   });
 
   afterEach(() => {
@@ -72,7 +83,7 @@ describe('CalendarManagementRoot', () => {
   describe('Default tab', () => {
     it('defaults to editors tab', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -86,7 +97,7 @@ describe('CalendarManagementRoot', () => {
   describe('Tab restoration from query param', () => {
     it('restores settings tab from ?tab=settings for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'settings' });
       currentWrapper = wrapper;
@@ -98,7 +109,7 @@ describe('CalendarManagementRoot', () => {
 
     it('restores widget tab from ?tab=widget for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'widget' });
       currentWrapper = wrapper;
@@ -110,7 +121,7 @@ describe('CalendarManagementRoot', () => {
 
     it('restores reports tab from ?tab=reports for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports' });
       currentWrapper = wrapper;
@@ -122,7 +133,7 @@ describe('CalendarManagementRoot', () => {
 
     it('ignores settings tab query param for non-owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'settings' });
       currentWrapper = wrapper;
@@ -134,7 +145,7 @@ describe('CalendarManagementRoot', () => {
 
     it('ignores reports tab query param for non-owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports' });
       currentWrapper = wrapper;
@@ -146,7 +157,7 @@ describe('CalendarManagementRoot', () => {
 
     it('ignores invalid tab query param values', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'nonexistent' });
       currentWrapper = wrapper;
@@ -158,7 +169,7 @@ describe('CalendarManagementRoot', () => {
 
     it('defaults to editors when no tab query param is present', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -170,7 +181,7 @@ describe('CalendarManagementRoot', () => {
 
     it('allows widget tab for non-owners via query param', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar', { tab: 'widget' });
       currentWrapper = wrapper;
@@ -184,7 +195,7 @@ describe('CalendarManagementRoot', () => {
   describe('Tab structure', () => {
     it('does not include categories or series tabs', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -199,7 +210,7 @@ describe('CalendarManagementRoot', () => {
 
     it('shows Editors, Reports, Settings, Import, Widget tabs for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -217,7 +228,7 @@ describe('CalendarManagementRoot', () => {
 
     it('shows Editors and Widget tabs for editors', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -236,7 +247,7 @@ describe('CalendarManagementRoot', () => {
   describe('Reports tab visibility', () => {
     it('shows the Reports tab button for calendar owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -250,7 +261,7 @@ describe('CalendarManagementRoot', () => {
 
     it('hides the Reports tab button for editors', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -264,7 +275,7 @@ describe('CalendarManagementRoot', () => {
 
     it('renders the reports panel for calendar owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -276,7 +287,7 @@ describe('CalendarManagementRoot', () => {
 
     it('renders the reports panel wrapper in DOM for editors (inner content hidden)', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -294,7 +305,7 @@ describe('CalendarManagementRoot', () => {
   describe('Settings tab visibility', () => {
     it('shows the Settings tab button for calendar owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -308,7 +319,7 @@ describe('CalendarManagementRoot', () => {
 
     it('hides the Settings tab button for editors', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -322,7 +333,7 @@ describe('CalendarManagementRoot', () => {
 
     it('renders the settings panel for calendar owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -334,7 +345,7 @@ describe('CalendarManagementRoot', () => {
 
     it('renders the settings panel wrapper in DOM for editors (inner content hidden)', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -351,7 +362,7 @@ describe('CalendarManagementRoot', () => {
   describe('Tab id attributes', () => {
     it('all tab buttons have id attributes for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -366,7 +377,7 @@ describe('CalendarManagementRoot', () => {
 
     it('non-owner tabs have id attributes for the visible tabs', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -384,7 +395,7 @@ describe('CalendarManagementRoot', () => {
   describe('activateTab guard for non-owners', () => {
     it('does not switch to settings tab when user is not an owner', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -401,7 +412,7 @@ describe('CalendarManagementRoot', () => {
 
     it('does not switch to reports tab when user is not an owner', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -421,7 +432,7 @@ describe('CalendarManagementRoot', () => {
   describe('EditorsTab isOwner prop forwarding', () => {
     it('passes isOwner=true to EditorsTab for calendar owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -435,7 +446,7 @@ describe('CalendarManagementRoot', () => {
 
     it('passes isOwner=false to EditorsTab for editor-role users', async () => {
       const info = makeCalendarInfo('my-calendar', 'editor');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -479,7 +490,7 @@ describe('CalendarManagementRoot', () => {
     });
 
     it('shows a not-available message when no calendar matches the route param', async () => {
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([
+      stubLoadedCalendars([
         makeCalendarInfo('other-calendar', 'owner'),
       ]);
 
@@ -498,7 +509,7 @@ describe('CalendarManagementRoot', () => {
   describe('Breadcrumb accessibility', () => {
     it('breadcrumb nav has an aria-label attribute', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -512,7 +523,7 @@ describe('CalendarManagementRoot', () => {
 
     it('breadcrumb links back to the calendar page', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -526,7 +537,7 @@ describe('CalendarManagementRoot', () => {
 
     it('breadcrumb nav and tablist nav have distinct aria-labels', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
 
       const { wrapper } = await mountRootComponent('my-calendar');
       currentWrapper = wrapper;
@@ -553,7 +564,7 @@ describe('CalendarManagementRoot', () => {
 
     const mockCalendarRole = (role: 'owner' | 'editor') => {
       const info = makeCalendarInfo('my-calendar', role);
-      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockResolvedValue([info]);
+      stubLoadedCalendars([info]);
     };
 
     const mockReportFound = () =>

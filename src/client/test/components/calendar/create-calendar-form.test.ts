@@ -17,9 +17,11 @@ import { Calendar } from '@/common/model/calendar';
 const routes: RouteRecordRaw[] = [
   { path: '/calendars', component: {}, name: 'calendars' },
   { path: '/calendar/:calendar', component: {}, name: 'calendar' },
+  { path: '/feed/:calendar', component: {}, name: 'feed' },
+  { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
 ];
 
-const createWrapper = async () => {
+const createWrapper = async (props: Record<string, unknown> = {}) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
@@ -27,6 +29,7 @@ const createWrapper = async () => {
   await router.push({ name: 'calendars' });
 
   const wrapper = mountComponent(CreateCalendarForm, router, {
+    props,
     provide: {
       site_config: { settings: () => ({ domain: 'pavillion.dev' }) },
     },
@@ -93,6 +96,36 @@ describe('CreateCalendarForm name pre-check', () => {
     expect(createStub.calledOnce).toBe(true);
     expect(createStub.firstCall.args[0]).toBe('community-events');
     expect(wrapper.find('#calendar-error').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+});
+
+describe('CreateCalendarForm navigation after create', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    sandbox.stub(CalendarService.prototype, 'createCalendar').resolves(new Calendar('cal-id', 'community-events'));
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it.each([
+    ['the calendar page by default', {}, '/calendar/community-events'],
+    ['the feed when the host is the feed', { routeName: 'feed' }, '/feed/community-events'],
+    ['calendar settings when the host is settings', { routeName: 'calendar_management' }, '/settings/calendar/community-events'],
+  ])('lands on %s', async (_label, props, expectedPath) => {
+    const { wrapper, router } = await createWrapper(props);
+
+    await wrapper.find('#calendar-name').setValue('community-events');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe(expectedPath);
+    expect(wrapper.emitted('created')).toHaveLength(1);
 
     wrapper.unmount();
   });

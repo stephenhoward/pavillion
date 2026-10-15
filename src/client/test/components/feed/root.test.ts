@@ -11,7 +11,7 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import CalendarService from '@/client/service/calendar';
 import FeedService from '@/client/service/feed';
-import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 const Stub = { template: '<div />' };
 const viewStubs = { FollowsView: true, FollowersView: true, FollowedEventsView: true, AddCalendarModal: true };

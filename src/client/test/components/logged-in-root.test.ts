@@ -10,7 +10,7 @@ import NotificationService from '@/client/service/notification';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
-import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 const Stub = { template: '<div />' };
 

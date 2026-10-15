@@ -6,7 +6,7 @@ import AuthenticationService from '@/client/service/authn';
 import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 /** A token whose claims name `id`; the client never verifies the signature. */
 function jwtFor(id: string): string {
