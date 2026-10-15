@@ -13,20 +13,19 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * as well.
  *
  * It is **not** a routing table. Membership means one thing to the validator
- * (reject) and four different things to a router: some segments must not reach
- * the site SPA because the server serves them, others because the client SPA
- * shell does, `discover` is a site SPA route, and `view` is neither — it
- * redirects. A router consuming this list therefore has to decide each
- * segment's disposition separately; an alternation built straight from the
- * array would exclude `discover` and `view` from exactly the handler that must
- * serve them.
+ * (reject) and five different things to a router: some segments must not reach
+ * the site SPA because the server serves them; others because the client SPA
+ * routes them; `profile`, `admin` and `funding` are **reserved but unrouted** —
+ * the server answers them with the client shell, the client router has no
+ * route for them, and they stay reserved because releasing a name is
+ * irreversible once a calendar claims it; `discover` is a site SPA route; and
+ * `view` is none of these — it redirects. A router consuming this list
+ * therefore has to decide each segment's disposition separately; an
+ * alternation built straight from the array would exclude `discover` and
+ * `view` from exactly the handler that must serve them.
  *
- * A fifth kind exists since the client moved its profile, funding and admin
- * pages under `settings`: **reserved but unrouted**. `profile`, `admin` and
- * `funding` serve nothing and redirect nowhere, yet stay reserved, because
- * releasing a name is irreversible once a calendar claims it and is a
- * separate decision. The reserved list also gates series url names, so
- * `settings` is unavailable as a series name too.
+ * Because the list also gates series url names, `settings` (the client's
+ * settings namespace) is unavailable as a series name too.
  *
  * Entries are lower case; `classifyReservedRouteSegment` does the case folding
  * (and `isReservedRouteSegment` folds through it), which matches the case-insensitive route regexes in src/server/app_routes.ts. The
