@@ -5,6 +5,7 @@ import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, Router, useRoute } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
 import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
+import CalendarManagementRoot from '@/client/components/logged_in/calendar-management/root.vue';
 import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
@@ -26,12 +27,13 @@ function calendar(id: string, urlName: string, name: string): Calendar {
   return cal;
 }
 
-function makeRouter(): Router {
+function makeRouter(management: object = ManagementPane): Router {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
+      { path: '/calendar/:calendar', component: Pane, name: 'calendar' },
       { path: '/settings', component: SettingsRoot, children: [
-        { path: 'calendar/:calendar', component: ManagementPane, name: 'calendar_management' },
+        { path: 'calendar/:calendar', component: management, name: 'calendar_management' },
         { path: 'account', component: Pane, name: 'profile' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
         { path: 'admin', component: { template: '<RouterView />' }, name: 'admin', children: [
@@ -68,11 +70,16 @@ describe('settings root', () => {
     sandbox.restore();
   });
 
-  async function mountAt(path: string, isAdmin: boolean): Promise<VueWrapper> {
+  async function mountAt(
+    path: string,
+    isAdmin: boolean,
+    options: { stubs?: Record<string, unknown>; attachTo?: Element } = {},
+  ): Promise<VueWrapper> {
     await router.push(path);
     wrapper = mountComponent(App, router, {
       pinia,
       provide: { authn: { isAdmin: () => isAdmin } },
+      ...options,
     });
     await flushPromises();
     return wrapper;
@@ -87,10 +94,25 @@ describe('settings root', () => {
     expect(w.find('[data-testid="pane"]').exists()).toBe(true);
   });
 
-  it('renders the management view for an edited calendar', async () => {
-    const w = await mountAt('/settings/calendar/shared', false);
+  it('renders the reduced management view for an edited calendar', async () => {
+    router = makeRouter(CalendarManagementRoot);
+    const w = await mountAt('/settings/calendar/shared', false, {
+      stubs: {
+        EditorsTab: true,
+        SettingsTab: true,
+        WidgetTab: true,
+        ReportsDashboard: true,
+        ReportDetail: true,
+        ImportSourcesSection: true,
+      },
+    });
     expect(trigger(w).text()).toContain('Shared Events');
-    expect(w.find('[data-testid="pane"]').exists()).toBe(true);
+    expect(w.find('#editors-tab').exists()).toBe(true);
+    expect(w.find('#widget-tab').exists()).toBe(true);
+    expect(w.find('#settings-tab').exists()).toBe(false);
+    expect(w.find('#reports-tab').exists()).toBe(false);
+    expect(w.find('.error-message').exists()).toBe(false);
+    expect(w.find('.empty-state').exists()).toBe(false);
   });
 
   it('labels the trigger Account on the account panes', async () => {
@@ -133,6 +155,17 @@ describe('settings root', () => {
     expect(w.find('[aria-current="true"][data-testid="switcher-row"]').exists()).toBe(false);
   });
 
+  it('marks the Instance administration row current on an admin pane', async () => {
+    const w = await mountAt('/settings/admin/settings', true);
+    await trigger(w).trigger('click');
+    const admin = w.find('[data-testid="switcher-admin"]');
+    expect(admin.attributes('aria-current')).toBe('true');
+    expect(admin.find('a').exists()).toBe(false);
+    const account = w.find('[data-testid="switcher-account"]');
+    expect(account.attributes('aria-current')).toBeUndefined();
+    expect(account.find('a').attributes('href')).toBe('/settings/account');
+  });
+
   it('marks the calendar row current on its management pane', async () => {
     const w = await mountAt('/settings/calendar/riverside', true);
     await trigger(w).trigger('click');
@@ -166,5 +199,39 @@ describe('settings root', () => {
     expect(router.currentRoute.value.fullPath).toBe('/settings/account');
     expect(w.find('[data-testid="switcher-account"]').exists()).toBe(false);
     expect(trigger(w).attributes('aria-expanded')).toBe('false');
+  });
+
+  describe('focus return', () => {
+    const { showModal, close } = HTMLDialogElement.prototype;
+
+    beforeEach(() => {
+      // happy-dom does not implement showModal()/close(). Polyfill just enough
+      // for the real sheet's useDialog to open, so focus really leaves the
+      // trigger and the test proves it comes back.
+      HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+      HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+    });
+
+    afterEach(() => {
+      HTMLDialogElement.prototype.showModal = showModal;
+      HTMLDialogElement.prototype.close = close;
+    });
+
+    it('returns focus to the trigger after a settings row is picked', async () => {
+      const w = await mountAt('/settings/calendar/riverside', false, { attachTo: document.body });
+      const triggerEl = trigger(w).element as HTMLButtonElement;
+      triggerEl.focus();
+      await trigger(w).trigger('click');
+      await flushPromises();
+      // useDialog moves initial focus into the sheet on a zero-delay timer.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(document.activeElement).not.toBe(triggerEl);
+
+      await w.find('[data-testid="switcher-account"] a').trigger('click');
+      await flushPromises();
+
+      expect(router.currentRoute.value.name).toBe('profile');
+      expect(document.activeElement).toBe(trigger(w).element);
+    });
   });
 });

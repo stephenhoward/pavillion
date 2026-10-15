@@ -48,55 +48,60 @@ const label = computed(() => {
 });
 
 const isAdmin = computed(() => authn?.isAdmin?.() ?? false);
+
+// The management view reads its calendar once on mount, so each calendar
+// gets its own key and picking another one mounts the pane afresh. The
+// prefixes keep a calendar named like a pane from sharing that pane's key.
+const paneKey = computed(() => currentUrlName.value ? `calendar:${currentUrlName.value}` : `pane:${pane.value}`);
 </script>
 
 <template>
   <div class="settings-root">
     <header class="settings-root__header">
-      <h1>
-        <CalendarSwitcher
-          :label="label"
-          route-name="calendar_management"
-          :current-url-name="currentUrlName"
-          :aria-label="t('aria_switch_settings', { name: label })"
-        >
-          <li
-            class="calendar-switcher-sheet__row"
-            data-testid="switcher-account"
-            :aria-current="pane === 'account' ? 'true' : undefined"
+      <div class="settings-root__header-inner">
+        <h1>
+          <CalendarSwitcher
+            :label="label"
+            route-name="calendar_management"
+            :current-url-name="currentUrlName"
+            :aria-label="t('aria_switch_settings', { name: label })"
           >
-            <span v-if="pane === 'account'" class="calendar-switcher-sheet__target">
-              <span class="calendar-switcher-sheet__name">
-                {{ t('account_row') }}
-                <span class="sr-only">{{ t('current_label') }}</span>
+            <li
+              class="calendar-switcher-sheet__row"
+              data-testid="switcher-account"
+              :aria-current="pane === 'account' ? 'true' : undefined"
+            >
+              <span v-if="pane === 'account'" class="calendar-switcher-sheet__target">
+                <span class="calendar-switcher-sheet__name">
+                  {{ t('account_row') }}
+                  <span class="sr-only">{{ t('current_label') }}</span>
+                </span>
               </span>
-            </span>
-            <RouterLink v-else :to="{ name: 'profile' }" class="calendar-switcher-sheet__target">
-              <span class="calendar-switcher-sheet__name">{{ t('account_row') }}</span>
-            </RouterLink>
-          </li>
-          <li
-            v-if="isAdmin"
-            class="calendar-switcher-sheet__row"
-            data-testid="switcher-admin"
-            :aria-current="pane === 'admin' ? 'true' : undefined"
-          >
-            <span v-if="pane === 'admin'" class="calendar-switcher-sheet__target">
-              <span class="calendar-switcher-sheet__name">
-                {{ t('admin_row') }}
-                <span class="sr-only">{{ t('current_label') }}</span>
+              <RouterLink v-else :to="{ name: 'profile' }" class="calendar-switcher-sheet__target">
+                <span class="calendar-switcher-sheet__name">{{ t('account_row') }}</span>
+              </RouterLink>
+            </li>
+            <li
+              v-if="isAdmin"
+              class="calendar-switcher-sheet__row"
+              data-testid="switcher-admin"
+              :aria-current="pane === 'admin' ? 'true' : undefined"
+            >
+              <span v-if="pane === 'admin'" class="calendar-switcher-sheet__target">
+                <span class="calendar-switcher-sheet__name">
+                  {{ t('admin_row') }}
+                  <span class="sr-only">{{ t('current_label') }}</span>
+                </span>
               </span>
-            </span>
-            <RouterLink v-else :to="{ name: 'admin_settings' }" class="calendar-switcher-sheet__target">
-              <span class="calendar-switcher-sheet__name">{{ t('admin_row') }}</span>
-            </RouterLink>
-          </li>
-        </CalendarSwitcher>
-      </h1>
+              <RouterLink v-else :to="{ name: 'admin_settings' }" class="calendar-switcher-sheet__target">
+                <span class="calendar-switcher-sheet__name">{{ t('admin_row') }}</span>
+              </RouterLink>
+            </li>
+          </CalendarSwitcher>
+        </h1>
+      </div>
     </header>
-    <!-- Keyed by calendar: the management view reads its calendar once on
-         mount, so picking another calendar must mount it afresh. -->
-    <RouterView :key="currentUrlName ?? pane" />
+    <RouterView :key="paneKey" />
   </div>
 </template>
 
@@ -105,11 +110,17 @@ const isAdmin = computed(() => authn?.isAdmin?.() ?? false);
 
 .settings-root {
   &__header {
-    padding: var(--pav-space-6) var(--pav-space-4) var(--pav-space-4);
+    padding-block: var(--pav-space-6) var(--pav-space-4);
+  }
+
+  /* Matches the calendar management pane's content column. */
+  &__header-inner {
+    max-width: 56rem;
+    margin-inline: auto;
+    padding-inline: var(--pav-space-4);
 
     h1 {
-      max-width: 56rem;
-      margin: 0 auto;
+      margin: 0;
       font-size: var(--pav-font-size-xl);
       font-weight: var(--pav-font-weight-light);
       color: var(--pav-text-primary);
