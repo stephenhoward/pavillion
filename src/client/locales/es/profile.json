@@ -1,5 +1,4 @@
 {
-  "admin_link": "Configuración de Administrador",
   "funding_link": "Plan de Financiamiento",
   "title": "Configuración",
   "subtitle": "Administra las preferencias de tu cuenta",
@@ -18,8 +17,6 @@
   "change_password_button": "Cambiar Contraseña",
   "logout": "Cerrar Sesión",
   "logout_description": "Cierra la sesión de tu cuenta",
-  "admin_section": "Administración de la Instancia",
-  "admin_description": "Administra la configuración del servidor, las cuentas de usuario, las políticas de federación y la configuración de financiamiento de esta instancia de Pavillion.",
   "change_email_form": {
     "title": "Cambia tu dirección de correo electrónico",
     "email_placeholder": "nueva dirección de correo electrónico",

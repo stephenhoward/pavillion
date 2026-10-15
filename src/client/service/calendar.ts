@@ -108,15 +108,6 @@ export default class CalendarService {
   }
 
   /**
-   * Calendars with relationship (owner vs editor), loading if needed.
-   * Kept for existing callers.
-   * @returns Promise<Array<CalendarInfo>> The list of calendars with relationship info
-   */
-  async loadCalendarsWithRelationship(): Promise<Array<CalendarInfo>> {
-    return this.ensureCalendarsLoaded();
-  }
-
-  /**
    * Create a new calendar with the given name and optional title
    * @param urlName The URL name for the calendar
    * @param title Optional display title for the calendar

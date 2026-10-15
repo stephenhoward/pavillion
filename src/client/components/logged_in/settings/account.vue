@@ -16,7 +16,6 @@ const authn = inject('authn');
 
 const state = reactive({
   userInfo: {
-    isAdmin: authn.isAdmin(),
     email: authn.userEmail(),
     displayName: '',
     username: authn.userEmail()?.split('@')[0] || '',
@@ -29,6 +28,7 @@ const state = reactive({
 });
 
 const saveMessage = ref(null);
+const saveIsError = ref(false);
 
 const { t } = useTranslation('profile');
 
@@ -130,6 +130,7 @@ async function handleDisplayNameChange() {
   try {
     state.isSaving = true;
     saveMessage.value = null;
+    saveIsError.value = false;
 
     const updatedProfile = await accountService.updateProfile(state.userInfo.displayName);
     state.userInfo.displayName = updatedProfile.displayName || '';
@@ -143,6 +144,7 @@ async function handleDisplayNameChange() {
   catch (error) {
     console.error('Error saving display name:', error);
     saveMessage.value = t('display_name_error', { defaultValue: 'Error saving display name' });
+    saveIsError.value = true;
     setTimeout(() => {
       saveMessage.value = null;
     }, 5000);
@@ -205,7 +207,7 @@ onMounted(async () => {
                 />
                 <span
                   class="save-feedback"
-                  :class="{ 'is-error': saveMessage && (saveMessage.includes('Error') || saveMessage.includes('error')), 'is-visible': saveMessage }"
+                  :class="{ 'is-error': saveMessage && saveIsError, 'is-visible': saveMessage }"
                   role="status"
                   aria-live="polite"
                   aria-atomic="true"
@@ -321,31 +323,6 @@ onMounted(async () => {
         </section>
       </div>
 
-      <!-- Instance Administration Card (Admin Only) -->
-      <div v-if="state.userInfo.isAdmin" class="admin-card">
-        <div class="admin-header">
-          <h2>{{ t("admin_section", { defaultValue: "Instance Administration" }) }}</h2>
-        </div>
-        <div class="admin-body">
-          <p class="admin-description">
-            {{ t("admin_description", { defaultValue: "Manage server settings, user accounts, federation policies, and funding configuration for this Pavillion instance." }) }}
-          </p>
-          <router-link to="/admin/settings" class="btn-admin">
-            {{ t("admin_link", { defaultValue: "Open Admin Settings" }) }}
-            <svg class="icon-arrow"
-                 aria-hidden="true"
-                 fill="none"
-                 viewBox="0 0 24 24"
-                 stroke="currentColor">
-              <path stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 5l7 7-7 7" />
-            </svg>
-          </router-link>
-        </div>
-      </div>
-
       <!-- Funding Plan Card (if enabled) -->
       <div v-if="fundingEnabled" class="funding-card">
         <div class="funding-card-header">
@@ -367,7 +344,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="funding-card-body">
-          <router-link to="/funding" class="btn-funding">
+          <router-link :to="{ name: 'funding_plan' }" class="btn-funding">
             {{ t("funding_card_action", { defaultValue: "Manage Funding Plan" }) }}
             <svg class="icon-arrow"
                  aria-hidden="true"
@@ -687,66 +664,6 @@ onMounted(async () => {
   &:focus-visible {
     outline: 2px solid var(--pav-color-red-600);
     outline-offset: 2px;
-  }
-}
-
-.admin-card {
-  margin-top: var(--pav-space-8);
-  background: var(--pav-surface-primary);
-  border-radius: 0.75rem;
-  border: 1px solid var(--pav-border-secondary);
-  overflow: hidden;
-
-  .admin-header {
-    padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
-    border-bottom: 1px solid var(--pav-border-secondary);
-
-    h2 {
-      margin: 0;
-      font-size: 1.125rem;
-      font-weight: 500;
-      color: var(--pav-text-primary);
-    }
-  }
-
-  .admin-body {
-    padding: var(--pav-space-6);
-
-    .admin-description {
-      margin: 0 0 var(--pav-space-4) 0;
-      font-size: 0.875rem;
-      color: var(--pav-text-muted);
-    }
-  }
-}
-
-.btn-admin {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: white;
-  background: var(--pav-color-orange-500);
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background-color 0.2s, box-shadow 0.2s;
-
-  &:hover {
-    background: var(--pav-color-orange-600);
-  }
-
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgba(249, 115, 22, 0.2);
-  }
-
-  .icon-arrow {
-    width: 1rem;
-    height: 1rem;
   }
 }
 

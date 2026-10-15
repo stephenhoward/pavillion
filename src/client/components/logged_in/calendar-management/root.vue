@@ -109,8 +109,8 @@ const openReportFromQuery = async () => {
 onBeforeMount(async () => {
   state.loading = true;
   try {
-    const calendarsWithRelationship = await calendarService.loadCalendarsWithRelationship();
-    const found = calendarsWithRelationship.find(
+    const calendarInfos = await calendarService.ensureCalendarsLoaded();
+    const found = calendarInfos.find(
       (info) => info.calendar.urlName === calendarUrlName,
     );
     state.calendarInfo = found ?? null;
@@ -197,7 +197,10 @@ const backToReports = () => {
         <div class="calendar-management-root__header-content">
           <div class="calendar-management-root__header-top">
             <nav class="calendar-management-root__breadcrumb" :aria-label="t('breadcrumb_label')">
-              <span class="calendar-management-root__breadcrumb-item">{{ calendar.urlName }}</span>
+              <RouterLink
+                :to="{ name: 'calendar', params: { calendar: calendarUrlName } }"
+                class="calendar-management-root__breadcrumb-item calendar-management-root__breadcrumb-link"
+              >{{ calendar.urlName }}</RouterLink>
               <span class="calendar-management-root__breadcrumb-separator">/</span>
               <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
             </nav>
@@ -423,6 +426,18 @@ const backToReports = () => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__breadcrumb-link {
+    &:hover {
+      color: var(--pav-text-primary);
+      text-decoration: underline;
+    }
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
+    }
   }
 
   &__breadcrumb-separator {

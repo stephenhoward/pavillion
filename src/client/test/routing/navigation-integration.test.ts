@@ -35,13 +35,13 @@ const createMockEvent = (id: string, calendarId: string) => {
 
 // Mock CalendarService
 const mockLoadCalendars = vi.fn();
-const mockLoadCalendarsWithRelationship = vi.fn();
+const mockEnsureCalendarsLoaded = vi.fn();
 const mockGetCalendarByUrlName = vi.fn();
 
 vi.mock('@/client/service/calendar', () => ({
   default: vi.fn().mockImplementation(() => ({
     loadCalendars: mockLoadCalendars,
-    loadCalendarsWithRelationship: mockLoadCalendarsWithRelationship,
+    ensureCalendarsLoaded: mockEnsureCalendarsLoaded,
     getCalendarByUrlName: mockGetCalendarByUrlName,
   })),
 }));
@@ -138,7 +138,7 @@ describe('Navigation Integration - Task Group 4', () => {
     mockLoadCalendars.mockResolvedValue([
       createMockCalendar('cal-1', 'test-calendar'),
     ]);
-    mockLoadCalendarsWithRelationship.mockResolvedValue([
+    mockEnsureCalendarsLoaded.mockResolvedValue([
       { calendar: createMockCalendar('cal-1', 'test-calendar'), isEditor: false },
     ]);
     mockGetCalendarByUrlName.mockResolvedValue(createMockCalendar('cal-1', 'test-calendar'));

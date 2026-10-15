@@ -18,16 +18,16 @@ const alertLevel = ref('ok');
 const hasAlert = computed(() => alertLevel.value !== 'ok');
 
 const navItems = [
-  { id: 'general', routeName: 'admin_settings', path: '/admin/settings', labelKey: 'general_settings' },
-  { id: 'accounts', routeName: 'accounts', path: '/admin/accounts', labelKey: 'accounts_link' },
-  { id: 'calendars', routeName: 'admin_calendars', path: '/admin/calendars', labelKey: 'calendars_link' },
-  { id: 'moderation', routeName: 'moderation', path: '/admin/moderation', labelKey: 'moderation' },
-  { id: 'federation', routeName: 'federation', path: '/admin/federation', labelKey: 'federation_settings' },
-  { id: 'funding', routeName: 'funding', path: '/admin/funding', labelKey: 'payment_details' },
+  { id: 'general', routeName: 'admin_settings', labelKey: 'general_settings' },
+  { id: 'accounts', routeName: 'accounts', labelKey: 'accounts_link' },
+  { id: 'calendars', routeName: 'admin_calendars', labelKey: 'calendars_link' },
+  { id: 'moderation', routeName: 'moderation', labelKey: 'moderation' },
+  { id: 'federation', routeName: 'federation', labelKey: 'federation_settings' },
+  { id: 'funding', routeName: 'funding', labelKey: 'payment_details' },
 ];
 
-const isActive = (path) => {
-  return route.path === path;
+const isActive = (item) => {
+  return route.name === item.routeName;
 };
 </script>
 
@@ -35,48 +35,17 @@ const isActive = (path) => {
   <div class="admin-root">
     <a href="#main" class="sr-only">{{ t("navigation.skip_to_content") }}</a>
 
-    <!-- Mobile Header -->
-    <header class="admin-mobile-header">
-      <router-link to="/profile" class="admin-back-link">
-        <svg class="admin-back-icon"
-             fill="none"
-             viewBox="0 0 24 24"
-             stroke="currentColor">
-          <path stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7" />
-        </svg>
-        {{ t("back") }}
-      </router-link>
-    </header>
-
     <div class="admin-layout">
       <!-- Desktop Sidebar -->
       <aside class="admin-sidebar">
-        <div class="admin-sidebar-header">
-          <router-link to="/profile" class="admin-back-link">
-            <svg class="admin-back-icon"
-                 fill="none"
-                 viewBox="0 0 24 24"
-                 stroke="currentColor">
-              <path stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 19l-7-7 7-7" />
-            </svg>
-            {{ t("back") }}
-          </router-link>
-        </div>
-
         <nav class="admin-sidebar-nav">
           <div class="admin-section-label">Administration</div>
           <ul class="admin-nav-list">
             <li v-for="item in navItems" :key="item.id">
               <router-link
                 :to="{ name: item.routeName }"
-                :class="['admin-nav-item', { active: isActive(item.path) }]"
-                :aria-current="isActive(item.path) ? 'page' : undefined"
+                :class="['admin-nav-item', { active: isActive(item) }]"
+                :aria-current="isActive(item) ? 'page' : undefined"
               >
                 <!-- General / Gear icon -->
                 <svg v-if="item.id === 'general'"
@@ -193,8 +162,8 @@ const isActive = (path) => {
         v-for="item in navItems"
         :key="item.id"
         :to="{ name: item.routeName }"
-        :class="['admin-bottom-nav-item', { active: isActive(item.path) }]"
-        :aria-current="isActive(item.path) ? 'page' : undefined"
+        :class="['admin-bottom-nav-item', { active: isActive(item) }]"
+        :aria-current="isActive(item) ? 'page' : undefined"
       >
         <span class="admin-bottom-nav-icon-wrap">
           <!-- General / Gear icon -->
@@ -317,40 +286,6 @@ const isActive = (path) => {
   background: var(--pav-color-surface-secondary);
 }
 
-/* Back link shared between mobile header and sidebar */
-.admin-back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--pav-space-2);
-  font-size: var(--pav-font-size-xs);
-  color: var(--pav-color-stone-500);
-  text-decoration: none;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: var(--pav-color-orange-600);
-  }
-}
-
-.admin-back-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-/* Mobile Header - visible below md */
-.admin-mobile-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--pav-color-surface-primary);
-  border-bottom: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
-  padding: var(--pav-space-3) var(--pav-space-4);
-
-  @include pav-media(md) {
-    display: none;
-  }
-}
-
 /* Layout container */
 .admin-layout {
   display: flex;
@@ -373,11 +308,6 @@ const isActive = (path) => {
     overflow-y: auto;
     z-index: 10;
   }
-}
-
-.admin-sidebar-header {
-  padding: var(--pav-space-4);
-  border-bottom: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
 }
 
 .admin-sidebar-nav {
@@ -557,10 +487,6 @@ const isActive = (path) => {
 
 /* Dark mode adjustments using existing token overrides */
 @media (prefers-color-scheme: dark) {
-  .admin-back-link:hover {
-    color: var(--pav-color-orange-400);
-  }
-
   .admin-nav-item {
     color: var(--pav-color-stone-400);
 

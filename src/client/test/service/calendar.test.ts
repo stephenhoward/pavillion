@@ -80,15 +80,6 @@ describe('ensureCalendarsLoaded', () => {
     const result = await service.loadCalendars();
     expect(result[0].id).toBe('o1');
   });
-
-  it('should return the loaded calendar infos from loadCalendarsWithRelationship', async () => {
-    sandbox.stub(ModelService, 'listModels').resolves({
-      items: [{ id: 'e1', urlName: 'edited-one', userRelationship: 'editor' }],
-    });
-    const result = await service.loadCalendarsWithRelationship();
-    expect(result.map((info) => info.calendar.id)).toEqual(['e1']);
-    expect(result[0].isEditor).toBe(true);
-  });
 });
 
 describe('createCalendar', () => {
