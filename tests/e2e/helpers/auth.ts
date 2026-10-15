@@ -29,6 +29,44 @@ export const TEST_CALENDAR_CREATOR = {
 };
 
 /**
+ * Seeded user that owns multicalendar_calendar and edits testuser_calendar,
+ * so its calendar switcher always has another calendar to switch to (the
+ * admin owns one calendar only).
+ */
+export const MULTI_CALENDAR_USER = {
+  email: 'multicalendar@example.com',
+  password: 'test',
+};
+
+/**
+ * Wait for the redirect that follows a successful sign-in. A user with
+ * calendars settles on `/calendar/<name>` (the bare-route guard redirects
+ * inside `beforeEnter`, so the bare URL never commits); a user without one
+ * settles on `/calendar`.
+ *
+ * @param page - Playwright page instance
+ */
+export async function waitForPostLoginUrl(page: Page) {
+  await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
+}
+
+/**
+ * Log in through the SPA's login form with any account.
+ *
+ * @param page - Playwright page instance
+ * @param baseURL - Base URL of the test server
+ * @param email - Account email
+ * @param password - Account password
+ */
+export async function loginViaUi(page: Page, baseURL: string, email: string, password: string) {
+  await page.goto(baseURL + '/auth/login');
+  await page.getByRole('textbox', { name: 'email' }).fill(email);
+  await page.getByRole('textbox', { name: 'password' }).fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await waitForPostLoginUrl(page);
+}
+
+/**
  * Log in as admin user
  * Navigates to login page and performs login
  *
@@ -46,7 +84,7 @@ export async function loginAsAdmin(page: Page, baseURL: string) {
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   // Wait for navigation to complete (longer timeout for server startup)
-  await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
+  await waitForPostLoginUrl(page);
 }
 
 /**
@@ -68,5 +106,5 @@ export async function loginAsFreshUser(page: Page, baseURL: string) {
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   // Wait for navigation to complete (longer timeout for server startup)
-  await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
+  await waitForPostLoginUrl(page);
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { paneHeading } from './helpers/pane-heading';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -42,7 +43,7 @@ test.describe('Profile Display Name', () => {
     await page.goto(env.baseURL + '/settings/account');
 
     // Wait for settings page to load
-    await page.waitForSelector('h2:has-text("Settings")', { timeout: 5000 });
+    await expect(paneHeading(page, 'Settings')).toBeVisible();
 
     // Wait for profile section to load (loading state should complete)
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });

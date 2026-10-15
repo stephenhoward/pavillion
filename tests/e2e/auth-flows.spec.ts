@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { TEST_ADMIN } from './helpers/auth';
+import { TEST_ADMIN, waitForPostLoginUrl } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import { clearEmails, waitForEmail, extractLinkFromEmail } from './helpers/emails';
 
@@ -43,15 +43,15 @@ test.describe('Authentication Workflows', () => {
   });
 
   test.describe('Login', () => {
-    test('should redirect to /calendar on successful login', async ({ page }) => {
+    test('should redirect to the current calendar on successful login', async ({ page }) => {
       await page.goto(env.baseURL + '/auth/login');
 
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(TEST_ADMIN.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
 
-      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
-      expect(page.url()).toContain('/calendar');
+      await waitForPostLoginUrl(page);
+      await expect(page).toHaveURL(/\/calendar\/test_calendar$/);
     });
 
     test('should show error message with wrong credentials', async ({ page }) => {
@@ -86,7 +86,7 @@ test.describe('Authentication Workflows', () => {
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(TEST_ADMIN.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
+      await waitForPostLoginUrl(page);
 
       // Navigate to admin settings page to set registration mode
       await page.goto(env.baseURL + '/settings/admin/settings');
@@ -192,8 +192,8 @@ test.describe('Authentication Workflows', () => {
       await page.getByRole('button', { name: 'Sign in' }).click();
 
       // Step 10: Verify successful login redirects to /calendar
-      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
-      expect(page.url()).toContain('/calendar');
+      await waitForPostLoginUrl(page);
+      await expect(page).toHaveURL(/\/calendar\/test_calendar$/);
     });
   });
 
@@ -207,7 +207,7 @@ test.describe('Authentication Workflows', () => {
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(currentPassword);
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
+      await waitForPostLoginUrl(page);
 
       // Step 2: Navigate to profile/settings page
       await page.goto(env.baseURL + '/settings/account');

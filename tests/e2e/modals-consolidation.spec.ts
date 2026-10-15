@@ -86,10 +86,9 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     await page.waitForLoadState('networkidle');
 
     const settingsTab = page.locator('button[role="tab"]#settings-tab');
-    if ((await settingsTab.count()) > 0) {
-      await settingsTab.click();
-      await page.waitForLoadState('networkidle');
-    }
+    await expect(settingsTab).toBeVisible();
+    await settingsTab.click();
+    await page.waitForLoadState('networkidle');
 
     // Find and click a button that opens the language picker (add language)
     const addLangButton = page.getByRole('button', { name: /add language/i }).first();

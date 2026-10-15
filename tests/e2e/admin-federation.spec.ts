@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { paneHeading } from './helpers/pane-heading';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -39,7 +40,7 @@ test.describe('Admin Federation Settings', () => {
     await page.goto(env.baseURL + '/settings/admin/federation');
 
     // Verify page header
-    const heading = page.locator('.federation-header h2');
+    const heading = paneHeading(page, 'Federation');
     await expect(heading).toBeVisible({ timeout: 10000 });
 
     // Verify subtitle
