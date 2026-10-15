@@ -94,7 +94,9 @@ const isAdmin = computed(() => authn?.isAdmin?.() ?? false);
         </CalendarSwitcher>
       </h1>
     </header>
-    <RouterView />
+    <!-- Keyed by calendar: the management view reads its calendar once on
+         mount, so picking another calendar must mount it afresh. -->
+    <RouterView :key="currentUrlName ?? pane" />
   </div>
 </template>
 

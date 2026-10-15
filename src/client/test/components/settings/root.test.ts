@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { flushPromises, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
-import { createMemoryHistory, createRouter, Router } from 'vue-router';
+import { createMemoryHistory, createRouter, Router, useRoute } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
 import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
 import CalendarService from '@/client/service/calendar';
@@ -12,6 +12,13 @@ import { CalendarInfo } from '@/common/model/calendar_info';
 
 const App = { template: '<RouterView />' };
 const Pane = { template: '<div data-testid="pane" />' };
+// Captures the calendar param once, at setup, as the management view does.
+const ManagementPane = {
+  setup() {
+    return { mountedFor: useRoute().params.calendar };
+  },
+  template: '<div data-testid="pane">{{ mountedFor }}</div>',
+};
 
 function calendar(id: string, urlName: string, name: string): Calendar {
   const cal = new Calendar(id, urlName);
@@ -24,7 +31,7 @@ function makeRouter(): Router {
     history: createMemoryHistory(),
     routes: [
       { path: '/settings', component: SettingsRoot, children: [
-        { path: 'calendar/:calendar', component: Pane, name: 'calendar_management' },
+        { path: 'calendar/:calendar', component: ManagementPane, name: 'calendar_management' },
         { path: 'account', component: Pane, name: 'profile' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
         { path: 'admin', component: { template: '<RouterView />' }, name: 'admin', children: [
@@ -140,6 +147,15 @@ describe('settings root', () => {
     await flushPromises();
     expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared');
     expect(trigger(w).text()).toContain('Shared Events');
+  });
+
+  it('remounts the management pane when another calendar is picked', async () => {
+    const w = await mountAt('/settings/calendar/riverside', false);
+    expect(w.find('[data-testid="pane"]').text()).toBe('riverside');
+    await trigger(w).trigger('click');
+    await w.find('[data-url-name="shared"] a').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="pane"]').text()).toBe('shared');
   });
 
   it('closes the sheet when a settings row is picked', async () => {
