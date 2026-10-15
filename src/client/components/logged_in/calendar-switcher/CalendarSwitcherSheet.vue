@@ -48,7 +48,7 @@ function onListClick(event: MouseEvent) {
 </script>
 
 <template>
-  <Sheet :title="t('title')" @close="emit('close')">
+  <Sheet class="calendar-switcher-sheet" :title="t('title')" @close="emit('close')">
     <p v-if="rows.length === 0" class="calendar-switcher-sheet__empty">{{ t('no_calendars') }}</p>
     <ul class="calendar-switcher-sheet__list" role="list" @click="onListClick">
       <li
@@ -107,13 +107,6 @@ function onListClick(event: MouseEvent) {
     gap: var(--pav-space-1);
   }
 
-  &__row--action {
-    border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
-    border-radius: 0;
-    margin-block-start: var(--pav-space-2);
-    padding-block-start: var(--pav-space-2);
-  }
-
   &__badge {
     font-size: var(--pav-font-size-xs);
     color: var(--pav-text-secondary);
@@ -124,53 +117,62 @@ function onListClick(event: MouseEvent) {
     justify-content: flex-start;
   }
 }
+</style>
 
-/* Row rules. A host's slot rows (the settings rows) carry the same classes;
-   each selector has a :slotted() twin so those rows get the row styling
-   while the sheet's styles stay scoped. */
-.calendar-switcher-sheet__row,
-:slotted(.calendar-switcher-sheet__row) {
-  border-radius: var(--pav-border-radius-md);
-}
+<!--
+  Row rules, unscoped: a host's slot rows (the settings rows) carry the same
+  classes and are forwarded through CalendarSwitcher, so scoped rules cannot
+  reach them reliably. Every rule is namespaced under the sheet's own
+  .calendar-switcher-sheet dialog.
+-->
+<style lang="scss">
+.calendar-switcher-sheet {
+  .calendar-switcher-sheet__row {
+    border-radius: var(--pav-border-radius-md);
 
-.calendar-switcher-sheet__row[aria-current='true'],
-:slotted(.calendar-switcher-sheet__row[aria-current='true']) {
-  background: var(--pav-surface-secondary);
-  font-weight: var(--pav-font-weight-medium);
-}
+    &[aria-current='true'] {
+      background: var(--pav-surface-secondary);
+      font-weight: var(--pav-font-weight-medium);
+    }
 
-/* The link (or the current row's label) fills the row, so the whole padded
-   row is the hit area. */
-.calendar-switcher-sheet__target,
-:slotted(.calendar-switcher-sheet__target) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pav-space-3);
-  padding: var(--pav-space-3) var(--pav-space-4);
-  border-radius: inherit;
-  color: var(--pav-text-primary);
-  text-decoration: none;
-}
+    &--action {
+      border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
+      border-radius: 0;
+      margin-block-start: var(--pav-space-2);
+      padding-block-start: var(--pav-space-2);
+    }
+  }
 
-a.calendar-switcher-sheet__target:hover,
-:slotted(a.calendar-switcher-sheet__target:hover) {
-  background: var(--pav-interactive-hover);
-}
+  /* The link (or the current row's label) fills the row, so the whole padded
+     row is the hit area. */
+  .calendar-switcher-sheet__target {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-3) var(--pav-space-4);
+    border-radius: inherit;
+    color: var(--pav-text-primary);
+    text-decoration: none;
+  }
 
-a.calendar-switcher-sheet__target:hover .calendar-switcher-sheet__name,
-:slotted(a.calendar-switcher-sheet__target:hover .calendar-switcher-sheet__name) {
-  text-decoration: underline;
-}
+  a.calendar-switcher-sheet__target {
+    &:hover {
+      background: var(--pav-interactive-hover);
 
-a.calendar-switcher-sheet__target:focus-visible,
-:slotted(a.calendar-switcher-sheet__target:focus-visible) {
-  outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-  outline-offset: -2px;
-}
+      .calendar-switcher-sheet__name {
+        text-decoration: underline;
+      }
+    }
 
-.calendar-switcher-sheet__name,
-:slotted(.calendar-switcher-sheet__name) {
-  flex: 1;
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  .calendar-switcher-sheet__name {
+    flex: 1;
+  }
 }
 </style>
