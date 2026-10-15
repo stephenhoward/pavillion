@@ -96,5 +96,13 @@ export const useCalendarStore = defineStore('calendars', {
       this.selectedCalendarId = null;
       writePersistedCalendarId(null);
     },
+
+    /** Drop the cached list, its account and the current calendar, so the next load starts clean. */
+    resetCalendars() {
+      this.calendarInfos = [];
+      this.loaded = false;
+      this.accountId = null;
+      this.clearSelectedCalendar();
+    },
   },
 });

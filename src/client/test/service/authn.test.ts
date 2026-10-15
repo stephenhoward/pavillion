@@ -646,4 +646,14 @@ describe('currentAccountId', () => {
     expect(currentAccountId(new LocalStore())).toBeNull();
     expect(currentAccountId(garbled)).toBeNull();
   });
+
+  it('returns null for an unexpired token whose id is missing or not a string', () => {
+    const missing = new LocalStore();
+    missing.setItem('jw_token', JSON.stringify({ email: 'a@example.com', isAdmin: false, exp: Math.floor(Date.now() / 1000) + 60 }));
+    const numeric = new LocalStore();
+    numeric.setItem('jw_token', claims({ id: 42 }));
+
+    expect(currentAccountId(missing)).toBeNull();
+    expect(currentAccountId(numeric)).toBeNull();
+  });
 });

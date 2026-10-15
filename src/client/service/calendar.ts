@@ -35,8 +35,11 @@ const errorMap = {
   AccountInviteAlreadyExistsError,
 };
 
-/** In-flight loads keyed by store instance, so concurrent callers share one request. */
-const inFlightLoads = new WeakMap<object, Promise<CalendarInfo[]>>();
+/**
+ * In-flight loads keyed by store instance, so concurrent callers for the same
+ * account share one request. A load for another account is never shared.
+ */
+const inFlightLoads = new WeakMap<object, { accountId: string | null; promise: Promise<CalendarInfo[]> }>();
 
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
@@ -50,29 +53,29 @@ export default class CalendarService {
    * Concurrent callers share the same request. Pass `forceLoad` after a
    * change the store cannot apply locally. A store loaded for a different
    * account (another account signed in through the session-expired modal,
-   * with no logout between) is refetched and its selection cleared.
+   * with no logout between) is reset, list and selection, before refetching,
+   * so a failed refetch leaves nothing of the previous account behind.
    * @returns Promise<Array<CalendarInfo>> The calendars with relationship info
    */
   async ensureCalendarsLoaded(forceLoad = false): Promise<CalendarInfo[]> {
     const accountId = currentAccountId();
     if (this.store.loaded && (this.store.accountId ?? null) !== accountId) {
-      this.store.clearSelectedCalendar();
-      forceLoad = true;
+      this.store.resetCalendars();
     }
     if (!forceLoad && this.store.loaded) {
       return this.store.calendarInfos;
     }
     const existing = inFlightLoads.get(this.store);
-    if (existing && !forceLoad) {
-      return existing;
+    if (existing && !forceLoad && existing.accountId === accountId) {
+      return existing.promise;
     }
     const pending: Promise<CalendarInfo[]> = this.fetchCalendarInfos(accountId).finally(() => {
-      // A forced load may have replaced this entry; only clear our own.
-      if (inFlightLoads.get(this.store) === pending) {
+      // A forced or other-account load may have replaced this entry; only clear our own.
+      if (inFlightLoads.get(this.store)?.promise === pending) {
         inFlightLoads.delete(this.store);
       }
     });
-    inFlightLoads.set(this.store, pending);
+    inFlightLoads.set(this.store, { accountId, promise: pending });
     return pending;
   }
 
@@ -83,7 +86,10 @@ export default class CalendarService {
     try {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
       const infos = calendarsData.items.map((data) => CalendarInfo.fromObject(data));
-      this.store.setCalendarInfos(infos, accountId);
+      // A load that finishes after another account signed in must not overwrite the store.
+      if (currentAccountId() === accountId) {
+        this.store.setCalendarInfos(infos, accountId);
+      }
       return infos;
     }
     catch (error) {

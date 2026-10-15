@@ -85,4 +85,46 @@ describe('calendar store across an account switch', () => {
     expect(useCalendarStore().selectedCalendarId).toBe('account-a-cal');
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('account-a-cal');
   });
+
+  it('leaves nothing of the first account behind when the refetch fails', async () => {
+    currentId = 'account-a';
+    await loginAs('account-a');
+    const service = new CalendarService();
+    await service.ensureCalendarsLoaded();
+    useCalendarStore().setSelectedCalendar('account-a-cal');
+
+    await loginAs('account-b');
+    listStub.withArgs('/api/v1/calendars').rejects(new Error('network'));
+    await expect(service.ensureCalendarsLoaded()).rejects.toThrow('network');
+
+    const store = useCalendarStore();
+    expect(store.calendars).toEqual([]);
+    expect(store.loaded).toBe(false);
+    expect(store.accountId).toBeNull();
+    expect(store.selectedCalendarId).toBeNull();
+  });
+
+  it('does not share a pending load across accounts', async () => {
+    let releaseA: () => void = () => {};
+    listStub.withArgs('/api/v1/calendars').onFirstCall().callsFake(() => new Promise((resolve) => {
+      releaseA = () => resolve({ items: [{ id: 'account-a-cal', urlName: 'account-a-cal', userRelationship: 'owner' }] });
+    }));
+    listStub.withArgs('/api/v1/calendars').onSecondCall().resolves({
+      items: [{ id: 'account-b-cal', urlName: 'account-b-cal', userRelationship: 'owner' }],
+    });
+    await loginAs('account-a');
+    const service = new CalendarService();
+    const loadA = service.ensureCalendarsLoaded();
+
+    await loginAs('account-b');
+    const infosB = await service.ensureCalendarsLoaded();
+    releaseA();
+    await loadA;
+
+    sinon.assert.calledTwice(listStub);
+    expect(infosB.map((info) => info.calendar.id)).toEqual(['account-b-cal']);
+    // The first account's late response does not overwrite the second account's list.
+    expect(useCalendarStore().calendars.map((calendar) => calendar.id)).toEqual(['account-b-cal']);
+    expect(useCalendarStore().accountId).toBe('account-b');
+  });
 });

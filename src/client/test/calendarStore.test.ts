@@ -147,6 +147,17 @@ describe('CalendarStore - calendar infos and persistence', () => {
     expect(store.accountId).toBe('account-1');
   });
 
+  it('should drop the list, its account and the selection on resetCalendars', () => {
+    const store = useCalendarStore();
+    store.setCalendarInfos([owned], 'account-1');
+    store.setSelectedCalendar('o1');
+    store.resetCalendars();
+    expect(store.calendarInfos).toEqual([]);
+    expect(store.loaded).toBe(false);
+    expect(store.accountId).toBeNull();
+    expect(store.selectedCalendarId).toBeNull();
+  });
+
   it('should look up by url name and return null for unknown', () => {
     const store = useCalendarStore();
     store.setCalendarInfos([owned]);
