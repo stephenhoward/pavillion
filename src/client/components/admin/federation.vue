@@ -12,7 +12,7 @@ const { t } = useTranslation('admin', {
     <!-- Page Header -->
     <div class="federation-header">
       <div>
-        <h1>{{ t("title") }}</h1>
+        <h2>{{ t("title") }}</h2>
         <p class="federation-subtitle">{{ t("subtitle") }}</p>
       </div>
       <HelpButton />
@@ -67,7 +67,7 @@ const { t } = useTranslation('admin', {
   max-width: 800px;
 
   .federation-header {
-    h1 {
+    h2 {
       margin: 0 0 var(--pav-space-1) 0;
       font-size: var(--pav-font-size-2xl);
       font-weight: var(--pav-font-weight-light);

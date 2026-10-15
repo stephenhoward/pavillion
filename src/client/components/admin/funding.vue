@@ -512,7 +512,7 @@ onMounted(async () => {
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 id="funding-heading">{{ t("title") }}</h1>
+        <h2 id="funding-heading">{{ t("title") }}</h2>
         <p class="page-subtitle">{{ t("settings_section_title") }}</p>
       </div>
       <HelpButton />
@@ -1185,7 +1185,7 @@ onMounted(async () => {
     }
 
     .page-header-text {
-      h1 {
+      h2 {
         margin: 0 0 var(--pav-space-1) 0;
         font-size: var(--pav-font-size-2xl);
         font-weight: var(--pav-font-weight-light);

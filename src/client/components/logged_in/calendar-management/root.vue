@@ -205,7 +205,7 @@ const backToReports = () => {
               <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
             </nav>
             <div class="calendar-management-root__title-row">
-              <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
+              <h2 class="calendar-management-root__title">{{ t('page_title') }}</h2>
               <HelpButton />
             </div>
           </div>

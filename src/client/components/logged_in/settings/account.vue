@@ -177,7 +177,7 @@ onMounted(async () => {
       <!-- Page Header -->
       <div class="page-header">
         <div class="page-header__title-row">
-          <h1>{{ t("title") }}</h1>
+          <h2>{{ t("title") }}</h2>
           <HelpButton />
         </div>
         <p class="subtitle">{{ t("subtitle", { defaultValue: "Manage your account preferences" }) }}</p>
@@ -396,7 +396,7 @@ onMounted(async () => {
     justify-content: space-between;
   }
 
-  h1 {
+  h2 {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--pav-text-primary);

@@ -66,7 +66,7 @@ describe('BlockedInstances', () => {
   });
 
   it('should render the page title and subtitle', () => {
-    expect(wrapper.find('h1').text()).toBe('blocked_instances.title');
+    expect(wrapper.find('.page-header h2').text()).toBe('blocked_instances.title');
     expect(wrapper.find('.page-subtitle').text()).toBe('blocked_instances.subtitle');
   });
 

@@ -114,7 +114,7 @@ async function updateSettings() {
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-header__title-row">
-        <h1>{{ t("general_settings") }}</h1>
+        <h2>{{ t("general_settings") }}</h2>
         <HelpButton />
       </div>
       <p class="page-subtitle">{{ t("settings_subtitle", "Monitor system health and configure instance settings") }}</p>
@@ -292,7 +292,7 @@ async function updateSettings() {
       justify-content: space-between;
     }
 
-    h1 {
+    h2 {
       margin: 0 0 var(--pav-space-1) 0;
       font-size: var(--pav-font-size-2xl);
       font-weight: var(--pav-font-weight-light);
