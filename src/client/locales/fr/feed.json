@@ -7,6 +7,7 @@
   "events_tab": "Événements",
   "follows_tab": "Abonnements",
   "followers_tab": "Abonnés",
+  "sections_label": "Sections du flux",
   "loading": "Chargement...",
   "load_error": "Échec du chargement des données du flux",
   "followers": {

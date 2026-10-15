@@ -7,6 +7,7 @@
   "events_tab": "Eventos",
   "follows_tab": "Siguiendo",
   "followers_tab": "Seguidores",
+  "sections_label": "Secciones del feed",
   "loading": "Cargando...",
   "load_error": "Error al cargar los datos del feed",
   "followers": {

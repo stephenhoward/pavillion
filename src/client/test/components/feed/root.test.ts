@@ -95,6 +95,8 @@ describe('Feed Root', () => {
 
     sinon.assert.called(clear);
     expect(getFeed.lastCall.args[0]).toBe('o2');
+    expect(getFollows.lastCall.args[0]).toBe('o2');
+    expect(getFollowers.lastCall.args[0]).toBe('o2');
     expect(useCalendarStore().selectedCalendarId).toBe('o2');
     expect(wrapper.find('h1 button[aria-haspopup="dialog"]').text()).toContain('second');
   });
@@ -119,7 +121,53 @@ describe('Feed Root', () => {
     expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
   });
 
+  it('stops requesting when the page moves from a valid calendar to an unknown one', async () => {
+    const wrapper = await mountAt('/feed/first');
+    const callsBefore = requestedCalendarIds().length;
+
+    await router.push('/feed/not-mine');
+    await flushPromises();
+
+    expect(requestedCalendarIds().length).toBe(callsBefore);
+    expect(wrapper.find('[role="alert"]').text()).toContain('not-mine');
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+  });
+
+  it('drops a slow response for the calendar switched away from', async () => {
+    let resolveFirstFeed: (value: unknown) => void = () => {};
+    let resolveFirstFollows: (value: unknown) => void = () => {};
+    getFeed.withArgs('o1').returns(new Promise((resolve) => { resolveFirstFeed = resolve; }));
+    getFollows.withArgs('o1').returns(new Promise((resolve) => { resolveFirstFollows = resolve; }));
+    getFeed.withArgs('o2').resolves({ events: [{ id: 'second-event' }], hasMore: false });
+    getFollows.withArgs('o2').resolves([{ id: 'second-follow' }]);
+
+    await mountAt('/feed/first');
+    await router.push('/feed/second');
+    await flushPromises();
+
+    resolveFirstFeed({ events: [{ id: 'first-event' }], hasMore: true });
+    resolveFirstFollows([{ id: 'first-follow' }]);
+    await flushPromises();
+
+    const feedStore = useFeedStore();
+    expect(feedStore.events.map((event) => event.id)).toEqual(['second-event']);
+    expect(feedStore.eventsHasMore).toBe(false);
+    expect(feedStore.follows.map((follow) => follow.id)).toEqual(['second-follow']);
+  });
+
+  it('closes the follow dialog when the calendar changes', async () => {
+    const wrapper = await mountAt('/feed/first');
+    await wrapper.vm.handleFollowCalendarRequest();
+    expect(wrapper.vm.showAddCalendarModal).toBe(true);
+
+    await router.push('/feed/second');
+    await flushPromises();
+
+    expect(wrapper.vm.showAddCalendarModal).toBe(false);
+  });
+
   it('requests nothing and claims no not-found when the calendars fail to load', async () => {
+    useCalendarStore().resetCalendars();
     (CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub).rejects(new Error('network'));
 
     const wrapper = await mountAt('/feed/first');
@@ -132,6 +180,11 @@ describe('Feed Root', () => {
     const wrapper = await mountAt('/feed/first');
     expect(wrapper.find('select').exists()).toBe(false);
     expect(wrapper.find('.no-calendar-selected').exists()).toBe(false);
+  });
+
+  it('labels the tab list from the feed translations', async () => {
+    const wrapper = await mountAt('/feed/first');
+    expect(wrapper.find('[role="tablist"]').attributes('aria-label')).toBe('Feed sections');
   });
 
   it('switches tabs', async () => {

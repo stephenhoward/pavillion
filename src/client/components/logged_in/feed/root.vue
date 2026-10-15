@@ -31,7 +31,6 @@ const { isLoading: isLoadingFollowers, loadFollowers } = useFeedFollowers();
 const state = reactive({
   activeTab: 'events',
   isInitialized: false,
-  calendarsLoadFailed: false,
 });
 
 const showAddCalendarModal = ref(false);
@@ -61,9 +60,16 @@ const activateTab = (tab) => {
 };
 
 /**
- * Load follows, followers and feed events for the route's calendar. The feed
- * composables read the store's selection, so it is pointed at the validated
- * route calendar first; with no such calendar nothing is requested.
+ * Load follows, followers and feed events for the route's calendar. With no
+ * such calendar nothing is requested.
+ *
+ * The feed composables read the store's selection, so it is pointed at the
+ * validated route calendar first. The route sync guard normally set it
+ * already; this covers the case where the guard's own calendar load failed
+ * and onMounted then loaded the calendars, leaving the selection unset or
+ * stale. The feed service also drops any response whose calendar is no
+ * longer the selection, so a slow load for a calendar switched away from
+ * cannot land on this one.
  */
 const loadFeedData = async () => {
   const calendarId = calendar.value?.id;
@@ -127,7 +133,6 @@ onMounted(async () => {
   catch (error) {
     console.error('Error loading calendars:', error);
     toast.error(t('load_error'));
-    state.calendarsLoadFailed = true;
     state.isInitialized = true;
     return;
   }
@@ -137,9 +142,11 @@ onMounted(async () => {
   state.isInitialized = true;
 });
 
-// Switching calendars keeps this component mounted with a new param.
+// Switching calendars keeps this component mounted with a new param. The
+// follow dialog belongs to the previous calendar, so it closes.
 watch(calendarUrlName, async (next, prev) => {
   if (next && next !== prev) {
+    showAddCalendarModal.value = false;
     feedStore.clearFeedData();
     await loadFeedData();
   }
@@ -162,7 +169,7 @@ watch(calendarUrlName, async (next, prev) => {
     </header>
 
     <div
-      v-if="state.isInitialized && !state.calendarsLoadFailed && !calendar"
+      v-if="state.isInitialized && calendarStore.loaded && !calendar"
       class="feed-not-found"
       role="alert"
     >
@@ -176,7 +183,7 @@ watch(calendarUrlName, async (next, prev) => {
       <div
         class="tab-navigation"
         role="tablist"
-        aria-label="Feed sections"
+        :aria-label="t('sections_label')"
       >
         <button
           id="events-tab"
@@ -259,7 +266,7 @@ watch(calendarUrlName, async (next, prev) => {
 
     <!-- Root-level modal: opened from Events tab empty state "Follow a Calendar" button -->
     <AddCalendarModal
-      v-if="showAddCalendarModal"
+      v-if="calendar && showAddCalendarModal"
       @close="handleCloseAddCalendarModal"
       @follow-success="handleFollowSuccess"
     />
