@@ -7,7 +7,6 @@
   "events_tab": "Events",
   "follows_tab": "Following",
   "followers_tab": "Followers",
-  "select_calendar_prompt": "Please select a calendar to view its feed",
   "loading": "Loading...",
   "load_error": "Failed to load feed data",
   "followers": {
