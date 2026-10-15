@@ -116,6 +116,20 @@ describe('CalendarSwitcherSheet', () => {
     expect(items[items.length - 1].attributes('data-testid')).toBe('slot-row');
   });
 
+  it('emits close when a slotted link is picked', async () => {
+    seed();
+    initI18Next();
+    const wrapper = mount(Sheet, {
+      global: { plugins: [makeRouter(), pinia, [I18NextVue, { i18next }]] },
+      props: { routeName: 'feed', currentUrlName: null },
+      slots: { default: '<li data-testid="slot-row"><a href="#account"><span>Account</span></a></li><li data-testid="slot-text">Text</li>' },
+    });
+    await wrapper.find('[data-testid="slot-text"]').trigger('click');
+    expect(wrapper.emitted('close')).toBeFalsy();
+    await wrapper.find('[data-testid="slot-row"] span').trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
   it('shows only the create row for an account with no calendars', () => {
     useCalendarStore().setCalendarInfos([]);
     const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });

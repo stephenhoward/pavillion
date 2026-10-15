@@ -27,7 +27,9 @@
     "editor_badge": "Éditeur",
     "aria_switch_calendar": "Changer de calendrier : {{name}}",
     "aria_switch_settings": "Changer de paramètres : {{name}}",
-    "no_calendars": "Vous n'avez encore aucun calendrier."
+    "no_calendars": "Vous n'avez encore aucun calendrier.",
+    "account_row": "Compte",
+    "admin_row": "Administration de l'instance"
   },
   "calendar": {
     "create_button": "Créer un événement",

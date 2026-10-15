@@ -27,7 +27,9 @@
     "editor_badge": "Editor",
     "aria_switch_calendar": "Switch calendar: {{name}}",
     "aria_switch_settings": "Switch settings: {{name}}",
-    "no_calendars": "You have no calendars yet."
+    "no_calendars": "You have no calendars yet.",
+    "account_row": "Account",
+    "admin_row": "Instance administration"
   },
   "calendar": {
     "create_button": "Create Event",
