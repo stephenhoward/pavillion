@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { CalendarPlus } from 'lucide-vue-next';
 import Sheet from '@/client/components/common/sheet.vue';
+import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import type { CalendarInfo } from '@/common/model/calendar_info';
 
-const props = defineProps<{
+defineProps<{
   /** Named route to navigate to with `{ calendar: urlName }` when a row is picked. */
   routeName: string;
   /** The calendar the host page already shows; its row is marked current and is inert. Null when the page shows none. */
@@ -20,17 +20,20 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation('calendars', { keyPrefix: 'switcher' });
-const router = useRouter();
 const store = useCalendarStore();
 
 const rows = computed<CalendarInfo[]>(() => [...store.ownedCalendars, ...store.editedCalendars]);
 
 const nameOf = (info: CalendarInfo) => info.calendar.content('en').name || info.calendar.urlName;
 
-async function pick(info: CalendarInfo) {
-  emit('close');
-  await router.push({ name: props.routeName, params: { calendar: info.calendar.urlName } });
-}
+// Revalidate on open: a no-op for the same account, while a different
+// signed-in account resets and refetches, so the sheet never lists a
+// previous account's calendars. A failed load keeps the list as it is.
+onMounted(() => {
+  new CalendarService().ensureCalendarsLoaded().catch((error) => {
+    console.error('Error loading calendars:', error);
+  });
+});
 </script>
 
 <template>
@@ -45,24 +48,27 @@ async function pick(info: CalendarInfo) {
         :data-url-name="info.calendar.urlName"
         :aria-current="info.calendar.urlName === currentUrlName ? 'true' : undefined"
       >
-        <span v-if="info.calendar.urlName === currentUrlName" class="calendar-switcher-sheet__name">
-          {{ nameOf(info) }}
-          <span class="sr-only">{{ t('current_label') }}</span>
+        <span v-if="info.calendar.urlName === currentUrlName" class="calendar-switcher-sheet__target">
+          <span class="calendar-switcher-sheet__name">
+            {{ nameOf(info) }}
+            <span class="sr-only">{{ t('current_label') }}</span>
+          </span>
+          <span v-if="info.isEditor" class="calendar-switcher-sheet__badge">{{ t('editor_badge') }}</span>
         </span>
-        <a
+        <RouterLink
           v-else
-          href="#"
-          class="calendar-switcher-sheet__name"
-          @click.prevent="pick(info)"
+          :to="{ name: routeName, params: { calendar: info.calendar.urlName } }"
+          class="calendar-switcher-sheet__target"
+          @click="emit('close')"
         >
-          {{ nameOf(info) }}
-        </a>
-        <span v-if="info.isEditor" class="calendar-switcher-sheet__badge">{{ t('editor_badge') }}</span>
+          <span class="calendar-switcher-sheet__name">{{ nameOf(info) }}</span>
+          <span v-if="info.isEditor" class="calendar-switcher-sheet__badge">{{ t('editor_badge') }}</span>
+        </RouterLink>
       </li>
       <li class="calendar-switcher-sheet__row calendar-switcher-sheet__row--action">
         <button
           type="button"
-          class="calendar-switcher-sheet__create"
+          class="btn btn--ghost calendar-switcher-sheet__create"
           data-testid="switcher-create"
           @click="emit('create')"
         >
@@ -92,11 +98,6 @@ async function pick(info: CalendarInfo) {
   }
 
   &__row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--pav-space-3);
-    padding: var(--pav-space-3) var(--pav-space-4);
     border-radius: var(--pav-border-radius-md);
 
     &[aria-current='true'] {
@@ -106,26 +107,42 @@ async function pick(info: CalendarInfo) {
 
     &--action {
       border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
+      border-radius: 0;
       margin-block-start: var(--pav-space-2);
-      padding-block-start: var(--pav-space-4);
+      padding-block-start: var(--pav-space-2);
+    }
+  }
+
+  /* The link (or the current row's label) fills the row, so the whole padded
+     row is the hit area. */
+  &__target {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-3) var(--pav-space-4);
+    border-radius: inherit;
+    color: var(--pav-text-primary);
+    text-decoration: none;
+  }
+
+  a.calendar-switcher-sheet__target {
+    &:hover {
+      background: var(--pav-interactive-hover);
+
+      .calendar-switcher-sheet__name {
+        text-decoration: underline;
+      }
+    }
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: -2px;
     }
   }
 
   &__name {
     flex: 1;
-    color: var(--pav-text-primary);
-    text-decoration: none;
-  }
-
-  a.calendar-switcher-sheet__name {
-    &:hover {
-      text-decoration: underline;
-    }
-
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: 2px;
-    }
   }
 
   &__badge {
@@ -134,20 +151,8 @@ async function pick(info: CalendarInfo) {
   }
 
   &__create {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--pav-space-2);
-    background: none;
-    border: 0;
-    padding: 0;
-    color: var(--pav-color-interactive-primary);
-    cursor: pointer;
-    font: inherit;
-
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: 2px;
-    }
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import sinon from 'sinon';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
@@ -7,6 +8,7 @@ import i18next from 'i18next';
 import { initI18Next } from '@/client/service/locale';
 import { mountComponent } from '@/client/test/lib/vue';
 import Sheet from '@/client/components/logged_in/calendar-switcher/CalendarSwitcherSheet.vue';
+import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -34,10 +36,31 @@ function makeRouter(): Router {
 
 describe('CalendarSwitcherSheet', () => {
   let pinia: Pinia;
+  let sandbox: sinon.SinonSandbox;
+  let ensureLoaded: sinon.SinonStub;
 
   beforeEach(() => {
     pinia = createPinia();
     setActivePinia(pinia);
+    sandbox = sinon.createSandbox();
+    ensureLoaded = sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded')
+      .callsFake(async () => useCalendarStore().calendarInfos);
+  });
+
+  afterEach(() => sandbox.restore());
+
+  it('revalidates the calendar list for the signed-in account on open', () => {
+    seed();
+    mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
+    sinon.assert.calledOnce(ensureLoaded);
+  });
+
+  it('keeps listing calendars when the revalidation fails', async () => {
+    seed();
+    ensureLoaded.rejects(new Error('network'));
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="switcher-row"]').length).toBe(3);
   });
 
   it('lists owned then edited calendars with the editor badge', () => {
@@ -64,7 +87,9 @@ describe('CalendarSwitcherSheet', () => {
     const router = makeRouter();
     await router.push('/');
     const wrapper = mountComponent(Sheet, router, { pinia, props: { routeName: 'calendar_management', currentUrlName: 'owned-one' } });
-    await wrapper.find('[data-url-name="owned-two"] a').trigger('click');
+    const link = wrapper.find('[data-url-name="owned-two"] a');
+    expect(link.attributes('href')).toBe('/settings/calendar/owned-two');
+    await link.trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/owned-two');
     expect(wrapper.emitted('close')).toBeTruthy();
