@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
+import { onBeforeMount, reactive, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
-import { ExternalLink, BookOpenText, CalendarPlus, Settings } from 'lucide-vue-next';
+import { ExternalLink, BookOpenText, Settings } from 'lucide-vue-next';
 import ActionsMenu from '@/client/components/common/actions-menu.vue';
 import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
 import HelpPanel from '@/client/components/common/help-panel.vue';
@@ -14,15 +14,14 @@ import EventsTab from '@/client/components/logged_in/calendar-content/events-tab
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
 import PlacesTab from '@/client/components/logged_in/calendar-content/places-tab.vue';
-import CreateCalendarSheet from './create-calendar-sheet.vue';
+import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
 });
 
-// For create calendar button translations
-const { t: tList } = useTranslation('calendars', {
-  keyPrefix: 'list',
+const { t: tSwitcher } = useTranslation('calendars', {
+  keyPrefix: 'switcher',
 });
 
 const eventService = new EventService();
@@ -35,6 +34,7 @@ const state = reactive({
   isLoading: false,
 });
 const calendarUrlName = computed(() => route.params.calendar);
+const calendarName = computed(() => state.calendar?.content('en').name || state.calendar?.urlName || '');
 const calendarService = new CalendarService();
 
 // Tab state
@@ -80,21 +80,6 @@ const activateTab = (tab: string) => {
 };
 
 const { handleTabKeydown } = useTabNavigation(ORDERED_TABS, activeTab, activateTab);
-
-// Create calendar sheet state
-const showCreateCalendarSheet = ref(false);
-const createCalendarSheetTriggerEl = ref<HTMLElement | null>(null);
-
-function openCreateCalendarSheet(event: MouseEvent) {
-  createCalendarSheetTriggerEl.value = (event?.currentTarget as HTMLElement) ?? null;
-  showCreateCalendarSheet.value = true;
-}
-
-async function closeCreateCalendarSheet() {
-  showCreateCalendarSheet.value = false;
-  await nextTick();
-  createCalendarSheetTriggerEl.value?.focus();
-}
 
 // Help panel state — hosted directly on this page so the actions menu can open it
 const showHelpPanel = ref(false);
@@ -186,7 +171,13 @@ const handleLoadEvents = async (filters) => {
           <div class="header-title-section">
             <div class="header-title-group">
               <h1>
-                <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
+                <CalendarSwitcher
+                  v-if="state.calendar"
+                  :label="calendarName"
+                  route-name="calendar"
+                  :current-url-name="state.calendar.urlName"
+                  :aria-label="tSwitcher('aria_switch_calendar', { name: calendarName })"
+                />
                 <span v-else>{{ calendarUrlName }}</span>
               </h1>
               <!--
@@ -206,7 +197,7 @@ const handleLoadEvents = async (filters) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 class="calendar-public-link"
-                :aria-label="t('view_public_calendar_label', { name: state.calendar.content('en').name || state.calendar.urlName })"
+                :aria-label="t('view_public_calendar_label', { name: calendarName })"
               >
                 {{ state.calendar.publicUrl }}
                 <ExternalLink :size="14" aria-hidden="true" />
@@ -216,9 +207,6 @@ const handleLoadEvents = async (filters) => {
               <ActionsMenu :trigger-label="t('menu_label')">
                 <ActionsMenuItem :icon="BookOpenText" @click="showHelpPanel = true">
                   {{ t('documentation') }}
-                </ActionsMenuItem>
-                <ActionsMenuItem :icon="CalendarPlus" @click="openCreateCalendarSheet">
-                  {{ tList('create_new_calendar_button') }}
                 </ActionsMenuItem>
                 <ActionsMenuItem
                   v-if="state.calendar"
@@ -361,12 +349,6 @@ const handleLoadEvents = async (filters) => {
         />
       </div>
     </div>
-
-    <!-- Create Calendar Sheet -->
-    <CreateCalendarSheet
-      v-if="showCreateCalendarSheet"
-      @close="closeCreateCalendarSheet"
-    />
 
     <!-- Help Panel (triggered from the actions menu's Documentation item) -->
     <HelpPanel

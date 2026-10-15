@@ -197,6 +197,40 @@ describe('Calendar View Tabs', () => {
     });
   });
 
+  describe('Header switcher', () => {
+    it('renders the calendar name as the switcher trigger inside the heading', async () => {
+      const { wrapper } = await createWrapper();
+
+      const trigger = wrapper.find('h1 button[aria-haspopup="dialog"]');
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toContain('Test Calendar');
+      expect(trigger.attributes('aria-label')).toBe('Switch calendar: Test Calendar');
+    });
+
+    it('keeps Documentation and Manage calendar in the actions menu, without Create calendar', async () => {
+      const { wrapper } = await createWrapper();
+
+      await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+      const items = wrapper.findAll('[role="menuitem"]').map((item) => item.text());
+      expect(items).toHaveLength(2);
+      expect(items.some((text) => /Documentation/.test(text))).toBe(true);
+      expect(items.some((text) => /Manage/.test(text))).toBe(true);
+      expect(items.some((text) => /New Calendar/i.test(text))).toBe(false);
+    });
+
+    it('reloads the calendar when the :calendar param changes', async () => {
+      const { router } = await createWrapper();
+      const getCalendar = CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub;
+      const callsBefore = getCalendar.callCount;
+
+      await router.push({ name: 'calendar', params: { calendar: 'other-calendar' } });
+      await flushPromises();
+
+      expect(getCalendar.callCount).toBe(callsBefore + 1);
+      expect(getCalendar.lastCall.args[0]).toBe('other-calendar');
+    });
+  });
+
   describe('Default Tab State', () => {
     it('should default to events tab when no ?tab= param', async () => {
       const { wrapper } = await createWrapper();
