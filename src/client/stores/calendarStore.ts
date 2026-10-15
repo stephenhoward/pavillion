@@ -18,20 +18,29 @@ export const useCalendarStore = defineStore('calendars', {
     };
   },
   getters: {
+    /** Bare calendars in API order, without the relationship. */
     calendars: (state): Calendar[] => state.calendarInfos.map((info: CalendarInfo) => info.calendar),
+    /** Calendars the account owns. */
     ownedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isOwner),
+    /** Calendars the account edits but does not own. */
     editedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isEditor),
+    /** Check if the user has any calendars. */
     hasCalendars: (state) => state.calendarInfos.length > 0,
+    /** Check if the user has multiple calendars. */
     hasMultipleCalendars: (state) => state.calendarInfos.length > 1,
+    /** Get a calendar by ID, or null if the account has none with that ID. */
     getCalendarById: (state) => (id: string): Calendar | null => {
       return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === id)?.calendar ?? null;
     },
+    /** Get a calendar by URL name, or null if not found. */
     getCalendarByUrlName: (state) => (urlName: string): Calendar | null => {
       return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName)?.calendar ?? null;
     },
+    /** Get a calendar with its relationship by URL name, or null if not found. */
     getCalendarInfoByUrlName: (state) => (urlName: string): CalendarInfo | null => {
       return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName) ?? null;
     },
+    /** The current calendar, or null when none is selected or it is not in the store. */
     selectedCalendar: (state): Calendar | null => {
       if (!state.selectedCalendarId) {
         return null;
@@ -65,6 +74,7 @@ export const useCalendarStore = defineStore('calendars', {
       }
     },
 
+    /** Removes a calendar from the store. */
     removeCalendar(calendar: Calendar) {
       const index = this.calendarInfos.findIndex((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (index >= 0) {

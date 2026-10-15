@@ -1,7 +1,7 @@
 # Frontend Data Exposure
 
 > Version: 1.0.0
-> Last Updated: 2026-03-22
+> Last Updated: 2026-10-14
 
 ## Privacy Risks
 
@@ -32,7 +32,8 @@ The client app (authenticated) may use localStorage for the JWT token and for no
 
 ```typescript
 // Safe: auth token in client app
-localStorage.setItem('jwt_token', token);
+localStorage.setItem('jwt', token);
+localStorage.setItem('jw_token', JSON.stringify(claims)); // decoded JWT claims
 
 // Safe: bare calendar UUID, removed whenever the token is removed
 localStorage.setItem('current_calendar_id', calendarId);
@@ -94,7 +95,7 @@ fetch('/api/v1/account')  // From public site code
 ## Known Codebase Patterns
 
 - Client app uses `localStorage` for authentication (`src/client/app.ts`, `src/client/service/authn.ts`)
-- `localStorage['current_calendar_id']` — the client app's current calendar, a bare calendar UUID, no PII. Written by `calendarStore.setSelectedCalendar`, removed by `Authentication._unset_token()` on every token-removal path. Client app only; the site and widget never read it.
+- `localStorage['current_calendar_id']` — the client app's current calendar, a bare calendar UUID, no PII. Written by `calendarStore.setSelectedCalendar`, removed by `Authentication._unset_token()` on every token-removal path. Client app only; the site and widget never read it. Re-login through the session-expired modal does not remove the key, so after an account switch there it can hold the previous account's calendar ID; safety there rests on `resolveCurrentCalendar` validating the ID against the signed-in account's calendar list.
 - Site app initializes authentication with `localStorage` (`src/site/app.ts`) -- verify this doesn't set cookies for public visitors
 - Locale middleware reads `cookie` header for language preference (`src/server/common/middleware/locale.ts`) -- verify no cookie is SET for unauthenticated requests
 - No analytics or tracking libraries detected in `package.json` (good)

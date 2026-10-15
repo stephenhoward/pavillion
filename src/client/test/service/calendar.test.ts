@@ -32,7 +32,7 @@ describe('ensureCalendarsLoaded', () => {
     sandbox.restore();
   });
 
-  it('fetches once, stores CalendarInfo and dedupes concurrent calls', async () => {
+  it('should fetch once, store CalendarInfo and dedupe concurrent calls', async () => {
     const listStub = sandbox.stub(ModelService, 'listModels').resolves({
       items: [
         { id: 'o1', urlName: 'owned-one', userRelationship: 'owner' },
@@ -46,7 +46,7 @@ describe('ensureCalendarsLoaded', () => {
     expect(mockStore.setCalendarInfos.firstCall.args[0][1].isEditor).toBe(true);
   });
 
-  it('returns the store when already loaded', async () => {
+  it('should return the store when already loaded', async () => {
     mockStore.loaded = true;
     mockStore.calendarInfos = [];
     const listStub = sandbox.stub(ModelService, 'listModels');
@@ -55,14 +55,14 @@ describe('ensureCalendarsLoaded', () => {
     expect(result).toBe(mockStore.calendarInfos);
   });
 
-  it('refetches on forceLoad', async () => {
+  it('should refetch on forceLoad', async () => {
     mockStore.loaded = true;
     const listStub = sandbox.stub(ModelService, 'listModels').resolves({ items: [] });
     await service.ensureCalendarsLoaded(true);
     sinon.assert.calledOnce(listStub);
   });
 
-  it('rethrows when loading calendars fails and does not cache the failure', async () => {
+  it('should rethrow when loading calendars fails and not cache the failure', async () => {
     const listStub = sandbox.stub(ModelService, 'listModels');
     listStub.onFirstCall().rejects(new Error('API Error'));
     listStub.onSecondCall().resolves({ items: [] });
@@ -74,14 +74,14 @@ describe('ensureCalendarsLoaded', () => {
     sinon.assert.calledTwice(listStub);
   });
 
-  it('loadCalendars returns bare calendars', async () => {
+  it('should return bare calendars from loadCalendars', async () => {
     mockStore.loaded = true;
     mockStore.calendars = [new Calendar('o1', 'owned-one')];
     const result = await service.loadCalendars();
     expect(result[0].id).toBe('o1');
   });
 
-  it('loadCalendarsWithRelationship returns the loaded calendar infos', async () => {
+  it('should return the loaded calendar infos from loadCalendarsWithRelationship', async () => {
     sandbox.stub(ModelService, 'listModels').resolves({
       items: [{ id: 'e1', urlName: 'edited-one', userRelationship: 'editor' }],
     });

@@ -10,6 +10,7 @@ describe('FeedStore', () => {
   let calendarStore: ReturnType<typeof useCalendarStore>;
 
   beforeEach(() => {
+    localStorage.clear();
     setActivePinia(createPinia());
     feedStore = useFeedStore();
     calendarStore = useCalendarStore();
