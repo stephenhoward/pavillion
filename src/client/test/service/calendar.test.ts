@@ -4,7 +4,6 @@ import sinon from 'sinon';
 import axios from 'axios';
 import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
-import ListResult from '@/client/service/list-result';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -14,18 +13,18 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 // Mock axios
 vi.mock('axios');
 
-describe('loadCalendars', () => {
+describe('ensureCalendarsLoaded', () => {
   const sandbox = sinon.createSandbox();
   let mockStore: ReturnType<typeof useCalendarStore>;
   let service: CalendarService;
 
   beforeEach(() => {
-    // Create a mock store before each test
     mockStore = {
-      setCalendars: sandbox.stub(),
+      setCalendarInfos: sandbox.stub(),
+      calendarInfos: [],
+      calendars: [],
       loaded: false,
     };
-    // Stub the useCalendarStore function to always return our mock
     service = new CalendarService(mockStore);
   });
 
@@ -33,73 +32,62 @@ describe('loadCalendars', () => {
     sandbox.restore();
   });
 
-  it('should return calendars from store if loaded and not forced to reload', async () => {
-    // Arrange
-    const calendars = [
-      new Calendar('cal1', 'calendar-1'),
-      new Calendar('cal2', 'calendar-2'),
-    ];
-    mockStore.calendars = calendars;
+  it('fetches once, stores CalendarInfo and dedupes concurrent calls', async () => {
+    const listStub = sandbox.stub(ModelService, 'listModels').resolves({
+      items: [
+        { id: 'o1', urlName: 'owned-one', userRelationship: 'owner' },
+        { id: 'e1', urlName: 'edited-one', userRelationship: 'editor' },
+      ],
+    });
+    const [a, b] = await Promise.all([service.ensureCalendarsLoaded(), service.ensureCalendarsLoaded()]);
+    expect(a).toBe(b);
+    sinon.assert.calledOnce(listStub);
+    sinon.assert.calledOnce(mockStore.setCalendarInfos);
+    expect(mockStore.setCalendarInfos.firstCall.args[0][1].isEditor).toBe(true);
+  });
+
+  it('returns the store when already loaded', async () => {
     mockStore.loaded = true;
-    const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves(ListResult.fromArray([]));
+    mockStore.calendarInfos = [];
+    const listStub = sandbox.stub(ModelService, 'listModels');
+    const result = await service.ensureCalendarsLoaded();
+    sinon.assert.notCalled(listStub);
+    expect(result).toBe(mockStore.calendarInfos);
+  });
 
-    // Act
+  it('refetches on forceLoad', async () => {
+    mockStore.loaded = true;
+    const listStub = sandbox.stub(ModelService, 'listModels').resolves({ items: [] });
+    await service.ensureCalendarsLoaded(true);
+    sinon.assert.calledOnce(listStub);
+  });
+
+  it('rethrows when loading calendars fails and does not cache the failure', async () => {
+    const listStub = sandbox.stub(ModelService, 'listModels');
+    listStub.onFirstCall().rejects(new Error('API Error'));
+    listStub.onSecondCall().resolves({ items: [] });
+
+    await expect(service.ensureCalendarsLoaded()).rejects.toThrow('API Error');
+    sinon.assert.notCalled(mockStore.setCalendarInfos);
+
+    await service.ensureCalendarsLoaded();
+    sinon.assert.calledTwice(listStub);
+  });
+
+  it('loadCalendars returns bare calendars', async () => {
+    mockStore.loaded = true;
+    mockStore.calendars = [new Calendar('o1', 'owned-one')];
     const result = await service.loadCalendars();
-
-    // Assert
-    expect(mockListModels.called).toBe(false);
-    expect(result).toBe(calendars);
+    expect(result[0].id).toBe('o1');
   });
 
-  it('should fetch calendars from API when not loaded', async () => {
-    // Arrange
-    const calendars = [
-      new Calendar('cal1', 'calendar-1'),
-      new Calendar('cal2', 'calendar-2'),
-    ];
-    const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves(ListResult.fromArray(calendars.map(calendar => calendar.toObject())));
-
-    // Ensure the store appears empty/not loaded
-    mockStore.loaded = false;
-    mockStore.calendars = [];
-
-    // Act
-    const result = await service.loadCalendars();
-
-    // Assert
-    expect(mockListModels.called).toBe(true);
-    expect(result).toEqual(calendars);  // Use toEqual instead of toBe for object comparison
-  });
-
-  it('should fetch calendars from API when forced to reload', async () => {
-    // Arrange
-    const calendars = [
-      new Calendar('cal1', 'calendar-1'),
-      new Calendar('cal2', 'calendar-2'),
-    ];
-    mockStore.setCalendars(calendars);
-    const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves(ListResult.fromArray(calendars.map(calendar => calendar.toObject())));
-
-    // Act
-    const result = await service.loadCalendars(true);
-
-    // Assert
-    expect(mockListModels.called).toBe(true);
-    expect(result).toEqual(calendars); // Use toEqual instead of toBe for object comparison
-  });
-
-  it('should throw an error when loading calendars fails', async () => {
-    // Arrange
-    const mockError = new Error('API Error');
-    const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.rejects(mockError);
-
-    // Act & Assert
-    await expect(service.loadCalendars())
-      .rejects.toThrow('API Error');
+  it('loadCalendarsWithRelationship returns the loaded calendar infos', async () => {
+    sandbox.stub(ModelService, 'listModels').resolves({
+      items: [{ id: 'e1', urlName: 'edited-one', userRelationship: 'editor' }],
+    });
+    const result = await service.loadCalendarsWithRelationship();
+    expect(result.map((info) => info.calendar.id)).toEqual(['e1']);
+    expect(result[0].isEditor).toBe(true);
   });
 });
 
