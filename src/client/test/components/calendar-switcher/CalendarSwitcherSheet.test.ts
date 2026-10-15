@@ -1,0 +1,100 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
+import { createMemoryHistory, createRouter, Router } from 'vue-router';
+import I18NextVue from 'i18next-vue';
+import i18next from 'i18next';
+import { initI18Next } from '@/client/service/locale';
+import { mountComponent } from '@/client/test/lib/vue';
+import Sheet from '@/client/components/logged_in/calendar-switcher/CalendarSwitcherSheet.vue';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+
+const Stub = { template: '<div />' };
+
+function seed() {
+  useCalendarStore().setCalendarInfos([
+    new CalendarInfo(new Calendar('e1', 'edited-one'), 'editor'),
+    new CalendarInfo(new Calendar('o1', 'owned-one'), 'owner'),
+    new CalendarInfo(new Calendar('o2', 'owned-two'), 'owner'),
+  ]);
+}
+
+function makeRouter(): Router {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: Stub, name: 'home' },
+      { path: '/feed/:calendar', component: Stub, name: 'feed' },
+      { path: '/settings/calendar/:calendar', component: Stub, name: 'calendar_management' },
+    ],
+  });
+}
+
+describe('CalendarSwitcherSheet', () => {
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
+  it('lists owned then edited calendars with the editor badge', () => {
+    seed();
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: 'owned-one' } });
+    const rows = wrapper.findAll('[data-testid="switcher-row"]');
+    expect(rows.map((r) => r.attributes('data-url-name'))).toEqual(['owned-one', 'owned-two', 'edited-one']);
+    expect(rows[2].text()).toContain('Editor');
+    expect(rows[0].text()).not.toContain('Editor');
+  });
+
+  it('marks the current row and renders it inert', () => {
+    seed();
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: 'owned-one' } });
+    const current = wrapper.find('[data-url-name="owned-one"]');
+    expect(current.attributes('aria-current')).toBe('true');
+    expect(current.find('a').exists()).toBe(false);
+    expect(current.find('.sr-only').text()).toBe('Current');
+    expect(wrapper.find('[data-url-name="owned-two"]').attributes('aria-current')).toBeUndefined();
+  });
+
+  it('navigates on the host route and emits close', async () => {
+    seed();
+    const router = makeRouter();
+    await router.push('/');
+    const wrapper = mountComponent(Sheet, router, { pinia, props: { routeName: 'calendar_management', currentUrlName: 'owned-one' } });
+    await wrapper.find('[data-url-name="owned-two"] a').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/owned-two');
+    expect(wrapper.emitted('close')).toBeTruthy();
+  });
+
+  it('with no current calendar every row navigates', () => {
+    seed();
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'calendar_management', currentUrlName: null } });
+    expect(wrapper.findAll('[data-testid="switcher-row"] a').length).toBe(3);
+    expect(wrapper.find('[aria-current="true"]').exists()).toBe(false);
+  });
+
+  it('emits create from the create row and renders slot rows after it', async () => {
+    seed();
+    initI18Next();
+    const wrapper = mount(Sheet, {
+      global: { plugins: [makeRouter(), pinia, [I18NextVue, { i18next }]] },
+      props: { routeName: 'feed', currentUrlName: null },
+      slots: { default: '<li data-testid="slot-row">Account</li>' },
+    });
+    await wrapper.find('[data-testid="switcher-create"]').trigger('click');
+    expect(wrapper.emitted('create')).toBeTruthy();
+    const items = wrapper.findAll('li');
+    expect(items[items.length - 1].attributes('data-testid')).toBe('slot-row');
+  });
+
+  it('shows only the create row for an account with no calendars', () => {
+    useCalendarStore().setCalendarInfos([]);
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
+    expect(wrapper.findAll('[data-testid="switcher-row"]').length).toBe(0);
+    expect(wrapper.find('[data-testid="switcher-create"]').exists()).toBe(true);
+  });
+});

@@ -31,6 +31,15 @@
     "editor_badge": "Editor",
     "last_used_badge": "Last Used"
   },
+  "switcher": {
+    "title": "Switch calendar",
+    "current_label": "Current",
+    "create_calendar_button": "Create a new calendar",
+    "editor_badge": "Editor",
+    "aria_switch_calendar": "Switch calendar: {{name}}",
+    "aria_switch_settings": "Switch settings: {{name}}",
+    "no_calendars": "You have no calendars yet."
+  },
   "calendar": {
     "create_button": "Create Event",
     "update_button": "Update Event",
