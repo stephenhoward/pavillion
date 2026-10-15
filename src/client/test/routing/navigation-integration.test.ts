@@ -330,4 +330,35 @@ describe('Navigation Integration - Task Group 4', () => {
       expect(router.resolve(path).matched).toEqual([]);
     });
   });
+
+  describe('Settings guards', () => {
+    it.each([
+      ['/settings/account', '/settings/account/funding'],
+      ['/settings/account/funding', '/settings/calendar/test-calendar'],
+      ['/settings/calendar/test-calendar', '/settings/account'],
+    ])('runs mustBeLoggedIn when moving from %s to its sibling %s', async (from, to) => {
+      const pass = () => true;
+      let loginChecks = 0;
+      const countingRouter = createRouter({
+        history: createWebHistory(),
+        routes: buildClientRoutes({
+          mustBeLoggedIn: () => {
+            loginChecks++;
+            return true;
+          },
+          mustBeAdmin: pass,
+          setupGuard: pass,
+          authRouteGuard: pass,
+          currentCalendarRedirect: () => pass,
+        }),
+      });
+      await countingRouter.push(from);
+      loginChecks = 0;
+
+      await countingRouter.push(to);
+
+      expect(countingRouter.currentRoute.value.path).toBe(to);
+      expect(loginChecks).toBe(1);
+    });
+  });
 });

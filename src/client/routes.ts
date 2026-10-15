@@ -83,11 +83,12 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
         // Settings: calendar management, the account, and instance admin.
         { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn,
           children: [
+            // A parent's beforeEnter does not run between siblings, so each child guards itself.
             { path: '', component: RedirectOnly, name: 'settings',
-              beforeEnter: currentCalendarRedirect('calendar_management', { name: 'profile' }) },
-            { path: 'calendar/:calendar', component: CalendarManagementView, name: 'calendar_management' },
-            { path: 'account', component: ProfileView, name: 'profile' },
-            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan' },
+              beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
+            { path: 'calendar/:calendar', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
+            { path: 'account', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
+            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan', beforeEnter: mustBeLoggedIn },
             { path: 'admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
               children: [
                 { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
