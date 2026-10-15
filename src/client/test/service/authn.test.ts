@@ -5,6 +5,7 @@ import axios from 'axios';
 import AuthenticationService from '@/client/service/authn';
 import { SessionExpiredError } from '@/common/exceptions/authentication';
 import { EmptyValueError } from '@/common/exceptions/base';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
 
 class LocalStore implements Storage {
 
@@ -595,5 +596,31 @@ describe('refreshToken', () => {
     const result = await authentication.refreshToken();
 
     expect(result).toBe(false);
+  });
+});
+
+describe('current calendar entry', () => {
+  function makeAuthWithCurrentCalendar(): { authentication: AuthenticationService; store: LocalStore } {
+    const store = new LocalStore();
+    store.setItem(CURRENT_CALENDAR_STORAGE_KEY, 'cal-1');
+    const authentication = new AuthenticationService(store);
+    createdServices.push(authentication);
+    return { authentication, store };
+  }
+
+  it('is removed on logout', () => {
+    const { authentication, store } = makeAuthWithCurrentCalendar();
+
+    authentication.logout();
+
+    expect(store.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeUndefined();
+  });
+
+  it('is removed when the token is dropped on expiry', async () => {
+    const { authentication, store } = makeAuthWithCurrentCalendar();
+
+    await authentication._refresh_login(Math.floor(Date.now() / 1000) - 1);
+
+    expect(store.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeUndefined();
   });
 });

@@ -3,6 +3,7 @@ import { ref, Ref } from 'vue';
 
 import { SessionExpiredError } from '@/common/exceptions/authentication';
 import { EmptyValueError } from '@/common/exceptions/base';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar';
 
 interface JWTClaims {
   exp: number;
@@ -699,13 +700,15 @@ export default class AuthenticationService {
   }
 
   /**
-   * Removes authentication tokens and clears refresh timer.
+   * Removes authentication tokens and the persisted current calendar, and
+   * clears the refresh timer. Every token-removal path funnels through here.
    *
    * @private
    */
   _unset_token() {
     this.localStore.removeItem('jwt');
     this.localStore.removeItem('jw_token');
+    this.localStore.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
     this.lastKnownEmail = null;
     if ( this._refresh_timer ) {
       clearTimeout(this._refresh_timer);
