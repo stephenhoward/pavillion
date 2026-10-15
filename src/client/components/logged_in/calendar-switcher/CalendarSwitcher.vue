@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 import { ChevronDown } from 'lucide-vue-next';
 import CalendarSwitcherSheet from './CalendarSwitcherSheet.vue';
 import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-calendar-sheet.vue';
@@ -15,19 +15,46 @@ defineProps<{
   ariaLabel: string;
 }>();
 
+const triggerEl = ref<HTMLButtonElement | null>(null);
 const sheetOpen = ref(false);
 const createOpen = ref(false);
 
-/** The sheet's create row hands over to the create-calendar sheet. */
-function onCreate() {
+/**
+ * Put focus back on the trigger once the closed sheet has unmounted. The
+ * sheets restore focus themselves only when dismissed through their own
+ * close (Escape, backdrop, close button); picking a calendar or creating
+ * one unmounts them without it, which would drop focus to the body.
+ */
+async function focusTrigger() {
+  await nextTick();
+  triggerEl.value?.focus();
+}
+
+function closeSheet() {
   sheetOpen.value = false;
+  focusTrigger();
+}
+
+/**
+ * The sheet's create row hands over to the create-calendar sheet. The
+ * trigger is refocused first so the create sheet captures it as the
+ * element to return focus to.
+ */
+async function onCreate() {
+  sheetOpen.value = false;
+  await focusTrigger();
   createOpen.value = true;
+}
+
+function closeCreate() {
+  createOpen.value = false;
+  focusTrigger();
 }
 </script>
 
 <template>
-  <!-- Focus returns here when the sheet closes: useDialog restores the previously focused element. -->
   <button
+    ref="triggerEl"
     type="button"
     class="calendar-switcher"
     aria-haspopup="dialog"
@@ -43,13 +70,13 @@ function onCreate() {
     v-if="sheetOpen"
     :route-name="routeName"
     :current-url-name="currentUrlName"
-    @close="sheetOpen = false"
+    @close="closeSheet"
     @create="onCreate"
   >
     <slot />
   </CalendarSwitcherSheet>
 
-  <CreateCalendarSheet v-if="createOpen" @close="createOpen = false" />
+  <CreateCalendarSheet v-if="createOpen" @close="closeCreate" />
 </template>
 
 <style scoped lang="scss">
