@@ -31,7 +31,9 @@
     "error_loading_calendars": "Échec du chargement des calendriers",
     "menu_label": "Actions de la liste des calendriers",
     "documentation": "Consulter la documentation",
-    "guide_link": "Comment créer un calendrier"
+    "guide_link": "Comment créer un calendrier",
+    "no_calendars_title": "Créez votre premier calendrier",
+    "no_calendars_description": "Dans Pavillion, tout commence par un calendrier. Créez-en un pour ajouter des événements, suivre d'autres calendriers et partager le vôtre."
   },
   "selector": {
     "select_calendar_title": "Sélectionner un calendrier",

@@ -31,7 +31,9 @@
     "error_loading_calendars": "Failed to load calendars",
     "menu_label": "Calendar list actions",
     "documentation": "Documentation",
-    "guide_link": "How to create a calendar"
+    "guide_link": "How to create a calendar",
+    "no_calendars_title": "Create your first calendar",
+    "no_calendars_description": "Everything in Pavillion starts with a calendar. Create one to add events, follow other calendars and share yours."
   },
   "selector": {
     "select_calendar_title": "Select Calendar",
