@@ -15,7 +15,7 @@ import { Account } from '@/common/model/account';
 const routes: RouteRecordRaw[] = [
   { path: '/settings', component: {}, name: 'settings' },
   { path: '/logout', component: {}, name: 'logout' },
-  { path: '/admin/settings', component: {}, name: 'admin-settings' },
+  { path: '/settings/admin/settings', component: {}, name: 'admin-settings' },
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 

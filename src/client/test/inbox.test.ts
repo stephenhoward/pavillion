@@ -14,8 +14,8 @@ import { mountComponent } from '@/client/test/lib/vue';
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
   { path: '/event/:eventId', component: {}, name: 'event_edit' },
-  { path: '/calendar/:calendar/manage', component: {}, name: 'calendar_management' },
-  { path: '/admin/moderation/reports/:reportId', component: {}, name: 'moderation_report_detail' },
+  { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
+  { path: '/settings/admin/moderation/reports/:reportId', component: {}, name: 'moderation_report_detail' },
 ];
 
 describe('InboxView', () => {
@@ -571,7 +571,7 @@ describe('InboxView', () => {
       const wrapper = await mountInbox();
 
       const link = wrapper.find('a.object-link');
-      expect(link.attributes('href')).toBe('/calendar/my-calendar/manage?tab=reports&report=rep-1');
+      expect(link.attributes('href')).toBe('/settings/calendar/my-calendar?tab=reports&report=rep-1');
     });
 
     it('renders the object label as plain text when the target is null', async () => {
