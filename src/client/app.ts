@@ -13,6 +13,7 @@ import SetupService from '@/client/service/setup';
 import CalendarService from '@/client/service/calendar';
 import { createCurrentCalendarRedirect, createCurrentCalendarSync } from '@/client/service/current-calendar';
 import { buildClientRoutes } from '@/client/routes';
+import { createRouteGuards } from '@/client/service/route-guards';
 
 import AppVue from '@/client/components/app.vue';
 
@@ -45,68 +46,10 @@ checkSetupMode().then((setupRequired) => {
     const app: App = createApp(AppVue);
     const authentication = new Authentication(localStorage);
 
-    const mustBeLoggedIn = (to, from, next) => {
-      // If in setup mode, redirect to setup
-      if (isSetupMode && to.name !== 'setup') {
-        next({ name: 'setup' });
-        return;
-      }
-      if (!authentication.isLoggedIn()) {
-        next({ name: 'login' });
-      }
-      else {
-        next();
-      }
-    };
-
-    const mustBeAdmin = (to, from, next) => {
-      // If in setup mode, redirect to setup
-      if (isSetupMode && to.name !== 'setup') {
-        next({ name: 'setup' });
-        return;
-      }
-      if (!authentication.isAdmin()) {
-        next({ name: 'login' });
-      }
-      else {
-        next();
-      }
-    };
-
-    /**
-     * Route guard for the setup route.
-     * Only allow access when setup mode is active.
-     */
-    const setupGuard = (to, from, next) => {
-      if (!isSetupMode) {
-        // Setup already completed, redirect to login
-        next({ name: 'login' });
-      }
-      else {
-        next();
-      }
-    };
-
-    /**
-     * Route guard for auth routes during setup mode.
-     * Redirect to setup if setup mode is active.
-     */
-    const authRouteGuard = (to, from, next) => {
-      if (isSetupMode && to.name !== 'setup') {
-        next({ name: 'setup' });
-      }
-      else {
-        next();
-      }
-    };
-
     const loadCalendars = () => new CalendarService().ensureCalendarsLoaded();
 
     const routes = buildClientRoutes({
-      mustBeLoggedIn,
-      mustBeAdmin,
-      setupGuard,
-      authRouteGuard,
+      ...createRouteGuards(authentication, () => isSetupMode),
       currentCalendarRedirect: (routeName, fallback) => createCurrentCalendarRedirect(routeName, fallback, loadCalendars),
     });
 

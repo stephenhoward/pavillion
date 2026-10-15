@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import { createRouter, createWebHistory, Router } from 'vue-router';
+import { createMemoryHistory, createRouter, createWebHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { buildClientRoutes } from '@/client/routes';
+import { createRouteGuards } from '@/client/service/route-guards';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -359,6 +360,53 @@ describe('Navigation Integration - Task Group 4', () => {
 
       expect(countingRouter.currentRoute.value.path).toBe(to);
       expect(loginChecks).toBe(1);
+    });
+  });
+
+  describe('Access guards on the real route table', () => {
+    /** The real client route table behind the real guards, for a given session. */
+    const routerFor = (session: { loggedIn: boolean; admin: boolean }, setupMode = false): Router => {
+      const pass = () => true;
+      return createRouter({
+        history: createMemoryHistory(),
+        routes: buildClientRoutes({
+          ...createRouteGuards({ isLoggedIn: () => session.loggedIn, isAdmin: () => session.admin }, () => setupMode),
+          currentCalendarRedirect: () => pass,
+        }),
+      });
+    };
+
+    it.each([
+      '/settings/admin/settings',
+      '/settings/admin/moderation/settings',
+    ])('sends a signed-in non-admin from %s to login', async (path) => {
+      const guarded = routerFor({ loggedIn: true, admin: false });
+      await guarded.push(path);
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
+    it('lets an admin into the admin settings page', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: true });
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('admin_settings');
+    });
+
+    it('lets a signed-in non-admin into the account page', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: false });
+      await guarded.push('/settings/account');
+      expect(guarded.currentRoute.value.name).toBe('profile');
+    });
+
+    it('sends a signed-out visitor from the account page to login', async () => {
+      const guarded = routerFor({ loggedIn: false, admin: false });
+      await guarded.push('/settings/account');
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
+    it('sends a guarded route to setup while setup mode is active', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: true }, true);
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('setup');
     });
   });
 });
