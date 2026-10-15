@@ -77,8 +77,10 @@ export type CalendarLoader = () => Promise<CalendarInfo[]>;
  * Guard for a bare route (`/calendar`, `/feed`, `/settings`): resolve the
  * current calendar and redirect to `routeName` with its url name. When no
  * calendar resolves, go to `fallback`, or render in place when `fallback`
- * is `true`. The redirect also persists the resolved ID, so a stale entry
- * is overwritten rather than kept.
+ * is `true`. The guard persists the resolved ID itself, so a stale entry is
+ * overwritten even where no sync guard runs; in the app the sync guard also
+ * persists it on the redirected navigation. A failed load rejects, aborting
+ * the navigation: there is nowhere sound to send the user.
  */
 export function createCurrentCalendarRedirect(
   routeName: string,
@@ -104,7 +106,9 @@ export function createCurrentCalendarRedirect(
  * Any route carrying a string `:calendar` param that names one of the
  * account's calendars sets the store's selection. Unknown names (not
  * owned or edited) change nothing. Skipped when logged out so an
- * anonymous hit never fires an authenticated request.
+ * anonymous hit never fires an authenticated request. Best-effort: a
+ * failed load leaves the selection unchanged and lets the navigation
+ * proceed, so the page itself can report the error.
  */
 export function createCurrentCalendarSync(
   isLoggedIn: () => boolean,
@@ -115,7 +119,13 @@ export function createCurrentCalendarSync(
     if (typeof name !== 'string' || !isLoggedIn()) {
       return true;
     }
-    const infos = await load();
+    let infos: CalendarInfo[];
+    try {
+      infos = await load();
+    }
+    catch {
+      return true;
+    }
     const hit = infos.find((info) => info.calendar.urlName === name);
     if (hit) {
       const store = useCalendarStore();

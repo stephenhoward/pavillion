@@ -111,4 +111,53 @@ describe('current calendar route guards', () => {
     expect(useCalendarStore().selectedCalendarId).toBeNull();
     expect(useCalendarStore().loaded).toBe(false);
   });
+
+  it('lets the navigation proceed with the selection unchanged when the sync load fails', async () => {
+    const failing = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/calendar/:calendar', component: Stub, name: 'calendar' }],
+    });
+    failing.beforeEach(createCurrentCalendarSync(() => true, () => Promise.reject(new Error('network'))));
+    useCalendarStore().selectedCalendarId = 'o1';
+
+    await failing.push('/calendar/second');
+
+    expect(failing.currentRoute.value.fullPath).toBe('/calendar/second');
+    expect(useCalendarStore().selectedCalendarId).toBe('o1');
+    expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeNull();
+  });
+
+  it('aborts the navigation when the redirect load fails', async () => {
+    const failing = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: Stub, name: 'home' },
+        { path: '/calendar', component: Stub, name: 'calendars',
+          beforeEnter: createCurrentCalendarRedirect('calendar', true, () => Promise.reject(new Error('network'))) },
+        { path: '/calendar/:calendar', component: Stub, name: 'calendar' },
+      ],
+    });
+    await failing.push('/');
+
+    await expect(failing.push('/calendar')).rejects.toThrow('network');
+    expect(failing.currentRoute.value.fullPath).toBe('/');
+  });
+
+  it('the redirect guard persists the resolved id without the sync guard', async () => {
+    const redirectOnly = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/calendar', component: Stub, name: 'calendars',
+          beforeEnter: createCurrentCalendarRedirect('calendar', true, load) },
+        { path: '/calendar/:calendar', component: Stub, name: 'calendar' },
+      ],
+    });
+    useCalendarStore().selectedCalendarId = 'gone';
+
+    await redirectOnly.push('/calendar');
+
+    expect(redirectOnly.currentRoute.value.fullPath).toBe('/calendar/first');
+    expect(useCalendarStore().selectedCalendarId).toBe('o1');
+    expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('o1');
+  });
 });
