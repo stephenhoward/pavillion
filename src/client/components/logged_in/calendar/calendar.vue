@@ -5,6 +5,7 @@ import { useTranslation } from 'i18next-vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 import { ExternalLink, BookOpenText, Settings } from 'lucide-vue-next';
 import ActionsMenu from '@/client/components/common/actions-menu.vue';
 import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
@@ -34,7 +35,13 @@ const state = reactive({
   isLoading: false,
 });
 const calendarUrlName = computed(() => route.params.calendar);
-const calendarName = computed(() => state.calendar?.content('en').name || state.calendar?.urlName || '');
+const calendarStore = useCalendarStore();
+// Read the name through the store so a rename elsewhere updates the heading;
+// the loaded snapshot covers a calendar the store does not hold.
+const calendarName = computed(() => {
+  const calendar = calendarStore.getCalendarByUrlName(String(calendarUrlName.value ?? '')) ?? state.calendar;
+  return calendar?.content('en').name || calendar?.urlName || '';
+});
 const calendarService = new CalendarService();
 
 // Tab state

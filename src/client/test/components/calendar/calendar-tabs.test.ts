@@ -9,6 +9,9 @@ import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import { useEventStore } from '@/client/stores/eventStore';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import { createPinia } from 'pinia';
 
 /**
@@ -198,7 +201,7 @@ describe('Calendar View Tabs', () => {
   });
 
   describe('Header switcher', () => {
-    it('renders the calendar name as the switcher trigger inside the heading', async () => {
+    it('should render the calendar name as the switcher trigger inside the heading', async () => {
       const { wrapper } = await createWrapper();
 
       const trigger = wrapper.find('h1 button[aria-haspopup="dialog"]');
@@ -207,7 +210,7 @@ describe('Calendar View Tabs', () => {
       expect(trigger.attributes('aria-label')).toBe('Switch calendar: Test Calendar');
     });
 
-    it('keeps Documentation and Manage calendar in the actions menu, without Create calendar', async () => {
+    it('should keep Documentation and Manage calendar in the actions menu, without Create calendar', async () => {
       const { wrapper } = await createWrapper();
 
       await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
@@ -218,7 +221,23 @@ describe('Calendar View Tabs', () => {
       expect(items.some((text) => /New Calendar/i.test(text))).toBe(false);
     });
 
-    it('reloads the calendar when the :calendar param changes', async () => {
+    it('should update the heading when the calendar is renamed in the store', async () => {
+      const { wrapper, pinia } = await createWrapper();
+      const store = useCalendarStore(pinia);
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      calendar.content('en').name = 'Test Calendar';
+      store.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
+      await nextTick();
+
+      const renamed = new Calendar('cal-1', 'test-calendar');
+      renamed.content('en').name = 'Renamed Calendar';
+      store.updateCalendar(renamed);
+      await nextTick();
+
+      expect(wrapper.find('h1 button[aria-haspopup="dialog"]').text()).toContain('Renamed Calendar');
+    });
+
+    it('should reload the calendar when the :calendar param changes', async () => {
       const { router } = await createWrapper();
       const getCalendar = CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub;
       const callsBefore = getCalendar.callCount;
