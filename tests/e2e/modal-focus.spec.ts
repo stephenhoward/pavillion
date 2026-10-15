@@ -39,8 +39,8 @@ test.describe('Modal Focus Trap & Return Focus', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });
+    await page.goto(env.baseURL + '/settings/account');
+    await page.waitForSelector('h2:has-text("Settings")', { timeout: 5000 });
   });
 
   test('keyboard focus stays trapped inside modal and returns to trigger on close', async ({ page }) => {

@@ -123,7 +123,7 @@ test.describe('Inbox accessibility scans', () => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
 
     await page.goto(
-      `${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage`
+      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
       + `?tab=reports&report=${fixtures.ownedReportId}`,
     );
 

@@ -455,7 +455,7 @@ test.describe('ICS Import Sources (e2e)', () => {
   }
 
   async function openCalendarImportTab(page: Page): Promise<void> {
-    await page.goto(`${env.baseURL}/calendar/${ADMIN_CALENDAR_URL_NAME}/manage`);
+    await page.goto(`${env.baseURL}/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`);
     // The calendar management root lazy-loads; wait for the Import tab button.
     const importTab = page.locator('#import-tab');
     await expect(importTab).toBeVisible({ timeout: 15000 });

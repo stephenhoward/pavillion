@@ -50,7 +50,7 @@ test.describe('Authentication Workflows', () => {
       await page.locator('#login-password').fill(TEST_ADMIN.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
 
-      await page.waitForURL('**/calendar', { timeout: 30000 });
+      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
       expect(page.url()).toContain('/calendar');
     });
 
@@ -86,10 +86,10 @@ test.describe('Authentication Workflows', () => {
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(TEST_ADMIN.password);
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await page.waitForURL('**/calendar', { timeout: 30000 });
+      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
 
       // Navigate to admin settings page to set registration mode
-      await page.goto(env.baseURL + '/admin/settings');
+      await page.goto(env.baseURL + '/settings/admin/settings');
       await page.waitForTimeout(2000);
 
       // Find and change registration mode to 'open'
@@ -192,7 +192,7 @@ test.describe('Authentication Workflows', () => {
       await page.getByRole('button', { name: 'Sign in' }).click();
 
       // Step 10: Verify successful login redirects to /calendar
-      await page.waitForURL('**/calendar', { timeout: 30000 });
+      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
       expect(page.url()).toContain('/calendar');
     });
   });
@@ -207,10 +207,10 @@ test.describe('Authentication Workflows', () => {
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(currentPassword);
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await page.waitForURL('**/calendar', { timeout: 30000 });
+      await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
 
       // Step 2: Navigate to profile/settings page
-      await page.goto(env.baseURL + '/profile');
+      await page.goto(env.baseURL + '/settings/account');
       await page.waitForTimeout(2000);
 
       // Step 3: Click logout button

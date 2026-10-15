@@ -44,13 +44,13 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should create a new calendar with name and title', async ({ page }) => {
-      // Navigate to calendar page - fresh user should see creation form
+      // A fresh user lands on the empty state; its button opens the create sheet
       await page.goto(env.baseURL + '/calendar');
-      await page.waitForTimeout(2000);
+      await page.getByRole('button', { name: 'Create Your Calendar' }).click();
 
-      // Verify creation form is visible
-      const titleInput = page.locator('input#calendar-title');
-      const nameInput = page.locator('input#calendar-name');
+      const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });
+      const titleInput = sheet.locator('input#calendar-title');
+      const nameInput = sheet.locator('input#calendar-name');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
       await expect(nameInput).toBeVisible({ timeout: 5000 });
 
@@ -66,7 +66,7 @@ test.describe('Calendar CRUD Workflow', () => {
       expect(autoSlug).toBe('my-test-calendar');
 
       // Submit the form
-      const submitButton = page.locator('button[type="submit"].btn--cta');
+      const submitButton = sheet.locator('button[type="submit"].btn--cta');
       await submitButton.click();
 
       // Wait for navigation to the new calendar page
@@ -78,12 +78,14 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should create a calendar with a custom name', async ({ page }) => {
-      // Navigate to create new calendar
-      await page.goto(env.baseURL + '/calendar/new');
-      await page.waitForTimeout(2000);
+      // The user now owns the calendar created above, so a second one is
+      // created from the calendar switcher's sheet
+      await page.getByRole('button', { name: /Switch calendar/ }).click();
+      await page.getByRole('button', { name: 'Create a new calendar' }).click();
 
-      const titleInput = page.locator('input#calendar-title');
-      const nameInput = page.locator('input#calendar-name');
+      const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });
+      const titleInput = sheet.locator('input#calendar-title');
+      const nameInput = sheet.locator('input#calendar-name');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
       await expect(nameInput).toBeVisible({ timeout: 5000 });
 
@@ -97,7 +99,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await nameInput.fill('custom_name_cal');
 
       // Submit the form
-      const submitButton = page.locator('button[type="submit"].btn--cta');
+      const submitButton = sheet.locator('button[type="submit"].btn--cta');
       await submitButton.click();
 
       // Wait for navigation to the new calendar
@@ -115,12 +117,8 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should edit calendar title with auto-save on blur', async ({ page }) => {
-      // Admin has one calendar (test_calendar) and auto-redirects to it
-      await page.goto(env.baseURL + '/calendar');
-      await page.waitForTimeout(2000);
-
-      // Navigate to manage page
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      // Navigate to the calendar's settings pane
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
 
       // Click the Settings tab (only visible to owner)
@@ -153,7 +151,7 @@ test.describe('Calendar CRUD Workflow', () => {
 
     test('should edit calendar description with auto-save on blur', async ({ page }) => {
       // Navigate to manage page
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
 
       // Click the Settings tab
@@ -186,7 +184,7 @@ test.describe('Calendar CRUD Workflow', () => {
 
     test('should persist edited title after page reload', async ({ page }) => {
       // Navigate to manage page
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
 
       // Click the Settings tab

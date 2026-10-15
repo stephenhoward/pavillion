@@ -40,28 +40,27 @@ test.describe('Calendar Name Validation UX', () => {
     await loginAsFreshUser(page, env.baseURL);
   });
 
-  test('should show calendar creation form on first visit', async ({ page }) => {
+  test('should open the calendar creation form from the empty state on first visit', async ({ page }) => {
     await page.goto(env.baseURL + '/calendar');
-    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: 'Create Your Calendar' }).click();
 
-    const hasCalendarForm = await page.locator('input#calendar-name').count() > 0;
-    const hasCalendarList = await page.locator('nav[aria-label*="calendar" i]').count() > 0;
-
-    expect(hasCalendarForm || hasCalendarList).toBeTruthy();
+    const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });
+    await expect(sheet.locator('input#calendar-name')).toBeVisible();
   });
 
   test('should show error message for invalid calendar name', async ({ page }) => {
     await page.goto(env.baseURL + '/calendar');
-    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: 'Create Your Calendar' }).click();
 
-    const calendarInput = page.locator('input#calendar-name');
+    const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });
+    const calendarInput = sheet.locator('input#calendar-name');
     await expect(calendarInput).toBeVisible();
 
     // Submit an invalid name (too short)
     await calendarInput.fill('ab');
     await calendarInput.blur();
 
-    const submitButton = page.locator('button[type="submit"].btn--cta');
+    const submitButton = sheet.locator('button[type="submit"].btn--cta');
     await submitButton.click();
     await page.waitForTimeout(1000);
 

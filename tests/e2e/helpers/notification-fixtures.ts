@@ -108,7 +108,7 @@ export async function loginViaUi(
   await page.getByRole('textbox', { name: 'email' }).fill(email);
   await page.getByRole('textbox', { name: 'password' }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL('**/calendar', { timeout: 30000 });
+  await page.waitForURL(/\/calendar(\/|$)/, { timeout: 30000 });
 }
 
 /**

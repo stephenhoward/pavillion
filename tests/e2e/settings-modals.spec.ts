@@ -45,10 +45,10 @@ test.describe('Settings Page Modals', () => {
   test.beforeEach(async ({ page }) => {
     // Log in as admin and navigate to settings
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/profile');
+    await page.goto(env.baseURL + '/settings/account');
 
     // Wait for settings page to load
-    await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });
+    await page.waitForSelector('h2:has-text("Settings")', { timeout: 5000 });
   });
 
   test.describe('Change Email Modal', () => {

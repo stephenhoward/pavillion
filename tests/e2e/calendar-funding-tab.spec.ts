@@ -129,7 +129,7 @@ function visibleUpsells(page: import('@playwright/test').Page) {
  * Navigate to calendar settings tab.
  */
 async function navigateToSettingsTab(page: import('@playwright/test').Page, baseURL: string) {
-  await page.goto(baseURL + '/calendar/test_calendar/manage');
+  await page.goto(baseURL + '/settings/calendar/test_calendar');
   await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
 
   const settingsTab = page.locator('#settings-tab');

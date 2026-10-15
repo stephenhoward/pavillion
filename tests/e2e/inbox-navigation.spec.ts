@@ -121,8 +121,8 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     const row = await inboxRow(page, 'invited you to edit');
     await row.locator('a.object-link').click();
 
-    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR_URL_NAME}/manage`, { timeout: 10000 });
-    expect(page.url()).toBe(`${env.baseURL}/calendar/${ADMIN_CALENDAR_URL_NAME}/manage`);
+    await page.waitForURL(`**/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`, { timeout: 10000 });
+    expect(page.url()).toBe(`${env.baseURL}/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`);
   });
 
   test('moderation_report target (verb: Flag, viewed as instance admin) opens the moderation queue', async ({ page }) => {
@@ -135,8 +135,8 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     const row = await inboxReportRow(page, fixtures.ownedReportId);
     await row.locator('a.object-link').click();
 
-    await page.waitForURL(`**/admin/moderation/reports/${fixtures.ownedReportId}`, { timeout: 10000 });
-    expect(page.url()).toBe(`${env.baseURL}/admin/moderation/reports/${fixtures.ownedReportId}`);
+    await page.waitForURL(`**/settings/admin/moderation/reports/${fixtures.ownedReportId}`, { timeout: 10000 });
+    expect(page.url()).toBe(`${env.baseURL}/settings/admin/moderation/reports/${fixtures.ownedReportId}`);
   });
 
   test('owner_report target (verb: Flag, same report viewed as the calendar owner) opens the calendar reports tab', async ({ page }) => {
@@ -155,13 +155,13 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     // query the producer actually emits.
     await expect(objectLink).toHaveAttribute(
       'href',
-      `/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage?tab=reports&report=${fixtures.ownedReportId}`,
+      `/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}?tab=reports&report=${fixtures.ownedReportId}`,
     );
 
     await objectLink.click();
-    await page.waitForURL('**/manage?tab=reports&report=*', { timeout: 10000 });
+    await page.waitForURL('**/settings/calendar/*?tab=reports&report=*', { timeout: 10000 });
     expect(page.url()).toBe(
-      `${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage`
+      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
       + `?tab=reports&report=${fixtures.ownedReportId}`,
     );
 
@@ -208,7 +208,7 @@ async function managementViewState(page: Page) {
  * `loadRejectedReportView`.
  */
 async function loadPlainReportsView(page: Page, query: string) {
-  await page.goto(`${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage${query}`);
+  await page.goto(`${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}${query}`);
   await expect(page.locator('.reports-dashboard__table-container')).toBeVisible({ timeout: 10000 });
   return managementViewState(page);
 }
@@ -234,7 +234,7 @@ async function loadRejectedReportView(page: Page, reportId: string) {
   );
 
   await page.goto(
-    `${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage`
+    `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
     + `?tab=reports&report=${reportId}`,
   );
 
@@ -259,7 +259,7 @@ test.describe('Reports deep link (?report=)', () => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
 
     await page.goto(
-      `${env.baseURL}/calendar/${TESTUSER_CALENDAR_URL_NAME}/manage`
+      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
       + `?tab=reports&report=${fixtures.ownedReportId}`,
     );
 

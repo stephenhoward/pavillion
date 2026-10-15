@@ -46,7 +46,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     });
 
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/admin/moderation/blocked-instances');
+    await page.goto(env.baseURL + '/settings/admin/moderation/blocked-instances');
     await page.waitForLoadState('networkidle');
 
     // Submit a dummy domain to trigger the unblock confirmation modal if
@@ -80,23 +80,12 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
 
     await loginAsAdmin(page, env.baseURL);
 
-    // Navigate to calendar management settings where language picker lives.
-    // Use admin user's calendar to access the settings tab.
-    await page.goto(env.baseURL + '/calendar');
+    // Open the admin calendar's management pane, where the language picker
+    // lives on the pane's own Settings tab.
+    await page.goto(env.baseURL + '/settings/calendar/test_calendar');
     await page.waitForLoadState('networkidle');
 
-    // Click the first calendar card to open its management view. If no
-    // calendar exists (unlikely since admin is seeded with one), skip gracefully.
-    const calendarCard = page.locator('a[href*="/calendar/"]').first();
-    if ((await calendarCard.count()) === 0) {
-      test.skip();
-      return;
-    }
-    await calendarCard.click();
-    await page.waitForLoadState('networkidle');
-
-    // Navigate to settings tab
-    const settingsTab = page.getByRole('link', { name: /settings/i }).first();
+    const settingsTab = page.locator('button[role="tab"]#settings-tab');
     if ((await settingsTab.count()) > 0) {
       await settingsTab.click();
       await page.waitForLoadState('networkidle');

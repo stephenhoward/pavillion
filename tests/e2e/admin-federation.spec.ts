@@ -36,10 +36,10 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should display federation settings page with header and info panel', async ({ page }) => {
-    await page.goto(env.baseURL + '/admin/federation');
+    await page.goto(env.baseURL + '/settings/admin/federation');
 
     // Verify page header
-    const heading = page.locator('.federation-header h1');
+    const heading = page.locator('.federation-header h2');
     await expect(heading).toBeVisible({ timeout: 10000 });
 
     // Verify subtitle
@@ -59,7 +59,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should navigate to blocked instances page via manage link', async ({ page }) => {
-    await page.goto(env.baseURL + '/admin/federation');
+    await page.goto(env.baseURL + '/settings/admin/federation');
 
     // Click the manage blocked instances link
     const manageLink = page.locator('.federation-manage-link');
@@ -67,7 +67,7 @@ test.describe('Admin Federation Settings', () => {
     await manageLink.click();
 
     // Verify navigation to the blocked instances management page
-    await page.waitForURL('**/admin/moderation/blocked-instances', { timeout: 10000 });
+    await page.waitForURL('**/settings/admin/moderation/blocked-instances', { timeout: 10000 });
   });
 });
 
