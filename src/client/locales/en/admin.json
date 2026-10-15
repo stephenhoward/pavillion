@@ -8,9 +8,8 @@
     "close_button": "Cancel"
   },
   "menu": {
-    "navigation": {
-      "skip_to_content": "Skip to main content"
-    },
+    "navigation_label": "Instance administration",
+    "needs_attention": "Needs attention",
     "general_settings": "General",
     "instance_name_title": "Instance Name/Title",
     "registration_mode": "Registration Mode",

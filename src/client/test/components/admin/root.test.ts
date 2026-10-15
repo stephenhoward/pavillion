@@ -43,12 +43,24 @@ describe('admin root', () => {
     expect(hrefs.some((href) => href?.startsWith('/admin/'))).toBe(false);
   });
 
-  it('marks the nav item for the current page in both navs', async () => {
+  it('renders one labelled nav and leaves the main landmark to the app shell', async () => {
+    const wrapper = await mountAt('/settings/admin/settings');
+    const navs = wrapper.findAll('nav');
+    expect(navs).toHaveLength(1);
+    expect(navs[0].attributes('aria-label')).toBe('Instance administration');
+    expect(wrapper.find('main').exists()).toBe(false);
+    expect(wrapper.find('a[href="#main"]').exists()).toBe(false);
+  });
+
+  it('marks the nav item for the current page', async () => {
     const wrapper = await mountAt('/settings/admin/federation');
     const current = wrapper.findAll('a[aria-current="page"]');
-    expect(current.map((a) => a.attributes('href'))).toEqual([
-      '/settings/admin/federation',
-      '/settings/admin/federation',
-    ]);
+    expect(current.map((a) => a.attributes('href'))).toEqual(['/settings/admin/federation']);
+  });
+
+  it('marks Moderation current on its sub-pages', async () => {
+    const wrapper = await mountAt('/settings/admin/moderation/settings');
+    const current = wrapper.findAll('a[aria-current="page"]');
+    expect(current.map((a) => a.attributes('href'))).toEqual(['/settings/admin/moderation']);
   });
 });
