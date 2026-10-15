@@ -12,6 +12,7 @@ import CalendarService from '@/client/service/calendar';
 import ModerationService from '@/client/service/moderation';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { currentAccountId } from '@/client/service/authn';
 
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
@@ -51,11 +52,12 @@ const mountRootComponent = async (
 
 /**
  * Stub the load as the real service behaves: it fills the calendar store,
- * which the component reads, and returns the list.
+ * which the component reads, tagged with the signed-in account (marking it
+ * loaded for that account), and returns the list.
  */
 const stubLoadedCalendars = (infos: CalendarInfo[]) =>
   vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockImplementation(async () => {
-    useCalendarStore().setCalendarInfos(infos);
+    useCalendarStore().setCalendarInfos(infos, currentAccountId());
     return infos;
   });
 

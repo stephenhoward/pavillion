@@ -57,10 +57,11 @@ describe('persisted calendar id', () => {
 });
 
 describe('current-calendar-storage module', () => {
-  // authn.ts imports the storage key and is bundled into the public site; an
-  // import here (e.g. the calendar store) would drag client state into it.
-  it('imports nothing', () => {
+  // The calendar store and authn.ts both import this module; any dependency
+  // here could reintroduce the store <-> current-calendar cycle or tie
+  // authn.ts to the calendar store.
+  it('has no static import, re-export, require() or dynamic import()', () => {
     const source = readFileSync(path.resolve(__dirname, '../../service/current-calendar-storage.ts'), 'utf-8');
-    expect(source).not.toMatch(/^\s*import\b/m);
+    expect(source).not.toMatch(/^\s*import\b|\bfrom\s+['"]|\brequire\(|\bimport\s*\(/m);
   });
 });

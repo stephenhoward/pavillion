@@ -1,15 +1,19 @@
 /*
  * Persistence of the current calendar's ID. Deliberately import-free: the
- * calendar store and `authn.ts` both depend on it, and `authn.ts` is bundled
- * into the public site, which must not pull in the client's Pinia stores.
+ * calendar store and `authn.ts` both depend on it, so keeping it free of
+ * imports breaks the store <-> `current-calendar.ts` cycle and keeps
+ * `authn.ts` from depending on the calendar store.
  */
 
 /**
  * localStorage key holding the current calendar's ID as a bare string.
  * Nothing else is stored: cross-account safety comes from
  * `resolveCurrentCalendar`, which discards any ID not in the signed-in
- * account's list. Client-app only: the site and widget never read it,
- * though the shared `Authentication` service removes it with the token.
+ * account's list. Only the client app uses it. The site and widget create
+ * the same calendar store (through `src/site/service/calendar.ts`), whose
+ * state initializer reads the key into memory, but neither uses the value;
+ * the site's `Authentication._unset_token()` can also remove it, and the
+ * widget never writes or removes it.
  */
 export const CURRENT_CALENDAR_STORAGE_KEY = 'current_calendar_id';
 

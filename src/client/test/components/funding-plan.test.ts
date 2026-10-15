@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { createPinia } from 'pinia';
@@ -13,14 +13,14 @@ import FundingService from '@/client/service/funding';
  */
 describe('Funding Plan UI Components', () => {
 
-  let mockFundingService: any;
+  let fundingStubs: Record<string, MockInstance>;
   let router: any;
 
   beforeEach(() => {
     // The components construct their own FundingService, so stub its
     // prototype: every load on mount resolves in-process, and flushPromises
     // settles it without reaching the network.
-    mockFundingService = {
+    fundingStubs = {
       getSettings: vi.spyOn(FundingService.prototype, 'getSettings').mockResolvedValue({
         enabled: false, monthlyPrice: 0, yearlyPrice: 0, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7,
       } as any),
@@ -29,6 +29,8 @@ describe('Funding Plan UI Components', () => {
         .mockResolvedValue({ fundingPlans: [], pagination: { totalCount: 0 } }),
       getOptions: vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({ enabled: false } as any),
       getStatus: vi.spyOn(FundingService.prototype, 'getStatus').mockResolvedValue(null),
+      getCalendarsInFundingPlan: vi.spyOn(FundingService.prototype, 'getCalendarsInFundingPlan').mockResolvedValue([]),
+      cancel: vi.spyOn(FundingService.prototype, 'cancel').mockResolvedValue(true),
     };
 
     // Create router for component testing
@@ -67,6 +69,7 @@ describe('Funding Plan UI Components', () => {
             status_active: 'Active',
             billing_cycle_monthly: 'Monthly',
             billing_cycle_yearly: 'Yearly',
+            cancel_success: 'Your funding plan has been cancelled',
           },
         },
       },
@@ -75,141 +78,135 @@ describe('Funding Plan UI Components', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  /**
-   * Test 1: Admin funding settings form renders with current values
-   */
-  it('should render admin funding settings form with current values', async () => {
-    const mockSettings = {
-      enabled: true,
-      monthlyPrice: 1000000, // $10.00 in millicents
-      yearlyPrice: 10000000, // $100.00 in millicents
-      currency: 'USD',
-      payWhatYouCan: true,
-      gracePeriodDays: 7,
-    };
-
-    mockFundingService.getSettings.mockResolvedValue(mockSettings);
-    mockFundingService.getProviders.mockResolvedValue([]);
-
+  const mountAdmin = async () => {
     const wrapper = mount(FundingSettings, {
       global: {
         plugins: [router, [I18NextVue, { i18next }]],
       },
     });
-
-    // Wait for component to load data
-    await wrapper.vm.$nextTick();
     await flushPromises();
+    return wrapper;
+  };
 
-    // Switch to settings sub-tab where the pricing form lives
-    (wrapper.vm as any).activeSubTab = 'settings';
-    await wrapper.vm.$nextTick();
-
-    // Verify settings content section exists (pricing form requires a configured provider)
-    expect(wrapper.find('.settings-content').exists()).toBe(true);
-  });
-
-  /**
-   * Test 2: Admin provider connection UI shows connect buttons for unconfigured providers
-   */
-  it('should show connect buttons for unconfigured payment providers', async () => {
-    const mockProviders = [
-      { provider_type: 'stripe', enabled: false, display_name: 'Credit Card', configured: false },
-      { provider_type: 'paypal', enabled: false, display_name: 'PayPal', configured: false },
-    ];
-
-    mockFundingService.getProviders.mockResolvedValue(mockProviders);
-    mockFundingService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
-
-    const wrapper = mount(FundingSettings, {
+  const mountAccount = async () => {
+    const wrapper = mount(FundingPlanManagement, {
       global: {
-        plugins: [router, [I18NextVue, { i18next }]],
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
       },
     });
-
-    await wrapper.vm.$nextTick();
     await flushPromises();
+    return wrapper;
+  };
 
-    // Verify provider section exists (structure test)
-    expect(wrapper.html()).toBeTruthy();
+  const enabledSettings = {
+    enabled: true,
+    monthlyPrice: 1250000, // 12.50 in millicents; not the form's 10.00 default
+    yearlyPrice: 12000000, // 120.00 in millicents; not the form's 100.00 default
+    currency: 'USD',
+    payWhatYouCan: true,
+    gracePeriodDays: 7,
+  };
+
+  const stripe = (configured: boolean) => ({
+    provider_type: 'stripe', enabled: configured, display_name: 'Credit Card', configured,
   });
 
-  /**
-   * Test 3: Admin provider connection UI shows status for configured providers
-   */
-  it('should show status for configured payment providers', async () => {
-    const mockProviders = [
-      { provider_type: 'stripe', enabled: true, display_name: 'Credit Card', configured: true },
+  const activePlan = {
+    id: 'plan-1',
+    status: 'active' as const,
+    billingCycle: 'monthly' as const,
+    amount: 1000000,
+    currency: 'USD',
+    currentPeriodStart: '2026-10-01T00:00:00Z',
+    currentPeriodEnd: '2026-11-01T00:00:00Z',
+  };
+
+  it('renders the admin pricing form with the loaded prices', async () => {
+    fundingStubs.getSettings.mockResolvedValue(enabledSettings);
+    fundingStubs.getProviders.mockResolvedValue([stripe(true)]);
+
+    const wrapper = await mountAdmin();
+    await wrapper.find('[aria-controls="settings-panel"]').trigger('click');
+
+    expect(Number((wrapper.find('#funding-monthly').element as HTMLInputElement).value)).toBe(12.5);
+    expect(Number((wrapper.find('#funding-yearly').element as HTMLInputElement).value)).toBe(120);
+  });
+
+  it('offers to add a provider when the supported provider is not configured', async () => {
+    fundingStubs.getSettings.mockResolvedValue(enabledSettings);
+    fundingStubs.getProviders.mockResolvedValue([stripe(false)]);
+
+    const wrapper = await mountAdmin();
+
+    const card = wrapper.find('.providers-card');
+    expect(card.find('.provider-item').exists()).toBe(false);
+    expect(card.find('.empty-card-inline button').exists()).toBe(true);
+    expect(card.find('.card-header button').attributes('disabled')).toBeUndefined();
+    // Pricing waits for a configured provider.
+    expect(wrapper.find('#funding-monthly').exists()).toBe(false);
+  });
+
+  it('shows a configured provider as connected and hides providers this release does not support', async () => {
+    fundingStubs.getSettings.mockResolvedValue(enabledSettings);
+    fundingStubs.getProviders.mockResolvedValue([
+      stripe(true),
       { provider_type: 'paypal', enabled: false, display_name: 'PayPal', configured: true },
-    ];
+    ]);
 
-    mockFundingService.getProviders.mockResolvedValue(mockProviders);
-    mockFundingService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
+    const wrapper = await mountAdmin();
 
-    const wrapper = mount(FundingSettings, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }]],
-      },
-    });
-
-    await wrapper.vm.$nextTick();
-    await flushPromises();
-
-    // Verify component renders (structure test)
-    expect(wrapper.html()).toBeTruthy();
+    const items = wrapper.findAll('.provider-item');
+    expect(items).toHaveLength(1);
+    expect(items[0].find('.provider-name').text()).toBe('Credit Card');
+    expect(items[0].find('.connected-badge').exists()).toBe(true);
+    expect((items[0].find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    // Every supported provider is configured, so there is nothing left to add.
+    expect(wrapper.find('.providers-card .card-header button').attributes('disabled')).toBeDefined();
   });
 
-  /**
-   * Test 4: User funding options display available providers and pricing
-   */
-  it('should display available providers and pricing for funding plan', async () => {
-    const wrapper = mount(FundingPlanManagement, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }], createPinia()],
-      },
-    });
+  it('points an account with no plan at calendar management when funding is enabled', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
 
-    await wrapper.vm.$nextTick();
-    await flushPromises();
+    const wrapper = await mountAccount();
 
-    // Verify component renders funding options
-    expect(wrapper.html()).toBeTruthy();
+    expect(wrapper.find('.no-funding-plan h2').text()).toBe('No Active Funding Plan');
+    expect(wrapper.find('.funding-plan-status').exists()).toBe(false);
+    expect(wrapper.find('.funding-disabled').exists()).toBe(false);
   });
 
-  /**
-   * Test 5: User funding plan status shows current details
-   */
-  it('should show current funding plan status and details', async () => {
-    const wrapper = mount(FundingPlanManagement, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }], createPinia()],
-      },
-    });
+  it('shows the current plan status, cycle and amount', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+    fundingStubs.getStatus.mockResolvedValue(activePlan);
 
-    await wrapper.vm.$nextTick();
-    await flushPromises();
+    const wrapper = await mountAccount();
 
-    // Verify component shows funding plan status
-    expect(wrapper.html()).toBeTruthy();
+    const card = wrapper.find('.funding-plan-status .status-card');
+    expect(card.find('.status-badge.status-active').text()).toBe('Active');
+    expect(card.text()).toContain('Monthly');
+    expect(card.text()).toContain('$10.00');
+    expect(wrapper.find('.no-funding-plan').exists()).toBe(false);
   });
 
-  /**
-   * Test 6: User cancel funding plan shows confirmation and processes cancellation
-   */
-  it('should show confirmation and process funding plan cancellation', async () => {
-    const wrapper = mount(FundingPlanManagement, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }], createPinia()],
-      },
-    });
+  it('cancels the plan after confirmation and stops offering to cancel', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+    fundingStubs.getStatus
+      .mockResolvedValueOnce(activePlan)
+      .mockResolvedValue({ ...activePlan, cancelAt: '2026-11-01T00:00:00Z' });
+    vi.stubGlobal('confirm', vi.fn(() => true));
 
-    await wrapper.vm.$nextTick();
+    const wrapper = await mountAccount();
+    const cancelButton = wrapper.find('.funding-plan-actions button.danger');
+    expect(cancelButton.text()).toBe('Cancel Plan');
+
+    await cancelButton.trigger('click');
     await flushPromises();
 
-    // Verify cancel button would be present (structure test)
-    expect(wrapper.html()).toBeTruthy();
+    expect(fundingStubs.cancel).toHaveBeenCalledOnce();
+    expect(wrapper.find('.success-message').text()).toBe('Your funding plan has been cancelled');
+    expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
   });
 
   it('links back to the account settings page', () => {
