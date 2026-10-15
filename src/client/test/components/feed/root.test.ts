@@ -6,6 +6,7 @@ import { mountComponent } from '@/client/test/lib/vue';
 import Root from '@/client/components/logged_in/feed/root.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 const routes = [
   { path: '/feed', component: {}, name: 'feed' },
@@ -23,7 +24,7 @@ describe('Feed Root Component', () => {
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
     const calendar2 = new Calendar('cal-2', 'calendar-2');
-    calendarStore.setCalendars([calendar1, calendar2]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner'), new CalendarInfo(calendar2, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -51,7 +52,7 @@ describe('Feed Root Component', () => {
 
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -79,7 +80,7 @@ describe('Feed Root Component', () => {
 
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -114,7 +115,7 @@ describe('Feed Root Component', () => {
 
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -151,7 +152,7 @@ describe('Feed Root Component', () => {
 
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),
@@ -190,7 +191,7 @@ describe('Feed Root Component', () => {
 
     const calendarStore = useCalendarStore();
     const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner')]);
 
     const router = createRouter({
       history: createMemoryHistory(),

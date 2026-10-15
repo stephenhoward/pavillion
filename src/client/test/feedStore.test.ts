@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 describe('FeedStore', () => {
   let feedStore: ReturnType<typeof useFeedStore>;
@@ -19,7 +20,7 @@ describe('FeedStore', () => {
     const calendar2 = new Calendar('cal-2', 'calendar-two');
     calendar2.addContent({ language: 'en', title: 'Calendar Two' });
 
-    calendarStore.setCalendars([calendar1, calendar2]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner'), new CalendarInfo(calendar2, 'owner')]);
   });
 
   describe('selectedCalendarId selection and persistence', () => {
@@ -193,13 +194,13 @@ describe('FeedStore', () => {
 
     it('should return false when user has single calendar', () => {
       const singleCalendar = new Calendar('cal-1', 'calendar-one');
-      calendarStore.setCalendars([singleCalendar]);
+      calendarStore.setCalendarInfos([new CalendarInfo(singleCalendar, 'owner')]);
 
       expect(feedStore.hasMultipleCalendars).toBe(false);
     });
 
     it('should return false when user has no calendars', () => {
-      calendarStore.setCalendars([]);
+      calendarStore.setCalendarInfos([]);
 
       expect(feedStore.hasMultipleCalendars).toBe(false);
     });
