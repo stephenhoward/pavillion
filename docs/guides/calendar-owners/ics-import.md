@@ -44,7 +44,7 @@ Because of these technical decisions, an event that imports correctly will still
 
 ## Add an import source
 
-Open your calendar's management page and find the **Import** tab.
+Open **Settings** in the main navigation, check that the name at the top is the calendar you're importing into (tap it to switch), and find the **Import** tab.
 
 If you haven't added an import source yet, the panel shows an empty state with one button. Click <Btn>Add Import Source</Btn>. The modal that opens has two tabs, one for each path: **From URL** and **Upload file**.
 

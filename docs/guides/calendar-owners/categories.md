@@ -22,7 +22,7 @@ Categories aren't strictly required; an event with no categories will still publ
 
 ## Create a category
 
-Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Categories** tab. The first time you visit, the list is empty.
+Open your calendar from the **Calendar** tab in the main navigation and find the **Categories** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; tap it to switch. The first time you visit, the list is empty.
 
 Click <Btn>+ Add category</Btn>. A small editor opens with one field: a name. Type the category name — *Concert*, *Workshop*, *Volunteer days* — and click <Btn>Create</Btn>. The new category appears in the list with an event count of zero.
 

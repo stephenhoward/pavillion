@@ -34,13 +34,13 @@ A few programs sit between the two — a weekly meditation group where the leade
 
 ## Create a series
 
-There are two ways to create a series: from the **Series** tab in calendar management, described here, or from inside the event editor while you're writing an event (see [Add events to a series](#add-events-to-a-series)). The Series tab is the one to use when you want to set everything up front, including the image.
+There are two ways to create a series: from the **Series** tab on your calendar's page, described here, or from inside the event editor while you're writing an event (see [Add events to a series](#add-events-to-a-series)). The Series tab is the one to use when you want to set everything up front, including the image.
 
-Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Series** tab. The first time you visit, the list is empty.
+Open your calendar from the **Calendar** tab in the main navigation and find the **Series** tab. If you run more than one calendar, the name at the top of the page shows which one you're in; tap it to switch. The first time you visit, the list is empty.
 
 Click <Btn>Add Series</Btn>. A full-page editor opens with the following fields:
 
-**URL name.** The slug that becomes the last segment of the series' public URL — `your-calendar/series/summer-music-series`. Use 3 to 24 letters, numbers, hyphens, or underscores; it can't start with a hyphen or an underscore, or end with a hyphen. Some words are reserved for the instance's own pages and can't be used: *admin*, *api*, *assets*, *auth*, *calendar*, *calendars*, *coverage*, *discover*, *event*, *feed*, *funding*, *health*, *inbox*, *login*, *policy*, *profile*, *setup*, *users*, *view*, and *widget*. The language codes the instance supports are reserved too. Pick something stable; the URL name is set when the series is created and stays put after that.
+**URL name.** The slug that becomes the last segment of the series' public URL — `your-calendar/series/summer-music-series`. Use 3 to 24 letters, numbers, hyphens, or underscores; it can't start with a hyphen or an underscore, or end with a hyphen. Some words are reserved for the instance's own pages and can't be used: *admin*, *api*, *assets*, *auth*, *calendar*, *calendars*, *coverage*, *discover*, *event*, *feed*, *funding*, *health*, *inbox*, *login*, *policy*, *profile*, *settings*, *setup*, *users*, *view*, and *widget*. The language codes the instance supports are reserved too. Pick something stable; the URL name is set when the series is created and stays put after that.
 
 **Series name.** The display name visitors see — *Summer Music Series*, *Fall Lecture Series*. If your calendar publishes in more than one language, the editor lets you provide the name in each: click <Btn>Add Language</Btn>, pick the language, and fill in the translation. The series itself is one thing with multiple labels, the same way a category is.
 

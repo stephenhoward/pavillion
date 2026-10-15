@@ -38,13 +38,13 @@ A separate per-editor toggle exists to let a specific editor review reports file
 
 ## Invite an editor
 
-Open <Btn>Manage Calendar</Btn> from your calendar page and find the **Editors** tab. The first time you visit, the list is empty.
+Open **Settings** in the main navigation, check that the name at the top is the calendar you mean (tap it to switch), and find the **Editors** tab. The first time you visit, the list is empty.
 
 Click <Btn>Add Editor</Btn>, enter the email address of the person you want to add, and submit.
 
 What happens next depends on whether that email already has a Pavillion account:
 
-- **They already have an account on this instance.** They become an editor immediately. The email field accepts the address they signed up with. They get a notification email letting them know, and the calendar shows up in their list of calendars next time they log in.
+- **They already have an account on this instance.** They become an editor immediately. The email field accepts the address they signed up with. They get a notification email letting them know, and the calendar shows up in their calendar switcher — the calendar name at the top of the page — next time they log in.
 - **They don't have an account yet.** Pavillion sends them an invitation email with a link to sign up. The link is good for seven days. When they accept and create their account, they become an editor on the calendar automatically — no second step required from you. While the invitation is outstanding, it shows up in your editors tab under **Pending Invitations**, where you can resend it (handy if it landed in their spam folder) or cancel it (if you sent it to the wrong address).
 - **The email belongs to someone on a different Pavillion instance.** Use the federated form `casey@calendar.coffee` — their username and their instance's domain — instead of a plain email. Pavillion looks them up across the federation, adds them as a remote editor, and notifies their instance. Their editing actions on your calendar then flow through ActivityPub the same way any other federated activity does.
 
