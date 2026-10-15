@@ -1,4 +1,6 @@
+import type { NavigationGuard, RouteLocationRaw } from 'vue-router';
 import type { CalendarInfo } from '@/common/model/calendar_info';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 /**
  * localStorage key holding the current calendar's ID as a bare string.
@@ -66,4 +68,61 @@ export function writePersistedCalendarId(id: string | null, storage: Storage | u
   catch {
     // Storage may be unavailable (private mode, blocked site data).
   }
+}
+
+/** Loads the account's calendars into the store (once) and returns them. */
+export type CalendarLoader = () => Promise<CalendarInfo[]>;
+
+/**
+ * Guard for a bare route (`/calendar`, `/feed`, `/settings`): resolve the
+ * current calendar and redirect to `routeName` with its url name. When no
+ * calendar resolves, go to `fallback`, or render in place when `fallback`
+ * is `true`. The redirect also persists the resolved ID, so a stale entry
+ * is overwritten rather than kept.
+ */
+export function createCurrentCalendarRedirect(
+  routeName: string,
+  fallback: RouteLocationRaw | true,
+  load: CalendarLoader,
+): NavigationGuard {
+  return async () => {
+    const infos = await load();
+    const store = useCalendarStore();
+    const target = resolveCurrentCalendar(store.selectedCalendarId, infos);
+    if (!target) {
+      return fallback;
+    }
+    if (store.selectedCalendarId !== target.calendar.id) {
+      store.setSelectedCalendar(target.calendar.id);
+    }
+    return { name: routeName, params: { calendar: target.calendar.urlName } };
+  };
+}
+
+/**
+ * Global guard: the URL is the source of truth for the current calendar.
+ * Any route carrying a string `:calendar` param that names one of the
+ * account's calendars sets the store's selection. Unknown names (not
+ * owned or edited) change nothing. Skipped when logged out so an
+ * anonymous hit never fires an authenticated request.
+ */
+export function createCurrentCalendarSync(
+  isLoggedIn: () => boolean,
+  load: CalendarLoader,
+): NavigationGuard {
+  return async (to) => {
+    const name = to.params.calendar;
+    if (typeof name !== 'string' || !isLoggedIn()) {
+      return true;
+    }
+    const infos = await load();
+    const hit = infos.find((info) => info.calendar.urlName === name);
+    if (hit) {
+      const store = useCalendarStore();
+      if (store.selectedCalendarId !== hit.calendar.id) {
+        store.setSelectedCalendar(hit.calendar.id);
+      }
+    }
+    return true;
+  };
 }
