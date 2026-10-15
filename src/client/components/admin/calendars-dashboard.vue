@@ -127,7 +127,7 @@ function fundingStatusLabel(status: AdminCalendarRow['fundingStatus']): string {
  */
 function viewOpenReports(calendarId: string) {
   router.push({
-    path: '/admin/moderation',
+    name: 'moderation',
     query: { calendar_id: calendarId },
   });
 }

@@ -90,7 +90,9 @@
     "recurrence_yearly": "Repeats yearly",
     "recurrence_generic": "Recurring event",
     "language_count": "{{count}} languages",
-    "guide_link": "Create your first event"
+    "guide_link": "Create your first event",
+    "not_found": "No calendar named {{name}} is yours to edit.",
+    "back_to_calendar": "Go to your calendar"
   },
   "editors": {
     "title": "Calendar Editors",

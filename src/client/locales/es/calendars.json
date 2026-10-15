@@ -90,7 +90,9 @@
     "recurrence_yearly": "Se repite cada año",
     "recurrence_generic": "Evento recurrente",
     "language_count": "{{count}} idiomas",
-    "guide_link": "Crea tu primer evento"
+    "guide_link": "Crea tu primer evento",
+    "not_found": "No tienes ningún calendario llamado {{name}} que puedas editar.",
+    "back_to_calendar": "Ir a tu calendario"
   },
   "editors": {
     "title": "Editores del calendario",

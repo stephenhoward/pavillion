@@ -7,6 +7,9 @@ import I18NextVue from 'i18next-vue';
 import sinon from 'sinon';
 import CalendarCategoryMappings from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import FeedService from '@/client/service/feed';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 const router = createRouter({
   history: createMemoryHistory(),
@@ -50,9 +53,14 @@ const EXISTING_MAPPINGS = [
 ];
 
 function mountPage(props: Record<string, string> = {}) {
+  // The route sync guard has loaded the account's calendars before this view renders.
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  useCalendarStore().setCalendarInfos([new CalendarInfo(new Calendar('cal-123', 'cal-name'), 'owner')]);
+
   return mount(CalendarCategoryMappings, {
     global: {
-      plugins: [router, [I18NextVue, { i18next }], createPinia()],
+      plugins: [router, [I18NextVue, { i18next }], pinia],
       stubs: {
         CategoryMappingEditor: {
           template: '<div class="category-mapping-editor-stub" />',
@@ -62,7 +70,7 @@ function mountPage(props: Record<string, string> = {}) {
       },
     },
     props: {
-      calendarId: 'cal-123',
+      calendar: 'cal-name',
       actorId: 'actor@remote.example',
       ...props,
     },
@@ -294,6 +302,40 @@ describe('CalendarCategoryMappings', () => {
       expect(getSourceStub.calledOnceWith('cal-123', 'actor@remote.example')).toBe(true);
       expect(getLocalStub.calledOnceWith('cal-123')).toBe(true);
       expect(getMappingsStub.calledOnceWith('cal-123', 'actor@remote.example')).toBe(true);
+      wrapper.unmount();
+    });
+  });
+
+  describe('calendar resolution', () => {
+    it('shows the load error without fetching when the calendar is not one of the account\'s', async () => {
+      const getSourceStub = sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves(SOURCE_CATEGORIES);
+      const getLocalStub = sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves(LOCAL_CATEGORIES);
+      const getMappingsStub = sandbox.stub(FeedService.prototype, 'getCategoryMappings').resolves(EXISTING_MAPPINGS);
+
+      const wrapper = mountPage({ calendar: 'someone-else' });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Failed to load category data');
+      expect(getSourceStub.called).toBe(false);
+      expect(getLocalStub.called).toBe(false);
+      expect(getMappingsStub.called).toBe(false);
+      wrapper.unmount();
+    });
+  });
+
+  describe('navigation', () => {
+    it('goes back to the feed for the same calendar', async () => {
+      sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves(SOURCE_CATEGORIES);
+      sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves(LOCAL_CATEGORIES);
+      sandbox.stub(FeedService.prototype, 'getCategoryMappings').resolves(EXISTING_MAPPINGS);
+      const pushStub = sandbox.stub(router, 'push').resolves();
+
+      const wrapper = mountPage();
+      await flushPromises();
+
+      await wrapper.find('[data-testid="back-button"]').trigger('click');
+
+      sinon.assert.calledWith(pushStub, { name: 'feed', params: { calendar: 'cal-name' } });
       wrapper.unmount();
     });
   });

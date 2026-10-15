@@ -34,8 +34,9 @@ describe('Funding Plan UI Components', () => {
     router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/admin/funding', component: FundingSettings },
-        { path: '/account/funding', component: FundingPlanManagement },
+        { path: '/settings/admin/funding', component: FundingSettings, name: 'funding' },
+        { path: '/settings/account', component: {}, name: 'profile' },
+        { path: '/settings/account/funding', component: FundingPlanManagement, name: 'funding_plan' },
       ],
     });
 
@@ -208,6 +209,16 @@ describe('Funding Plan UI Components', () => {
 
     // Verify cancel button would be present (structure test)
     expect(wrapper.html()).toBeTruthy();
+  });
+
+  it('links back to the account settings page', () => {
+    const wrapper = mount(FundingPlanManagement, {
+      global: {
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
+      },
+    });
+
+    expect(wrapper.find('a.back-button').attributes('href')).toBe('/settings/account');
   });
 
 });

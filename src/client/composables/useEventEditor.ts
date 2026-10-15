@@ -198,6 +198,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       if (!eventData) {
         // Event not found
         state.err = 'error_event_not_found';
+        // 'calendars' is the bare /calendar route, which resolves to the current calendar.
         router.push({ name: 'calendars' });
         return null;
       }

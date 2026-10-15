@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft } from 'lucide-vue-next';
@@ -7,14 +7,21 @@ import CategoryMappingEditor from '@/client/components/logged_in/category-mappin
 import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mapping-constants';
 import FeedService, { type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 import HelpButton from '@/client/components/common/help-button.vue';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const props = defineProps<{
-  calendarId: string;
+  /** The receiving calendar's url name, from the route. */
+  calendar: string;
   actorId: string;
 }>();
 
 const router = useRouter();
 const { t } = useTranslation('calendars', { keyPrefix: 'category_mapping' });
+const calendarStore = useCalendarStore();
+
+// The route sync guard loads the account's calendars before this view renders,
+// so a name the store does not know is not one of the account's calendars.
+const calendarId = computed(() => calendarStore.getCalendarByUrlName(props.calendar)?.id ?? '');
 
 const sourceCategories = ref<CategoryEntry[]>([]);
 const localCategories = ref<CategoryEntry[]>([]);
@@ -26,12 +33,17 @@ const loadError = ref('');
 const saveError = ref('');
 
 onMounted(async () => {
+  if (!calendarId.value) {
+    loadError.value = t('load_error');
+    loading.value = false;
+    return;
+  }
   const feedService = new FeedService();
   try {
     const [src, own, existing] = await Promise.all([
-      feedService.getSourceCategories(props.calendarId, props.actorId),
-      feedService.getCalendarCategories(props.calendarId),
-      feedService.getCategoryMappings(props.calendarId, props.actorId),
+      feedService.getSourceCategories(calendarId.value, props.actorId),
+      feedService.getCalendarCategories(calendarId.value),
+      feedService.getCategoryMappings(calendarId.value, props.actorId),
     ]);
     sourceCategories.value = src;
     localCategories.value = own;
@@ -46,10 +58,10 @@ onMounted(async () => {
 });
 
 /**
- * Navigate back to the Feed page.
+ * Navigate back to the same calendar's Feed page.
  */
 function goBack() {
-  router.push({ name: 'feed' });
+  router.push({ name: 'feed', params: { calendar: props.calendar } });
 }
 
 /**
@@ -66,13 +78,13 @@ async function save() {
     const resolvedMappings: CategoryMappingEntry[] = await Promise.all(
       mappings.value.map(async (m) => {
         if (m.localCategoryId !== ADD_CATEGORY_VALUE) return m;
-        const created = await feedService.createLocalCategory(props.calendarId, m.sourceCategoryName);
+        const created = await feedService.createLocalCategory(calendarId.value, m.sourceCategoryName);
         localCategories.value = [...localCategories.value, created];
         return { ...m, localCategoryId: created.id };
       }),
     );
 
-    await feedService.setCategoryMappings(props.calendarId, props.actorId, resolvedMappings);
+    await feedService.setCategoryMappings(calendarId.value, props.actorId, resolvedMappings);
     mappings.value = resolvedMappings;
     saveSuccess.value = true;
     setTimeout(() => {
@@ -96,6 +108,7 @@ async function save() {
     <button
       type="button"
       class="back-button"
+      data-testid="back-button"
       @click="goBack"
     >
       <ArrowLeft

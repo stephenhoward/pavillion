@@ -175,7 +175,7 @@ onMounted(async () => {
 <template>
   <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
     <div class="settings-header">
-      <router-link to="/profile" class="back-button">{{ t("back_to_settings") }}</router-link>
+      <router-link :to="{ name: 'profile' }" class="back-button">{{ t("back_to_settings") }}</router-link>
       <div class="settings-header__title-row">
         <h1 id="funding-plan-heading">{{ t("title") }}</h1>
         <HelpButton />

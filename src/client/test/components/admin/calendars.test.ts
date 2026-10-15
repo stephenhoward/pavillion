@@ -15,7 +15,7 @@ import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
-  { path: '/admin/moderation', component: {}, name: 'moderation' },
+  { path: '/settings/admin/moderation', component: {}, name: 'moderation' },
 ];
 
 /**
@@ -53,12 +53,7 @@ function mockResponse(rows: AdminCalendarRow[]): AdminCalendarListResponse {
   };
 }
 
-const mountDashboard = (pinia: Pinia) => {
-  const router: Router = createRouter({
-    history: createMemoryHistory(),
-    routes,
-  });
-
+const mountDashboard = (pinia: Pinia, router: Router = createRouter({ history: createMemoryHistory(), routes })) => {
   return mountComponent(CalendarsDashboard, router, { pinia });
 };
 
@@ -109,6 +104,20 @@ describe('CalendarsDashboard', () => {
     const badges = wrapper.findAll('[data-testid="open-reports-badge"]');
     expect(badges).toHaveLength(1);
     expect(badges[0].text()).toContain('4');
+  });
+
+  it('opens the moderation dashboard filtered to the calendar from its reports badge', async () => {
+    listStub.resolves(mockResponse([mockRow({ id: 'cal-b', openReportCount: 4 })]));
+    const router: Router = createRouter({ history: createMemoryHistory(), routes });
+
+    const wrapper = mountDashboard(pinia, router);
+    await flushPromises();
+
+    await wrapper.find('[data-testid="open-reports-badge"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.name).toBe('moderation');
+    expect(router.currentRoute.value.fullPath).toBe('/settings/admin/moderation?calendar_id=cal-b');
   });
 
   it('updates store filter state when the search input changes', async () => {

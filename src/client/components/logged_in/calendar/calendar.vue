@@ -116,9 +116,9 @@ const loadCalendarData = async () => {
     // Load calendar by URL name — only returns calendars the current user can edit
     state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName.value);
 
-    // If the calendar wasn't found in the user's accessible calendars, redirect away
+    // Not one of the user's calendars: say so in place, with a way back to the current one
     if (!state.calendar) {
-      router.replace({ name: 'calendars' });
+      state.err = t('not_found', { name: calendarUrlName.value });
       return;
     }
 
@@ -176,6 +176,7 @@ const handleLoadEvents = async (filters) => {
          role="alert"
          aria-live="polite">
       {{ state.err }}
+      <RouterLink :to="{ name: 'calendars' }">{{ t('back_to_calendar') }}</RouterLink>
     </div>
     <div v-else>
       <header class="calendar-header">

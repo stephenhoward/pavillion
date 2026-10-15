@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/calendars', component: {}, name: 'calendars' },
   { path: '/event/new', component: {}, name: 'event_new' },
   { path: '/event/:eventId/edit', component: {}, name: 'event_edit' },
-  { path: '/calendar/:calendar/manage', component: {}, name: 'calendar_management' },
+  { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
 ];
 
 const mockCalendar = {
@@ -373,6 +373,20 @@ describe('Calendar View Tabs', () => {
 
       expect(wrapper.find('#series-tab').attributes('aria-selected')).toBe('true');
       expect(wrapper.find('#events-tab').attributes('aria-selected')).toBe('false');
+    });
+  });
+
+  describe('Calendar not found', () => {
+    it('renders the not-found state in place with a link to the current calendar', async () => {
+      (CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub).resolves(null);
+
+      const { wrapper, router } = await createWrapper({}, { calendar: 'not-mine' });
+
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/not-mine');
+      const alert = wrapper.find('[role="alert"]');
+      expect(alert.text()).toContain('not-mine');
+      expect(alert.find('a').attributes('href')).toBe('/calendars');
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
     });
   });
 });
