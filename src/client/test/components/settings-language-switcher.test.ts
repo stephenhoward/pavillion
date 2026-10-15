@@ -4,7 +4,7 @@ import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { mountComponent } from '@/client/test/lib/vue';
-import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
+import SettingsRoot from '@/client/components/logged_in/settings/account.vue';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import AccountService from '@/client/service/account';
 import FundingService from '@/client/service/funding';

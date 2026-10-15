@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createRouter, createWebHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
-import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
+import { buildClientRoutes } from '@/client/routes';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -114,20 +114,18 @@ describe('Navigation Integration - Task Group 4', () => {
   let router: Router;
   let pinia: Pinia;
 
+  // The real client route table, with every guard passing through.
   const createTestRouter = () => {
+    const pass = () => true;
     return createRouter({
       history: createWebHistory(),
-      routes: [
-        { path: '/', redirect: '/calendar' },
-        { path: '/calendar', name: 'calendars', component: { template: '<div>Calendars</div>' } },
-        { path: '/calendar/:calendar', name: 'calendar', component: CalendarView },
-        { path: '/event', name: 'event_new', component: { template: '<div>New Event</div>' } },
-        { path: '/event/:eventId', name: 'event_edit', component: { template: '<div>Edit Event</div>' }, props: true },
-        { path: '/feed', name: 'feed', component: { template: '<div>Feed</div>' } },
-        { path: '/inbox', name: 'inbox', component: { template: '<div>Inbox</div>' } },
-        { path: '/profile', name: 'profile', component: { template: '<div>Profile</div>' } },
-        { path: '/auth/login', name: 'login', component: { template: '<div>Login</div>' } },
-      ],
+      routes: buildClientRoutes({
+        mustBeLoggedIn: pass,
+        mustBeAdmin: pass,
+        setupGuard: pass,
+        authRouteGuard: pass,
+        currentCalendarRedirect: () => pass,
+      }),
     });
   };
 
@@ -301,6 +299,35 @@ describe('Navigation Integration - Task Group 4', () => {
       // Verify calendars route exists as fallback
       const calendarsRoute = router.resolve({ name: 'calendars' });
       expect(calendarsRoute.path).toBe('/calendar');
+    });
+  });
+
+  describe('URL contract', () => {
+    it.each([
+      [{ name: 'calendars' }, '/calendar'],
+      [{ name: 'feed_root' }, '/feed'],
+      [{ name: 'feed', params: { calendar: 'cal' } }, '/feed/cal'],
+      [{ name: 'calendar_category_mappings', params: { calendar: 'cal', actorId: 'a1' } }, '/feed/cal/following/a1/category-mappings'],
+      [{ name: 'settings' }, '/settings'],
+      [{ name: 'calendar_management', params: { calendar: 'cal' } }, '/settings/calendar/cal'],
+      [{ name: 'profile' }, '/settings/account'],
+      [{ name: 'funding_plan' }, '/settings/account/funding'],
+      [{ name: 'admin_settings' }, '/settings/admin/settings'],
+      [{ name: 'moderation_report_detail', params: { reportId: 'r1' } }, '/settings/admin/moderation/reports/r1'],
+    ])('resolves %o to %s', (location, path) => {
+      router = createTestRouter();
+      expect(router.resolve(location).path).toBe(path);
+    });
+
+    it('has no calendar_new route; /calendar/new is just a calendar name', () => {
+      router = createTestRouter();
+      expect(router.hasRoute('calendar_new')).toBe(false);
+      expect(router.resolve('/calendar/new').name).toBe('calendar');
+    });
+
+    it.each(['/profile', '/funding', '/admin/settings'])('does not route the old path %s', (path) => {
+      router = createTestRouter();
+      expect(router.resolve(path).matched).toEqual([]);
     });
   });
 });

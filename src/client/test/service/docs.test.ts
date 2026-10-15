@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { RouteRecordRaw } from 'vue-router';
 import {
   DOCS_BASE,
   docsUrl,
@@ -7,6 +8,7 @@ import {
   audienceForRoute,
   ROUTE_GUIDES,
 } from '@/client/service/docs';
+import { buildClientRoutes } from '@/client/routes';
 import enSystem from '@/client/locales/en/system.json';
 
 const enGuides = (enSystem as { help: { guides: Record<string, { label: string; description: string }> } }).help.guides;
@@ -120,5 +122,33 @@ describe('ROUTE_GUIDES referential integrity', () => {
       }
     }
     expect(badSlugs).toEqual([]);
+  });
+});
+
+function routeNames(records: RouteRecordRaw[], acc: Set<string> = new Set()): Set<string> {
+  for (const record of records) {
+    if (typeof record.name === 'string') {
+      acc.add(record.name);
+    }
+    if (record.children) {
+      routeNames(record.children, acc);
+    }
+  }
+  return acc;
+}
+
+describe('ROUTE_GUIDES keys', () => {
+  it('every key is a live client route name', () => {
+    const pass = () => true;
+    const names = routeNames(buildClientRoutes({
+      mustBeLoggedIn: pass,
+      mustBeAdmin: pass,
+      setupGuard: pass,
+      authRouteGuard: pass,
+      currentCalendarRedirect: () => pass,
+    }));
+    for (const key of Object.keys(ROUTE_GUIDES)) {
+      expect(names.has(key), `ROUTE_GUIDES has dead key ${key}`).toBe(true);
+    }
   });
 });

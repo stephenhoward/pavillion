@@ -98,6 +98,10 @@ export default defineConfig({
             'src/server/moderation/test/service/moderation.test.ts',
             // Frontend tests that transitively import renderPolicyMarkdown
             'src/client/test/components/logged_out/instance-policy.test.ts',
+            // Import the full client route table (src/client/routes.ts), which
+            // reaches instance-policy.vue → renderPolicyMarkdown.
+            'src/client/test/service/docs.test.ts',
+            'src/client/test/routing/navigation-integration.test.ts',
           ],
           env: { NODE_ENV: 'test' },
         },
@@ -150,6 +154,9 @@ export default defineConfig({
           include: [
             // Frontend component tests that transitively import renderPolicyMarkdown
             'src/client/test/components/logged_out/instance-policy.test.ts',
+            // Tests that import the full client route table (src/client/routes.ts)
+            'src/client/test/service/docs.test.ts',
+            'src/client/test/routing/navigation-integration.test.ts',
           ],
           setupFiles: ['./src/client/test/lib/local-storage-stub.ts'],
           env: { NODE_ENV: 'test' },

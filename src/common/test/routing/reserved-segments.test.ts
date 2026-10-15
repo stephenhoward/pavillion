@@ -31,7 +31,7 @@ function topLevelSegment(routePath: string): string | null {
 
 /**
  * Extracts the top-level URL segments the client SPA router owns by reading its
- * source, so a route added to src/client/app.ts without a matching reservation
+ * source, so a route added to src/client/routes.ts without a matching reservation
  * fails here instead of silently shadowing a calendar of the same name.
  *
  * Route objects sitting directly in the `routes` array are top level. So are the
@@ -46,9 +46,14 @@ function topLevelSegment(routePath: string): string | null {
  * wrong.
  */
 function clientRouterTopLevelSegments(): { segments: string[], unparseable: string[] } {
-  const source = readFileSync(path.join(SOURCE_ROOT, 'client/app.ts'), 'utf-8');
+  const source = readFileSync(path.join(SOURCE_ROOT, 'client/routes.ts'), 'utf-8');
+  // The array buildClientRoutes builds and returns.
   const declaration = 'const routes: RouteRecordRaw[] = [';
-  const arrayStart = source.indexOf(declaration) + declaration.length - 1;
+  const declarationIndex = source.indexOf(declaration);
+  if (declarationIndex === -1) {
+    throw new Error(`src/client/routes.ts no longer declares "${declaration}"; update clientRouterTopLevelSegments`);
+  }
+  const arrayStart = declarationIndex + declaration.length - 1;
 
   const segments = new Set<string>();
   const unparseable: string[] = [];
@@ -164,20 +169,18 @@ describe('reserved route segments', () => {
   });
 
   describe('client SPA routes', () => {
-    // Every top-level segment src/client/app.ts owns today. Asserted exactly, so
+    // Every top-level segment src/client/routes.ts owns today. Asserted exactly, so
     // that a route added there shows up as a diff here rather than slipping past
     // a loose count.
     const expectedRouterSegments = [
-      'admin',
       'auth',
       'calendar',
       'event',
       'feed',
-      'funding',
       'inbox',
       'login',
       'policy',
-      'profile',
+      'settings',
       'setup',
     ];
 
@@ -186,7 +189,7 @@ describe('reserved route segments', () => {
 
       expect(
         unparseable,
-        `src/client/app.ts declares route paths this test cannot read as plain '…' string literals, `
+        `src/client/routes.ts declares route paths this test cannot read as plain '…' string literals, `
         + 'so their segments are unchecked. Extend clientRouterTopLevelSegments to cover: '
         + unparseable.join(' | '),
       ).toEqual([]);
