@@ -508,56 +508,6 @@ describe('CalendarManagementRoot', () => {
     });
   });
 
-  describe('Breadcrumb accessibility', () => {
-    it('breadcrumb nav has an aria-label attribute', async () => {
-      const info = makeCalendarInfo('my-calendar', 'owner');
-      stubLoadedCalendars([info]);
-
-      const { wrapper } = await mountRootComponent('my-calendar');
-      currentWrapper = wrapper;
-
-      await flushPromises();
-
-      const breadcrumbNav = wrapper.find('.calendar-management-root__breadcrumb');
-      expect(breadcrumbNav.exists()).toBe(true);
-      expect(breadcrumbNav.attributes('aria-label')).toBeTruthy();
-    });
-
-    it('breadcrumb links back to the calendar page', async () => {
-      const info = makeCalendarInfo('my-calendar', 'owner');
-      stubLoadedCalendars([info]);
-
-      const { wrapper } = await mountRootComponent('my-calendar');
-      currentWrapper = wrapper;
-
-      await flushPromises();
-
-      const link = wrapper.find('.calendar-management-root__breadcrumb a');
-      expect(link.attributes('href')).toBe('/calendar/my-calendar');
-      expect(link.text()).toBe('my-calendar');
-    });
-
-    it('breadcrumb nav and tablist nav have distinct aria-labels', async () => {
-      const info = makeCalendarInfo('my-calendar', 'owner');
-      stubLoadedCalendars([info]);
-
-      const { wrapper } = await mountRootComponent('my-calendar');
-      currentWrapper = wrapper;
-
-      await flushPromises();
-
-      const breadcrumbNav = wrapper.find('.calendar-management-root__breadcrumb');
-      const tablistNav = wrapper.find('[role="tablist"]');
-
-      const breadcrumbLabel = breadcrumbNav.attributes('aria-label');
-      const tablistLabel = tablistNav.attributes('aria-label');
-
-      expect(breadcrumbLabel).toBeTruthy();
-      expect(tablistLabel).toBeTruthy();
-      expect(breadcrumbLabel).not.toBe(tablistLabel);
-    });
-  });
-
   describe('Report deep link from ?report=', () => {
     // Strict v4 shape, matching the server's path-parameter validation.
     const VALID_REPORT_ID = '9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';

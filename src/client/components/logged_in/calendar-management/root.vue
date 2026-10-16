@@ -194,91 +194,79 @@ const backToReports = () => {
       <!-- Header with tabs -->
       <header class="calendar-management-root__header">
         <div class="calendar-management-root__header-content">
-          <div class="calendar-management-root__header-top">
-            <nav class="calendar-management-root__breadcrumb" :aria-label="t('breadcrumb_label')">
-              <RouterLink
-                :to="{ name: 'calendar', params: { calendar: calendarUrlName } }"
-                class="calendar-management-root__breadcrumb-item calendar-management-root__breadcrumb-link"
-              >{{ calendar.urlName }}</RouterLink>
-              <span class="calendar-management-root__breadcrumb-separator">/</span>
-              <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
+          <div class="calendar-management-root__tab-row">
+            <nav
+              role="tablist"
+              :aria-label="t('tabs_label')"
+              class="calendar-management-root__tabs"
+              @keydown="handleTabKeydown"
+            >
+              <button
+                id="editors-tab"
+                type="button"
+                role="tab"
+                :aria-selected="state.activeTab === 'editors'"
+                aria-controls="editors-panel"
+                :tabindex="state.activeTab === 'editors' ? 0 : -1"
+                class="calendar-management-root__tab"
+                @click="activateTab('editors')"
+              >
+                {{ t('editors_tab') }}
+              </button>
+              <button
+                v-if="isOwner"
+                id="reports-tab"
+                type="button"
+                role="tab"
+                :aria-selected="state.activeTab === 'reports'"
+                aria-controls="reports-panel"
+                :tabindex="state.activeTab === 'reports' ? 0 : -1"
+                class="calendar-management-root__tab"
+                @click="activateTab('reports')"
+              >
+                {{ t('reports_tab') }}
+              </button>
+              <button
+                v-if="isOwner"
+                id="settings-tab"
+                type="button"
+                role="tab"
+                :aria-selected="state.activeTab === 'settings'"
+                aria-controls="settings-panel"
+                :tabindex="state.activeTab === 'settings' ? 0 : -1"
+                class="calendar-management-root__tab"
+                @click="activateTab('settings')"
+              >
+                {{ t('settings_tab') }}
+              </button>
+              <button
+                v-if="isOwner"
+                id="import-tab"
+                type="button"
+                role="tab"
+                :aria-selected="state.activeTab === 'import'"
+                aria-controls="import-panel"
+                :tabindex="state.activeTab === 'import' ? 0 : -1"
+                class="calendar-management-root__tab"
+                @click="activateTab('import')"
+              >
+                {{ t('import_tab') }}
+              </button>
+              <button
+                id="widget-tab"
+                type="button"
+                role="tab"
+                :aria-selected="state.activeTab === 'widget'"
+                aria-controls="widget-panel"
+                :tabindex="state.activeTab === 'widget' ? 0 : -1"
+                class="calendar-management-root__tab"
+                @click="activateTab('widget')"
+              >
+                {{ t('widget_tab') }}
+              </button>
             </nav>
-            <div class="calendar-management-root__title-row">
-              <h2 class="calendar-management-root__title">{{ t('page_title') }}</h2>
-              <HelpButton />
-            </div>
+            <HelpButton />
           </div>
-
-          <nav
-            role="tablist"
-            :aria-label="t('tabs_label')"
-            class="calendar-management-root__tabs"
-            @keydown="handleTabKeydown"
-          >
-            <button
-              id="editors-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'editors'"
-              aria-controls="editors-panel"
-              :tabindex="state.activeTab === 'editors' ? 0 : -1"
-              class="calendar-management-root__tab"
-              @click="activateTab('editors')"
-            >
-              {{ t('editors_tab') }}
-            </button>
-            <button
-              v-if="isOwner"
-              id="reports-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'reports'"
-              aria-controls="reports-panel"
-              :tabindex="state.activeTab === 'reports' ? 0 : -1"
-              class="calendar-management-root__tab"
-              @click="activateTab('reports')"
-            >
-              {{ t('reports_tab') }}
-            </button>
-            <button
-              v-if="isOwner"
-              id="settings-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'settings'"
-              aria-controls="settings-panel"
-              :tabindex="state.activeTab === 'settings' ? 0 : -1"
-              class="calendar-management-root__tab"
-              @click="activateTab('settings')"
-            >
-              {{ t('settings_tab') }}
-            </button>
-            <button
-              v-if="isOwner"
-              id="import-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'import'"
-              aria-controls="import-panel"
-              :tabindex="state.activeTab === 'import' ? 0 : -1"
-              class="calendar-management-root__tab"
-              @click="activateTab('import')"
-            >
-              {{ t('import_tab') }}
-            </button>
-            <button
-              id="widget-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'widget'"
-              aria-controls="widget-panel"
-              :tabindex="state.activeTab === 'widget' ? 0 : -1"
-              class="calendar-management-root__tab"
-              @click="activateTab('widget')"
-            >
-              {{ t('widget_tab') }}
-            </button>
-          </nav>
         </div>
       </header>
 
@@ -397,72 +385,18 @@ const backToReports = () => {
     min-width: 0;
   }
 
-  &__header-top {
-    padding: var(--pav-space-4) 0;
-
-    @media (min-width: 640px) {
-      padding: var(--pav-space-6) 0;
-    }
-  }
-
-  &__breadcrumb {
+  &__tab-row {
     display: flex;
     align-items: center;
-    gap: var(--pav-space-2);
-    color: var(--pav-text-muted);
-    font-size: 0.875rem;
-    margin-bottom: var(--pav-space-2);
-    min-width: 0;
-
-    @media (min-width: 640px) {
-      font-size: 0.875rem;
-    }
-  }
-
-  &__breadcrumb-item {
-    color: var(--pav-text-muted);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__breadcrumb-link {
-    &:hover {
-      color: var(--pav-text-primary);
-      text-decoration: underline;
-    }
-
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: 2px;
-    }
-  }
-
-  &__breadcrumb-separator {
-    color: var(--pav-nav-inactive-icon);
-    flex-shrink: 0;
-  }
-
-  &__title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  &__title {
-    font-size: 1.25rem;
-    font-weight: 300;
-    color: var(--pav-text-primary);
-    margin: 0;
-
-    @media (min-width: 640px) {
-      font-size: 1.5rem;
-    }
+    gap: var(--pav-space-4);
+    border-bottom: 1px solid var(--pav-border-primary);
   }
 
   &__tabs {
     @include tab-navigation;
+    flex: 1;
+    min-width: 0;
+    border-bottom: none;
     margin-bottom: 0;
   }
 

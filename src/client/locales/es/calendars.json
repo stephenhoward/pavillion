@@ -129,7 +129,6 @@
     "error_resending_invitation": "Error al reenviar la invitación"
   },
   "management": {
-    "page_title": "Configuración del calendario",
     "tabs_label": "Pestañas de gestión del calendario",
     "editors_tab": "Editores",
     "settings_tab": "Configuración",
@@ -188,9 +187,7 @@
     "event_count_other": "{{count}} eventos",
     "languages_count_one": "{{count}} idioma",
     "languages_count_other": "{{count}} idiomas",
-    "places_tab": "Lugares",
-    "breadcrumb_label": "Ruta de navegación",
-    "breadcrumb_settings": "configuración"
+    "places_tab": "Lugares"
   },
   "import": {
     "section_title": "Fuentes de importación",

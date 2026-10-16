@@ -129,7 +129,6 @@
     "error_resending_invitation": "Failed to resend invitation"
   },
   "management": {
-    "page_title": "Calendar Settings",
     "tabs_label": "Calendar management tabs",
     "editors_tab": "Editors",
     "settings_tab": "Settings",
@@ -188,9 +187,7 @@
     "event_count_other": "{{count}} events",
     "languages_count_one": "{{count}} language",
     "languages_count_other": "{{count}} languages",
-    "places_tab": "Places",
-    "breadcrumb_label": "Breadcrumb",
-    "breadcrumb_settings": "settings"
+    "places_tab": "Places"
   },
   "import": {
     "section_title": "Import Sources",

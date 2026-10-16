@@ -129,7 +129,6 @@
     "error_resending_invitation": "Échec du renvoi de l'invitation"
   },
   "management": {
-    "page_title": "Paramètres du calendrier",
     "tabs_label": "Onglets de gestion du calendrier",
     "editors_tab": "Éditeurs",
     "settings_tab": "Paramètres",
@@ -188,9 +187,7 @@
     "event_count_other": "{{count}} événements",
     "languages_count_one": "{{count}} langue",
     "languages_count_other": "{{count}} langues",
-    "places_tab": "Lieux",
-    "breadcrumb_label": "Fil d'Ariane",
-    "breadcrumb_settings": "paramètres"
+    "places_tab": "Lieux"
   },
   "import": {
     "section_title": "Sources d'importation",
