@@ -3,7 +3,7 @@
     "calendar_button": "Calendar",
     "inbox_button": "Inbox",
     "new_event": "New Event",
-    "profile_button": "Settings",
+    "settings_button": "Settings",
     "feed_button": "Feed",
     "inbox_badge_label": "{{count}} unread notification"
   },

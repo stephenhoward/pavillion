@@ -1,7 +1,7 @@
 # Frontend Data Exposure
 
 > Version: 1.0.0
-> Last Updated: 2026-03-22
+> Last Updated: 2026-10-14
 
 ## Privacy Risks
 
@@ -28,13 +28,17 @@ Public site visitors should receive zero cookies:
 
 ### Authenticated App Storage
 
-The client app (authenticated) may use localStorage for JWT tokens only:
+The client app (authenticated) may use localStorage for the JWT token and for non-PII session state that is cleared with the token (the current calendar's ID, see Known Codebase Patterns):
 
 ```typescript
-// Safe: localStorage used only for auth token in client app
-localStorage.setItem('jwt_token', token);
+// Safe: auth token in client app
+localStorage.setItem('jwt', token);
+localStorage.setItem('jw_token', JSON.stringify(claims)); // decoded JWT claims
 
-// Safe: no PII stored in localStorage beyond the token
+// Safe: bare calendar UUID, removed whenever the token is removed
+localStorage.setItem('current_calendar_id', calendarId);
+
+// Safe: no PII stored in localStorage
 // Account details fetched fresh from API, not cached in storage
 ```
 
@@ -91,6 +95,7 @@ fetch('/api/v1/account')  // From public site code
 ## Known Codebase Patterns
 
 - Client app uses `localStorage` for authentication (`src/client/app.ts`, `src/client/service/authn.ts`)
+- `localStorage['current_calendar_id']` — the client app's current calendar, a bare calendar UUID, no PII. Key and read/write helpers live in the import-free `src/client/service/current-calendar-storage.ts`. Written by `calendarStore.setSelectedCalendar`, removed by `Authentication._unset_token()` on every token-removal path. Only the client app uses it. The site and widget both create the same calendar store through `src/site/service/calendar.ts`, whose state initializer reads the key into memory, but neither ever uses the value. The site app also bundles the same `Authentication` service, so its `_unset_token()` can remove the key — harmless; the widget never writes or removes it. The calendar store tags its list with the account it was loaded for, and `CalendarService.ensureCalendarsLoaded` resets the list and the persisted key when the signed-in account differs (including a re-login as another account through the session-expired modal). An ID that survives anyway — e.g. read at store creation — is still validated by `resolveCurrentCalendar` against the signed-in account's calendar list before use.
 - Site app initializes authentication with `localStorage` (`src/site/app.ts`) -- verify this doesn't set cookies for public visitors
 - Locale middleware reads `cookie` header for language preference (`src/server/common/middleware/locale.ts`) -- verify no cookie is SET for unauthenticated requests
 - No analytics or tracking libraries detected in `package.json` (good)

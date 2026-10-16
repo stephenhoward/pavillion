@@ -3,12 +3,14 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 describe('FeedStore', () => {
   let feedStore: ReturnType<typeof useFeedStore>;
   let calendarStore: ReturnType<typeof useCalendarStore>;
 
   beforeEach(() => {
+    localStorage.clear();
     setActivePinia(createPinia());
     feedStore = useFeedStore();
     calendarStore = useCalendarStore();
@@ -19,7 +21,7 @@ describe('FeedStore', () => {
     const calendar2 = new Calendar('cal-2', 'calendar-two');
     calendar2.addContent({ language: 'en', title: 'Calendar Two' });
 
-    calendarStore.setCalendars([calendar1, calendar2]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner'), new CalendarInfo(calendar2, 'owner')]);
   });
 
   describe('selectedCalendarId selection and persistence', () => {
@@ -29,15 +31,6 @@ describe('FeedStore', () => {
       calendarStore.setSelectedCalendar('cal-1');
 
       expect(feedStore.selectedCalendarId).toBe('cal-1');
-    });
-
-    it('should get selected calendar from calendar store', () => {
-      calendarStore.setSelectedCalendar('cal-1');
-
-      const calendar = feedStore.selectedCalendar;
-
-      expect(calendar).toBeDefined();
-      expect(calendar?.id).toBe('cal-1');
     });
 
     it('should not call calendarStore.setSelectedCalendar', () => {
@@ -183,25 +176,6 @@ describe('FeedStore', () => {
       feedStore.setEventsHasMore(false);
 
       expect(feedStore.eventsHasMore).toBe(false);
-    });
-  });
-
-  describe('hasMultipleCalendars getter', () => {
-    it('should return true when user has multiple calendars', () => {
-      expect(feedStore.hasMultipleCalendars).toBe(true);
-    });
-
-    it('should return false when user has single calendar', () => {
-      const singleCalendar = new Calendar('cal-1', 'calendar-one');
-      calendarStore.setCalendars([singleCalendar]);
-
-      expect(feedStore.hasMultipleCalendars).toBe(false);
-    });
-
-    it('should return false when user has no calendars', () => {
-      calendarStore.setCalendars([]);
-
-      expect(feedStore.hasMultipleCalendars).toBe(false);
     });
   });
 });

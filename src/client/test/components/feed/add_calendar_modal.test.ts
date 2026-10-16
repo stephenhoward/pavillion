@@ -7,6 +7,7 @@ import I18NextVue from 'i18next-vue';
 import AddCalendarModal from '@/client/components/logged_in/feed/add_calendar_modal.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import FeedService from '@/client/service/feed';
 
 const mockFollowCalendar = vi.fn();
@@ -84,7 +85,7 @@ describe('AddCalendarModal — mapping step', () => {
     const calendarStore = useCalendarStore();
     const calendar = new Calendar('cal-123', 'test-calendar');
     calendar.addContent({ language: 'en', title: 'Test Calendar' });
-    calendarStore.setCalendars([calendar]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
     calendarStore.setSelectedCalendar('cal-123');
 
     await i18next.init({

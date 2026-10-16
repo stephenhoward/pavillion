@@ -10,6 +10,7 @@ import EmptyState from '@/common/ui/components/EmptyState.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import { CalendarEvent } from '@/common/model/events';
 
 const mockEventsIsLoading = ref(false);
@@ -77,7 +78,7 @@ describe('FollowedEventsView', () => {
     const calendarStore = useCalendarStore();
     const calendar = new Calendar('cal-123', 'test-calendar');
     calendar.addContent({ language: 'en', title: 'Test Calendar' });
-    calendarStore.setCalendars([calendar]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
     calendarStore.setSelectedCalendar('cal-123');
 
     // Initialize i18next for testing

@@ -45,7 +45,7 @@ test('admin change to widget view mode is reflected in rendered widget', async (
   await loginAsAdmin(page, env.baseURL);
 
   // Step 2: Navigate directly to the calendar management page and open the widget tab.
-  await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+  await page.goto(env.baseURL + '/settings/calendar/test_calendar');
   await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
 
   const widgetTabButton = page.locator('#widget-tab');
@@ -225,7 +225,7 @@ async function openWidgetEmbed(
  * Save button is in its clean (disabled) state.
  */
 async function openWidgetAdminTab(page: Page, baseURL: string): Promise<void> {
-  await page.goto(baseURL + '/calendar/test_calendar/manage');
+  await page.goto(baseURL + '/settings/calendar/test_calendar');
   await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
   await page.locator('#widget-tab').click();
   await expect(page.locator('.widget-config')).toBeVisible({ timeout: 15000 });

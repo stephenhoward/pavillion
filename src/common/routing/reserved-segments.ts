@@ -13,13 +13,19 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * as well.
  *
  * It is **not** a routing table. Membership means one thing to the validator
- * (reject) and four different things to a router: some segments must not reach
- * the site SPA because the server serves them, others because the client SPA
- * shell does, `discover` is a site SPA route, and `view` is neither — it
- * redirects. A router consuming this list therefore has to decide each
- * segment's disposition separately; an alternation built straight from the
- * array would exclude `discover` and `view` from exactly the handler that must
- * serve them.
+ * (reject) and five different things to a router: some segments must not reach
+ * the site SPA because the server serves them; others because the client SPA
+ * routes them; `profile`, `admin` and `funding` are **reserved but unrouted** —
+ * the server answers them with the client shell, the client router has no
+ * route for them, and they stay reserved because releasing a name is
+ * irreversible once a calendar claims it; `discover` is a site SPA route; and
+ * `view` is none of these — it redirects. A router consuming this list
+ * therefore has to decide each segment's disposition separately; an
+ * alternation built straight from the array would exclude `discover` and
+ * `view` from exactly the handler that must serve them.
+ *
+ * Because the list also gates series url names, `settings` (the client's
+ * settings namespace) is unavailable as a series name too.
  *
  * Entries are lower case; `classifyReservedRouteSegment` does the case folding
  * (and `isReservedRouteSegment` folds through it), which matches the case-insensitive route regexes in src/server/app_routes.ts. The
@@ -30,7 +36,7 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * - server: the client catch-all exclusions and the dev asset/coverage
  *   redirects in src/server/app_routes.ts, the federation routers mounted at
  *   '/' in src/server/activitypub/api/v1.ts, and /health in src/server/server.ts
- * - client SPA: every top-level route in src/client/app.ts
+ * - client SPA: every top-level route in src/client/routes.ts
  * - public site: the discovery page, plus `view`, which stays reserved
  *   permanently so the redirects away from the old URL shape stay unambiguous
  *
@@ -64,6 +70,7 @@ export const RESERVED_ROUTE_SEGMENTS: readonly string[] = Object.freeze([
   'login',
   'policy',
   'profile',
+  'settings',
   'setup',
   'users',
   'view',

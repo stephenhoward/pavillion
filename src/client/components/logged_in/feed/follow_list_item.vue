@@ -39,6 +39,9 @@ const localCalendarName = computed(() => {
   return name || null;
 });
 
+/** URL name of the local calendar that receives this follow's events, or null when unknown. */
+const localCalendarUrlName = computed(() => calendarStore.getCalendarById(props.follow.calendarId)?.urlName ?? null);
+
 const handleOriginalsToggle = (value: boolean) => {
   // If turning off originals, also turn off reposts
   const newReposts = value ? props.follow.autoRepostReposts : false;
@@ -90,9 +93,10 @@ const handleUnfollow = () => {
 
       <div class="item-links">
         <router-link
+          v-if="localCalendarUrlName"
           :to="{
             name: 'calendar_category_mappings',
-            params: { calendarId: follow.calendarId, actorId: follow.calendarActorUuid },
+            params: { calendar: localCalendarUrlName, actorId: follow.calendarActorUuid },
           }"
           class="mappings-link"
           :aria-label="tMappings.t('category_mappings_link_for', { calendar: follow.calendarActorId })"

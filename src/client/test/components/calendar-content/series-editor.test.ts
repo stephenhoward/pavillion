@@ -10,7 +10,7 @@ import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError } from '@/common/exceptions/series';
 
 const routes: RouteRecordRaw[] = [
-  { path: '/calendar/:calendar/manage', component: {}, name: 'manage' },
+  { path: '/settings/calendar/:calendar', component: {}, name: 'manage' },
 ];
 
 function createSeries(mediaId: string | null = null): EventSeries {

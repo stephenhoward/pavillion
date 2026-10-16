@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import { createRouter, createWebHistory, Router } from 'vue-router';
+import { createMemoryHistory, createRouter, createWebHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
-import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
+import { buildClientRoutes } from '@/client/routes';
+import { createRouteGuards } from '@/client/service/route-guards';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -35,13 +36,13 @@ const createMockEvent = (id: string, calendarId: string) => {
 
 // Mock CalendarService
 const mockLoadCalendars = vi.fn();
-const mockLoadCalendarsWithRelationship = vi.fn();
+const mockEnsureCalendarsLoaded = vi.fn();
 const mockGetCalendarByUrlName = vi.fn();
 
 vi.mock('@/client/service/calendar', () => ({
   default: vi.fn().mockImplementation(() => ({
     loadCalendars: mockLoadCalendars,
-    loadCalendarsWithRelationship: mockLoadCalendarsWithRelationship,
+    ensureCalendarsLoaded: mockEnsureCalendarsLoaded,
     getCalendarByUrlName: mockGetCalendarByUrlName,
   })),
 }));
@@ -114,20 +115,18 @@ describe('Navigation Integration - Task Group 4', () => {
   let router: Router;
   let pinia: Pinia;
 
+  // The real client route table, with every guard passing through.
   const createTestRouter = () => {
+    const pass = () => true;
     return createRouter({
       history: createWebHistory(),
-      routes: [
-        { path: '/', redirect: '/calendar' },
-        { path: '/calendar', name: 'calendars', component: { template: '<div>Calendars</div>' } },
-        { path: '/calendar/:calendar', name: 'calendar', component: CalendarView },
-        { path: '/event', name: 'event_new', component: { template: '<div>New Event</div>' } },
-        { path: '/event/:eventId', name: 'event_edit', component: { template: '<div>Edit Event</div>' }, props: true },
-        { path: '/feed', name: 'feed', component: { template: '<div>Feed</div>' } },
-        { path: '/inbox', name: 'inbox', component: { template: '<div>Inbox</div>' } },
-        { path: '/profile', name: 'profile', component: { template: '<div>Profile</div>' } },
-        { path: '/auth/login', name: 'login', component: { template: '<div>Login</div>' } },
-      ],
+      routes: buildClientRoutes({
+        mustBeLoggedIn: pass,
+        mustBeAdmin: pass,
+        setupGuard: pass,
+        authRouteGuard: pass,
+        currentCalendarRedirect: () => pass,
+      }),
     });
   };
 
@@ -140,7 +139,7 @@ describe('Navigation Integration - Task Group 4', () => {
     mockLoadCalendars.mockResolvedValue([
       createMockCalendar('cal-1', 'test-calendar'),
     ]);
-    mockLoadCalendarsWithRelationship.mockResolvedValue([
+    mockEnsureCalendarsLoaded.mockResolvedValue([
       { calendar: createMockCalendar('cal-1', 'test-calendar'), isEditor: false },
     ]);
     mockGetCalendarByUrlName.mockResolvedValue(createMockCalendar('cal-1', 'test-calendar'));
@@ -301,6 +300,126 @@ describe('Navigation Integration - Task Group 4', () => {
       // Verify calendars route exists as fallback
       const calendarsRoute = router.resolve({ name: 'calendars' });
       expect(calendarsRoute.path).toBe('/calendar');
+    });
+  });
+
+  describe('URL contract', () => {
+    it.each([
+      [{ name: 'calendars' }, '/calendar'],
+      [{ name: 'feed_root' }, '/feed'],
+      [{ name: 'feed', params: { calendar: 'cal' } }, '/feed/cal'],
+      [{ name: 'calendar_category_mappings', params: { calendar: 'cal', actorId: 'a1' } }, '/feed/cal/following/a1/category-mappings'],
+      [{ name: 'settings' }, '/settings'],
+      [{ name: 'calendar_management', params: { calendar: 'cal' } }, '/settings/calendar/cal'],
+      [{ name: 'profile' }, '/settings/account'],
+      [{ name: 'funding_plan' }, '/settings/account/funding'],
+      [{ name: 'admin_settings' }, '/settings/admin/settings'],
+      [{ name: 'moderation_report_detail', params: { reportId: 'r1' } }, '/settings/admin/moderation/reports/r1'],
+    ])('resolves %o to %s', (location, path) => {
+      router = createTestRouter();
+      expect(router.resolve(location).path).toBe(path);
+    });
+
+    it('has no calendar_new route; /calendar/new is just a calendar name', () => {
+      router = createTestRouter();
+      expect(router.hasRoute('calendar_new')).toBe(false);
+      expect(router.resolve('/calendar/new').name).toBe('calendar');
+    });
+
+    it.each(['/profile', '/funding', '/admin/settings'])('does not route the old path %s', (path) => {
+      router = createTestRouter();
+      expect(router.resolve(path).matched).toEqual([]);
+    });
+  });
+
+  describe('Settings guards', () => {
+    it.each([
+      ['/settings/account', '/settings/account/funding'],
+      ['/settings/account/funding', '/settings/calendar/test-calendar'],
+      ['/settings/calendar/test-calendar', '/settings/account'],
+    ])('runs mustBeLoggedIn when moving from %s to its sibling %s', async (from, to) => {
+      const pass = () => true;
+      let loginChecks = 0;
+      const countingRouter = createRouter({
+        history: createWebHistory(),
+        routes: buildClientRoutes({
+          mustBeLoggedIn: () => {
+            loginChecks++;
+            return true;
+          },
+          mustBeAdmin: pass,
+          setupGuard: pass,
+          authRouteGuard: pass,
+          currentCalendarRedirect: () => pass,
+        }),
+      });
+      await countingRouter.push(from);
+      loginChecks = 0;
+
+      await countingRouter.push(to);
+
+      expect(countingRouter.currentRoute.value.path).toBe(to);
+      expect(loginChecks).toBe(1);
+    });
+  });
+
+  describe('Access guards on the real route table', () => {
+    /** The real client route table behind the real guards, for a given session. */
+    const routerFor = (session: { loggedIn: boolean; admin: boolean }, setupMode = false): Router => {
+      const pass = () => true;
+      return createRouter({
+        history: createMemoryHistory(),
+        routes: buildClientRoutes({
+          ...createRouteGuards({ isLoggedIn: () => session.loggedIn, isAdmin: () => session.admin }, () => setupMode),
+          currentCalendarRedirect: () => pass,
+        }),
+      });
+    };
+
+    it.each([
+      '/settings/admin/settings',
+      '/settings/admin/moderation/settings',
+    ])('sends a signed-in non-admin from %s to login', async (path) => {
+      const guarded = routerFor({ loggedIn: true, admin: false });
+      await guarded.push(path);
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
+    it('checks admin again on a move between admin pages', async () => {
+      // Starting inside the admin section means only the destination's own
+      // guard runs on the second push, not the parent admin route's.
+      const session = { loggedIn: true, admin: true };
+      const guarded = routerFor(session);
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('admin_settings');
+
+      session.admin = false;
+      await guarded.push('/settings/admin/moderation/settings');
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
+    it('lets an admin into the admin settings page', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: true });
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('admin_settings');
+    });
+
+    it('lets a signed-in non-admin into the account page', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: false });
+      await guarded.push('/settings/account');
+      expect(guarded.currentRoute.value.name).toBe('profile');
+    });
+
+    it('sends a signed-out visitor from the account page to login', async () => {
+      const guarded = routerFor({ loggedIn: false, admin: false });
+      await guarded.push('/settings/account');
+      expect(guarded.currentRoute.value.name).toBe('login');
+    });
+
+    it('sends a guarded route to setup while setup mode is active', async () => {
+      const guarded = routerFor({ loggedIn: true, admin: true }, true);
+      await guarded.push('/settings/admin/settings');
+      expect(guarded.currentRoute.value.name).toBe('setup');
     });
   });
 });

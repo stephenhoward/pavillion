@@ -16,6 +16,13 @@ const { t } = useTranslation('calendars', {
 
 const router = useRouter();
 
+const props = withDefaults(defineProps<{
+  /** Named route to open the new calendar on, with `{ calendar: urlName }`. */
+  routeName?: string;
+}>(), {
+  routeName: 'calendar',
+});
+
 const emit = defineEmits<{
   created: [];
 }>();
@@ -130,8 +137,7 @@ async function createCalendar() {
 
     emit('created');
 
-    // Navigate to the new calendar
-    router.push({ path: '/calendar/' + calendar.urlName });
+    router.push({ name: props.routeName, params: { calendar: calendar.urlName } });
   }
   catch (error) {
     console.error('Error creating calendar:', error);

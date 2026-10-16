@@ -10,6 +10,7 @@ import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFound
 import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
+import { currentAccountId } from '@/client/service/authn';
 
 import {
   BulkEventsNotFoundError,
@@ -34,6 +35,12 @@ const errorMap = {
   AccountInviteAlreadyExistsError,
 };
 
+/**
+ * In-flight loads keyed by store instance, so concurrent callers for the same
+ * account share one request. A load for another account is never shared.
+ */
+const inFlightLoads = new WeakMap<object, { accountId: string | null; promise: Promise<CalendarInfo[]> }>();
+
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
 
@@ -42,25 +49,48 @@ export default class CalendarService {
   }
 
   /**
-   * Load calendars from the server if needed, updating the store
-   * @returns Promise<Array<Calendar>> The list of calendars
+   * Load every calendar the account owns or edits into the store, once.
+   * Concurrent callers share the same request. Pass `forceLoad` after a
+   * change the store cannot apply locally. A store loaded for a different
+   * account (another account signed in through the session-expired modal,
+   * with no logout between) is reset, list and selection, before refetching,
+   * so a failed refetch leaves nothing of the previous account behind.
+   * @returns Promise<Array<CalendarInfo>> The calendars with relationship info
    */
-  async loadCalendars(forceLoad?: boolean): Promise<Array<Calendar>> {
-
-    // If calendars are already loaded in the store, return them
-    if (!forceLoad && this.store.loaded && this.store.calendars.length > 0) {
-      return this.store.calendars;
+  async ensureCalendarsLoaded(forceLoad = false): Promise<CalendarInfo[]> {
+    const accountId = currentAccountId();
+    if (this.store.loaded && (this.store.accountId ?? null) !== accountId) {
+      this.store.resetCalendars();
     }
+    if (!forceLoad && this.store.loaded) {
+      return this.store.calendarInfos;
+    }
+    const existing = inFlightLoads.get(this.store);
+    if (existing && !forceLoad && existing.accountId === accountId) {
+      return existing.promise;
+    }
+    const pending: Promise<CalendarInfo[]> = this.fetchCalendarInfos(accountId).finally(() => {
+      // A forced or other-account load may have replaced this entry; only clear our own.
+      if (inFlightLoads.get(this.store)?.promise === pending) {
+        inFlightLoads.delete(this.store);
+      }
+    });
+    inFlightLoads.set(this.store, { accountId, promise: pending });
+    return pending;
+  }
 
-    // Otherwise, fetch from the server and update the store
+  /**
+   * Fetch the account's calendars with relationship and replace the store's list.
+   */
+  private async fetchCalendarInfos(accountId: string | null): Promise<CalendarInfo[]> {
     try {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
-      const calendars = calendarsData.items.map(calendar => Calendar.fromObject(calendar));
-
-      // Update the store with fetched calendars
-      this.store.setCalendars(calendars);
-
-      return calendars;
+      const infos = calendarsData.items.map((data) => CalendarInfo.fromObject(data));
+      // A load that finishes after another account signed in must not overwrite the store.
+      if (currentAccountId() === accountId) {
+        this.store.setCalendarInfos(infos, accountId);
+      }
+      return infos;
     }
     catch (error) {
       console.error('Error loading calendars:', error);
@@ -69,18 +99,12 @@ export default class CalendarService {
   }
 
   /**
-   * Load calendars with relationship information (owner vs editor)
-   * @returns Promise<Array<CalendarInfo>> The list of calendars with relationship info
+   * Bare calendars, loading if needed. Kept for existing callers.
+   * @returns Promise<Array<Calendar>> The list of calendars
    */
-  async loadCalendarsWithRelationship(): Promise<Array<CalendarInfo>> {
-    try {
-      const calendarsData = await ModelService.listModels('/api/v1/calendars');
-      return calendarsData.items.map(calendarData => CalendarInfo.fromObject(calendarData));
-    }
-    catch (error) {
-      console.error('Error loading calendars with relationship:', error);
-      throw error;
-    }
+  async loadCalendars(forceLoad?: boolean): Promise<Array<Calendar>> {
+    await this.ensureCalendarsLoaded(forceLoad ?? false);
+    return this.store.calendars;
   }
 
   /**

@@ -21,6 +21,11 @@ interface FeedState {
  * Pinia store for feed data cache.
  * Contains only data state and simple mutation actions.
  * API calls and loading state are managed by composables and FeedService.
+ *
+ * Feed reads and writes target the calendar store's selection, not a route
+ * param. That is sound because the route guard and feed/root.vue keep the
+ * selection equal to the `:calendar` in the URL, and FeedService drops any
+ * response for a calendar that is no longer selected.
  */
 export const useFeedStore = defineStore('feed', {
   state: (): FeedState => {
@@ -42,21 +47,6 @@ export const useFeedStore = defineStore('feed', {
       return calendarStore.selectedCalendarId;
     },
 
-    /**
-     * Get the currently selected calendar from the calendar store
-     */
-    selectedCalendar(): any {
-      const calendarStore = useCalendarStore();
-      return calendarStore.selectedCalendar;
-    },
-
-    /**
-     * Check if the user has multiple calendars
-     */
-    hasMultipleCalendars(): boolean {
-      const calendarStore = useCalendarStore();
-      return calendarStore.calendars.length > 1;
-    },
   },
 
   actions: {

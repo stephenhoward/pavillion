@@ -133,7 +133,7 @@ async function saveSettings() {
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1>{{ t('title') }}</h1>
+        <h2>{{ t('title') }}</h2>
         <p class="page-subtitle">{{ t('subtitle') }}</p>
       </div>
       <HelpButton />
@@ -396,7 +396,7 @@ async function saveSettings() {
 
   .page-header {
     .page-header-text {
-      h1 {
+      h2 {
         margin: 0 0 var(--pav-space-1) 0;
         font-size: var(--pav-font-size-2xl);
         font-weight: var(--pav-font-weight-light);

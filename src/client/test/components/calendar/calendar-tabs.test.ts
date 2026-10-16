@@ -9,6 +9,9 @@ import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import { useEventStore } from '@/client/stores/eventStore';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import { createPinia } from 'pinia';
 
 /**
@@ -29,7 +32,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/calendars', component: {}, name: 'calendars' },
   { path: '/event/new', component: {}, name: 'event_new' },
   { path: '/event/:eventId/edit', component: {}, name: 'event_edit' },
-  { path: '/calendar/:calendar/manage', component: {}, name: 'calendar_management' },
+  { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
 ];
 
 const mockCalendar = {
@@ -194,6 +197,56 @@ describe('Calendar View Tabs', () => {
 
       expect(wrapper.find('a.calendar-public-link').exists()).toBe(false);
       expect(wrapper.find('a[href=""]').exists()).toBe(false);
+    });
+  });
+
+  describe('Header switcher', () => {
+    it('should render the calendar name as the switcher trigger inside the heading', async () => {
+      const { wrapper } = await createWrapper();
+
+      const trigger = wrapper.find('h1 button[aria-haspopup="dialog"]');
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toContain('Test Calendar');
+      expect(trigger.attributes('aria-label')).toBe('Switch calendar: Test Calendar');
+    });
+
+    it('should keep Documentation and Manage calendar in the actions menu, without Create calendar', async () => {
+      const { wrapper } = await createWrapper();
+
+      await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+      const items = wrapper.findAll('[role="menuitem"]').map((item) => item.text());
+      expect(items).toHaveLength(2);
+      expect(items.some((text) => /Documentation/.test(text))).toBe(true);
+      expect(items.some((text) => /Manage/.test(text))).toBe(true);
+      expect(items.some((text) => /New Calendar/i.test(text))).toBe(false);
+    });
+
+    it('should update the heading when the calendar is renamed in the store', async () => {
+      const { wrapper, pinia } = await createWrapper();
+      const store = useCalendarStore(pinia);
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      calendar.content('en').name = 'Test Calendar';
+      store.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
+      await nextTick();
+
+      const renamed = new Calendar('cal-1', 'test-calendar');
+      renamed.content('en').name = 'Renamed Calendar';
+      store.updateCalendar(renamed);
+      await nextTick();
+
+      expect(wrapper.find('h1 button[aria-haspopup="dialog"]').text()).toContain('Renamed Calendar');
+    });
+
+    it('should reload the calendar when the :calendar param changes', async () => {
+      const { router } = await createWrapper();
+      const getCalendar = CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub;
+      const callsBefore = getCalendar.callCount;
+
+      await router.push({ name: 'calendar', params: { calendar: 'other-calendar' } });
+      await flushPromises();
+
+      expect(getCalendar.callCount).toBe(callsBefore + 1);
+      expect(getCalendar.lastCall.args[0]).toBe('other-calendar');
     });
   });
 
@@ -373,6 +426,29 @@ describe('Calendar View Tabs', () => {
 
       expect(wrapper.find('#series-tab').attributes('aria-selected')).toBe('true');
       expect(wrapper.find('#events-tab').attributes('aria-selected')).toBe('false');
+    });
+  });
+
+  describe('Calendar not found', () => {
+    it('renders the not-found state in place with a link to the current calendar', async () => {
+      (CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub).resolves(null);
+
+      const { wrapper, router } = await createWrapper({}, { calendar: 'not-mine' });
+
+      expect(router.currentRoute.value.fullPath).toBe('/calendar/not-mine');
+      const paragraphs = wrapper.findAll('[role="alert"] p');
+      expect(paragraphs).toHaveLength(2);
+      expect(paragraphs[0].text()).toContain('not-mine');
+      expect(paragraphs[1].find('a').attributes('href')).toBe('/calendars');
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+    });
+
+    it('shows a translated error when the calendar fails to load', async () => {
+      (CalendarService.prototype.getCalendarByUrlName as sinon.SinonStub).rejects(new Error('network'));
+
+      const { wrapper } = await createWrapper();
+
+      expect(wrapper.find('[role="alert"] p').text()).toBe('Failed to load calendar data');
     });
   });
 });

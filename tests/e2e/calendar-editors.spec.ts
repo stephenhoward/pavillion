@@ -55,7 +55,7 @@ test.describe('Calendar Editor Collaboration', () => {
       await clearEmails(env.baseURL);
 
       // Navigate to calendar management page - Editors tab is the default
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
 
       // Wait for editors content to load
@@ -150,7 +150,7 @@ test.describe('Calendar Editor Collaboration', () => {
       expect(acceptResponse.status).toBe(200);
 
       // Navigate to calendar management page and verify editor appears
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
       await page.waitForTimeout(1000);
 
@@ -163,7 +163,7 @@ test.describe('Calendar Editor Collaboration', () => {
 
     test('should remove an editor from the calendar', async ({ page }) => {
       // Navigate to calendar management page as admin
-      await page.goto(env.baseURL + '/calendar/test_calendar/manage');
+      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
       await page.waitForTimeout(2000);
       await page.waitForTimeout(1000);
 

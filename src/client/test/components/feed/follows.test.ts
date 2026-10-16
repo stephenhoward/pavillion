@@ -9,6 +9,7 @@ import Follows from '@/client/components/logged_in/feed/follows.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 const mockIsLoading = ref(false);
 const mockUnfollowCalendar = vi.fn();
@@ -149,7 +150,7 @@ describe('Following Tab', () => {
     const calendar = new Calendar('local-cal-id', 'my-calendar');
     const content = new CalendarContent('en', 'My Local Calendar');
     calendar.addContent(content);
-    calendarStore.setCalendars([calendar]);
+    calendarStore.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
 
     feedStore.follows = [
       {

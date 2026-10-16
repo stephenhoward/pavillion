@@ -1,224 +1,210 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter } from 'vue-router';
-import { nextTick } from 'vue';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import sinon from 'sinon';
+import { flushPromises } from '@vue/test-utils';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
+import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
 import Root from '@/client/components/logged_in/feed/root.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFeedStore } from '@/client/stores/feedStore';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import CalendarService from '@/client/service/calendar';
+import FeedService from '@/client/service/feed';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
-const routes = [
-  { path: '/feed', component: {}, name: 'feed' },
-];
+const Stub = { template: '<div />' };
+const viewStubs = { FollowsView: true, FollowersView: true, FollowedEventsView: true, AddCalendarModal: true };
 
-describe('Feed Root Component', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia());
-  });
+describe('Feed Root', () => {
+  let sandbox: sinon.SinonSandbox;
+  let pinia: Pinia;
+  let router: Router;
+  let getFeed: sinon.SinonStub;
+  let getFollows: sinon.SinonStub;
+  let getFollowers: sinon.SinonStub;
 
-  it('should show calendar selector when user has multiple calendars', async () => {
-    const pinia = createPinia();
+  /** Every FeedService request, flattened to the calendar ID it was made for. */
+  const requestedCalendarIds = () => [getFeed, getFollows, getFollowers]
+    .flatMap((stub) => stub.getCalls().map((call) => call.args[0]));
+
+  beforeEach(async () => {
+    localStorage.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
+    sandbox = sinon.createSandbox();
+    pinia = createPinia();
     setActivePinia(pinia);
 
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    const calendar2 = new Calendar('cal-2', 'calendar-2');
-    calendarStore.setCalendars([calendar1, calendar2]);
+    const infos = [
+      new CalendarInfo(new Calendar('o1', 'first'), 'owner'),
+      new CalendarInfo(new Calendar('o2', 'second'), 'owner'),
+    ];
+    useCalendarStore().setCalendarInfos(infos);
+    sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded').resolves(infos);
 
-    const router = createRouter({
+    getFeed = sandbox.stub(FeedService.prototype, 'getFeed').resolves({ events: [], hasMore: false });
+    getFollows = sandbox.stub(FeedService.prototype, 'getFollows').resolves([]);
+    getFollowers = sandbox.stub(FeedService.prototype, 'getFollowers').resolves([]);
+
+    router = createRouter({
       history: createMemoryHistory(),
-      routes,
+      routes: [
+        { path: '/feed/:calendar', component: Stub, name: 'feed' },
+        { path: '/calendar', component: Stub, name: 'calendars' },
+      ],
     });
-
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-      },
-    });
-
-    await nextTick();
-
-    const selector = wrapper.find('[data-testid="calendar-selector"]');
-    expect(selector.exists()).toBe(true);
   });
 
-  it('should hide calendar selector when user has single calendar', async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
-
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes,
-    });
-
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-      },
-    });
-
-    await nextTick();
-
-    const selector = wrapper.find('[data-testid="calendar-selector"]');
-    expect(selector.exists()).toBe(false);
+  afterEach(() => {
+    sandbox.restore();
+    localStorage.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
   });
 
-  it('should switch tabs correctly', async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
+  const mountAt = async (path: string) => {
+    await router.push(path);
+    const wrapper = mountComponent(Root, router, { pinia, stubs: viewStubs });
+    await flushPromises();
+    return wrapper;
+  };
 
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
-
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes,
-    });
-
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-      },
-    });
-
-    await nextTick();
-
-    // Initially on events tab
-    expect(wrapper.vm.state.activeTab).toBe('events');
-
-    // Click follows tab
-    const followsTab = wrapper.findAll('button[role="tab"]')[1];
-    await followsTab.trigger('click');
-    await nextTick();
-
-    expect(wrapper.vm.state.activeTab).toBe('follows');
+  it('keeps the feed-root class', async () => {
+    const wrapper = await mountAt('/feed/first');
+    expect(wrapper.find('.feed-root').exists()).toBe(true);
   });
 
-  it('should have nextTick imported and working for tab switching', async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
-
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
-
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes,
-    });
-
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-      },
-    });
-
-    await nextTick();
-
-    // Click followers tab
-    const followersTab = wrapper.findAll('button[role="tab"]')[2];
-    await followersTab.trigger('click');
-    await nextTick();
-
-    // Verify tab switched (this confirms nextTick is imported and working)
-    expect(wrapper.vm.state.activeTab).toBe('followers');
-
-    // Verify the follower panel is visible
-    const followerPanel = wrapper.find('#followers-panel');
-    expect(followerPanel.attributes('hidden')).toBeUndefined();
+  it('shows the switcher in the header with the route calendar', async () => {
+    const wrapper = await mountAt('/feed/first');
+    const trigger = wrapper.find('header h1 button[aria-haspopup="dialog"]');
+    expect(trigger.text()).toContain('first');
+    expect(trigger.attributes('aria-label')).toBe('Switch calendar: first');
   });
 
-  it('should open add calendar modal without switching tabs when handleFollowCalendarRequest is called', async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
+  it('loads the feed for the route calendar', async () => {
+    await mountAt('/feed/first');
+    expect(getFeed.calledWith('o1')).toBe(true);
+    expect(getFollows.calledWith('o1')).toBe(true);
+    expect(getFollowers.calledWith('o1')).toBe(true);
+    expect(useCalendarStore().selectedCalendarId).toBe('o1');
+  });
 
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+  it('clears feed data and reloads when the calendar param changes', async () => {
+    const wrapper = await mountAt('/feed/first');
+    const clear = sandbox.spy(useFeedStore(), 'clearFeedData');
 
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes,
-    });
+    await router.push('/feed/second');
+    await flushPromises();
 
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-        AddCalendarModal: true,
-      },
-    });
+    sinon.assert.called(clear);
+    expect(getFeed.lastCall.args[0]).toBe('o2');
+    expect(getFollows.lastCall.args[0]).toBe('o2');
+    expect(getFollowers.lastCall.args[0]).toBe('o2');
+    expect(useCalendarStore().selectedCalendarId).toBe('o2');
+    expect(wrapper.find('h1 button[aria-haspopup="dialog"]').text()).toContain('second');
+  });
 
-    await nextTick();
+  it('never sends a stale persisted ID to the feed service', async () => {
+    useCalendarStore().selectedCalendarId = 'stale-id';
 
-    // Initially on events tab with modal closed
-    expect(wrapper.vm.state.activeTab).toBe('events');
+    await mountAt('/feed/first');
+
+    expect(requestedCalendarIds().length).toBeGreaterThan(0);
+    expect(requestedCalendarIds().every((id) => id === 'o1')).toBe(true);
+  });
+
+  it('unknown :calendar triggers no FeedService call', async () => {
+    // A previously selected calendar must not be used as a fallback.
+    useCalendarStore().selectedCalendarId = 'o1';
+
+    const wrapper = await mountAt('/feed/not-mine');
+
+    expect(requestedCalendarIds()).toEqual([]);
+    expect(wrapper.find('[role="alert"]').text()).toContain('not-mine');
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+  });
+
+  it('stops requesting when the page moves from a valid calendar to an unknown one', async () => {
+    const wrapper = await mountAt('/feed/first');
+    const callsBefore = requestedCalendarIds().length;
+
+    await router.push('/feed/not-mine');
+    await flushPromises();
+
+    expect(requestedCalendarIds().length).toBe(callsBefore);
+    expect(wrapper.find('[role="alert"]').text()).toContain('not-mine');
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
+  });
+
+  it('drops a slow response for the calendar switched away from', async () => {
+    let resolveFirstFeed: (value: unknown) => void = () => {};
+    let resolveFirstFollows: (value: unknown) => void = () => {};
+    getFeed.withArgs('o1').returns(new Promise((resolve) => { resolveFirstFeed = resolve; }));
+    getFollows.withArgs('o1').returns(new Promise((resolve) => { resolveFirstFollows = resolve; }));
+    getFeed.withArgs('o2').resolves({ events: [{ id: 'second-event' }], hasMore: false });
+    getFollows.withArgs('o2').resolves([{ id: 'second-follow' }]);
+
+    await mountAt('/feed/first');
+    await router.push('/feed/second');
+    await flushPromises();
+
+    resolveFirstFeed({ events: [{ id: 'first-event' }], hasMore: true });
+    resolveFirstFollows([{ id: 'first-follow' }]);
+    await flushPromises();
+
+    const feedStore = useFeedStore();
+    expect(feedStore.events.map((event) => event.id)).toEqual(['second-event']);
+    expect(feedStore.eventsHasMore).toBe(false);
+    expect(feedStore.follows.map((follow) => follow.id)).toEqual(['second-follow']);
+  });
+
+  it('closes the follow dialog when the calendar changes', async () => {
+    const wrapper = await mountAt('/feed/first');
+    await wrapper.vm.handleFollowCalendarRequest();
+    expect(wrapper.vm.showAddCalendarModal).toBe(true);
+
+    await router.push('/feed/second');
+    await flushPromises();
+
     expect(wrapper.vm.showAddCalendarModal).toBe(false);
-
-    // Trigger the follow calendar request
-    await wrapper.vm.handleFollowCalendarRequest();
-    await nextTick();
-
-    // Should stay on events tab (not switch to follows)
-    expect(wrapper.vm.state.activeTab).toBe('events');
-    // Should have opened the modal
-    expect(wrapper.vm.showAddCalendarModal).toBe(true);
   });
 
-  it('should close add calendar modal when handleCloseAddCalendarModal is called', async () => {
-    const pinia = createPinia();
-    setActivePinia(pinia);
+  it('requests nothing and claims no not-found when the calendars fail to load', async () => {
+    useCalendarStore().resetCalendars();
+    (CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub).rejects(new Error('network'));
 
-    const calendarStore = useCalendarStore();
-    const calendar1 = new Calendar('cal-1', 'calendar-1');
-    calendarStore.setCalendars([calendar1]);
+    const wrapper = await mountAt('/feed/first');
 
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes,
-    });
+    expect(requestedCalendarIds()).toEqual([]);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
 
-    const wrapper = mountComponent(Root, router, {
-      pinia,
-      stubs: {
-        FollowsView: true,
-        FollowersView: true,
-        FollowedEventsView: true,
-        AddCalendarModal: true,
-      },
-    });
+  it('has no calendar dropdown or select prompt', async () => {
+    const wrapper = await mountAt('/feed/first');
+    expect(wrapper.find('select').exists()).toBe(false);
+    expect(wrapper.find('.no-calendar-selected').exists()).toBe(false);
+  });
 
-    await nextTick();
+  it('labels the tab list from the feed translations', async () => {
+    const wrapper = await mountAt('/feed/first');
+    expect(wrapper.find('[role="tablist"]').attributes('aria-label')).toBe('Feed sections');
+  });
 
-    // Open the modal first
+  it('switches tabs', async () => {
+    const wrapper = await mountAt('/feed/first');
+    expect(wrapper.vm.state.activeTab).toBe('events');
+
+    await wrapper.findAll('button[role="tab"]')[2].trigger('click');
+
+    expect(wrapper.vm.state.activeTab).toBe('followers');
+    expect(wrapper.find('#followers-panel').attributes('hidden')).toBeUndefined();
+  });
+
+  it('opens and closes the add calendar modal without switching tabs', async () => {
+    const wrapper = await mountAt('/feed/first');
+
     await wrapper.vm.handleFollowCalendarRequest();
-    await nextTick();
+    expect(wrapper.vm.state.activeTab).toBe('events');
     expect(wrapper.vm.showAddCalendarModal).toBe(true);
 
-    // Now close it
     await wrapper.vm.handleCloseAddCalendarModal();
-    await nextTick();
-
-    // Modal should be closed
     expect(wrapper.vm.showAddCalendarModal).toBe(false);
   });
 });

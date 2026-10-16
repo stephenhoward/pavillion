@@ -1,104 +1,98 @@
 import { defineStore } from 'pinia';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import { readPersistedCalendarId, writePersistedCalendarId } from '@/client/service/current-calendar-storage';
 
 export const useCalendarStore = defineStore('calendars', {
   state: () => {
     return {
-      calendars: [] as Calendar[],
+      /** Every calendar the account owns or edits, with the relationship. */
+      calendarInfos: [] as CalendarInfo[],
       loaded: false,
-      selectedCalendarId: null as string | null,
+      /** The account `calendarInfos` was loaded for, so an account switch can be detected. */
+      accountId: null as string | null,
+      /**
+       * The current calendar. The URL is the source of truth (a router guard
+       * sets this from `:calendar`); the value persists so a bare route can
+       * resolve on reload. Null until a route or the resolver sets it.
+       */
+      selectedCalendarId: readPersistedCalendarId(),
     };
   },
   getters: {
-    /**
-     * Check if the user has any calendars
-     */
-    hasCalendars: (state) => state.calendars.length > 0,
-
-    /**
-     * Check if the user has multiple calendars
-     */
-    hasMultipleCalendars: (state) => state.calendars.length > 1,
-
-    /**
-     * Get calendar by ID
-     */
-    getCalendarById: (state) => (id: string) => {
-      return state.calendars.find((calendar: Calendar) => calendar.id === id) || null;
+    /** Bare calendars in API order, without the relationship. */
+    calendars: (state): Calendar[] => state.calendarInfos.map((info: CalendarInfo) => info.calendar),
+    /** Calendars the account owns. */
+    ownedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isOwner),
+    /** Calendars the account edits but does not own. */
+    editedCalendars: (state): CalendarInfo[] => state.calendarInfos.filter((info: CalendarInfo) => info.isEditor),
+    /** Get a calendar by ID, or null if the account has none with that ID. */
+    getCalendarById: (state) => (id: string): Calendar | null => {
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === id)?.calendar ?? null;
     },
-
-    /**
-     * Get calendar by URL name
-     */
-    getCalendarByUrlName: (state) => (urlName: string) => {
-      return state.calendars.find((calendar: Calendar) => calendar.urlName === urlName) || null;
+    /** Get a calendar by URL name, or null if not found. */
+    getCalendarByUrlName: (state) => (urlName: string): Calendar | null => {
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName)?.calendar ?? null;
     },
-
-    /**
-     * Get the currently selected calendar
-     */
-    selectedCalendar: (state) => {
+    /** Get a calendar with its relationship by URL name, or null if not found. */
+    getCalendarInfoByUrlName: (state) => (urlName: string): CalendarInfo | null => {
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.urlName === urlName) ?? null;
+    },
+    /** The current calendar, or null when none is selected or it is not in the store. */
+    selectedCalendar: (state): Calendar | null => {
       if (!state.selectedCalendarId) {
         return null;
       }
-      return state.calendars.find((calendar: Calendar) => calendar.id === state.selectedCalendarId) || null;
+      return state.calendarInfos.find((info: CalendarInfo) => info.calendar.id === state.selectedCalendarId)?.calendar ?? null;
     },
-
   },
   actions: {
-    /**
-     * Set calendars in the store and mark as loaded
-     * @param {Calendar[]} calendars - The calendars to set in the store
-     */
-    setCalendars(calendars: Calendar[]) {
-      this.calendars = calendars;
+    /** Replace every calendar and mark the store loaded for `accountId`. */
+    setCalendarInfos(infos: CalendarInfo[], accountId: string | null = null) {
+      this.calendarInfos = infos;
       this.loaded = true;
+      this.accountId = accountId;
     },
 
-    /**
-     * Adds a new calendar to the store.
-     * @param {Calendar} calendar - The calendar to add to the store
-     */
+    /** Adds a calendar the account just created, so it is owned. */
     addCalendar(calendar: Calendar) {
-      const exists = this.calendars.some((c: Calendar) => c.id === calendar.id);
+      const exists = this.calendarInfos.some((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (!exists) {
-        this.calendars.push(calendar);
+        this.calendarInfos.push(new CalendarInfo(calendar, 'owner'));
       }
     },
 
-    /**
-     * Updates an existing calendar in the store or adds it if not found.
-     * @param {Calendar} calendar - The calendar to update or add
-     */
+    /** Replace the calendar inside its info, keeping the relationship; add as owned if absent. */
     updateCalendar(calendar: Calendar) {
-      const index = this.calendars.findIndex((c: Calendar) => c.id === calendar.id);
+      const index = this.calendarInfos.findIndex((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (index >= 0) {
-        this.calendars[index] = calendar;
+        this.calendarInfos[index] = new CalendarInfo(calendar, this.calendarInfos[index].userRelationship);
       }
       else {
         this.addCalendar(calendar);
       }
     },
 
-    /**
-     * Removes a calendar from the store.
-     * @param {Calendar} calendar - The calendar to remove
-     */
+    /** Removes a calendar from the store. */
     removeCalendar(calendar: Calendar) {
-      const index = this.calendars.findIndex((c: Calendar) => c.id === calendar.id);
+      const index = this.calendarInfos.findIndex((info: CalendarInfo) => info.calendar.id === calendar.id);
       if (index >= 0) {
-        this.calendars.splice(index, 1);
+        this.calendarInfos.splice(index, 1);
       }
     },
 
-    /**
-     * Set the currently selected calendar ID.
-     * This represents the calendar context the user is currently working in.
-     * Note: This is session-based only and will not persist across page refreshes.
-     * @param {string | null} calendarId - The ID of the calendar to select, or null to clear
-     */
+    /** Set and persist the current calendar; null forgets it in memory and in storage. */
     setSelectedCalendar(calendarId: string | null) {
       this.selectedCalendarId = calendarId;
+      writePersistedCalendarId(calendarId);
+    },
+
+    /** Drop the cached list, its account and the current calendar, so the next load starts clean. */
+    resetCalendars() {
+      this.calendarInfos = [];
+      this.loaded = false;
+      this.accountId = null;
+      this.setSelectedCalendar(null);
     },
   },
 });

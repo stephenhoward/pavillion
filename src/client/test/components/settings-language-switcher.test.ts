@@ -4,7 +4,7 @@ import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { mountComponent } from '@/client/test/lib/vue';
-import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
+import SettingsRoot from '@/client/components/logged_in/settings/account.vue';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import AccountService from '@/client/service/account';
 import FundingService from '@/client/service/funding';
@@ -15,7 +15,8 @@ import { Account } from '@/common/model/account';
 const routes: RouteRecordRaw[] = [
   { path: '/settings', component: {}, name: 'settings' },
   { path: '/logout', component: {}, name: 'logout' },
-  { path: '/admin/settings', component: {}, name: 'admin-settings' },
+  { path: '/settings/account/funding', component: {}, name: 'funding_plan' },
+  { path: '/settings/admin/settings', component: {}, name: 'admin_settings' },
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
@@ -32,14 +33,14 @@ function buildProfile(language = 'en'): Account {
 /**
  * Mount the settings root component with sensible defaults
  */
-function mountSettings() {
+function mountSettings(isAdmin = false) {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
   });
 
   const mockAuthn = {
-    isAdmin: () => false,
+    isAdmin: () => isAdmin,
     userEmail: () => 'test@example.com',
   };
 
@@ -226,6 +227,41 @@ describe('Settings Language Switcher', () => {
       await flushPromises();
 
       expect(wrapper.findComponent(PolicyLink).exists()).toBe(true);
+    });
+  });
+
+  describe('account pane', () => {
+    it('has no instance administration card, even for an admin', async () => {
+      const { wrapper } = mountSettings(true);
+      await flushPromises();
+
+      expect(wrapper.find('.admin-card').exists()).toBe(false);
+      expect(wrapper.findAll('a').some((a) => a.attributes('href')?.includes('/admin/'))).toBe(false);
+    });
+
+    it('links the funding card to the funding plan page under settings', async () => {
+      vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({ enabled: true });
+      vi.spyOn(FundingService.prototype, 'getStatus').mockResolvedValue(null);
+      const { wrapper } = mountSettings();
+      await flushPromises();
+
+      expect(wrapper.find('a.btn-funding').attributes('href')).toBe('/settings/account/funding');
+    });
+
+    it('styles the display-name feedback as an error only when the save fails', async () => {
+      const save = vi.spyOn(AccountService.prototype, 'updateProfile').mockResolvedValue(buildProfile('en'));
+      const { wrapper } = mountSettings();
+      await flushPromises();
+
+      const input = wrapper.find('input#display-name');
+      await input.trigger('blur');
+      await flushPromises();
+      expect(wrapper.find('.save-feedback').classes()).not.toContain('is-error');
+
+      save.mockRejectedValue(new Error('network'));
+      await input.trigger('blur');
+      await flushPromises();
+      expect(wrapper.find('.save-feedback').classes()).toContain('is-error');
     });
   });
 });

@@ -2,12 +2,13 @@ import { test, expect, Page } from '@playwright/test';
 import axios from 'axios';
 
 import { loginAsAdmin } from './helpers/auth';
+import { paneHeading } from './helpers/pane-heading';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Admin Calendars Listing Page
  *
- * Covers the cross-domain admin calendars dashboard (/admin/calendars):
+ * Covers the cross-domain admin calendars dashboard (/settings/admin/calendars):
  * 1. Listing behavior — search, open-reports toggle, sort dropdown
  * 2. Badge navigation — clicking an open-report badge lands on the
  *    moderation dashboard filtered by that calendar.
@@ -66,8 +67,8 @@ test.afterAll(async () => {
  * filter controls to render.
  */
 async function gotoAdminCalendars(page: Page): Promise<void> {
-  await page.goto(env.baseURL + '/admin/calendars');
-  await page.waitForSelector('h1', { timeout: 10000 });
+  await page.goto(env.baseURL + '/settings/admin/calendars');
+  await expect(paneHeading(page, 'Local Calendars')).toBeVisible({ timeout: 10000 });
   await page.waitForSelector('input#search-filter', { timeout: 10000 });
   // Wait for the initial load to settle (either rows or empty state).
   await page.waitForFunction(
@@ -88,7 +89,7 @@ test.describe('Admin Calendars Listing behavior', () => {
     await gotoAdminCalendars(page);
 
     // Page heading reflects the calendars dashboard translation.
-    await expect(page.locator('h1')).toContainText(/Local Calendars/i);
+    await expect(paneHeading(page, 'Local Calendars')).toBeVisible();
 
     // Seeded calendars are visible in the table.
     const rows = page.locator('[data-testid="calendar-row"]');
@@ -216,7 +217,7 @@ test.describe('Admin Calendars Badge navigation', () => {
     await loginAsAdmin(page, env.baseURL);
   });
 
-  test('should navigate to /admin/moderation?calendar_id=<id> when clicking a nonzero open-report badge', async ({ page }) => {
+  test('should navigate to /settings/admin/moderation?calendar_id=<id> when clicking a nonzero open-report badge', async ({ page }) => {
     await gotoAdminCalendars(page);
 
     // Find a row that has an open-reports badge (seeded via beforeAll).
@@ -238,13 +239,12 @@ test.describe('Admin Calendars Badge navigation', () => {
     await testCalendarBadge.click();
 
     // URL should include the moderation path + calendar_id query param.
-    await page.waitForURL(/\/admin\/moderation\?.*calendar_id=/, { timeout: 10000 });
+    await page.waitForURL(/\/settings\/admin\/moderation\?.*calendar_id=/, { timeout: 10000 });
     const url = new URL(page.url());
-    expect(url.pathname).toMatch(/\/admin\/moderation$/);
+    expect(url.pathname).toMatch(/\/settings\/admin\/moderation$/);
     expect(url.searchParams.get('calendar_id')).toBe(TEST_CALENDAR_ID);
 
     // The moderation dashboard should render successfully under that URL.
-    await page.waitForSelector('h1', { timeout: 10000 });
-    await expect(page.locator('h1').first()).toContainText(/Moderation/i);
+    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
   });
 });

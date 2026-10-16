@@ -30,7 +30,7 @@ Calendar handles take the shape `calendar-name@domain.example`. The part before 
 
 ## Connect to a calendar
 
-Connecting lives in **Feed > Following**. If you run more than one calendar, the selector at the top loads the right feed — connections are *per-calendar*, not per-account; each of your calendars has its own list, its own feed, and its own followers.
+Connecting lives in **Feed > Following**. If you run more than one calendar, the name at the top of the page shows whose feed you're looking at; click it to switch calendars and you stay on the feed. Connections are *per-calendar*, not per-account; each of your calendars has its own list, its own feed, and its own followers.
 
 Click <Btn>Follow a Calendar</Btn> and type the identifier — `name@domain.example` for a remote calendar, or just `name` for one on your own instance. Pavillion looks it up and shows a preview matching the calendar's public page; use it to confirm you've got the right one. The auto-repost toggles below the preview control what happens to *new* events arriving from this connection from now on — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand, and you can change these toggles for any connection at any time.
 

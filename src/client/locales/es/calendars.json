@@ -1,7 +1,5 @@
 {
   "list": {
-    "my_calendars_header": "Mis calendarios",
-    "create_first_calendar_header": "Crea tu primer calendario",
     "create_calendar_button": "Crear tu calendario",
     "creating_calendar": "Creando calendario...",
     "error_empty_calendar_name": "El nombre del calendario no puede estar vacío",
@@ -11,37 +9,27 @@
     "error_create_calendar": "Error al crear el calendario",
     "calendar_name_placeholder": "nombre-de-tu-calendario",
     "calendar_name_help": "Los nombres de calendario deben tener entre 3 y 24 caracteres, comenzar con una letra o número, y pueden contener letras, números, guiones bajos y guiones (los guiones no se permiten al principio ni al final). Algunos nombres están reservados por el sitio y no se pueden usar.",
-    "aria_calendar_management": "Gestión de calendarios",
-    "aria_my_calendars_navigation": "Navegación de mis calendarios",
     "create_new_calendar_header": "Crear nuevo calendario",
-    "create_new_calendar_button": "Nuevo calendario",
-    "aria_create_new_calendar": "Crear nuevo calendario",
     "aria_new_calendar_form": "Formulario de nuevo calendario",
     "legend_calendar_creation": "Creación de calendario",
     "label_calendar_name": "Nombre del calendario",
     "label_calendar_title": "Título del calendario",
     "calendar_title_placeholder": "Mi calendario comunitario",
     "calendar_title_help": "Un título legible para tu calendario",
-    "calendar_count_one": "{{count}} calendario que puedes editar",
-    "calendar_count_other": "{{count}} calendarios que puedes editar",
-    "role_owner": "Propietario",
-    "role_editor": "Editor",
-    "aria_navigate_calendar": "Ir al calendario: {{calendarName}}, rol: {{role}}",
-    "aria_view_public_calendar": "Ver calendario público: {{name}} (se abre en una pestaña nueva)",
-    "error_loading_calendars": "Error al cargar los calendarios",
-    "menu_label": "Acciones de la lista de calendarios",
-    "documentation": "Documentación",
-    "guide_link": "Cómo crear un calendario"
+    "guide_link": "Cómo crear un calendario",
+    "no_calendars_title": "Crea tu primer calendario",
+    "no_calendars_description": "En Pavillion todo empieza con un calendario. Crea uno para añadir eventos, seguir otros calendarios y compartir el tuyo."
   },
-  "selector": {
-    "select_calendar_title": "Seleccionar calendario",
-    "select_calendar_instructions": "Por favor selecciona un calendario para tu evento:",
-    "loading_calendars": "Cargando calendarios...",
-    "no_calendars": "No tienes ningún calendario. Por favor crea uno primero.",
-    "error_loading_calendars": "Error al cargar los calendarios",
-    "cancel_button": "Cancelar",
+  "switcher": {
+    "title": "Cambiar de calendario",
+    "current_label": "Actual",
+    "create_calendar_button": "Crear un calendario nuevo",
     "editor_badge": "Editor",
-    "last_used_badge": "Usado por última vez"
+    "aria_switch_calendar": "Cambiar de calendario: {{name}}",
+    "aria_switch_settings": "Cambiar configuración: {{name}}",
+    "no_calendars": "Todavía no tienes calendarios.",
+    "account_row": "Cuenta",
+    "admin_row": "Administración de la instancia"
   },
   "calendar": {
     "create_button": "Crear evento",
@@ -88,7 +76,11 @@
     "recurrence_yearly": "Se repite cada año",
     "recurrence_generic": "Evento recurrente",
     "language_count": "{{count}} idiomas",
-    "guide_link": "Crea tu primer evento"
+    "guide_link": "Crea tu primer evento",
+    "not_found": "No tienes ningún calendario llamado {{name}} que puedas editar.",
+    "back_to_calendar": "Ir a tu calendario",
+    "load_error": "No se pudieron cargar los datos del calendario",
+    "load_events_error": "No se pudieron cargar los eventos con los filtros actuales"
   },
   "editors": {
     "title": "Editores del calendario",
@@ -137,7 +129,6 @@
     "error_resending_invitation": "Error al reenviar la invitación"
   },
   "management": {
-    "page_title": "Configuración del calendario",
     "tabs_label": "Pestañas de gestión del calendario",
     "editors_tab": "Editores",
     "settings_tab": "Configuración",
@@ -196,9 +187,7 @@
     "event_count_other": "{{count}} eventos",
     "languages_count_one": "{{count}} idioma",
     "languages_count_other": "{{count}} idiomas",
-    "places_tab": "Lugares",
-    "breadcrumb_label": "Ruta de navegación",
-    "breadcrumb_settings": "configuración"
+    "places_tab": "Lugares"
   },
   "import": {
     "section_title": "Fuentes de importación",

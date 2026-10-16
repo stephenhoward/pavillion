@@ -8,6 +8,7 @@ import { useFeedFollows } from '@/client/composables/useFeedFollows';
 import { useFeedEvents } from '@/client/composables/useFeedEvents';
 import { useFeedRepost } from '@/client/composables/useFeedRepost';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import { CalendarEvent } from '@/common/model/events';
 
 /**
@@ -46,7 +47,7 @@ describe('Feed Workflow Integration Tests', () => {
 
       // Setup: User has a calendar
       const calendar = new Calendar('local-cal-1', 'my-calendar');
-      calendarStore.setCalendars([calendar]);
+      calendarStore.setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
       calendarStore.setSelectedCalendar('local-cal-1');
 
       // Mock follow calendar API call
@@ -150,7 +151,7 @@ describe('Feed Workflow Integration Tests', () => {
       // Setup: User has multiple calendars
       const calendar1 = new Calendar('cal-1', 'calendar-1');
       const calendar2 = new Calendar('cal-2', 'calendar-2');
-      calendarStore.setCalendars([calendar1, calendar2]);
+      calendarStore.setCalendarInfos([new CalendarInfo(calendar1, 'owner'), new CalendarInfo(calendar2, 'owner')]);
 
       calendarStore.setSelectedCalendar('cal-1');
 

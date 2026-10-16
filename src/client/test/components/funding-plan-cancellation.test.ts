@@ -77,7 +77,10 @@ describe('funding-plan.vue cancellation states', () => {
 
     router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: '/account/funding', component: FundingPlanManagement }],
+      routes: [
+        { path: '/settings/account', component: {}, name: 'profile' },
+        { path: '/settings/account/funding', component: FundingPlanManagement, name: 'funding_plan' },
+      ],
     });
 
     i18next.init({

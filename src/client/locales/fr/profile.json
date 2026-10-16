@@ -1,5 +1,4 @@
 {
-  "admin_link": "Paramètres d'administration",
   "funding_link": "Plan de financement",
   "title": "Paramètres",
   "subtitle": "Gérez les préférences de votre compte",
@@ -18,8 +17,6 @@
   "change_password_button": "Modifier le mot de passe",
   "logout": "Se déconnecter",
   "logout_description": "Déconnectez-vous de votre compte",
-  "admin_section": "Administration de l'instance",
-  "admin_description": "Gérez les paramètres du serveur, les comptes utilisateurs, les politiques de fédération et la configuration du financement de cette instance Pavillion.",
   "change_email_form": {
     "title": "Modifier votre adresse e-mail",
     "email_placeholder": "nouvelle adresse e-mail",

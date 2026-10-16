@@ -115,6 +115,7 @@ export function useUnsavedChanges() {
           router.back();
         }
         else {
+          // 'calendars' is the bare /calendar route, which resolves to the current calendar.
           router.push({ name: 'calendars' });
         }
       };

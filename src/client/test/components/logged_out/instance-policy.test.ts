@@ -11,7 +11,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: {}, name: 'login' },
   { path: '/auth/register', component: {}, name: 'register' },
   { path: '/auth/apply', component: {}, name: 'register-apply' },
-  { path: '/profile', component: {}, name: 'profile' },
+  { path: '/settings/account', component: {}, name: 'profile' },
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
@@ -185,14 +185,14 @@ describe('InstancePolicy back link', () => {
   it('routes back to settings when from=settings', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=settings' });
     const link = wrapper.find('a.policy-page__back');
-    expect(link.attributes('href')).toBe('/profile');
+    expect(link.attributes('href')).toBe('/settings/account');
     expect(link.text()).toContain('settings');
   });
 
   it('falls back to settings when no source is given but the visitor is logged in', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, isLoggedIn: true });
     const link = wrapper.find('a.policy-page__back');
-    expect(link.attributes('href')).toBe('/profile');
+    expect(link.attributes('href')).toBe('/settings/account');
     expect(link.text()).toContain('settings');
   });
 

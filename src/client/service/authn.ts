@@ -3,11 +3,36 @@ import { ref, Ref } from 'vue';
 
 import { SessionExpiredError } from '@/common/exceptions/authentication';
 import { EmptyValueError } from '@/common/exceptions/base';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 interface JWTClaims {
   exp: number;
+  id: string;
   isAdmin: boolean;
   email: string;
+}
+
+/**
+ * The signed-in account's ID from the stored JWT claims, or null when there
+ * is no unexpired token. Reads the same storage AuthenticationService writes
+ * (`window.localStorage` in the app); never throws.
+ */
+export function currentAccountId(storage?: Storage): string | null {
+  try {
+    const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    const token = store?.getItem('jw_token');
+    if (!token) {
+      return null;
+    }
+    const claims: JWTClaims = JSON.parse(token);
+    if (claims.exp > Math.floor(Date.now() / 1000) && typeof claims.id === 'string') {
+      return claims.id;
+    }
+    return null;
+  }
+  catch {
+    return null;
+  }
 }
 
 interface PendingRequest {
@@ -699,13 +724,15 @@ export default class AuthenticationService {
   }
 
   /**
-   * Removes authentication tokens and clears refresh timer.
+   * Removes authentication tokens and the persisted current calendar, and
+   * clears the refresh timer. Every token-removal path funnels through here.
    *
    * @private
    */
   _unset_token() {
     this.localStore.removeItem('jwt');
     this.localStore.removeItem('jw_token');
+    this.localStore.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
     this.lastKnownEmail = null;
     if ( this._refresh_timer ) {
       clearTimeout(this._refresh_timer);

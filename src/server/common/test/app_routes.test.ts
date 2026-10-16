@@ -752,6 +752,19 @@ describe('app_routes', () => {
       }
     });
 
+    // The client SPA owns the whole /settings subtree (calendar management,
+    // account, instance admin), so nested paths must reach the client shell too.
+    it('should serve the client shell for nested /settings paths', async () => {
+      const app = buildTestApp('en');
+
+      for (const path of ['/settings/admin/settings', '/settings/calendar/foo', '/settings/account/funding']) {
+        const res = await request(app).get(path);
+        expect(res.status, `${path} should succeed`).toBe(200);
+        expect(res.body.template, `${path} should render the client shell`)
+          .toBe('client.index.html.ejs');
+      }
+    });
+
     it('should serve the client shell for a locale-prefixed reserved segment', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);

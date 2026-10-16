@@ -7,7 +7,7 @@
   "events_tab": "Eventos",
   "follows_tab": "Siguiendo",
   "followers_tab": "Seguidores",
-  "select_calendar_prompt": "Por favor selecciona un calendario para ver su feed",
+  "sections_label": "Secciones del feed",
   "loading": "Cargando...",
   "load_error": "Error al cargar los datos del feed",
   "followers": {

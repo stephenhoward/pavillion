@@ -175,9 +175,9 @@ onMounted(async () => {
 <template>
   <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
     <div class="settings-header">
-      <router-link to="/profile" class="back-button">{{ t("back_to_settings") }}</router-link>
+      <router-link :to="{ name: 'profile' }" class="back-button">{{ t("back_to_settings") }}</router-link>
       <div class="settings-header__title-row">
-        <h1 id="funding-plan-heading">{{ t("title") }}</h1>
+        <h2 id="funding-plan-heading">{{ t("title") }}</h2>
         <HelpButton />
       </div>
     </div>
@@ -315,7 +315,7 @@ onMounted(async () => {
     justify-content: space-between;
   }
 
-  h1 {
+  h2 {
     font-weight: 200;
     font-size: 2rem;
     margin: 0;

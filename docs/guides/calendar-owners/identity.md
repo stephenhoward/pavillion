@@ -4,7 +4,9 @@ description: Customize the public identity of your Pavillion calendar — name, 
 
 # Customize your calendar's identity
 
-Your calendar has a public face. Visitors see it when they land on your page; other calendar owners see it when they're deciding whether to follow you or repost from your events. This guide is about the settings you have to shape that presence deliberately — what to put in each field, and what gets harder to change later. These settings live in **Manage Calendar → Settings**.
+Your calendar has a public face. Visitors see it when they land on your page; other calendar owners see it when they're deciding whether to follow you or repost from your events. This guide is about the settings you have to shape that presence deliberately — what to put in each field, and what gets harder to change later.
+
+Open **Settings** in the main navigation. The name at the top of the page shows which calendar you're working on; click it to switch to another. Everything this guide covers is on that calendar's **Settings** tab, below the name.
 
 ## Who sees your identity, and where
 

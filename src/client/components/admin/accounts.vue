@@ -95,7 +95,7 @@ const subTabs = computed(() => [
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 id="accounts-heading">{{ t('page_title') }}</h1>
+        <h2 id="accounts-heading">{{ t('page_title') }}</h2>
         <p class="page-subtitle">{{ t('page_subtitle') }}</p>
       </div>
       <HelpButton />
@@ -265,7 +265,7 @@ const subTabs = computed(() => [
     }
 
     .page-header-text {
-      h1 {
+      h2 {
         margin: 0 0 var(--pav-space-1) 0;
         font-size: var(--pav-font-size-2xl);
         font-weight: var(--pav-font-weight-light);

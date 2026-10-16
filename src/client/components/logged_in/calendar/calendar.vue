@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
+import { onBeforeMount, reactive, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
-import { ExternalLink, BookOpenText, CalendarPlus, Settings } from 'lucide-vue-next';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
+import { ExternalLink, BookOpenText, Settings } from 'lucide-vue-next';
 import ActionsMenu from '@/client/components/common/actions-menu.vue';
 import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
 import HelpPanel from '@/client/components/common/help-panel.vue';
@@ -14,15 +16,14 @@ import EventsTab from '@/client/components/logged_in/calendar-content/events-tab
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
 import PlacesTab from '@/client/components/logged_in/calendar-content/places-tab.vue';
-import CreateCalendarSheet from './create-calendar-sheet.vue';
+import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
 });
 
-// For create calendar button translations
-const { t: tList } = useTranslation('calendars', {
-  keyPrefix: 'list',
+const { t: tSwitcher } = useTranslation('calendars', {
+  keyPrefix: 'switcher',
 });
 
 const eventService = new EventService();
@@ -35,6 +36,13 @@ const state = reactive({
   isLoading: false,
 });
 const calendarUrlName = computed(() => route.params.calendar);
+const calendarStore = useCalendarStore();
+// Read the name through the store so a rename elsewhere updates the heading;
+// the loaded snapshot covers a calendar the store does not hold.
+const calendarName = computed(() => {
+  const calendar = calendarStore.getCalendarByUrlName(String(calendarUrlName.value ?? '')) ?? state.calendar;
+  return calendar ? calendarDisplayName(calendar) : '';
+});
 const calendarService = new CalendarService();
 
 // Tab state
@@ -81,21 +89,6 @@ const activateTab = (tab: string) => {
 
 const { handleTabKeydown } = useTabNavigation(ORDERED_TABS, activeTab, activateTab);
 
-// Create calendar sheet state
-const showCreateCalendarSheet = ref(false);
-const createCalendarSheetTriggerEl = ref<HTMLElement | null>(null);
-
-function openCreateCalendarSheet(event: MouseEvent) {
-  createCalendarSheetTriggerEl.value = (event?.currentTarget as HTMLElement) ?? null;
-  showCreateCalendarSheet.value = true;
-}
-
-async function closeCreateCalendarSheet() {
-  showCreateCalendarSheet.value = false;
-  await nextTick();
-  createCalendarSheetTriggerEl.value?.focus();
-}
-
 // Help panel state — hosted directly on this page so the actions menu can open it
 const showHelpPanel = ref(false);
 const guides = computed(() => guidesForRoute(route?.name));
@@ -116,9 +109,9 @@ const loadCalendarData = async () => {
     // Load calendar by URL name — only returns calendars the current user can edit
     state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName.value);
 
-    // If the calendar wasn't found in the user's accessible calendars, redirect away
+    // Not one of the user's calendars: say so in place, with a way back to the current one
     if (!state.calendar) {
-      router.replace({ name: 'calendars' });
+      state.err = t('not_found', { name: calendarUrlName.value });
       return;
     }
 
@@ -137,7 +130,7 @@ const loadCalendarData = async () => {
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
-    state.err = 'Failed to load calendar data';
+    state.err = t('load_error');
   }
   finally {
     state.isLoading = false;
@@ -161,7 +154,7 @@ const handleLoadEvents = async (filters) => {
   }
   catch (error) {
     console.error('Error loading filtered events:', error);
-    state.err = 'Failed to load events with current filters';
+    state.err = t('load_events_error');
   }
   finally {
     state.isLoading = false;
@@ -172,10 +165,13 @@ const handleLoadEvents = async (filters) => {
 <template>
   <div>
     <div v-if="state.err"
-         class="error alert"
+         class="error alert calendar-error"
          role="alert"
          aria-live="polite">
-      {{ state.err }}
+      <p>{{ state.err }}</p>
+      <p>
+        <RouterLink :to="{ name: 'calendars' }" class="calendar-error__link">{{ t('back_to_calendar') }}</RouterLink>
+      </p>
     </div>
     <div v-else>
       <header class="calendar-header">
@@ -183,7 +179,13 @@ const handleLoadEvents = async (filters) => {
           <div class="header-title-section">
             <div class="header-title-group">
               <h1>
-                <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
+                <CalendarSwitcher
+                  v-if="state.calendar"
+                  :label="calendarName"
+                  route-name="calendar"
+                  :current-url-name="state.calendar.urlName"
+                  :aria-label="tSwitcher('aria_switch_calendar', { name: calendarName })"
+                />
                 <span v-else>{{ calendarUrlName }}</span>
               </h1>
               <!--
@@ -203,7 +205,7 @@ const handleLoadEvents = async (filters) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 class="calendar-public-link"
-                :aria-label="t('view_public_calendar_label', { name: state.calendar.content('en').name || state.calendar.urlName })"
+                :aria-label="t('view_public_calendar_label', { name: calendarName })"
               >
                 {{ state.calendar.publicUrl }}
                 <ExternalLink :size="14" aria-hidden="true" />
@@ -213,9 +215,6 @@ const handleLoadEvents = async (filters) => {
               <ActionsMenu :trigger-label="t('menu_label')">
                 <ActionsMenuItem :icon="BookOpenText" @click="showHelpPanel = true">
                   {{ t('documentation') }}
-                </ActionsMenuItem>
-                <ActionsMenuItem :icon="CalendarPlus" @click="openCreateCalendarSheet">
-                  {{ tList('create_new_calendar_button') }}
                 </ActionsMenuItem>
                 <ActionsMenuItem
                   v-if="state.calendar"
@@ -359,12 +358,6 @@ const handleLoadEvents = async (filters) => {
       </div>
     </div>
 
-    <!-- Create Calendar Sheet -->
-    <CreateCalendarSheet
-      v-if="showCreateCalendarSheet"
-      @close="closeCreateCalendarSheet"
-    />
-
     <!-- Help Panel (triggered from the actions menu's Documentation item) -->
     <HelpPanel
       v-if="showHelpPanel"
@@ -378,6 +371,22 @@ const handleLoadEvents = async (filters) => {
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins/tabs' as *;
 @use '../../../assets/style/components/calendar-admin' as *;
+
+/* Message and recovery link stacked; the link takes the alert's text colour
+   and an underline so it reads as a link without relying on colour. */
+.calendar-error {
+  flex-direction: column;
+  gap: var(--pav-space-2);
+
+  p {
+    margin: 0;
+  }
+
+  &__link {
+    color: currentColor;
+    text-decoration: underline;
+  }
+}
 
 /* Calendar header with sticky blur effect */
 .calendar-header {

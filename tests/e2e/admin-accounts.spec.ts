@@ -46,7 +46,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto(env.baseURL + '/admin/accounts');
+    await page.goto(env.baseURL + '/settings/admin/accounts');
 
     // Wait for accounts section to load (using semantic HTML)
     await page.waitForSelector('section#accounts', { timeout: 10000 });
@@ -60,7 +60,7 @@ test.describe('Admin Account Management', () => {
 
   test('should display admin account in list (not "No accounts")', async ({ page }) => {
     // Navigate to Admin > Accounts
-    await page.goto(env.baseURL + '/admin/accounts');
+    await page.goto(env.baseURL + '/settings/admin/accounts');
 
     // Wait for accounts section
     await page.waitForSelector('section#accounts', { timeout: 10000 });
@@ -89,7 +89,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto(env.baseURL + '/admin/accounts');
+    await page.goto(env.baseURL + '/settings/admin/accounts');
 
     // Click on Applications tab using role and aria-controls
     const applicationsTab = page.locator('button[role="tab"][aria-controls="applications-panel"]');
@@ -117,7 +117,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto(env.baseURL + '/admin/accounts');
+    await page.goto(env.baseURL + '/settings/admin/accounts');
 
     // Click on Invitations tab using role and aria-controls
     const invitationsTab = page.locator('button[role="tab"][aria-controls="invitations-panel"]');
@@ -141,7 +141,7 @@ test.describe('Admin Account Management', () => {
 
   test('should send invitation successfully', async ({ page }) => {
     // Navigate to Admin > Accounts
-    await page.goto(env.baseURL + '/admin/accounts');
+    await page.goto(env.baseURL + '/settings/admin/accounts');
 
     // Click on Invitations tab
     const invitationsTab = page.locator('button[role="tab"][aria-controls="invitations-panel"]');

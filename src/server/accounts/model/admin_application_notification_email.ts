@@ -36,7 +36,7 @@ class AdminApplicationNotificationEmail extends EmailMessage {
    */
   buildMessage(language: string): MailData {
     const appUrl = publicOrigin();
-    const reviewUrl = publicUrl('/admin/accounts');
+    const reviewUrl = publicUrl('/settings/admin/accounts');
 
     const templateData = {
       applicantEmail: this.application.email,

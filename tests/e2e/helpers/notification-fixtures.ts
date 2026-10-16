@@ -1,5 +1,8 @@
-import { expect, type Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import axios from 'axios';
+
+// Moved to helpers/auth.ts; re-exported for the specs that import it from here.
+export { loginViaUi } from './auth';
 
 /**
  * Shared notification fixtures for the inbox e2e specs.
@@ -92,23 +95,6 @@ export async function loginViaApi(
   const response = await axios.post(`${baseURL}/api/auth/v1/login`, { email, password });
   // The login endpoint returns the JWT as a bare string body.
   return response.data;
-}
-
-/**
- * Log in through the SPA's login form, for the accounts `helpers/auth.ts`
- * does not cover. Assertions that need a real router need a real session.
- */
-export async function loginViaUi(
-  page: Page,
-  baseURL: string,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto(baseURL + '/auth/login');
-  await page.getByRole('textbox', { name: 'email' }).fill(email);
-  await page.getByRole('textbox', { name: 'password' }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL('**/calendar', { timeout: 30000 });
 }
 
 /**

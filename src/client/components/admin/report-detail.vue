@@ -197,7 +197,7 @@ async function handleForward() {
         </button>
       </div>
       <div class="page-header-text">
-        <h1>{{ t('title') }}</h1>
+        <h2>{{ t('title') }}</h2>
         <p class="page-subtitle">{{ t('subtitle') }}</p>
       </div>
     </div>
@@ -534,7 +534,7 @@ async function handleForward() {
     }
 
     .page-header-text {
-      h1 {
+      h2 {
         margin: 0 0 var(--pav-space-1) 0;
         font-size: var(--pav-font-size-2xl);
         font-weight: var(--pav-font-weight-light);

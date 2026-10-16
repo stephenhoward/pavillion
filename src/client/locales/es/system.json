@@ -3,7 +3,7 @@
     "calendar_button": "Calendario",
     "inbox_button": "Bandeja de entrada",
     "new_event": "Nuevo Evento",
-    "profile_button": "Configuración",
+    "settings_button": "Configuración",
     "feed_button": "Noticias",
     "inbox_badge_label": "{{count}} notificación sin leer"
   },

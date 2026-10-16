@@ -1,5 +1,4 @@
 {
-  "admin_link": "Admin Settings",
   "funding_link": "Funding Plan",
   "title": "Settings",
   "subtitle": "Manage your account preferences",
@@ -18,8 +17,6 @@
   "change_password_button": "Change Password",
   "logout": "Log Out",
   "logout_description": "Sign out of your account",
-  "admin_section": "Instance Administration",
-  "admin_description": "Manage server settings, user accounts, federation policies, and funding configuration for this Pavillion instance.",
   "change_email_form": {
     "title": "Change your email address",
     "email_placeholder": "new email address",

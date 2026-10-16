@@ -58,7 +58,7 @@ class AutoEscalationNotificationEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    const reviewUrl = publicUrl('/admin/moderation/reports/' + this.reportId);
+    const reviewUrl = publicUrl('/settings/admin/moderation/reports/' + this.reportId);
 
     const templateData = {
       eventName: truncatedName,

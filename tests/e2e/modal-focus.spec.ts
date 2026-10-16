@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { paneHeading } from './helpers/pane-heading';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -39,8 +40,8 @@ test.describe('Modal Focus Trap & Return Focus', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });
+    await page.goto(env.baseURL + '/settings/account');
+    await expect(paneHeading(page, 'Settings')).toBeVisible();
   });
 
   test('keyboard focus stays trapped inside modal and returns to trigger on close', async ({ page }) => {

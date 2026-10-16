@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { paneHeading } from './helpers/pane-heading';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -45,10 +46,10 @@ test.describe('Settings Page Modals', () => {
   test.beforeEach(async ({ page }) => {
     // Log in as admin and navigate to settings
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/profile');
+    await page.goto(env.baseURL + '/settings/account');
 
     // Wait for settings page to load
-    await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });
+    await expect(paneHeading(page, 'Settings')).toBeVisible();
   });
 
   test.describe('Change Email Modal', () => {

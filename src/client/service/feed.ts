@@ -123,42 +123,62 @@ export default class FeedService {
   }
 
   /**
-   * Load follows from the API and update the store.
+   * Whether a response for `calendarId` may still be written to the store.
+   * The store holds one calendar's feed at a time; a response that arrives
+   * after the user switched to another calendar would otherwise land on the
+   * new calendar's page, so the load* methods drop it.
+   */
+  private isSelectedCalendar(calendarId: string): boolean {
+    return this.store.selectedCalendarId === calendarId;
+  }
+
+  /**
+   * Load follows from the API and update the store, unless another calendar
+   * was selected while the request was in flight.
    * @param calendarId The calendar ID to load follows for
    * @returns Promise<FollowRelationship[]> The loaded follows
    */
   async loadFollows(calendarId: string): Promise<FollowRelationship[]> {
     const follows = await this.getFollows(calendarId);
-    this.store.setFollows(follows);
+    if (this.isSelectedCalendar(calendarId)) {
+      this.store.setFollows(follows);
+    }
     return follows;
   }
 
   /**
-   * Load followers from the API and update the store.
+   * Load followers from the API and update the store, unless another
+   * calendar was selected while the request was in flight.
    * @param calendarId The calendar ID to load followers for
    * @returns Promise<FollowerRelationship[]> The loaded followers
    */
   async loadFollowers(calendarId: string): Promise<FollowerRelationship[]> {
     const followers = await this.getFollowers(calendarId);
-    this.store.setFollowers(followers);
+    if (this.isSelectedCalendar(calendarId)) {
+      this.store.setFollowers(followers);
+    }
     return followers;
   }
 
   /**
-   * Load the initial page of feed events and update the store.
+   * Load the initial page of feed events and update the store, unless
+   * another calendar was selected while the request was in flight.
    * @param calendarId The calendar ID to load feed for
    * @param pageSize The number of events per page
    * @returns Promise<FeedResponse> The loaded feed response
    */
   async loadFeed(calendarId: string, pageSize: number = 20): Promise<FeedResponse> {
     const response = await this.getFeed(calendarId, 0, pageSize);
-    this.store.setEvents(response.events);
-    this.store.setEventsHasMore(response.hasMore);
+    if (this.isSelectedCalendar(calendarId)) {
+      this.store.setEvents(response.events);
+      this.store.setEventsHasMore(response.hasMore);
+    }
     return response;
   }
 
   /**
-   * Load the next page of feed events and append to the store.
+   * Load the next page of feed events and append to the store, unless
+   * another calendar was selected while the request was in flight.
    * @param calendarId The calendar ID to load feed for
    * @param page The page number to load
    * @param pageSize The number of events per page
@@ -166,8 +186,10 @@ export default class FeedService {
    */
   async loadMoreFeed(calendarId: string, page: number, pageSize: number = 20): Promise<FeedResponse> {
     const response = await this.getFeed(calendarId, page, pageSize);
-    this.store.appendEvents(response.events, page);
-    this.store.setEventsHasMore(response.hasMore);
+    if (this.isSelectedCalendar(calendarId)) {
+      this.store.appendEvents(response.events, page);
+      this.store.setEventsHasMore(response.hasMore);
+    }
     return response;
   }
 
