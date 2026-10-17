@@ -532,6 +532,9 @@ function collapse(findings: Finding[]): DeltaFinding[] {
 
 const RENOVATE_BRANCH_PREFIX = /^renovate\//i;
 
+/** How a fix-carrying row Trivy reported without a PkgName is named in a hint. */
+const UNNAMED_PACKAGE = '(unnamed package)';
+
 /**
  * What Renovate appends after the dependency slug in a branch name: a version
  * constraint (`6.x`, `1.3.2`) or an update-type keyword. Requiring one of these
@@ -605,8 +608,11 @@ function titleUpdateForPackage(title: string, pkg: string): TitleDependencyUpdat
   const update = parseTitleDependencyUpdate(title ?? '');
   if (!update) return undefined;
 
-  const slug = packageSlug(update.name);
-  return slug.length > 0 && slug === packageSlug(pkg) ? update : undefined;
+  // Compared literally (case-insensitively), never through `packageSlug`: the
+  // title carries the exact npm name and Trivy the exact PkgName, so the lossy
+  // slug is reserved for the branch. Slugging both halves made a collision
+  // (`types-node` vs `@types/node`) pass the branch and title checks together.
+  return pkg.length > 0 && update.name.toLowerCase() === pkg.toLowerCase() ? update : undefined;
 }
 
 /**
@@ -637,7 +643,7 @@ function branchNamesPackage(headRefName: string, pkg: string): boolean {
 }
 
 /**
- * True when the title's `update dependency <name>` clause resolves to this same
+ * True when the title's `update dependency <name>` clause names this exact
  * package. This is the half that binds identity to the decisive value: the
  * target version comes out of that clause and no other, so unless the title
  * names *this* package there is no version to compare at all.
@@ -659,17 +665,19 @@ function prNamesPackage(pr: RenovatePr, pkg: string): boolean {
 /**
  * Only an open PR Renovate itself opened may suppress a finding. This repo is
  * public, so anyone can open a PR on a `renovate/`-shaped branch; the author
- * check is what stops that from silencing a CVE. An absent `author` disables
- * coverage entirely rather than trusting the branch name alone — the fail-safe
- * direction, since the cost is a duplicate bead rather than a dropped CVE.
+ * check is what stops that from silencing a CVE. An absent `author` or
+ * `authorIsBot` disables coverage entirely rather than trusting the branch name
+ * or login alone — the fail-safe direction, since the cost is a duplicate bead
+ * rather than a dropped CVE.
  */
 function isTrustedRenovatePr(pr: RenovatePr): boolean {
   if ((pr.state ?? '').toUpperCase() !== 'OPEN') return false;
   if (!RENOVATE_BRANCH_PREFIX.test(pr.headRefName ?? '')) return false;
   // `gh pr list --json author` reports `is_bot`. A human account is never
-  // Renovate whatever it renames itself to; when the field is absent (older gh,
-  // a hand-built input) the login check stands on its own.
-  if (pr.authorIsBot === false) return false;
+  // Renovate whatever it renames itself to, and the plain `renovate` login is
+  // registerable, so the login never stands on its own: an absent field (older
+  // gh, a hand-built input) fails closed.
+  if (pr.authorIsBot !== true) return false;
   return /^renovate(\[bot\])?$/i.test((pr.author ?? '').replace(/^app\//, ''));
 }
 
@@ -749,7 +757,8 @@ interface RenovateCoverage {
  *     as it stays open.
  *   - Every package of a collapsed finding must be covered. One CVE against
  *     `foo` and `bar` is not handled by a PR that upgrades only `foo`; partial
- *     coverage files the whole finding, carrying the matched PRs as hints.
+ *     coverage files the whole finding, carrying the matched PRs as hints. A
+ *     fixed row with no package name is a package no PR can cover.
  */
 function matchRenovate(finding: DeltaFinding, prs: RenovatePr[]): RenovateCoverage | undefined {
   if (finding.targetClass !== 'node') return undefined;
@@ -757,6 +766,13 @@ function matchRenovate(finding: DeltaFinding, prs: RenovatePr[]): RenovateCovera
 
   const coverages = finding.packages.map(pkg => coverPackage(finding, pkg, prs));
   if (coverages.every(coverage => !coverage.pr && coverage.hints.length === 0)) return undefined;
+
+  // A row Trivy reported without a PkgName still carries a fix (`collapse` keys
+  // it under '') but never enters `packages`, so no PR can be matched to it.
+  // It is an uncoverable package for the every-package rule, not an exemption.
+  if (finding.fixedVersions && '' in finding.fixedVersions) {
+    coverages.push({ pkg: UNNAMED_PACKAGE, hints: [] });
+  }
 
   const uncovered = coverages.filter(coverage => !coverage.pr).map(coverage => coverage.pkg);
   if (uncovered.length === 0) {
@@ -1116,9 +1132,15 @@ function computeResolved(
  *
  * Throws when more than one open `cve-watch` bead exists: the watch list is a
  * single rewritten document, so a split one is corruption the agent must not
- * paper over by picking a winner.
+ * paper over by picking a winner. Throws too when `expectedScans` is not an
+ * array, rather than resolving as though no scan were required.
  */
 export function computeDelta(inputs: DeltaInputs): Delta {
+  // Required by the type, but a JS caller or a cast can still omit it, and a
+  // fallback to [] would silently drop missing-scan suppression of resolution.
+  if (!Array.isArray(inputs.expectedScans)) {
+    throw new Error('expectedScans must be an array of the scan labels this run requires');
+  }
   if (inputs.watchBeads.length > 1) {
     const ids = inputs.watchBeads.map(bead => bead.id).join(', ');
     throw new Error(
@@ -1151,7 +1173,7 @@ export function computeDelta(inputs: DeltaInputs): Delta {
   // too. Presence is decided by set membership on canonical ids, so such an id
   // is in neither set — it would read as absent from a scan that in fact named
   // it, and close a live bead.
-  const missingScans = missingScanLabels(inputs.expectedScans ?? [], inputs.reports);
+  const missingScans = missingScanLabels(inputs.expectedScans, inputs.reports);
   const resolutionSuppressed = summary.errors.length > 0
     || missingScans.length > 0
     || raw.unusableIds.length > 0
