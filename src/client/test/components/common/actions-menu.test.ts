@@ -7,6 +7,7 @@ import { CalendarPlus, Cog, BookOpenText } from 'lucide-vue-next';
 import ActionsMenu from '@/client/components/common/actions-menu.vue';
 import ActionsMenuItem from '@/client/components/common/actions-menu-item.vue';
 import { mountComponent } from '@/client/test/lib/vue';
+import { screenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
@@ -226,5 +227,87 @@ describe('ActionsMenu', () => {
     await flushPromises();
 
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+describe('ActionsMenu screen reader announcement', () => {
+  const COLLAPSED_TRIGGER = 'button, Actions, not expanded, has popup menu';
+  const EXPANDED_TRIGGER = 'button, Actions, expanded, has popup menu';
+
+  let currentWrapper: any = null;
+  let sr: ScreenReaderHandle | null = null;
+
+  afterEach(async () => {
+    if (sr) {
+      await sr.stop();
+      sr = null;
+    }
+    if (currentWrapper) {
+      currentWrapper.element.remove();
+      currentWrapper.unmount();
+      currentWrapper = null;
+    }
+  });
+
+  // Mounted attached to the document so the virtual screen reader sees
+  // the same tree a browser would.
+  const mountAttached = async () => {
+    const wrapper = await mountHarness();
+    currentWrapper = wrapper;
+    document.body.appendChild(wrapper.element);
+    sr = await screenReader(wrapper.element);
+    return { wrapper, sr };
+  };
+
+  it('announces the trigger as a collapsed menu button and exposes no menu', async () => {
+    const { sr } = await mountAttached();
+
+    const phrases = await sr.walk();
+
+    // A sub-tree walk cycles back to its start, so the lone trigger is
+    // spoken twice.
+    expect(phrases).toEqual([COLLAPSED_TRIGGER, COLLAPSED_TRIGGER]);
+  });
+
+  it('announces the expanded trigger and each menu item after activation', async () => {
+    const { wrapper, sr } = await mountAttached();
+
+    await sr.next();
+    expect(await sr.lastPhrase()).toBe(COLLAPSED_TRIGGER);
+
+    await sr.act();
+    await flushPromises();
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+
+    expect(await sr.walk()).toEqual([
+      'menu, orientated vertically',
+      'menuitem, Documentation, position 1, set size 3',
+      'Documentation',
+      'end of menuitem, Documentation, position 1, set size 3',
+      'menuitem, New Calendar, position 2, set size 3',
+      'New Calendar',
+      'end of menuitem, New Calendar, position 2, set size 3',
+      'menuitem, Manage, position 3, set size 3',
+      'Manage',
+      'end of menuitem, Manage, position 3, set size 3',
+      'end of menu, orientated vertically',
+      EXPANDED_TRIGGER,
+    ]);
+  });
+
+  it('announces the trigger as collapsed again after a second activation', async () => {
+    const { wrapper, sr } = await mountAttached();
+
+    await sr.next();
+    await sr.act();
+    await flushPromises();
+    // The walk ends back on the trigger, ready for the next activation.
+    expect((await sr.walk()).at(-1)).toBe(EXPANDED_TRIGGER);
+
+    await sr.act();
+    await flushPromises();
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+
+    expect(await sr.walk()).toEqual([COLLAPSED_TRIGGER, COLLAPSED_TRIGGER]);
   });
 });
