@@ -28,7 +28,6 @@ Notes on the shared rows:
 - A component under `src/common/ui/` may not reach into `src/client/assets/style/**`. The boundary rule in `src/common/ui/README.md` forbids it and `src/common/ui/test/boundary.test.ts` enforces it.
 - `src/common/ui/assets/breakpoints.ts` mirrors the `public-tablet-up` / `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `src/common/ui/test/breakpoints.test.ts` fails when the two drift apart. Change both together.
 - Site and widget style loads the public design system as `@use '@/common/ui/assets/mixins'`. That file holds the non-colour `$public-*` constants (type, spacing, radius, motion, breakpoints), the `public-*` component mixins and the runtime token layer (`public-theme-tokens`). Colour and shadow come only from `--pav-*` tokens; `scripts/check-theme-tokens.ts` (in `npm run lint`) fails on a colour `$public-*`, a dark selector, `prefers-color-scheme` or `color-scheme` outside the token layer. See DEC-019 rules 7 and 10.
-- `mixins.scss` also carries unprefixed compatibility aliases (`filter-*`, `search-*`, `input-base`, `mobile-only`, `medium-size-device`, the `$spacing-*` scale, `$font-regular` / `$font-medium`) for call sites that predate the `public-*` naming. They are not the design system and are slated for removal (pv-msw8) — do not reach for them in new code.
 
 ### Extraction Threshold
 
