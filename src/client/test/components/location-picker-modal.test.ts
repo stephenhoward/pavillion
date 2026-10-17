@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
@@ -7,6 +7,7 @@ import PillButton from '@/client/components/common/pill-button.vue';
 import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import enEventEditor from '@/client/locales/en/event_editor.json';
 import enCalendars from '@/client/locales/en/calendars.json';
+import { screenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';
 
 /**
  * Sheet stub: renders a native <dialog> with the given title + slot so
@@ -887,6 +888,111 @@ describe('LocationPickerModal', () => {
       const emptyMessage = wrapper.find('.empty-state');
       expect(emptyMessage.exists()).toBe(true);
       expect(emptyMessage.text()).toContain('No locations yet');
+    });
+  });
+
+  describe('screen reader announcement', () => {
+    /**
+     * The shared SheetStub renders a closed <dialog>, which the virtual
+     * screen reader treats as hidden. This stub mirrors Sheet's dialog
+     * semantics (aria-modal, named by its h2 via aria-labelledby) but is
+     * open, so the picker contents enter the accessibility tree.
+     */
+    const OpenSheetStub = {
+      props: ['title'],
+      template: `
+        <dialog open aria-modal="true" aria-labelledby="picker-sheet-title">
+          <h2 id="picker-sheet-title">{{ title }}</h2>
+          <slot/>
+        </dialog>
+      `,
+      emits: ['close'],
+    };
+
+    const conventionCenter = new EventLocation('place-cc', 'Convention Center', '100 Main St', 'Portland', 'OR', '97201');
+    const secondVenue = new EventLocation('loc-2', 'Second Venue', '456 Oak Ave', 'Portland', 'OR', '97202');
+    const locations = [
+      placeWithSpaces(conventionCenter, [makeSpace('space-pacific', 'place-cc', 'Pacific Room')]),
+      secondVenue,
+    ];
+
+    let sr: ScreenReaderHandle | undefined;
+    let wrapper: VueWrapper | undefined;
+
+    afterEach(async () => {
+      if (sr) {
+        await sr.stop();
+        sr = undefined;
+      }
+      // Attached so aria-labelledby resolves against a live document.
+      wrapper?.unmount();
+      wrapper = undefined;
+    });
+
+    const walk = async (props: { selectedLocationId: string | null; selectedSpaceId: string | null }) => {
+      wrapper = mount(LocationPickerModal, {
+        attachTo: document.body,
+        global: {
+          plugins: [[I18NextVue, { i18next }] as const],
+          stubs: { Sheet: OpenSheetStub },
+        },
+        props: { locations, ...props },
+      });
+      sr = await screenReader(wrapper.element as unknown as Node);
+      return sr.walk();
+    };
+
+    it('announces the named search field ahead of the location list', async () => {
+      const phrases = await walk({ selectedLocationId: null, selectedSpaceId: null });
+
+      expect(phrases.slice(0, 4)).toEqual([
+        'heading, Select Location, level 2',
+        'textbox, Search locations, placeholder Search locations...',
+        'list',
+        'listitem, level 1, position 1, set size 3',
+      ]);
+    });
+
+    it('announces each entry as a named toggle button, distinguishing whole venue from a space', async () => {
+      const phrases = await walk({ selectedLocationId: null, selectedSpaceId: null });
+
+      expect(phrases).toContain('button, Convention Center, whole venue, not pressed');
+      expect(phrases).toContain('button, Convention Center, Pacific Room, not pressed');
+      expect(phrases).toContain('button, Second Venue, not pressed');
+    });
+
+    it('announces the selected space entry as pressed and the others as not pressed', async () => {
+      const phrases = await walk({ selectedLocationId: 'place-cc', selectedSpaceId: 'space-pacific' });
+
+      const entryButtons = phrases.filter(phrase => phrase.startsWith('button, ') && phrase.endsWith('pressed'));
+      expect(entryButtons).toEqual([
+        'button, Convention Center, whole venue, not pressed',
+        'button, Convention Center, Pacific Room, pressed',
+        'button, Second Venue, not pressed',
+      ]);
+    });
+
+    it('announces the whole-venue entry as pressed when the place is selected without a space', async () => {
+      const phrases = await walk({ selectedLocationId: 'place-cc', selectedSpaceId: null });
+
+      expect(phrases).toContain('button, Convention Center, whole venue, pressed');
+      expect(phrases).toContain('button, Convention Center, Pacific Room, not pressed');
+    });
+
+    it('names each add-space button after its place', async () => {
+      const phrases = await walk({ selectedLocationId: null, selectedSpaceId: null });
+
+      expect(phrases.filter(phrase => phrase.startsWith('button, Add space'))).toEqual([
+        'button, Add space to Convention Center',
+        'button, Add space to Second Venue',
+      ]);
+    });
+
+    it('announces the footer actions as named buttons', async () => {
+      const phrases = await walk({ selectedLocationId: null, selectedSpaceId: null });
+
+      expect(phrases).toContain('button, Remove location, not disabled');
+      expect(phrases).toContain('button, Create New, not disabled');
     });
   });
 });
