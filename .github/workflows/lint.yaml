@@ -34,3 +34,19 @@ jobs:
       - name: Theme token guard
         run: npm run lint:theme
         if: ${{ !cancelled() }}
+
+      # Report-only duplication measurement (see .jscpd.json); never fails the job.
+      - name: Duplication report
+        run: npm run lint:dup
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+
+      - name: Upload duplication report
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: jscpd-report
+          path: reports/jscpd/
+          if-no-files-found: warn
+          retention-days: 30

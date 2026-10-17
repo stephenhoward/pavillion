@@ -1,0 +1,17 @@
+{
+  "path": ["src/server", "src/client"],
+  "format": ["typescript", "javascript", "vue"],
+  "ignore": [
+    "**/test/**",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/locales/**",
+    "**/*.d.ts",
+    "**/*.min.js",
+    "**/dist/**",
+    "**/vendor/**",
+    "**/node_modules/**"
+  ],
+  "reporters": ["console", "json"],
+  "output": "reports/jscpd"
+}
