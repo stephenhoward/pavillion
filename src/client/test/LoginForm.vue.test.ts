@@ -1,3 +1,9 @@
+// @vitest-environment jsdom
+//
+// jsdom rather than the default happy-dom: under happy-dom the virtual
+// screen reader does not resolve `<label for>` onto an `<input>`, so the
+// fields are announced without their names even though browsers name them.
+// See the environment note in src/common/test-utils/screen-reader.ts.
 import { expect, describe, it, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
@@ -6,6 +12,7 @@ import sinon from 'sinon';
 import { mountComponent } from '@/client/test/lib/vue';
 import LoginForm from '@/client/components/logged_out/LoginForm.vue';
 import ErrorAlert from '@/client/components/logged_out/error-alert.vue';
+import { screenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -15,6 +22,7 @@ const routes: RouteRecordRaw[] = [
 
 interface MountedLoginFormOptions {
   props?: Record<string, any>;
+  attachTo?: Element;
 }
 
 const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
@@ -33,6 +41,7 @@ const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
       authn,
     },
     props: options.props ?? {},
+    attachTo: options.attachTo,
   });
 
   return {
@@ -272,3 +281,73 @@ describe('LoginForm Behavior', () => {
   });
 });
 
+
+describe('LoginForm', () => {
+  describe('screen reader announcement', () => {
+    const sandbox = sinon.createSandbox();
+    let sr: ScreenReaderHandle | undefined;
+    let unmount: (() => void) | undefined;
+
+    afterEach(async () => {
+      if (sr) {
+        await sr.stop();
+        sr = undefined;
+      }
+      // The form is attached to the document so aria-describedby resolves
+      // against a live tree; detach it so later tests start clean.
+      unmount?.();
+      unmount = undefined;
+      sandbox.restore();
+    });
+
+    const mountAttached = () => {
+      const mounted = mountedLoginForm({ attachTo: document.body });
+      unmount = () => mounted.wrapper.unmount();
+      return mounted;
+    };
+
+    const walk = async (element: Element) => {
+      sr = await screenReader(element as unknown as Node);
+      return sr.walk();
+    };
+
+    it('announces the named fields and the submit button in reading order', async () => {
+      const { wrapper } = mountAttached();
+
+      const phrases = await walk(wrapper.element);
+
+      expect(phrases).toEqual([
+        'email',
+        'textbox, email, not invalid, placeholder email, required',
+        'password',
+        'password',
+        'button, Sign in',
+        'end of form',
+      ]);
+    });
+
+    it('announces a failed sign-in as an alert ahead of the fields it describes', async () => {
+      const { wrapper, authn } = mountAttached();
+      sandbox.stub(authn, 'login').resolves(false);
+
+      await wrapper.find('input[type="email"]').setValue('user@example.com');
+      await wrapper.find('input[type="password"]').setValue('secret');
+      await wrapper.find('form').trigger('submit.prevent');
+      await wrapper.vm.$nextTick();
+
+      const phrases = await walk(wrapper.element);
+
+      expect(phrases).toEqual([
+        'alert',
+        'bad sign in',
+        'end of alert',
+        'email',
+        'textbox, email, user@example.com, bad sign in, invalid, required',
+        'password',
+        'password, secret, bad sign in',
+        'button, Sign in, bad sign in',
+        'end of form',
+      ]);
+    });
+  });
+});
