@@ -50,23 +50,18 @@ $public-line-height-relaxed: 1.75;
 
 // Letter spacing (subtle refinement)
 $public-letter-spacing-tight: -0.01em;
-$public-letter-spacing-normal: 0;
 $public-letter-spacing-wide: 0.02em;
 
 // ===== SPACING TOKENS =====
 
 // Base scale (4px increments)
-$public-space-0: 0;
 $public-space-1: 4px;
 $public-space-2: 8px;
 $public-space-3: 12px;
 $public-space-4: 16px;
-$public-space-5: 20px;
 $public-space-6: 24px;
 $public-space-8: 32px;
-$public-space-10: 40px;
 $public-space-12: 48px;
-$public-space-16: 64px;
 
 // Semantic spacing (use these in components)
 $public-space-xs: $public-space-1;
@@ -314,7 +309,6 @@ $public-radius-full: 9999px;
 // ===== ANIMATION TOKENS =====
 
 // Durations
-$public-duration-instant: 100ms;
 $public-duration-fast: 150ms;
 $public-duration-normal: 200ms;
 $public-duration-slow: 300ms;
@@ -325,12 +319,10 @@ $public-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
 $public-ease-in: cubic-bezier(0.4, 0, 1, 1);
 $public-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 $public-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-$public-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
 
 // Transitions (combined properties)
 $public-transition-fast: all $public-duration-fast $public-ease-out;
 $public-transition-normal: all $public-duration-normal $public-ease-out;
-$public-transition-slow: all $public-duration-slow $public-ease-in-out;
 
 // ================================================================
 // COMPONENT MIXINS
@@ -621,12 +613,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   }
 }
 
-@mixin public-wide-up {
-  @media (min-width: 1280px) {
-    @content;
-  }
-}
-
 // ===== CATEGORY BADGE COMPONENT =====
 
 @mixin public-category-badge {
@@ -680,67 +666,6 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 @mixin public-search-clear-button {
   @include public-input-clear-button;
 }
-
-// ================================================================
-// UNPREFIXED ALIASES FOR BACKWARD COMPATIBILITY
-// ================================================================
-// These aliases allow components to use shorter, unprefixed names
-// while still using the public design system
-
-@mixin filter-container {
-  @include public-filter-container;
-}
-
-@mixin filter-section {
-  @include public-filter-section;
-}
-
-@mixin filter-label {
-  @include public-filter-label;
-}
-
-@mixin search-input-container {
-  @include public-search-input-container;
-}
-
-@mixin search-input {
-  @include public-search-input;
-}
-
-@mixin search-clear-button {
-  @include public-search-clear-button;
-}
-
-@mixin input-base {
-  @include public-input-base;
-}
-
-// Unprefixed compatibility aliases for call sites that predate the
-// public-* names (spacing scale, responsive helpers, font weights). Not part
-// of the design system; slated for retirement with the alias mixins above.
-$spacing-xs: 4px;
-$spacing-sm: 8px;
-$spacing-md: 12px;
-$spacing-lg: 16px;
-$spacing-xl: 20px;
-$spacing-2xl: 24px;
-$spacing-3xl: 32px;
-
-@mixin mobile-only {
-  @include public-mobile-only {
-    @content;
-  }
-}
-
-@mixin medium-size-device {
-  @media (min-width: 600px) {
-    @content;
-  }
-}
-
-// Font weight tokens
-$font-regular: $public-font-weight-regular;
-$font-medium: $public-font-weight-medium;
 
 // ================================================================
 // UTILITY MIXINS

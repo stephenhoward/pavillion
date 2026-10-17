@@ -390,7 +390,6 @@ const LAYOUT_ONLY_MIXINS = [
   'public-mobile-only',
   'public-tablet-up',
   'public-desktop-up',
-  'public-wide-up',
   'public-sr-only',
   'public-horizontal-scroll',
   'public-scroll-fade-left',

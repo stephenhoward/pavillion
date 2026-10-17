@@ -790,7 +790,7 @@ onUnmounted(() => {
 // themes.
 
 .search-filter-public {
-  @include filter-container;
+  @include public-filter-container;
   @include public-container-constrained;
 }
 
@@ -805,13 +805,13 @@ onUnmounted(() => {
 
 // Search Section
 .search-section {
-  @include filter-section;
+  @include public-filter-section;
 
   flex: 1;
   min-width: 0; // Prevent flex overflow
 
   .search-label {
-    @include filter-label;
+    @include public-filter-label;
 
     // Screen reader only class
     &.sr-only {
@@ -828,7 +828,7 @@ onUnmounted(() => {
   }
 
   .search-input-container {
-    @include search-input-container;
+    @include public-search-input-container;
   }
 
   .search-icon {
@@ -841,17 +841,17 @@ onUnmounted(() => {
   }
 
   .search-input {
-    @include search-input;
+    @include public-search-input;
 
     padding-left: calc(#{$public-space-md} + 16px + #{$public-space-sm});
   }
 
   .clear-search {
-    @include search-clear-button;
+    @include public-search-clear-button;
   }
 
   .search-helper-text {
-    margin-top: $spacing-xs;
+    margin-top: $public-space-xs;
     font-size: 12px;
     color: var(--pav-text-secondary);
   }
@@ -859,12 +859,12 @@ onUnmounted(() => {
 
 // Category Filter Section (full width)
 .category-filter-section {
-  @include filter-section;
+  @include public-filter-section;
 
   width: 100%;
 
   .filter-label {
-    @include filter-label;
+    @include public-filter-label;
     // Override font-size for better readability
     font-size: 12px;
     opacity: 0.6;
@@ -959,7 +959,7 @@ onUnmounted(() => {
     background: var(--pav-surface-picker);
     font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
     font-size: 14px;
-    font-weight: $font-regular;
+    font-weight: $public-font-weight-regular;
     color: var(--pav-text-picker);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -989,7 +989,7 @@ onUnmounted(() => {
     &.has-filter {
       background-color: var(--pav-accent);
       color: white;
-      font-weight: $font-medium;
+      font-weight: $public-font-weight-medium;
       border-color: var(--pav-accent);
       box-shadow: var(--pav-shadow-selected);
 
@@ -1031,13 +1031,13 @@ onUnmounted(() => {
     right: 0;
     z-index: 20;
     min-width: 320px;
-    padding: $spacing-md;
+    padding: $public-space-md;
     background: var(--pav-surface-popover);
     border-radius: 16px;
     box-shadow: var(--pav-shadow-lg);
     backdrop-filter: var(--pav-popover-backdrop-filter);
 
-    @include mobile-only {
+    @include public-mobile-only {
       right: 0;
       left: auto;
       min-width: auto;
@@ -1051,7 +1051,7 @@ onUnmounted(() => {
     gap: 8px;
     flex-wrap: wrap;
 
-    @include medium-size-device {
+    @include public-tablet-up {
       flex-wrap: nowrap;
     }
 
@@ -1068,7 +1068,7 @@ onUnmounted(() => {
       border-radius: 16px;
       font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
       font-size: 13px;
-      font-weight: $font-regular;
+      font-weight: $public-font-weight-regular;
       letter-spacing: 0.01em;
       cursor: pointer;
       transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1100,7 +1100,7 @@ onUnmounted(() => {
       &.active {
         background-color: var(--pav-accent);
         color: white;
-        font-weight: $font-medium;
+        font-weight: $public-font-weight-medium;
         box-shadow: var(--pav-shadow-selected);
 
         &:hover {
@@ -1144,18 +1144,18 @@ onUnmounted(() => {
 
   // Custom Dates Section (shown when custom mode is active)
   .custom-dates-section {
-    margin-top: $spacing-md;
-    padding-top: $spacing-md;
+    margin-top: $public-space-md;
+    padding-top: $public-space-md;
     border-top: 1px solid var(--pav-border-picker-divider);
 
     .date-inputs-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: $spacing-md;
+      gap: $public-space-md;
 
-      @include mobile-only {
+      @include public-mobile-only {
         grid-template-columns: 1fr;
-        gap: $spacing-sm;
+        gap: $public-space-sm;
       }
 
       .date-input-group {
@@ -1165,14 +1165,14 @@ onUnmounted(() => {
 
         .date-input-label {
           font-size: 11px;
-          font-weight: $font-medium;
+          font-weight: $public-font-weight-medium;
           text-transform: uppercase;
           letter-spacing: 0.05em;
           color: var(--pav-text-secondary);
         }
 
         .date-input {
-          @include input-base;
+          @include public-input-base;
 
           width: 100%;
           padding: 8px 10px;
@@ -1183,7 +1183,7 @@ onUnmounted(() => {
           background-color: var(--pav-surface-secondary);
           color: var(--pav-text-picker);
           font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
-          font-weight: $font-regular;
+          font-weight: $public-font-weight-regular;
           transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 
           &:hover {
@@ -1293,9 +1293,9 @@ onUnmounted(() => {
 }
 
 // Responsive adjustments
-@include mobile-only {
+@include public-mobile-only {
   .search-filter-public {
-    gap: $spacing-md;
+    gap: $public-space-md;
   }
 
   .search-row {
