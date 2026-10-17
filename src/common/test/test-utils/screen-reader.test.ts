@@ -75,4 +75,38 @@ describe('screen-reader helper (Vitest variant)', () => {
     expect(typeof last).toBe('string');
     expect(last.length).toBeGreaterThan(0);
   });
+
+  it('restores HTMLElement.prototype after stop() so later files can stub focus', async () => {
+    const proto = HTMLElement.prototype;
+    const originalKeys = Reflect.ownKeys(proto);
+    const originalFocus = Object.getOwnPropertyDescriptor(proto, 'focus');
+    const originalBlur = Object.getOwnPropertyDescriptor(proto, 'blur');
+
+    const router: Router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    });
+    const wrapper = mountComponent(ToggleSwitch, router, {
+      props: {
+        modelValue: false,
+        label: 'Notifications',
+        id: 'notifications-toggle',
+      },
+    });
+
+    sr = await screenReader(wrapper.element as unknown as Node);
+    await sr.stop();
+    sr = undefined;
+
+    expect(Object.getOwnPropertyDescriptor(proto, 'focus')).toEqual(originalFocus);
+    expect(Object.getOwnPropertyDescriptor(proto, 'blur')).toEqual(originalBlur);
+    expect(Reflect.ownKeys(proto)).toEqual(originalKeys);
+
+    // The failure mode the leak produced in later files: assigning a stub
+    // to an instance's focus threw against a getter-only accessor.
+    const el = document.createElement('button');
+    expect(() => {
+      el.focus = () => {};
+    }).not.toThrow();
+  });
 });
