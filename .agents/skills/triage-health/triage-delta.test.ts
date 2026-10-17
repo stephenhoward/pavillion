@@ -396,6 +396,60 @@ describe('computeDelta: resolution', () => {
   });
 });
 
+describe('computeDelta: watch-table changes', () => {
+  const watchTable = (...ids: string[]) => ({
+    id: 'pv-watch',
+    design: ids.map(id => `| ${id} | HIGH | pkg | image | 2026-08-01 | none |`).join('\n'),
+  });
+
+  const imageScan = (vulnerabilities: Record<string, unknown>[]) =>
+    imageReport([{ Target: 'debian 12.5 (bookworm)', Vulnerabilities: vulnerabilities }]);
+
+  it('prunes both the rows absent from the scan and the rows that gained a fix', () => {
+    const delta = computeDelta(inputs({
+      reports: [imageScan([
+        vuln({ VulnerabilityID: 'CVE-2026-9999', PkgName: 'perl', FixedVersion: '5.40.1-2' }),
+        vuln({ VulnerabilityID: 'CVE-2026-8888', PkgName: 'zlib1g', FixedVersion: '' }),
+      ])],
+      expectedScans: ['image'],
+      watchBeads: [watchTable('CVE-2026-7777', 'CVE-2026-8888', 'CVE-2026-9999')],
+    }));
+
+    // 7777 left the scan; 9999 is still there but now fixable; 8888 is still
+    // unfixed and keeps its row.
+    expect(delta.watch_prune).toEqual(['CVE-2026-7777', 'CVE-2026-9999']);
+    expect(delta.watch_note_rewrites).toEqual([]);
+  });
+
+  it('still prunes newly-fixable rows on a suppressed run, but never on the strength of an absence', () => {
+    const delta = computeDelta(inputs({
+      reports: [imageScan([vuln({ VulnerabilityID: 'CVE-2026-9999', PkgName: 'perl', FixedVersion: '5.40.1-2' })])],
+      expectedScans: ['image', 'repository'],
+      watchBeads: [watchTable('CVE-2026-7777', 'CVE-2026-9999')],
+    }));
+
+    expect(delta.resolution_suppressed).toBe(true);
+    expect(delta.watch_prune).toEqual(['CVE-2026-9999']);
+  });
+
+  it('names a watch-listed CVE covered by Renovate for a note rewrite, never for a prune', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([
+        vuln(),
+        vuln({ VulnerabilityID: 'CVE-2026-0002', PrimaryURL: advisory('CVE-2026-0002') }),
+      ])])],
+      expectedScans: ['repository'],
+      watchBeads: [watchTable('CVE-2026-0001')],
+      renovatePrs: [renovatePr()],
+    }));
+
+    expect(delta.covered_by_renovate.map(f => f.id)).toEqual(['CVE-2026-0001', 'CVE-2026-0002']);
+    // 0002 is covered too, but has no watch row, so there is nothing to rewrite.
+    expect(delta.watch_note_rewrites).toEqual([{ cve: 'CVE-2026-0001', prs: [561] }]);
+    expect(delta.watch_prune).toEqual([]);
+  });
+});
+
 describe('computeDelta: bead status handling', () => {
   it('treats a bead with no status as untracked rather than assuming it is open', () => {
     const delta = computeDelta(inputs({

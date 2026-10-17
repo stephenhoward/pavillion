@@ -153,6 +153,12 @@ export interface Resolved {
   watchEntries: string[];
 }
 
+/** A watch row whose CVE an open Renovate PR now provably covers. */
+export interface WatchNoteRewrite {
+  cve: string;
+  prs: number[];
+}
+
 export interface DeltaMetadata {
   sha?: string;
   runUrl?: string;
@@ -265,6 +271,19 @@ export interface Delta {
    * watch entries on it.
    */
   resolution_suppressed: boolean;
+  /**
+   * Every watch row the step-4 rewrite removes: rows absent from the scan
+   * (`resolved.watchEntries`, empty on a suppressed run) plus rows whose CVE
+   * gained a fix (`newly_fixable`, which survives suppression because it is a
+   * positive observation, not an absence).
+   */
+  watch_prune: string[];
+  /**
+   * Watch rows kept but whose note is rewritten: CVEs on the watch table that
+   * landed in `covered_by_renovate`. Never a prune — the fix sits in an
+   * unmerged PR.
+   */
+  watch_note_rewrites: WatchNoteRewrite[];
   scan_errors: string[];
   scope_notes: ScopeNotes;
 }
@@ -1112,6 +1131,27 @@ function computeResolved(
 }
 
 /**
+ * Derive every change the step-4 watch-table rewrite makes from sets the
+ * script already holds, so the agent never intersects them by hand.
+ */
+function computeWatchChanges(
+  watchList: string[],
+  resolved: Resolved,
+  categorized: Categorized,
+): Pick<Delta, 'watch_prune' | 'watch_note_rewrites'> {
+  const watchSet = new Set(watchList);
+  return {
+    watch_prune: dedupe([
+      ...resolved.watchEntries,
+      ...categorized.newly_fixable.map(finding => normalizeId(finding.id)),
+    ]),
+    watch_note_rewrites: categorized.covered_by_renovate
+      .filter(finding => watchSet.has(normalizeId(finding.id)))
+      .map(finding => ({ cve: normalizeId(finding.id), prs: finding.prs.map(pr => pr.number) })),
+  };
+}
+
+/**
  * Categorize one scan against current triage state.
  *
  * Throws when more than one open `cve-watch` bead exists: the watch list is a
@@ -1157,14 +1197,17 @@ export function computeDelta(inputs: DeltaInputs): Delta {
     || raw.unusableIds.length > 0
     || inputs.reports.every(report => !!report.error);
 
+  const resolved = resolutionSuppressed
+    ? { beads: [], watchEntries: [] }
+    : computeResolved(index, watchList, raw.allIds);
+
   return {
     metadata: inputs.metadata ?? {},
     counts,
     ...categorized,
-    resolved: resolutionSuppressed
-      ? { beads: [], watchEntries: [] }
-      : computeResolved(index, watchList, raw.allIds),
+    resolved,
     resolution_suppressed: resolutionSuppressed,
+    ...computeWatchChanges(watchList, resolved, categorized),
     scan_errors: summary.errors,
     scope_notes: {
       untriagedMisconfigurations: raw.untriagedMisconfigurations,
@@ -1670,6 +1713,8 @@ const UNTRUSTED_CONTENT: UntrustedContentNotice = {
     'resolved.beads[].clearedCves[]',
     'resolved.beads[].remainingCves[]',
     'resolved.watchEntries[]',
+    'watch_prune[]',
+    'watch_note_rewrites[].cve',
     'scan_errors[]',
     'scope_notes.unusableIds[]',
   ],
@@ -1751,6 +1796,11 @@ export function sanitizeDelta(delta: Delta): SanitizedDelta {
       })),
       watchEntries: delta.resolved.watchEntries.map(cve => sanitizeText(cve)),
     },
+    watch_prune: delta.watch_prune.map(cve => sanitizeText(cve)),
+    watch_note_rewrites: delta.watch_note_rewrites.map(rewrite => ({
+      cve: sanitizeText(rewrite.cve),
+      prs: rewrite.prs,
+    })),
     scan_errors: delta.scan_errors.map(redactDiagnostic),
     scope_notes: {
       ...delta.scope_notes,
