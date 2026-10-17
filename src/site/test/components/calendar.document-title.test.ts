@@ -4,6 +4,8 @@
  * Validates:
  * - document.title is set to "Calendar Name | Pavillion" after loading calendar data.
  * - The calendar URL name is used as fallback when no localized name is available.
+ * - document.title is set on the back-navigation path, where the store already
+ *   holds this calendar's events and the full load is skipped.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -45,27 +47,37 @@ vi.mock('@/site/service/calendar', () => {
   };
 });
 
+// Mutable store mock so individual tests can put the store in the state a
+// back-navigation leaves it in (this calendar already loaded, events present).
+function createMockStore(): Record<string, any> {
+  return {
+    currentCalendarUrlName: null,
+    allEvents: [],
+    availableCategories: [],
+    getFilteredEventsByDay: {},
+    hasActiveFilters: false,
+    hasNonDateFilters: false,
+    hasOnlyDateFilters: false,
+    isLoadingEvents: false,
+    hasLoadedEvents: true,
+    isSearchPending: false,
+    eventError: null,
+    categoryError: null,
+    setServerDefaultDateRange: vi.fn(),
+    setCurrentCalendar: vi.fn(),
+    loadCalendar: vi.fn().mockResolvedValue(undefined),
+    loadCategories: vi.fn().mockResolvedValue(undefined),
+    clearAllFilters: vi.fn(),
+    reloadWithFilters: vi.fn(),
+    setViewWindow: vi.fn(),
+  };
+}
+
+let mockStore = createMockStore();
+
 vi.mock('@/site/stores/publicCalendarStore', () => {
   return {
-    usePublicCalendarStore: () => ({
-      availableCategories: [],
-      getFilteredEventsByDay: {},
-      hasActiveFilters: false,
-      hasNonDateFilters: false,
-      hasOnlyDateFilters: false,
-      isLoadingEvents: false,
-      hasLoadedEvents: true,
-      isSearchPending: false,
-      eventError: null,
-      categoryError: null,
-      setServerDefaultDateRange: vi.fn(),
-      setCurrentCalendar: vi.fn(),
-      loadCalendar: vi.fn().mockResolvedValue(undefined),
-      loadCategories: vi.fn().mockResolvedValue(undefined),
-      clearAllFilters: vi.fn(),
-      reloadWithFilters: vi.fn(),
-      setViewWindow: vi.fn(),
-    }),
+    usePublicCalendarStore: () => mockStore,
   };
 });
 
@@ -133,6 +145,7 @@ describe('calendar.vue document.title', () => {
   beforeEach(() => {
     mockCurrentLocale.value = 'en';
     mockCalendarName = 'Test Calendar';
+    mockStore = createMockStore();
     document.title = 'Pavillion'; // Reset to default before each test
   });
 
@@ -155,6 +168,18 @@ describe('calendar.vue document.title', () => {
 
     const wrapper = await mountCalendar('/test_calendar');
 
+    expect(document.title).toBe('Test Calendar | Pavillion');
+    wrapper.unmount();
+  });
+
+  it('should set document.title when returning to a calendar the store already holds', async () => {
+    mockStore.currentCalendarUrlName = 'test_calendar';
+    mockStore.allEvents = [{}];
+    document.title = 'Self Event | Pavillion';
+
+    const wrapper = await mountCalendar('/test_calendar');
+
+    expect(mockStore.loadCalendar).not.toHaveBeenCalled();
     expect(document.title).toBe('Test Calendar | Pavillion');
     wrapper.unmount();
   });
