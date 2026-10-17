@@ -1,0 +1,145 @@
+# Daily staging-drift check.
+#
+# Staging deploys only when the CI Pipeline goes green on main, and the `:main`
+# image is published behind the same gate (publish_images in project.ci.yaml).
+# A red or stuck CI Pipeline therefore leaves staging and `:main` silently
+# behind main. This workflow measures that gap and, once main is ahead of the
+# last successful deploy and that deploy is more than a day old, keeps one
+# rolling issue labelled `staging-drift` up to date.
+#
+# A run that finds no drift touches no issue. A failed run means the tooling
+# itself broke — it never stands in for a "no drift" reading.
+name: Staging Drift
+on:
+  schedule:
+    # Daily; the exact hour does not matter for a once-a-day reading.
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  issues: write
+
+env:
+  GH_REPO: ${{ github.repository }}
+  # Hours a deploy may lag main before the drift is reported.
+  MAX_AGE_HOURS: 24
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Measure drift
+        id: measure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          main_sha=$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')
+
+          deploy=$(gh run list --workflow deploy-staging.yaml --status success --limit 1 \
+            --json headSha,createdAt,url --jq '.[0] // empty')
+          if [ -z "$deploy" ]; then
+            echo "::error::No successful Deploy to Staging run found"
+            exit 1
+          fi
+          deployed_sha=$(jq -r '.headSha' <<<"$deploy")
+          deploy_url=$(jq -r '.url' <<<"$deploy")
+          hours=$(jq -r '((now - (.createdAt | fromdateiso8601)) / 3600) | floor' <<<"$deploy")
+
+          gh api "repos/$GH_REPO/compare/$deployed_sha...$main_sha" > compare.json
+          behind=$(jq -r '.ahead_by' compare.json)
+
+          ci=$(gh run list --workflow project.ci.yaml --branch main --limit 1 \
+            --json status,conclusion,url,headSha --jq '.[0] // empty')
+          if [ -z "$ci" ]; then
+            echo "::error::No CI Pipeline run found on main"
+            exit 1
+          fi
+          # An in-flight run has no conclusion yet; report its status instead.
+          ci_result=$(jq -r 'if .conclusion == "" then .status else .conclusion end' <<<"$ci")
+          ci_url=$(jq -r '.url' <<<"$ci")
+          ci_sha=$(jq -r '.headSha' <<<"$ci")
+
+          # Pull requests merged since the deployed sha: merge commits carry the
+          # PR title on their third line, squash commits end in "(#N)".
+          prs=$(jq -r '.commits[].commit.message
+            | split("\n") as $l
+            | if ($l[0] | test("^Merge pull request #[0-9]+ ")) then
+                "- #" + ($l[0] | capture("#(?<n>[0-9]+)").n) + " " + ($l[2] // "")
+              elif ($l[0] | test("\\(#[0-9]+\\)$")) then
+                "- " + $l[0]
+              else empty end' compare.json)
+
+          if [ "$behind" -ge 1 ] && [ "$hours" -gt "$MAX_AGE_HOURS" ]; then
+            drift=1
+          else
+            drift=0
+          fi
+
+          {
+            echo "## Staging is behind main"
+            echo
+            echo "- **Commits behind:** $behind (main \`${main_sha:0:7}\`, staging \`${deployed_sha:0:7}\`)"
+            echo "- **Hours since last successful deploy:** $hours ([run]($deploy_url))"
+            echo "- **Last CI Pipeline on main:** \`$ci_result\` on \`${ci_sha:0:7}\` ([run]($ci_url))"
+            echo
+            echo "Staging deploys only after the CI Pipeline succeeds on main, and the"
+            echo "\`:main\` image is published behind the same gate, so \`:main\` is behind"
+            echo "main by the same $behind commit(s)."
+            echo
+            echo "### Pull requests merged since the deployed sha"
+            echo
+            if [ -n "$prs" ]; then echo "$prs"; else echo "_None — the commits were pushed directly._"; fi
+          } > report.md
+
+          echo "Main ${main_sha:0:7}; staging ${deployed_sha:0:7}; $behind commit(s) behind; last deploy ${hours}h ago; CI $ci_result; drift=$drift"
+          {
+            echo "drift=$drift"
+            echo "behind=$behind"
+            echo "hours=$hours"
+            echo "main_sha=$main_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      # One rolling issue carries the current state: updated while drift stands,
+      # closed once staging catches up, recreated when drift returns.
+      - name: Report to rolling issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRIFT: ${{ steps.measure.outputs.drift }}
+          BEHIND: ${{ steps.measure.outputs.behind }}
+          HOURS: ${{ steps.measure.outputs.hours }}
+          MAIN_SHA: ${{ steps.measure.outputs.main_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh label create staging-drift \
+            --description "Rolling report: main has outrun the last staging deploy" \
+            --color D93F0B --force
+
+          issue=$(gh issue list --label staging-drift --state open --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ "$DRIFT" = "0" ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body "Staging caught up as of \`$MAIN_SHA\`. Closing — a new issue opens if drift returns. [Run]($RUN_URL)"
+              gh issue close "$issue"
+            fi
+            echo "No drift."
+            exit 0
+          fi
+
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file report.md
+            # Editing the body sends no notification; the comment is the ping.
+            gh issue comment "$issue" --body "Still behind: $BEHIND commit(s), ${HOURS}h since the last successful deploy. [Run]($RUN_URL)"
+          else
+            gh issue create \
+              --title "Staging is behind main" \
+              --label staging-drift \
+              --body-file report.md
+          fi
