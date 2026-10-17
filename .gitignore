@@ -66,5 +66,5 @@ caddy-extras.d/*.caddyfile
 docker/staging/hooks.json
 /deploy.log
 
-# local per-run reports from /clear-backlog --scheduled; never shipped
+# local per-run reports (/clear-backlog --scheduled, npm run lint:dup); never shipped
 /reports/
