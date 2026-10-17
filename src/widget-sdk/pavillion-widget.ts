@@ -24,6 +24,11 @@ interface WidgetInitOptions {
   onResize?: (height: number) => void;
   onEventClick?: (eventId: string) => void;
   onNavigate?: (path: string) => void;
+  /**
+   * Scroll the host page so the top of the frame is visible when the widget
+   * moves between its list and an event detail. Default `true`.
+   */
+  scrollOnNavigate?: boolean;
 }
 
 // Display options (view, accentColor, colorMode) are now stored server-side
@@ -47,6 +52,7 @@ class PavillionWidget {
   private iframe: HTMLIFrameElement | null = null;
   private container: HTMLElement | null = null;
   private widgetOrigin: string;
+  private lastPathname: string | null = null;
 
   constructor() {
     // Determine widget origin from script tag by finding our widget script
@@ -161,6 +167,7 @@ class PavillionWidget {
 
     const iframe = document.createElement('iframe');
     iframe.src = this.buildWidgetUrl();
+    this.lastPathname = new URL(iframe.src).pathname;
     iframe.style.width = '100%';
     iframe.style.border = 'none';
     iframe.style.display = 'block';
@@ -217,9 +224,29 @@ class PavillionWidget {
   }
 
   /**
-   * Handle navigation event from widget
+   * Handle navigation event from widget.
+   *
+   * A pathname change is a change of view (list <-> event detail); a
+   * query-only change (filters, date range, locale) is not, and leaves the
+   * host scroll alone. On a view change, if the frame's top edge is above the
+   * host viewport, scroll it into view so the new view does not start
+   * off-screen. The geometry is read when the message arrives, before the
+   * frame resizes to the new view's height.
    */
   private handleNavigate(path: string): void {
+    const pathname = new URL(path, this.widgetOrigin).pathname;
+    const viewChanged = pathname !== this.lastPathname;
+    this.lastPathname = pathname;
+
+    if (
+      viewChanged
+      && this.config?.scrollOnNavigate !== false
+      && this.iframe
+      && this.iframe.getBoundingClientRect().top < 0
+    ) {
+      this.iframe.scrollIntoView({ block: 'start' });
+    }
+
     if (this.config?.onNavigate) {
       this.config.onNavigate(path);
     }
@@ -244,6 +271,7 @@ class PavillionWidget {
     this.iframe = null;
     this.container = null;
     this.config = null;
+    this.lastPathname = null;
   }
 }
 
