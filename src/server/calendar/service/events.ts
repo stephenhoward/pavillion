@@ -177,11 +177,14 @@ export function scrubExternalUrlForLog(externalUrl: string | null | undefined): 
  *   service looks up the `EventImportOriginEntity` sibling row (if any)
  *   and flips `locally_edited=true` so future sync runs know not to
  *   overwrite this event's content. On createEvent, no-op.
- * - `'import'`: ICS sync orchestrator. On createEvent and updateEvent,
- *   no-op at the EventService layer — origin bookkeeping lives on the
- *   sibling table and is owned by sync.ts's stampImportOrigin, which
- *   runs in the same transaction. The context argument is retained for
- *   symmetry, audit traceability, and future originator-aware behavior.
+ * - `'import'`: ICS sync orchestrator. Origin bookkeeping is a no-op at
+ *   the EventService layer — it lives on the sibling table and is owned by
+ *   sync.ts's stampImportOrigin, which runs in the same transaction. On
+ *   createEvent and updateEvent, `'import'` selects the non-throwing
+ *   alt-text normalizer (`sanitizeImageAlt`) instead of the rejecting
+ *   validator: the sync pipeline's only error surface is a sanitized run
+ *   outcome, so a field-level rejection has no one to reach and would
+ *   instead roll back the whole run.
  *
  * Event-bus emissions fire on BOTH paths (critical — imported events must
  * still federate via AP through the existing emission machinery).
@@ -674,14 +677,13 @@ class EventService {
   /**
      * Creates a new event for the provided account.
      *
-     * The `_context` originator-context parameter is retained on the
-     * signature for symmetry with updateEvent and because callers (notably
-     * the ICS-import sync orchestrator) pass `{ source: 'import' }`
-     * positionally. createEvent currently has no originator-branching
-     * behavior — origin-provenance bookkeeping lives on the sibling
+     * The `context` originator-context parameter decides how `imageAlt` is
+     * handled: `{ source: 'import' }` (the ICS-import sync orchestrator)
+     * normalizes an invalid alt text away, because a rejection there has no
+     * one to reach; the default `'user'` context rejects it. Origin-provenance
+     * bookkeeping does not branch here — it lives on the sibling
      * EventImportOriginEntity written by the orchestrator in the same
-     * transaction. Preserving the argument keeps the API stable for any
-     * future originator-aware create behavior.
+     * transaction.
      *
      * @param account - account the event belongs to
      * @param eventParams - the parameters for the new event
@@ -690,17 +692,21 @@ class EventService {
   async createEvent(
     account: Account,
     eventParams: Record<string, any>,
-    _context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
+    context: EventOriginatorContext = DEFAULT_ORIGINATOR_CONTEXT,
     tx?: Transaction,
   ): Promise<CalendarEvent> {
+    const untrusted = context.source === 'import';
 
     // Bounds-check media transform values before any persistence.
     validateMediaTransform(eventParams);
 
     // Validate every language's imageAlt before the event row or any content
     // row is written — the per-language loop below throws, and this method
-    // holds no transaction when called without one.
-    validateContentImageAlts(eventParams.content);
+    // holds no transaction when called without one. Import writes normalize
+    // instead of throwing, so they skip the pre-pass.
+    if (!untrusted) {
+      validateContentImageAlts(eventParams.content);
+    }
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
@@ -848,7 +854,7 @@ class EventService {
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
-        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>, tx));
+        event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>, tx, { untrusted }));
       }
     }
 
@@ -896,10 +902,13 @@ class EventService {
    *
    * What `untrusted` actually discriminates is **recourse, not provenance**:
    * is there anyone to return an error to? Remote-in-provenance is not the
-   * test. A user-initiated ingest (ICS import, hosted-provider OAuth sync)
-   * pulls remote data but has a user standing in front of it, so it takes the
-   * strict default and reports the rejection rather than silently discarding
-   * the value. Pass `true` only when a rejection would have nowhere to go.
+   * test, and neither is who pressed the button. The ICS import pipeline
+   * (`context.source === 'import'` on createEvent / updateEvent) passes
+   * `true`: even a user-initiated sync run surfaces only a sanitized run
+   * outcome, so a field-level rejection has no one to reach and would roll
+   * back the whole run instead. Author-facing request bodies, which can be
+   * answered with a 400 naming the field, take the strict default. Pass
+   * `true` only when a rejection would have nowhere to go.
    *
    * Scope: the flag currently governs `imageAlt` and nothing else. `name`,
    * `description` and `accessibilityInfo` on the same call get nothing from it.
@@ -974,10 +983,15 @@ class EventService {
     // Bounds-check media transform values before any persistence.
     validateMediaTransform(eventParams);
 
+    const untrusted = context.source === 'import';
+
     // Validate every language's imageAlt before the first content row is
     // updated. Without this, an over-long alt text on the second language
     // would 400 the request with the first language's edit already saved.
-    validateContentImageAlts(eventParams.content);
+    // Import writes normalize instead of throwing, so they skip the pre-pass.
+    if (!untrusted) {
+      validateContentImageAlts(eventParams.content);
+    }
 
     const eventEntity = await EventEntity.findByPk(eventId);
 
@@ -1068,9 +1082,9 @@ class EventService {
             name: name,
             description: c.description,
             accessibility_info: c.accessibilityInfo ?? '',
-            // validateImageAlt maps nullish to '', matching the `?? ''` idiom
-            // above: an omitted alt text clears the stored one.
-            image_alt: validateImageAlt(c.imageAlt),
+            // Both map nullish to '', matching the `?? ''` idiom above: an
+            // omitted alt text clears the stored one.
+            image_alt: untrusted ? sanitizeImageAlt(c.imageAlt) : validateImageAlt(c.imageAlt),
           }, { transaction: tx });
           event.addContent(contentEntity.toModel());
         }
@@ -1083,7 +1097,7 @@ class EventService {
           delete c.language;
 
           if ( Object.keys(c).length > 0 ) {
-            event.addContent(await this.createEventContent(eventId, language, c, tx));
+            event.addContent(await this.createEventContent(eventId, language, c, tx, { untrusted }));
           }
         }
       }
