@@ -286,6 +286,106 @@ describe('Pavillion Widget SDK', () => {
       widget.destroy();
     });
 
+    describe('scroll on navigate', () => {
+      let scrollIntoView: ReturnType<typeof vi.fn>;
+      let originalScrollIntoView: typeof HTMLElement.prototype.scrollIntoView;
+
+      beforeEach(() => {
+        // The DOM shim does not implement scrollIntoView.
+        originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+        scrollIntoView = vi.fn();
+        HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      });
+
+      afterEach(() => {
+        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+      });
+
+      const mountWidget = (options: { onNavigate?: (path: string) => void; scrollOnNavigate?: boolean } = {}) => {
+        const widget = new PavillionWidget();
+        widget.init({
+          calendar: 'my-calendar',
+          container: '#widget-container',
+          ...options,
+        });
+        const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+        return { widget, iframe };
+      };
+
+      const setFrameTop = (iframe: HTMLIFrameElement, top: number) => {
+        vi.spyOn(iframe, 'getBoundingClientRect').mockReturnValue({ top } as DOMRect);
+      };
+
+      const navigate = (path: string) => {
+        window.dispatchEvent(new MessageEvent('message', {
+          origin: window.location.origin,
+          data: { type: 'pavillion:navigate', path },
+        }));
+      };
+
+      it('scrolls the frame into view when the pathname changes and the frame top is above the viewport', () => {
+        const onNavigate = vi.fn();
+        const { widget, iframe } = mountWidget({ onNavigate });
+        setFrameTop(iframe, -200);
+
+        navigate('/widget/my-calendar/events/123');
+
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+        expect(scrollIntoView.mock.contexts[0]).toBe(iframe);
+        expect(onNavigate).toHaveBeenCalledWith('/widget/my-calendar/events/123');
+
+        widget.destroy();
+      });
+
+      it('does not scroll when only the query changes', () => {
+        const { widget, iframe } = mountWidget();
+        setFrameTop(iframe, -200);
+
+        navigate('/widget/my-calendar?startDate=2026-10-01&endDate=2026-10-31');
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+
+        widget.destroy();
+      });
+
+      it('does not scroll when the frame top is already inside the viewport', () => {
+        const { widget, iframe } = mountWidget();
+        setFrameTop(iframe, 40);
+
+        navigate('/widget/my-calendar/events/123');
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+
+        widget.destroy();
+      });
+
+      it('does not scroll when scrollOnNavigate is false, but still calls onNavigate', () => {
+        const onNavigate = vi.fn();
+        const { widget, iframe } = mountWidget({ onNavigate, scrollOnNavigate: false });
+        setFrameTop(iframe, -200);
+
+        navigate('/widget/my-calendar/events/123');
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+        expect(onNavigate).toHaveBeenCalledWith('/widget/my-calendar/events/123');
+
+        widget.destroy();
+      });
+
+      it('scrolls again when navigating from the detail view back to the list', () => {
+        const { widget, iframe } = mountWidget();
+        setFrameTop(iframe, -200);
+
+        navigate('/widget/my-calendar/events/123');
+        navigate('/widget/my-calendar');
+
+        expect(scrollIntoView).toHaveBeenCalledTimes(2);
+
+        widget.destroy();
+      });
+    });
+
     it('should ignore messages from unauthorized origins', () => {
       const resizeHandler = vi.fn();
 
