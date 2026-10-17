@@ -435,8 +435,13 @@ for (const osScheme of ['light', 'dark'] as const) {
       });
 
       await test.step('selected category pill', async () => {
-        await page.locator('.date-filter-button').click();
+        // Toggle the preset off before picking a category. Category presence
+        // follows the date window, and the seeded week can be empty: on a
+        // Saturday the only in-week seed event lands past the UTC week end,
+        // so every pill is absent and nothing is clickable.
+        await page.locator('.date-dropdown button.date-pill.active').click();
         await expect(page.locator('.date-dropdown')).toBeHidden({ timeout: 15000 });
+        await expect(page.locator('li.day-event-item').first()).toBeVisible({ timeout: 15000 });
         await page.locator('button.category-pill:not(.absent):not(:disabled)').first().click();
         await blurActive(page);
         await expect(page.locator('.category-pill.selected .checkmark')).toBeVisible({ timeout: 15000 });
