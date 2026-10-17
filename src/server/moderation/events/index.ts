@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import { ReportStatus } from '@/common/model/report';
+import { Calendar } from '@/common/model/calendar';
 import ModerationInterface from '../interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
@@ -153,6 +154,12 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         return;
       }
 
+      // The review link is keyed by the calendar's url name
+      const calendar = await this.calendarInterface.getCalendar(report.calendarId);
+      if (!calendar) {
+        return;
+      }
+
       // Look up the event name
       const eventName = await this.getEventName(report.eventId);
 
@@ -165,7 +172,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         report.category,
         report.description,
         timeRemaining,
-        report.calendarId,
+        calendar.urlName,
       );
 
       const language = ownerAccount.language || 'en';
@@ -283,9 +290,14 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         return;
       }
 
-      // Look up event and calendar names
+      // The review link is keyed by the calendar's url name
+      const calendar = await this.calendarInterface.getCalendar(report.calendarId);
+      if (!calendar) {
+        return;
+      }
+
       const eventName = await this.getEventName(report.eventId);
-      const calendarName = await this.getCalendarName(report.calendarId);
+      const calendarName = this.calendarLabel(calendar);
 
       // Format deadline if present
       const deadline = report.adminDeadline
@@ -300,7 +312,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         report.description,
         report.adminPriority || 'medium',
         deadline,
-        report.calendarId,
+        calendar.urlName,
       );
 
       const language = ownerAccount.language || 'en';
@@ -397,14 +409,24 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       if (!calendar) {
         return 'Unknown Calendar';
       }
-      // urlName takes precedence over the generic fallback so calendars
-      // with a slug but no translated name still render their slug.
-      return calendar.displayName(calendar.urlName || 'Unknown Calendar');
+      return this.calendarLabel(calendar);
     }
     catch {
       // If calendar lookup fails, proceed with default name
       return 'Unknown Calendar';
     }
+  }
+
+  /**
+   * The display label for a calendar. urlName takes precedence over the
+   * generic fallback so calendars with a slug but no translated name still
+   * render their slug.
+   *
+   * @param calendar - The calendar to label
+   * @returns The translated name, else the urlName, else 'Unknown Calendar'
+   */
+  private calendarLabel(calendar: Calendar): string {
+    return calendar.displayName(calendar.urlName || 'Unknown Calendar');
   }
 
   /**

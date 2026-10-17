@@ -18,7 +18,7 @@ class EscalationReminderEmail extends EmailMessage {
   reportCategory: string;
   reportDescription: string;
   timeRemaining: string;
-  calendarId: string;
+  calendarUrlName: string;
 
   constructor(
     recipientEmail: string,
@@ -26,7 +26,7 @@ class EscalationReminderEmail extends EmailMessage {
     reportCategory: string,
     reportDescription: string,
     timeRemaining: string,
-    calendarId: string,
+    calendarUrlName: string,
   ) {
     super('escalation_reminder_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
@@ -34,7 +34,7 @@ class EscalationReminderEmail extends EmailMessage {
     this.reportCategory = reportCategory;
     this.reportDescription = reportDescription;
     this.timeRemaining = timeRemaining;
-    this.calendarId = calendarId;
+    this.calendarUrlName = calendarUrlName;
   }
 
   /**
@@ -52,7 +52,8 @@ class EscalationReminderEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    const reviewUrl = publicUrl('/calendar/' + this.calendarId + '/reports');
+    // The reports tab of the calendar's management view, keyed by url name.
+    const reviewUrl = publicUrl('/settings/calendar/' + encodeURIComponent(this.calendarUrlName) + '?tab=reports');
 
     const templateData = {
       eventName: truncatedName,

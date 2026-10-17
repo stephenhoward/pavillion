@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
 import i18next from 'i18next';
+import Handlebars from 'handlebars';
 import EscalationReminderEmail from '../../model/escalation_reminder_email';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 
@@ -45,7 +46,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'This event is spam',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     expect(email.namespace).toBe('escalation_reminder_email');
@@ -58,7 +59,7 @@ describe('EscalationReminderEmail', () => {
       'inappropriate',
       'Contains inappropriate content',
       '6 hours',
-      'cal-456',
+      'community-hub',
     );
 
     expect(email.recipientEmail).toBe('owner@example.com');
@@ -66,7 +67,7 @@ describe('EscalationReminderEmail', () => {
     expect(email.reportCategory).toBe('inappropriate');
     expect(email.reportDescription).toBe('Contains inappropriate content');
     expect(email.timeRemaining).toBe('6 hours');
-    expect(email.calendarId).toBe('cal-456');
+    expect(email.calendarUrlName).toBe('community-hub');
   });
 
   it('should set the correct email address in buildMessage', () => {
@@ -76,7 +77,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -91,7 +92,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -107,7 +108,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -126,7 +127,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -143,7 +144,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -159,7 +160,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       longDesc,
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -175,7 +176,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -191,7 +192,7 @@ describe('EscalationReminderEmail', () => {
       'harassment',
       'Harassing content',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -207,13 +208,14 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
 
-    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
-    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
+    const reviewUrl = `https://${config.get('domain')}/settings/calendar/city-events?tab=reports`;
+    expect(mailData.textMessage).toContain(reviewUrl);
+    expect(mailData.htmlMessage).toContain(Handlebars.escapeExpression(reviewUrl));
   });
 
   it('should pass the language to template rendering', () => {
@@ -223,7 +225,7 @@ describe('EscalationReminderEmail', () => {
       'spam',
       'Spam event',
       '12 hours',
-      'cal-123',
+      'city-events',
     );
 
     const renderPlaintextSpy = sandbox.spy(email, 'renderPlaintext');
