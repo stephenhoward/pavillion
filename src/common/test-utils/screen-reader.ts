@@ -70,7 +70,11 @@ export interface ScreenReaderHandle {
   lastPhrase(): Promise<string>;
   /** Activate the currently focused element. */
   act(): Promise<void>;
-  /** Stop the virtual SR and restore the previous i18next language. */
+  /**
+   * Stop the virtual SR and restore the previous i18next language. The
+   * Vitest variant also restores `HTMLElement.prototype` (see
+   * `screenReader()`).
+   */
   stop(): Promise<void>;
 }
 
@@ -103,16 +107,46 @@ async function lockLocale(): Promise<() => Promise<void>> {
 }
 
 /**
+ * Snapshot an object's own property descriptors. Returns a restore function
+ * that redefines every snapshotted descriptor and deletes any own key added
+ * since the snapshot.
+ */
+function snapshotPrototype(target: object): () => void {
+  const saved = Object.getOwnPropertyDescriptors(target) as Record<PropertyKey, PropertyDescriptor>;
+  const savedKeys = new Set<PropertyKey>(Reflect.ownKeys(saved));
+  return () => {
+    for (const key of Reflect.ownKeys(target)) {
+      if (!savedKeys.has(key)) {
+        Reflect.deleteProperty(target, key);
+      }
+    }
+    for (const key of savedKeys) {
+      Object.defineProperty(target, key, saved[key as string]);
+    }
+  };
+}
+
+/**
  * Create a virtual screen reader bound to a DOM element (typically a
  * Vue Test Utils `wrapper.element`).
  *
  * The helper starts the virtual SR against the supplied container, forces
  * the i18next locale to `'en'`, and exposes the shared primitive API. Call
  * `stop()` on the returned handle in your test teardown to release the
- * virtual SR and restore the previous locale.
+ * virtual SR, restore the previous locale, and restore
+ * `HTMLElement.prototype`.
+ *
+ * `virtual.start()` calls `userEvent.setup()`, which replaces `focus` and
+ * `blur` on `HTMLElement.prototype` with getter-only accessors and never
+ * undoes it. Under `vmThreads` the happy-dom element classes are shared by
+ * every file a worker runs, so the patch would leak into later files and
+ * break any test that assigns `el.focus = spy`. The helper snapshots the
+ * prototype's own property descriptors before starting and puts them back
+ * in `stop()`.
  */
 export async function screenReader(element: Node): Promise<ScreenReaderHandle> {
   const restoreLocale = await lockLocale();
+  const restorePrototype = snapshotPrototype(HTMLElement.prototype);
   await virtual.start({ container: element });
 
   return {
@@ -152,6 +186,7 @@ export async function screenReader(element: Node): Promise<ScreenReaderHandle> {
     },
     async stop() {
       await virtual.stop();
+      restorePrototype();
       await restoreLocale();
     },
   };
