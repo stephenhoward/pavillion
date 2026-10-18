@@ -83,9 +83,9 @@ const renovatePr = (over: Partial<RenovatePr> = {}): RenovatePr => ({
 });
 
 /**
- * `expectedScans` defaults to the labels the fixtures use. Tests that assert
- * resolution therefore run against a complete scan; the missing-scan cases set
- * it explicitly.
+ * `expectedScans` defaults to `[]`: no scan is required, so a run with no
+ * missing-scan suppression. A test that asserts resolution must set it to the
+ * labels its reports carry, or a never-attempted scan goes unnoticed.
  */
 const inputs = (over: Partial<DeltaInputs> = {}): DeltaInputs => ({
   reports: [],
@@ -215,6 +215,18 @@ describe('computeDelta: idempotency against filed beads', () => {
     expect(() => computeDelta(inputs({
       watchBeads: [{ id: 'pv-watch1' }, { id: 'pv-watch2' }],
     }))).toThrow(/pv-watch1.*pv-watch2/s);
+  });
+
+  it('aborts when expectedScans is absent at runtime rather than resolving without it', () => {
+    // A JS caller or a cast can omit the required field; a nullish fallback
+    // would silently drop missing-scan suppression and close live beads.
+    const missing = { ...inputs(), expectedScans: undefined } as unknown as DeltaInputs;
+    expect(() => computeDelta(missing)).toThrow(/expectedScans/);
+  });
+
+  it('aborts when expectedScans is not an array', () => {
+    const wrong = { ...inputs(), expectedScans: 'repository' } as unknown as DeltaInputs;
+    expect(() => computeDelta(wrong)).toThrow(/expectedScans/);
   });
 
   it('treats zero watch beads as a valid first run', () => {
@@ -569,6 +581,27 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.new_actionable.map(f => f.id)).toEqual(['CVE-2026-1112']);
   });
 
+  it('compares the title dependency name literally, so a slug collision cannot cover', () => {
+    // `types-node` and `@types/node` share the slug `types-node`, so the branch
+    // check passes; only a literal title comparison keeps the two independent.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln({ PkgName: 'types-node', FixedVersion: '20.0.0' })])])],
+      renovatePrs: [renovatePr({ title: 'chore(deps): update dependency @types/node to v20.1.0', headRefName: 'renovate/types-node-20.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+  });
+
+  it('matches the title dependency name case-insensitively', () => {
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([vuln({ PkgName: '@types/node', FixedVersion: '20.0.0' })])])],
+      renovatePrs: [renovatePr({ title: 'chore(deps): update dependency @Types/Node to v20.1.0', headRefName: 'renovate/types-node-20.x' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(1);
+  });
+
   it('does not let a PR whose branch and title name different dependencies cover either', () => {
     // Grouped and hand-retitled Renovate PRs produce this shape: the branch
     // says undici, the title (which is where the decisive version is read from)
@@ -600,6 +633,26 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.new_actionable[0].packages).toEqual(['bar', 'foo']);
     expect(delta.new_actionable[0].renovateHints).toEqual([
       expect.objectContaining({ number: 102, pkg: 'foo', reason: expect.stringContaining('bar') }),
+    ]);
+  });
+
+  it('never covers a CVE when a row carrying a fix names no package', () => {
+    // The unnamed row's 9.9.9 fix is displayed and makes the finding fixable,
+    // but no PR can ever be matched to it, so it must block coverage rather
+    // than drop out of the every-package rule.
+    const delta = computeDelta(inputs({
+      reports: [repoReport([nodeResult([
+        vuln({ VulnerabilityID: 'CVE-2026-8010', FixedVersion: '6.0.0' }),
+        vuln({ VulnerabilityID: 'CVE-2026-8010', PkgName: undefined, FixedVersion: '9.9.9' }),
+      ])])],
+      renovatePrs: [renovatePr({ title: 'chore(deps): update dependency undici to v6.0.0' })],
+    }));
+
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0].fixedVersion).toBe('6.0.0, 9.9.9');
+    expect(delta.new_actionable[0].renovateHints).toEqual([
+      expect.objectContaining({ number: 561, pkg: 'undici', reason: expect.stringContaining('unnamed package') }),
     ]);
   });
 
@@ -866,13 +919,16 @@ describe('computeDelta: Renovate coverage', () => {
     expect(delta.new_actionable[0].renovateHints).toBeUndefined();
   });
 
-  it('still trusts a Renovate PR when gh reported no is_bot field', () => {
+  it('ignores a renovate-login PR when gh reported no is_bot field', () => {
+    // The plain `renovate` login is registerable by a human; without is_bot the
+    // login alone is not proof, so absence fails closed like an absent author.
     const delta = computeDelta(inputs({
       reports: [repoReport([nodeResult([vuln()])])],
-      renovatePrs: [renovatePr({ authorIsBot: undefined })],
+      renovatePrs: [renovatePr({ author: 'Renovate', authorIsBot: undefined })],
     }));
 
-    expect(delta.covered_by_renovate).toHaveLength(1);
+    expect(delta.covered_by_renovate).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
   });
 
   it('prefers the matching PR that reaches the fix when several are open for one package', () => {
