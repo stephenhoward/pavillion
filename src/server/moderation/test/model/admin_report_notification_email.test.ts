@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
 import i18next from 'i18next';
+import Handlebars from 'handlebars';
 import AdminReportNotificationEmail from '../../model/admin_report_notification_email';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 
@@ -48,7 +49,7 @@ describe('AdminReportNotificationEmail', () => {
       'This event is spam',
       'high',
       '2026-02-14',
-      'calendar-uuid',
+      'city-events',
     );
 
     expect(email.namespace).toBe('admin_report_notification_email');
@@ -63,7 +64,7 @@ describe('AdminReportNotificationEmail', () => {
       'Contains inappropriate content',
       'medium',
       '2026-03-01',
-      'cal-123',
+      'city-events',
     );
 
     expect(email.recipientEmail).toBe('owner@example.com');
@@ -73,7 +74,7 @@ describe('AdminReportNotificationEmail', () => {
     expect(email.reportDescription).toBe('Contains inappropriate content');
     expect(email.priority).toBe('medium');
     expect(email.deadline).toBe('2026-03-01');
-    expect(email.calendarId).toBe('cal-123');
+    expect(email.calendarUrlName).toBe('city-events');
   });
 
   it('should set the correct email address in buildMessage', () => {
@@ -85,7 +86,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -102,7 +103,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     email.buildMessage('en');
@@ -119,7 +120,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'medium',
       null,
-      'cal-123',
+      'city-events',
     );
 
     email.buildMessage('en');
@@ -136,7 +137,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'low',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -155,7 +156,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       '2026-02-14',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -176,7 +177,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -195,7 +196,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -213,7 +214,7 @@ describe('AdminReportNotificationEmail', () => {
       longDesc,
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -231,7 +232,7 @@ describe('AdminReportNotificationEmail', () => {
       'Harassing content',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -249,7 +250,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -267,7 +268,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       '2026-02-14',
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -285,13 +286,14 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
 
-    expect(mailData.textMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
-    expect(mailData.htmlMessage).toContain(`https://${config.get('domain')}/calendar/cal-123/reports`);
+    const reviewUrl = `https://${config.get('domain')}/settings/calendar/city-events?tab=reports`;
+    expect(mailData.textMessage).toContain(reviewUrl);
+    expect(mailData.htmlMessage).toContain(Handlebars.escapeExpression(reviewUrl));
   });
 
   it('should include priority in rendered output', () => {
@@ -303,7 +305,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const mailData = email.buildMessage('en');
@@ -321,7 +323,7 @@ describe('AdminReportNotificationEmail', () => {
       'Spam event',
       'high',
       null,
-      'cal-123',
+      'city-events',
     );
 
     const renderPlaintextSpy = sandbox.spy(email, 'renderPlaintext');

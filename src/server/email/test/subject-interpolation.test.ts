@@ -92,7 +92,7 @@ describe('email subjects with placeholders', () => {
 
   it('admin report subject carries the priority exactly once', () => {
     const email = new AdminReportNotificationEmail(
-      'owner@example.com', 'Event', 'Calendar', 'spam', 'desc', 'high', null, 'cal-1',
+      'owner@example.com', 'Event', 'Calendar', 'spam', 'desc', 'high', null, 'city-events',
     );
 
     expect(email.buildMessage('en').subject).toBe('[HIGH] Admin report on your event');

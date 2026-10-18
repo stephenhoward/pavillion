@@ -20,7 +20,7 @@ class AdminReportNotificationEmail extends EmailMessage {
   reportDescription: string;
   priority: string;
   deadline: string | null;
-  calendarId: string;
+  calendarUrlName: string;
 
   constructor(
     recipientEmail: string,
@@ -30,7 +30,7 @@ class AdminReportNotificationEmail extends EmailMessage {
     reportDescription: string,
     priority: string,
     deadline: string | null,
-    calendarId: string,
+    calendarUrlName: string,
   ) {
     super('admin_report_notification_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
@@ -40,7 +40,7 @@ class AdminReportNotificationEmail extends EmailMessage {
     this.reportDescription = reportDescription;
     this.priority = priority;
     this.deadline = deadline;
-    this.calendarId = calendarId;
+    this.calendarUrlName = calendarUrlName;
   }
 
   /**
@@ -58,7 +58,8 @@ class AdminReportNotificationEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    const reviewUrl = publicUrl('/calendar/' + this.calendarId + '/reports');
+    // The reports tab of the calendar's management view, keyed by url name.
+    const reviewUrl = publicUrl('/settings/calendar/' + encodeURIComponent(this.calendarUrlName) + '?tab=reports');
     const priorityLabel = this.priority.toUpperCase();
 
     const templateData = {

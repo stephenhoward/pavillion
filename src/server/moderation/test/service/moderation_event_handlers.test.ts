@@ -173,6 +173,88 @@ describe('ModerationEventHandlers getCalendarName urlName precedence', () => {
 });
 
 /**
+ * The owner-facing report emails link to the reports tab of the calendar's
+ * management view, which the client keys by url name, so the handlers must
+ * resolve the calendar before building the email.
+ */
+describe('ModerationEventHandlers owner review link', () => {
+  let sandbox: sinon.SinonSandbox;
+  let calendarInterface: CalendarInterface;
+  let accountsInterface: AccountsInterface;
+  let emailInterface: EmailInterface;
+  let sentEmails: MailData[];
+  let handlers: ModerationEventHandlers;
+
+  const report = Report.fromObject({
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    eventId: 'event-id',
+    calendarId: 'cal-id',
+    category: ReportCategory.SPAM,
+    description: 'Test report',
+    reporterType: 'administrator',
+    status: ReportStatus.SUBMITTED,
+    adminPriority: 'high',
+    createdAt: new Date(),
+  });
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    sentEmails = [];
+
+    calendarInterface = {
+      getCalendarOwnerAccountId: sandbox.stub().resolves('owner-id'),
+      getEventById: sandbox.stub().resolves(new CalendarEvent('event-id', 'cal-id')),
+      getCalendar: sandbox.stub().resolves(new Calendar('cal-id', 'community-hub')),
+    } as unknown as CalendarInterface;
+    accountsInterface = {
+      getAccountById: sandbox.stub().resolves(new Account('owner-id', 'owner', 'owner@example.test')),
+    } as unknown as AccountsInterface;
+    emailInterface = {
+      sendEmail: async (data: MailData) => {
+        sentEmails.push(data);
+        return null;
+      },
+    } as unknown as EmailInterface;
+
+    handlers = new ModerationEventHandlers(
+      {} as ModerationInterface,
+      calendarInterface,
+      accountsInterface,
+      emailInterface,
+    );
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('links the escalation reminder to the calendar reports tab by url name', async () => {
+    await (handlers as any).handleEscalationReminder({ report });
+
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub?tab=reports');
+    expect(sentEmails[0].textMessage).not.toContain('/calendar/cal-id/reports');
+  });
+
+  it('links the admin report notification to the calendar reports tab by url name', async () => {
+    await (handlers as any).sendAdminReportNotification(report);
+
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub?tab=reports');
+    expect(sentEmails[0].textMessage).not.toContain('/calendar/cal-id/reports');
+  });
+
+  it('sends no owner email when the calendar cannot be found', async () => {
+    (calendarInterface as any).getCalendar = sandbox.stub().resolves(null);
+
+    await (handlers as any).handleEscalationReminder({ report });
+    await (handlers as any).sendAdminReportNotification(report);
+
+    expect(sentEmails).toHaveLength(0);
+  });
+});
+
+/**
  * Suppress the unused-import warning for MODERATION_BUS_EVENTS. The
  * constant documents that handleEscalated is wired to the bus event
  * `moderation:report:escalated` even though the test calls the handler
