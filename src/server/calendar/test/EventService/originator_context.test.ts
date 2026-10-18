@@ -5,9 +5,11 @@ import type { Transaction } from 'sequelize';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { EventEntity } from '@/server/calendar/entity/event';
+import { ValidationError } from '@/common/exceptions/base';
+import { EventContentEntity, EventEntity } from '@/server/calendar/entity/event';
 import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import EventService from '@/server/calendar/service/events';
+import { IMAGE_ALT_MAX_LENGTH } from '@/server/calendar/service/image_alt';
 
 /**
  * Coverage for EventService originator context after the pv-picz origin-refactor.
@@ -276,6 +278,171 @@ describe('EventService originator context', () => {
       );
 
       expect(listener.calledOnce).toBe(true);
+    });
+  });
+
+  /**
+   * `'import'` is the ICS sync pipeline, whose only error surface is a
+   * sanitized run outcome — a field-level rejection has no one to reach and
+   * would roll back the whole run. So import writes normalize an invalid
+   * imageAlt away; author writes keep rejecting it.
+   */
+  describe('imageAlt disposition', () => {
+    const OVER_LONG_ALT = 'a'.repeat(IMAGE_ALT_MAX_LENGTH + 1);
+
+    describe('createEvent', () => {
+      let contentFromModelSpy: sinon.SinonSpy;
+
+      beforeEach(() => {
+        sandbox.stub(EventEntity.prototype, 'save');
+        sandbox.stub(EventContentEntity.prototype, 'save');
+        contentFromModelSpy = sandbox.spy(EventContentEntity, 'fromModel');
+      });
+
+      it('import context drops an over-long imageAlt and writes the event', async () => {
+        await expect(service.createEvent(
+          account,
+          { calendarId: CALENDAR_ID, content: { en: { name: 'Feed event', imageAlt: OVER_LONG_ALT } } },
+          { source: 'import' },
+        )).resolves.toBeDefined();
+
+        expect(contentFromModelSpy.calledOnce).toBe(true);
+        expect(contentFromModelSpy.returnValues[0].image_alt).toBe('');
+      });
+
+      it('import context drops a non-string imageAlt and writes the event', async () => {
+        await expect(service.createEvent(
+          account,
+          { calendarId: CALENDAR_ID, content: { en: { name: 'Feed event', imageAlt: 42 } } },
+          { source: 'import' },
+        )).resolves.toBeDefined();
+
+        expect(contentFromModelSpy.calledOnce).toBe(true);
+        expect(contentFromModelSpy.returnValues[0].image_alt).toBe('');
+      });
+
+      it('default context still rejects an over-long imageAlt', async () => {
+        await expect(service.createEvent(
+          account,
+          { calendarId: CALENDAR_ID, content: { en: { name: 'Authored event', imageAlt: OVER_LONG_ALT } } },
+        )).rejects.toBeInstanceOf(ValidationError);
+
+        expect(contentFromModelSpy.called).toBe(false);
+      });
+    });
+
+    describe('updateEvent', () => {
+      beforeEach(() => {
+        sandbox.stub(EventEntity, 'findByPk').resolves(EventEntity.build({
+          id: EVENT_ID,
+          calendar_id: CALENDAR_ID,
+        }));
+        sandbox.stub(EventEntity.prototype, 'save');
+        sandbox.stub(EventImportOriginEntity, 'findOne').resolves(null);
+      });
+
+      /**
+       * Stubs the lookup of an existing content row so updateEvent takes the
+       * in-place update branch. Returns the stub standing in for its update.
+       */
+      function stubExistingContentRow(): sinon.SinonStub {
+        const row = EventContentEntity.build({
+          id: '33333333-3333-4333-8333-333333333333',
+          event_id: EVENT_ID,
+          language: 'en',
+          name: 'Before',
+          description: '',
+          accessibility_info: '',
+          image_alt: 'old alt',
+        });
+        const updateStub = sandbox.stub(row, 'update').resolves(row);
+        sandbox.stub(EventContentEntity, 'findOne').resolves(row);
+        return updateStub;
+      }
+
+      it('import context drops an over-long imageAlt on an existing content row', async () => {
+        const updateStub = stubExistingContentRow();
+
+        await expect(service.updateEvent(
+          account,
+          EVENT_ID,
+          { content: { en: { name: 'After', imageAlt: OVER_LONG_ALT } } },
+          { source: 'import' },
+        )).resolves.toBeDefined();
+
+        expect(updateStub.calledOnce).toBe(true);
+        expect(updateStub.firstCall.args[0].image_alt).toBe('');
+      });
+
+      it('import context drops a non-string imageAlt on an existing content row', async () => {
+        const updateStub = stubExistingContentRow();
+
+        await expect(service.updateEvent(
+          account,
+          EVENT_ID,
+          { content: { en: { name: 'After', imageAlt: 42 } } },
+          { source: 'import' },
+        )).resolves.toBeDefined();
+
+        expect(updateStub.calledOnce).toBe(true);
+        expect(updateStub.firstCall.args[0].image_alt).toBe('');
+      });
+
+      it('default context still rejects an over-long imageAlt on an existing content row', async () => {
+        const updateStub = stubExistingContentRow();
+
+        await expect(service.updateEvent(
+          account,
+          EVENT_ID,
+          { content: { en: { name: 'After', imageAlt: OVER_LONG_ALT } } },
+        )).rejects.toBeInstanceOf(ValidationError);
+
+        expect(updateStub.called).toBe(false);
+      });
+
+      describe('new content row', () => {
+        let contentFromModelSpy: sinon.SinonSpy;
+
+        beforeEach(() => {
+          sandbox.stub(EventContentEntity, 'findOne').resolves(null);
+          sandbox.stub(EventContentEntity.prototype, 'save');
+          contentFromModelSpy = sandbox.spy(EventContentEntity, 'fromModel');
+        });
+
+        it('import context drops an over-long imageAlt', async () => {
+          await expect(service.updateEvent(
+            account,
+            EVENT_ID,
+            { content: { fr: { name: 'Nouveau', imageAlt: OVER_LONG_ALT } } },
+            { source: 'import' },
+          )).resolves.toBeDefined();
+
+          expect(contentFromModelSpy.calledOnce).toBe(true);
+          expect(contentFromModelSpy.returnValues[0].image_alt).toBe('');
+        });
+
+        it('import context drops a non-string imageAlt', async () => {
+          await expect(service.updateEvent(
+            account,
+            EVENT_ID,
+            { content: { fr: { name: 'Nouveau', imageAlt: 42 } } },
+            { source: 'import' },
+          )).resolves.toBeDefined();
+
+          expect(contentFromModelSpy.calledOnce).toBe(true);
+          expect(contentFromModelSpy.returnValues[0].image_alt).toBe('');
+        });
+
+        it('default context still rejects an over-long imageAlt', async () => {
+          await expect(service.updateEvent(
+            account,
+            EVENT_ID,
+            { content: { fr: { name: 'Nouveau', imageAlt: OVER_LONG_ALT } } },
+          )).rejects.toBeInstanceOf(ValidationError);
+
+          expect(contentFromModelSpy.called).toBe(false);
+        });
+      });
     });
   });
 });
