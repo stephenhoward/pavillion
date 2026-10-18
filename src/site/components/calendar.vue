@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, computed, inject } from 'vue';
+import { reactive, onBeforeMount, computed, inject, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -93,6 +93,14 @@ function clearAllFilters() {
   router.replace({ query: viewQuery });
 }
 
+// The page title follows the loaded calendar, so every load path (the full
+// load and the back-navigation fast path) sets it.
+watchEffect(() => {
+  if (!state.calendar) return;
+  const calendarName = localizedContent(state.calendar).name || state.calendar.urlName;
+  document.title = `${calendarName} | Pavillion`;
+});
+
 onBeforeMount(async () => {
   // Skip full reload if the store already has data for this calendar (e.g. back-navigation).
   // Only fetch the calendar metadata needed to render the header, then return early.
@@ -117,10 +125,6 @@ onBeforeMount(async () => {
       state.notFound = true;
       return;
     }
-
-    // Set page title to calendar name
-    const calendarName = localizedContent(state.calendar).name || state.calendar.urlName;
-    document.title = `${calendarName} | Pavillion`;
 
     // Set server-level default date range from site config before loading calendar
     if (siteConfig) {

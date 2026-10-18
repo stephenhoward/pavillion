@@ -210,6 +210,27 @@ test.describe('Public Calendar', () => {
     const breadcrumb = page.locator('.breadcrumb a, p.breadcrumb a');
     await expect(breadcrumb).toBeVisible();
   });
+
+  test('should restore the calendar page title after Back from an event', async ({ page }) => {
+    await expect(page).toHaveTitle(/\| Pavillion$/, { timeout: 10000 });
+    const calendarTitle = await page.title();
+
+    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
+    const eventLinks = page.locator('li.day-event-item h3 a');
+    if (await eventLinks.count() === 0) {
+      test.skip();
+      return;
+    }
+
+    // In-SPA navigation to the event page, which sets its own title.
+    await eventLinks.first().click();
+    await expect(page).not.toHaveTitle(calendarTitle, { timeout: 10000 });
+
+    // Back re-shows the calendar from the store's cached events; the title
+    // must follow it rather than keep the event's.
+    await page.goBack();
+    await expect(page).toHaveTitle(calendarTitle, { timeout: 10000 });
+  });
 });
 
 /**
