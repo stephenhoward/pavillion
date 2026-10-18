@@ -516,6 +516,41 @@ test.describe('Widget Embedding', () => {
     expect(Math.min(...toList)).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
   });
 
+  test('host page brings the top of the frame into view on list to detail and back', async ({ page }) => {
+    // A short viewport so the list is taller than it and scrolling the host to
+    // the bottom puts the frame's top edge above the viewport.
+    await page.setViewportSize({ width: 1280, height: 500 });
+    await page.goto(embeddingUrl());
+
+    await page.locator(WIDGET_FRAME).waitFor({ timeout: 15000 });
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectDocumentFitsFrame(page);
+
+    const frameTop = () => page.locator(WIDGET_FRAME).evaluate((el) => el.getBoundingClientRect().top);
+    const scrollHostToBottom = () => page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const expectFrameTopInViewport = () => expect.poll(async () => {
+      const top = await frameTop();
+      const viewportHeight = await page.evaluate(() => window.innerHeight);
+      return top >= 0 && top < viewportHeight;
+    }, { timeout: 10000 }).toBe(true);
+
+    await scrollHostToBottom();
+    // Precondition: without the SDK's scroll the new view would start off-screen.
+    expect(await frameTop()).toBeLessThan(0);
+
+    await iframe.locator('article.event-card .event-title-link').last().click();
+    await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expectFrameTopInViewport();
+
+    // If the detail is shorter than the viewport this is a no-op and the
+    // assertion below still holds.
+    await scrollHostToBottom();
+    await iframe.locator('.back-link').first().click();
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
+    await expectFrameTopInViewport();
+  });
+
   test('custom date popover stays inside a frame shrunk to an empty list', async ({ page }) => {
     await page.goto(embeddingUrl());
 
