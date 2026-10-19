@@ -135,7 +135,7 @@
     "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.32.0",
     "@typescript-eslint/parser": "^8.32.0",
-    "@vitejs/plugin-vue": "^5.2.0",
+    "@vitejs/plugin-vue": "^6.0.0",
     "@vitest/coverage-v8": "^4.1.12",
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.0",
