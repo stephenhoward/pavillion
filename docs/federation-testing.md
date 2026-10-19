@@ -397,8 +397,8 @@ The federation testing infrastructure consists of:
 - `tests/e2e/federation/helpers/instances.ts` - Instance configuration and helpers
 
 **Unit Test Utilities:**
-- `src/server/activitypub/test/helpers/fedify-mock.ts` - Fedify-based mocking utilities for unit tests
-- `src/server/activitypub/test/helpers/fedify-mock.test.ts` - Tests for the mock utilities
+- `src/server/activitypub/test/helpers/activity-builders.ts` - Builders for well-formed ActivityPub activities in unit tests
+- `src/server/activitypub/test/helpers/activity-builders.test.ts` - Tests for the activity builders
 
 ## Security Note
 
