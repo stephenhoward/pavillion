@@ -83,14 +83,14 @@ export default class AccountsInterface {
     limit: number = 50,
     status?: string,
   ): Promise<{
-      applications: AccountApplication[];
-      pagination: {
-        currentPage: number;
-        totalPages: number;
-        totalCount: number;
-        limit: number;
-      };
-    }> {
+    applications: AccountApplication[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
     return this.accountService.listAccountApplications(page, limit, status);
   }
 
@@ -121,14 +121,14 @@ export default class AccountsInterface {
     inviterId?: string,
     calendarId?: string,
   ): Promise<{
-      invitations: AccountInvitation[];
-      pagination: {
-        currentPage: number;
-        totalPages: number;
-        totalCount: number;
-        limit: number;
-      };
-    }> {
+    invitations: AccountInvitation[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
     return this.accountService.listInvitations(page, limit, inviterId, calendarId);
   }
 
@@ -137,14 +137,14 @@ export default class AccountsInterface {
     limit: number = 50,
     search?: string,
   ): Promise<{
-      accounts: Account[];
-      pagination: {
-        currentPage: number;
-        totalPages: number;
-        totalCount: number;
-        limit: number;
-      };
-    }> {
+    accounts: Account[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
     return this.accountService.listAccounts(page, limit, search);
   }
 
