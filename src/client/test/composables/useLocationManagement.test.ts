@@ -15,6 +15,9 @@ describe('useLocationManagement', () => {
   });
 
   afterEach(() => {
+    // vitest 4 returns the same spy from repeated vi.spyOn calls, so call
+    // history would otherwise leak from one test into the next.
+    vi.restoreAllMocks();
     sandbox.restore();
   });
 

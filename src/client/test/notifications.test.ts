@@ -16,7 +16,9 @@ vi.mock('@/client/service/notification', async () => {
   const actual = await vi.importActual('@/client/service/notification');
   return {
     ...actual,
-    default: vi.fn(() => mockNotificationService),
+    default: vi.fn(function () {
+      return mockNotificationService;
+    }),
   };
 });
 

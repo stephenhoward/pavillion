@@ -100,33 +100,35 @@ let mockSpace: {
 
 vi.mock('@/site/service/calendar', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      getCalendarByUrlName: vi.fn().mockResolvedValue({
-        urlName: 'test_calendar',
-        content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
-        hasContent: (_lang: string) => true,
-        getLanguages: () => ['en'],
-      }),
-      loadEvent: vi.fn().mockImplementation(() =>
-        Promise.resolve({
-          content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo, imageAlt: mockEventImageAlt }),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        getCalendarByUrlName: vi.fn().mockResolvedValue({
+          urlName: 'test_calendar',
+          content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
           hasContent: (_lang: string) => true,
           getLanguages: () => ['en'],
-          media: mockEventMedia,
-          mediaFocalPointX: 0.5,
-          mediaFocalPointY: 0.5,
-          mediaZoom: 1.0,
-          categories: mockCategories,
-          location: mockLocation,
-          space: mockSpace,
-          series: mockSeries,
-          schedules: [],
-          sourceCalendar: mockSourceCalendar,
-          externalUrl: mockExternalUrl,
-          urlPrompt: mockUrlPrompt,
         }),
-      ),
-    })),
+        loadEvent: vi.fn().mockImplementation(() =>
+          Promise.resolve({
+            content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo, imageAlt: mockEventImageAlt }),
+            hasContent: (_lang: string) => true,
+            getLanguages: () => ['en'],
+            media: mockEventMedia,
+            mediaFocalPointX: 0.5,
+            mediaFocalPointY: 0.5,
+            mediaZoom: 1.0,
+            categories: mockCategories,
+            location: mockLocation,
+            space: mockSpace,
+            series: mockSeries,
+            schedules: [],
+            sourceCalendar: mockSourceCalendar,
+            externalUrl: mockExternalUrl,
+            urlPrompt: mockUrlPrompt,
+          }),
+        ),
+      };
+    }),
   };
 });
 

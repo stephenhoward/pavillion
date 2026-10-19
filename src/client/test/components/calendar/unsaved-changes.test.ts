@@ -24,10 +24,12 @@ vi.mock('@/client/stores/calendarStore', () => ({
 
 // Mock CategoryService
 vi.mock('@/client/service/category', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getEventCategories: vi.fn().mockResolvedValue([]),
-    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getEventCategories: vi.fn().mockResolvedValue([]),
+      assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // Mock useEventDuplication composable
@@ -43,9 +45,11 @@ vi.mock('@/client/composables/useEventDuplication', () => ({
 
 // Mock EventService
 vi.mock('@/client/service/event', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    saveEvent: vi.fn().mockResolvedValue({ id: 'saved-event-id', calendarId: 'testCalendarId' }),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      saveEvent: vi.fn().mockResolvedValue({ id: 'saved-event-id', calendarId: 'testCalendarId' }),
+    };
+  }),
 }));
 
 // Stub component for other routes

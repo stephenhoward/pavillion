@@ -98,12 +98,16 @@ describe('Editors Component', () => {
       cancelInvitation: vi.fn(),
       resendInvitation: vi.fn(),
     };
-    vi.mocked(CalendarService).mockImplementation(() => calendarServiceMock);
+    vi.mocked(CalendarService).mockImplementation(function () {
+      return calendarServiceMock;
+    });
 
     authServiceMock = {
       userEmail: vi.fn().mockReturnValue(null),
     };
-    vi.mocked(AuthenticationService).mockImplementation(() => authServiceMock);
+    vi.mocked(AuthenticationService).mockImplementation(function () {
+      return authServiceMock;
+    });
   });
 
   afterEach(() => {

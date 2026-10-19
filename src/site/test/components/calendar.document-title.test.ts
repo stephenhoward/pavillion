@@ -34,16 +34,18 @@ let mockCalendarName = 'Test Calendar';
 
 vi.mock('@/site/service/calendar', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      getCalendarByUrlName: vi.fn().mockImplementation(() =>
-        Promise.resolve({
-          urlName: 'test_calendar',
-          content: (_lang: string) => ({ name: mockCalendarName, description: '' }),
-          hasContent: (_lang: string) => true,
-          getLanguages: () => ['en'],
-        }),
-      ),
-    })),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        getCalendarByUrlName: vi.fn().mockImplementation(() =>
+          Promise.resolve({
+            urlName: 'test_calendar',
+            content: (_lang: string) => ({ name: mockCalendarName, description: '' }),
+            hasContent: (_lang: string) => true,
+            getLanguages: () => ['en'],
+          }),
+        ),
+      };
+    }),
   };
 });
 

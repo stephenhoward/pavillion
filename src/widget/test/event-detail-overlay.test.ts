@@ -77,19 +77,21 @@ function buildFallbackInstanceMock() {
 
 vi.mock('@/site/service/calendar', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      getCalendarByUrlName: vi.fn().mockResolvedValue({
-        urlName: 'test_calendar',
-        content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
-        hasContent: (_lang: string) => true,
-        getLanguages: () => ['en'],
-      }),
-      // Note: do NOT call mockImplementation here — that would clobber any
-      // per-test mockResolvedValue set up before mountOverlay. The default
-      // implementation is installed once in beforeEach instead.
-      loadCalendarEvents: loadCalendarEventsMock,
-      loadEventInstance: loadEventInstanceMock,
-    })),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        getCalendarByUrlName: vi.fn().mockResolvedValue({
+          urlName: 'test_calendar',
+          content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
+          hasContent: (_lang: string) => true,
+          getLanguages: () => ['en'],
+        }),
+        // Note: do NOT call mockImplementation here — that would clobber any
+        // per-test mockResolvedValue set up before mountOverlay. The default
+        // implementation is installed once in beforeEach instead.
+        loadCalendarEvents: loadCalendarEventsMock,
+        loadEventInstance: loadEventInstanceMock,
+      };
+    }),
   };
 });
 

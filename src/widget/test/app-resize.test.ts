@@ -96,14 +96,14 @@ describe('widget app height reporting', () => {
     notifyResize = vi.spyOn(useWidgetStore(), 'notifyResize').mockImplementation(() => {});
 
     observers = [];
-    vi.stubGlobal('ResizeObserver', vi.fn().mockImplementation((callback: ResizeObserverCallback) => {
+    vi.stubGlobal('ResizeObserver', vi.fn().mockImplementation(function (callback: ResizeObserverCallback) {
       const observer = { callback, observe: vi.fn(), disconnect: vi.fn() };
       observers.push(observer);
       return observer;
     }));
 
     mutationObservers = [];
-    vi.stubGlobal('MutationObserver', vi.fn().mockImplementation((callback: MutationCallback) => {
+    vi.stubGlobal('MutationObserver', vi.fn().mockImplementation(function (callback: MutationCallback) {
       const observer = { callback, observe: vi.fn(), disconnect: vi.fn() };
       mutationObservers.push(observer);
       return observer;

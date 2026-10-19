@@ -21,17 +21,21 @@ vi.mock('@/client/composables/useToast', () => ({
 }));
 
 vi.mock('@/client/service/calendar', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    loadCalendars: vi.fn().mockResolvedValue([]),
-    replaceEventCategories: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      loadCalendars: vi.fn().mockResolvedValue([]),
+      replaceEventCategories: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@/client/service/event', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    deleteEvent: vi.fn(),
-    unshareReposted: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      deleteEvent: vi.fn(),
+      unshareReposted: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@/client/stores/categoryStore', () => ({

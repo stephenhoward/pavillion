@@ -62,9 +62,11 @@ const createMockLocation = (id: string, name: string, spaces: EventLocationSpace
 const mockGetCalendarByUrlName = vi.fn();
 
 vi.mock('@/client/service/calendar', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getCalendarByUrlName: mockGetCalendarByUrlName,
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getCalendarByUrlName: mockGetCalendarByUrlName,
+    };
+  }),
 }));
 
 // Mock LocationService — per-Space CRUD methods are no longer used.
@@ -75,12 +77,14 @@ const mockUpdateLocation = vi.fn();
 const mockReassignEvents = vi.fn();
 
 vi.mock('@/client/service/location', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getLocationById: mockGetLocationById,
-    createLocation: mockCreateLocation,
-    updateLocation: mockUpdateLocation,
-    reassignEvents: mockReassignEvents,
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getLocationById: mockGetLocationById,
+      createLocation: mockCreateLocation,
+      updateLocation: mockUpdateLocation,
+      reassignEvents: mockReassignEvents,
+    };
+  }),
 }));
 
 const routes: RouteRecordRaw[] = [

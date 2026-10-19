@@ -9,31 +9,33 @@ import enAdmin from '@/client/locales/en/admin.json';
 
 // Mock FundingService
 vi.mock('@/client/service/funding', () => {
-  const MockFundingService = vi.fn().mockImplementation(() => ({
-    getSettings: vi.fn().mockResolvedValue({
-      enabled: true,
-      monthlyPrice: 1000000, // 10.00 in millicents
-      yearlyPrice: 10000000, // 100.00 in millicents
-      currency: 'USD',
-      payWhatYouCan: false,
-      gracePeriodDays: 7,
-    }),
-    getProviders: vi.fn().mockResolvedValue([
-      {
-        provider_type: 'stripe',
-        display_name: 'Stripe',
-        configured: false,
-        enabled: false,
-      },
-      {
-        provider_type: 'paypal',
-        display_name: 'PayPal',
-        configured: false,
-        enabled: false,
-      },
-    ]),
-    listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
-  }));
+  const MockFundingService = vi.fn().mockImplementation(function () {
+    return {
+      getSettings: vi.fn().mockResolvedValue({
+        enabled: true,
+        monthlyPrice: 1000000, // 10.00 in millicents
+        yearlyPrice: 10000000, // 100.00 in millicents
+        currency: 'USD',
+        payWhatYouCan: false,
+        gracePeriodDays: 7,
+      }),
+      getProviders: vi.fn().mockResolvedValue([
+        {
+          provider_type: 'stripe',
+          display_name: 'Stripe',
+          configured: false,
+          enabled: false,
+        },
+        {
+          provider_type: 'paypal',
+          display_name: 'PayPal',
+          configured: false,
+          enabled: false,
+        },
+      ]),
+      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
+    };
+  });
 
   // Add static methods to the mock class
   MockFundingService.formatCurrency = vi.fn((millicents, currency) => `${currency} ${(millicents / 100000).toFixed(2)}`);
@@ -133,7 +135,9 @@ describe('Funding Page Wizard Integration', () => {
       listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
-    vi.mocked(FundingService).mockImplementation(() => mockService as any);
+    vi.mocked(FundingService).mockImplementation(function () {
+      return mockService as any;
+    });
 
     wrapper = mountWithI18n({
       global: {
@@ -154,31 +158,33 @@ describe('Funding Page Wizard Integration', () => {
 
   it('opens wizard with correct provider list when "Add Provider" button is clicked', async () => {
     // Reset mock to ensure we get unconfigured providers
-    vi.mocked(FundingService).mockImplementation(() => ({
-      getSettings: vi.fn().mockResolvedValue({
-        enabled: true,
-        monthlyPrice: 1000000,
-        yearlyPrice: 10000000,
-        currency: 'USD',
-        payWhatYouCan: false,
-        gracePeriodDays: 7,
-      }),
-      getProviders: vi.fn().mockResolvedValue([
-        {
-          provider_type: 'stripe',
-          display_name: 'Stripe',
-          configured: false,
-          enabled: false,
-        },
-        {
-          provider_type: 'paypal',
-          display_name: 'PayPal',
-          configured: false,
-          enabled: false,
-        },
-      ]),
-      listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
-    } as any));
+    vi.mocked(FundingService).mockImplementation(function () {
+      return {
+        getSettings: vi.fn().mockResolvedValue({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: false,
+          gracePeriodDays: 7,
+        }),
+        getProviders: vi.fn().mockResolvedValue([
+          {
+            provider_type: 'stripe',
+            display_name: 'Stripe',
+            configured: false,
+            enabled: false,
+          },
+          {
+            provider_type: 'paypal',
+            display_name: 'PayPal',
+            configured: false,
+            enabled: false,
+          },
+        ]),
+        listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
+      } as any;
+    });
 
     wrapper = mountWithI18n({
       global: {
@@ -259,7 +265,9 @@ describe('Funding Page Wizard Integration', () => {
       listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
-    vi.mocked(FundingService).mockImplementation(() => mockService as any);
+    vi.mocked(FundingService).mockImplementation(function () {
+      return mockService as any;
+    });
 
     wrapper = mountWithI18n({
       global: {
@@ -369,7 +377,9 @@ describe('Funding Page Wizard Integration', () => {
       listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
     };
 
-    vi.mocked(FundingService).mockImplementation(() => mockService as any);
+    vi.mocked(FundingService).mockImplementation(function () {
+      return mockService as any;
+    });
 
     wrapper = mountWithI18n({
       global: {
@@ -399,20 +409,22 @@ describe('Funding Page Wizard Integration', () => {
 
   describe('Settings form validation', () => {
     function mountSettings(overrides: Record<string, any> = {}) {
-      vi.mocked(FundingService).mockImplementation(() => ({
-        getSettings: vi.fn().mockResolvedValue({
-          enabled: true,
-          monthlyPrice: 0,
-          yearlyPrice: 0,
-          currency: 'USD',
-          payWhatYouCan: false,
-          gracePeriodDays: 7,
-          ...overrides,
-        }),
-        getProviders: vi.fn().mockResolvedValue([]),
-        listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
-        updateSettings: vi.fn().mockResolvedValue(true),
-      } as any));
+      vi.mocked(FundingService).mockImplementation(function () {
+        return {
+          getSettings: vi.fn().mockResolvedValue({
+            enabled: true,
+            monthlyPrice: 0,
+            yearlyPrice: 0,
+            currency: 'USD',
+            payWhatYouCan: false,
+            gracePeriodDays: 7,
+            ...overrides,
+          }),
+          getProviders: vi.fn().mockResolvedValue([]),
+          listFundingPlans: vi.fn().mockResolvedValue({ fundingPlans: [], pagination: { currentPage: 1, totalPages: 0, totalCount: 0, limit: 20 } }),
+          updateSettings: vi.fn().mockResolvedValue(true),
+        } as any;
+      });
 
       return mount(funding, {
         global: {

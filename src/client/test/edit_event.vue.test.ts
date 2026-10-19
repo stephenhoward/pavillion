@@ -29,10 +29,12 @@ vi.mock('@/client/stores/calendarStore', () => ({
 
 // Mock CategoryService
 vi.mock('@/client/service/category', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getEventCategories: vi.fn().mockResolvedValue([]),
-    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getEventCategories: vi.fn().mockResolvedValue([]),
+      assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // Module-level LocationService mocks so individual tests can configure
@@ -47,7 +49,9 @@ const locationServiceMocks = {
 
 // Mock LocationService
 vi.mock('@/client/service/location', () => ({
-  default: vi.fn().mockImplementation(() => locationServiceMocks),
+  default: vi.fn().mockImplementation(function () {
+    return locationServiceMocks;
+  }),
 }));
 
 // Mock useEventDuplication composable

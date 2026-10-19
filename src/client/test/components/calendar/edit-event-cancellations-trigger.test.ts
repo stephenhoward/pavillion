@@ -66,39 +66,47 @@ const createEventModelObject = (
 // Mocks --------------------------------------------------------------
 
 vi.mock('@/client/service/calendar', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    loadCalendars: vi.fn().mockResolvedValue([
-      createMockCalendar('calendar-123', 'test-calendar'),
-    ]),
-    getCalendarByUrlName: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      loadCalendars: vi.fn().mockResolvedValue([
+        createMockCalendar('calendar-123', 'test-calendar'),
+      ]),
+      getCalendarByUrlName: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@/client/service/event', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    initEvent: vi.fn((calendar) => {
-      const event = new CalendarEvent();
-      event.calendarId = calendar.id;
-      event.location = new EventLocation();
-      event.addSchedule();
-      return event;
-    }),
-    saveEvent: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      initEvent: vi.fn((calendar) => {
+        const event = new CalendarEvent();
+        event.calendarId = calendar.id;
+        event.location = new EventLocation();
+        event.addSchedule();
+        return event;
+      }),
+      saveEvent: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('@/client/service/category', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getEventCategories: vi.fn().mockResolvedValue([]),
-    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getEventCategories: vi.fn().mockResolvedValue([]),
+      assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@/client/service/location', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getLocations: vi.fn().mockResolvedValue([]),
-    createLocation: vi.fn().mockResolvedValue({}),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getLocations: vi.fn().mockResolvedValue([]),
+      createLocation: vi.fn().mockResolvedValue({}),
+    };
+  }),
 }));
 
 // ModelService.getModel is what useEventEditor calls to hydrate the event in
