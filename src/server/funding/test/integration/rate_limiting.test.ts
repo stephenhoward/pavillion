@@ -35,6 +35,12 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
   // ('Parse Error: Expected HTTP/' client failures). supertest reuses an
   // already-listening server without closing it, so one stable port serves
   // the whole loop.
+  //
+  // The server binds 127.0.0.1, not the wildcard, because the limiter keys on
+  // req.ip: a wildcard bind is dual-stack and sees the client as
+  // ::ffff:127.0.0.1, while supertest binds its own server for
+  // request(realEnv.app) to 127.0.0.1. Mismatched keys would leave the real
+  // route's bucket untouched and the wiring check would get 200, not 429.
   let server: http.Server;
 
   beforeAll(async () => {
@@ -46,7 +52,7 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
     });
 
     server = http.createServer(app);
-    await new Promise<void>((resolve) => server.listen(0, resolve));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   });
 
   afterAll(async () => {
