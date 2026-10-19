@@ -55,15 +55,17 @@ let mockCalendar: Record<string, any> | null = null;
 
 vi.mock('@/site/service/calendar', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      getCalendarByUrlName: vi.fn().mockImplementation(() => Promise.resolve(mockCalendar)),
-      loadSeriesDetail: vi.fn().mockImplementation(() => {
-        if (!mockSeriesResult.series) {
-          return Promise.resolve(null);
-        }
-        return Promise.resolve(mockSeriesResult);
-      }),
-    })),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        getCalendarByUrlName: vi.fn().mockImplementation(() => Promise.resolve(mockCalendar)),
+        loadSeriesDetail: vi.fn().mockImplementation(() => {
+          if (!mockSeriesResult.series) {
+            return Promise.resolve(null);
+          }
+          return Promise.resolve(mockSeriesResult);
+        }),
+      };
+    }),
   };
 });
 

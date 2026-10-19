@@ -11,13 +11,8 @@ export default defineConfig({
     // 2. The sqlite3 native module crashes with vmThreads during cleanup
     fileParallelism: true,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        isolate: true,
-        minForks: 1,
-        maxForks: 4,
-      },
-    },
+    isolate: true,
+    maxWorkers: 4,
     teardownTimeout: 15000,
     // Polling helpers in src/server/common/test/lib/test_polling.ts wait up to
     // DEFAULT_MAX_WAIT_MS (15000) before throwing a labelled error. Both

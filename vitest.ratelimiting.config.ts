@@ -9,13 +9,8 @@ export default defineConfig({
     // Rate limiting tests use forks pool
     fileParallelism: true,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        isolate: true,
-        minForks: 1,
-        maxForks: 1, // Run serially to avoid rate limit conflicts between tests
-      },
-    },
+    isolate: true,
+    maxWorkers: 1, // Run serially to avoid rate limit conflicts between tests
     teardownTimeout: 15000,
     // Only include the rate limiting integration test files
     include: [

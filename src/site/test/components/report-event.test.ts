@@ -11,9 +11,11 @@ import { UnknownError } from '@/common/exceptions/base';
 // Mock the report service module
 vi.mock('@/site/service/report', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      submitReport: vi.fn(),
-    })),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        submitReport: vi.fn(),
+      };
+    }),
   };
 });
 

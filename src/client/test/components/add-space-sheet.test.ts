@@ -17,9 +17,11 @@ import enCalendars from '@/client/locales/en/calendars.json';
 const mockUpdateLocation = vi.fn();
 
 vi.mock('@/client/service/location', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    updateLocation: mockUpdateLocation,
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      updateLocation: mockUpdateLocation,
+    };
+  }),
 }));
 
 const SheetStub = {

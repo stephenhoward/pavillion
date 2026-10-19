@@ -30,10 +30,12 @@ vi.mock('@/client/stores/calendarStore', () => ({
 
 // Mock CategoryService
 vi.mock('@/client/service/category', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getEventCategories: vi.fn().mockResolvedValue([]),
-    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getEventCategories: vi.fn().mockResolvedValue([]),
+      assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // Mock useEventDuplication composable

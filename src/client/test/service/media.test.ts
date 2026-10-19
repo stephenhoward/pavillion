@@ -101,7 +101,9 @@ describe('MediaService', () => {
 
       Object.defineProperty(window, 'FileReader', {
         writable: true,
-        value: vi.fn(() => mockFileReader),
+        value: vi.fn(function () {
+          return mockFileReader;
+        }),
       });
 
       const previewPromise = mediaService.generatePreview(imageFile);

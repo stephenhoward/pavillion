@@ -19,11 +19,13 @@ const {
 }));
 
 vi.mock('@/client/service/funding', () => {
-  const MockClass = vi.fn().mockImplementation(() => ({
-    getOptions: mockGetOptions,
-    createCheckoutSession: mockCreateCheckoutSession,
-    getCheckoutSessionStatus: mockGetCheckoutSessionStatus,
-  }));
+  const MockClass = vi.fn().mockImplementation(function () {
+    return {
+      getOptions: mockGetOptions,
+      createCheckoutSession: mockCreateCheckoutSession,
+      getCheckoutSessionStatus: mockGetCheckoutSessionStatus,
+    };
+  });
   MockClass.formatCurrency = (millicents: number, currency: string) => {
     const amount = millicents / 100000;
     return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);

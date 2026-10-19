@@ -47,16 +47,18 @@ function buildInstanceMock() {
 }
 
 vi.mock('@/site/service/calendar', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getCalendarByUrlName: vi.fn().mockResolvedValue({
-      urlName: 'test_calendar',
-      content: () => ({ name: 'Test Calendar', description: '' }),
-      hasContent: () => true,
-      getLanguages: () => ['en'],
-    }),
-    loadEventInstance: vi.fn().mockImplementation(() => Promise.resolve(buildInstanceMock())),
-    loadCalendarEvents: vi.fn().mockImplementation(() => Promise.resolve([buildInstanceMock()])),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getCalendarByUrlName: vi.fn().mockResolvedValue({
+        urlName: 'test_calendar',
+        content: () => ({ name: 'Test Calendar', description: '' }),
+        hasContent: () => true,
+        getLanguages: () => ['en'],
+      }),
+      loadEventInstance: vi.fn().mockImplementation(() => Promise.resolve(buildInstanceMock())),
+      loadCalendarEvents: vi.fn().mockImplementation(() => Promise.resolve([buildInstanceMock()])),
+    };
+  }),
 }));
 
 vi.mock('@/site/components/not-found.vue', () => ({
@@ -153,10 +155,12 @@ describe('widget router server-config guard', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     stubDarkSystem();
-    vi.stubGlobal('ResizeObserver', vi.fn().mockImplementation(() => ({
-      observe: vi.fn(),
-      disconnect: vi.fn(),
-    })));
+    vi.stubGlobal('ResizeObserver', vi.fn().mockImplementation(function () {
+      return {
+        observe: vi.fn(),
+        disconnect: vi.fn(),
+      };
+    }));
   });
 
   afterEach(() => {

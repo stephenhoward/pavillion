@@ -10,7 +10,14 @@ import { BackupCreateError } from '@/common/exceptions/housekeeping';
 // Note: child_process is a Node.js built-in and cannot be mocked via vi.mock() in
 // ESM environments. Instead, we spy on BackupService.executeCommand() directly,
 // which is a protected method exposed for exactly this purpose.
-vi.mock('fs');
+vi.mock('fs', async (importOriginal) => {
+  // vitest 4 no longer automocks a Node builtin from a bare vi.mock('fs');
+  // rebuild the automock so every fs function is an inert vi.fn().
+  const actual = await importOriginal<typeof import('fs')>();
+  return Object.fromEntries(
+    Object.entries(actual).map(([name, value]) => [name, typeof value === 'function' ? vi.fn() : value]),
+  );
+});
 vi.mock('@/server/housekeeping/entity/backup', () => ({
   BackupEntity: {
     create: vi.fn(),

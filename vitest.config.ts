@@ -27,6 +27,9 @@ const sharedAliases = {
 export default defineConfig({
   plugins: [vue()],
   test: {
+    // Shared by every project below: vitest 4 refuses to run projects with
+    // differing maxWorkers unless they are given distinct group orders.
+    maxWorkers: 4,
     // Two-project layout:
     //  - default: vmThreads pool for the bulk of unit tests (Sequelize
     //    isolation, low RPC overhead).
@@ -47,12 +50,6 @@ export default defineConfig({
           globals: true,
           fileParallelism: true,
           pool: 'vmThreads',
-          poolOptions: {
-            vmThreads: {
-              minThreads: 1,
-              maxThreads: 4,
-            },
-          },
           teardownTimeout: 15000,
           // Skill-bundled tests are opted in one skill at a time, never by a
           // blanket `.agents/skills/**`: some skills ship integration-tier

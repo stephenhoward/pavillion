@@ -112,47 +112,49 @@ let mockIsCancelled: boolean = false;
 
 vi.mock('@/site/service/calendar', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      getCalendarByUrlName: vi.fn().mockResolvedValue({
-        urlName: 'test_calendar',
-        content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
-        hasContent: (_lang: string) => true,
-        getLanguages: () => ['en'],
-      }),
-      loadEventInstance: vi.fn().mockImplementation(() =>
-        Promise.resolve({
-          start: {
-            toISO: () => '2026-03-01T10:00:00.000Z',
-            toISODate: () => '2026-03-01',
-            toLocal: () => ({
-              setLocale: (_locale: string) => ({
-                toLocaleString: () => 'March 1, 2026, 10:00 AM',
-              }),
-            }),
-            hasSame: (_other: unknown, unit: string) => unit === 'day' ? true : false,
-          },
-          end: mockEnd,
-          isCancelled: mockIsCancelled,
-          event: {
-            content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo }),
-            hasContent: (_lang: string) => true,
-            getLanguages: () => ['en'],
-            media: null,
-            mediaFocalPointX: 0.5,
-            mediaFocalPointY: 0.5,
-            mediaZoom: 1.0,
-            categories: mockCategories,
-            location: mockLocation,
-            space: mockSpace,
-            series: mockSeries,
-            recurrenceSummary: mockRecurrenceSummary,
-            sourceCalendar: mockSourceCalendar,
-            externalUrl: mockExternalUrl,
-            urlPrompt: mockUrlPrompt,
-          },
+    default: vi.fn().mockImplementation(function () {
+      return {
+        getCalendarByUrlName: vi.fn().mockResolvedValue({
+          urlName: 'test_calendar',
+          content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
+          hasContent: (_lang: string) => true,
+          getLanguages: () => ['en'],
         }),
-      ),
-    })),
+        loadEventInstance: vi.fn().mockImplementation(() =>
+          Promise.resolve({
+            start: {
+              toISO: () => '2026-03-01T10:00:00.000Z',
+              toISODate: () => '2026-03-01',
+              toLocal: () => ({
+                setLocale: (_locale: string) => ({
+                  toLocaleString: () => 'March 1, 2026, 10:00 AM',
+                }),
+              }),
+              hasSame: (_other: unknown, unit: string) => unit === 'day' ? true : false,
+            },
+            end: mockEnd,
+            isCancelled: mockIsCancelled,
+            event: {
+              content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo }),
+              hasContent: (_lang: string) => true,
+              getLanguages: () => ['en'],
+              media: null,
+              mediaFocalPointX: 0.5,
+              mediaFocalPointY: 0.5,
+              mediaZoom: 1.0,
+              categories: mockCategories,
+              location: mockLocation,
+              space: mockSpace,
+              series: mockSeries,
+              recurrenceSummary: mockRecurrenceSummary,
+              sourceCalendar: mockSourceCalendar,
+              externalUrl: mockExternalUrl,
+              urlPrompt: mockUrlPrompt,
+            },
+          }),
+        ),
+      };
+    }),
   };
 });
 

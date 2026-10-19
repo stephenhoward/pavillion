@@ -39,42 +39,50 @@ const createMockEvent = (id?: string) => {
 
 // Mock the CalendarService
 vi.mock('@/client/service/calendar', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    loadCalendars: vi.fn().mockResolvedValue([
-      createMockCalendar('calendar-123', 'test-calendar'),
-    ]),
-    getCalendarByUrlName: vi.fn(),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      loadCalendars: vi.fn().mockResolvedValue([
+        createMockCalendar('calendar-123', 'test-calendar'),
+      ]),
+      getCalendarByUrlName: vi.fn(),
+    };
+  }),
 }));
 
 // Mock the EventService
 vi.mock('@/client/service/event', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    initEvent: vi.fn((calendar) => {
-      const event = new CalendarEvent();
-      event.calendarId = calendar.id;
-      event.location = new EventLocation();
-      event.addSchedule();
-      return event;
-    }),
-    saveEvent: vi.fn().mockResolvedValue(createMockEvent('new-event-id')),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      initEvent: vi.fn((calendar) => {
+        const event = new CalendarEvent();
+        event.calendarId = calendar.id;
+        event.location = new EventLocation();
+        event.addSchedule();
+        return event;
+      }),
+      saveEvent: vi.fn().mockResolvedValue(createMockEvent('new-event-id')),
+    };
+  }),
 }));
 
 // Mock the CategoryService
 vi.mock('@/client/service/category', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getEventCategories: vi.fn().mockResolvedValue([]),
-    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getEventCategories: vi.fn().mockResolvedValue([]),
+      assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 // Mock the LocationService
 vi.mock('@/client/service/location', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    getLocations: vi.fn().mockResolvedValue([]),
-    createLocation: vi.fn().mockResolvedValue({}),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getLocations: vi.fn().mockResolvedValue([]),
+      createLocation: vi.fn().mockResolvedValue({}),
+    };
+  }),
 }));
 
 // Mock the ModelService

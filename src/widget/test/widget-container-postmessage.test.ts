@@ -17,9 +17,11 @@ import i18next from 'i18next';
 vi.mock('@/site/service/calendar', () => ({
   // No calendar: the container renders its not-found branch and loads
   // nothing else, which keeps these tests about the message handler alone.
-  default: vi.fn().mockImplementation(() => ({
-    getCalendarByUrlName: vi.fn().mockResolvedValue(null),
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      getCalendarByUrlName: vi.fn().mockResolvedValue(null),
+    };
+  }),
 }));
 
 vi.mock('@/site/components/not-found.vue', () => ({
