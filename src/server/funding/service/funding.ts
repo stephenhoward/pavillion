@@ -1488,14 +1488,14 @@ export default class FundingService {
     page: number = 1,
     limit: number = 50,
   ): Promise<{
-      fundingPlans: FundingPlan[];
-      pagination: {
-        currentPage: number;
-        totalPages: number;
-        totalCount: number;
-        limit: number;
-      };
-    }> {
+    fundingPlans: FundingPlan[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
     const offset = (page - 1) * limit;
 
     const { rows, count } = await FundingPlanEntity.findAndCountAll({
