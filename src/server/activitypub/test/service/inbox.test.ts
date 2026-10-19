@@ -2,10 +2,10 @@
  * Tests for ProcessInboxService
  *
  * These tests verify inbox message processing for various ActivityPub activity types.
- * Uses Fedify mock utilities for creating well-formed ActivityPub activities,
+ * Uses the activity builders for creating well-formed ActivityPub activities,
  * and Sinon for mocking database entities and services.
  *
- * The Fedify mock helpers provide:
+ * The activity builders provide:
  * - Properly formatted ActivityPub activities with @context
  * - Consistent activity structure matching the ActivityStreams spec
  * - Type-safe activity creation for tests
@@ -28,7 +28,7 @@ import ModerationInterface from '@/server/moderation/interface';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 
-// Import Fedify mock helpers for creating well-formed ActivityPub activities
+// Import activity builders for creating well-formed ActivityPub activities
 import {
   createMockFollowActivity,
   createMockCreateActivity,
@@ -36,7 +36,7 @@ import {
   createMockDeleteActivity,
   createMockAnnounceActivity,
   createMockUndoActivity,
-} from '@/server/activitypub/test/helpers/fedify-mock';
+} from '@/server/activitypub/test/helpers/activity-builders';
 
 
 // Mock the remote-fetch module at the top level for vitest
@@ -79,7 +79,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should fail without calendar', async () => {
-    // Use Fedify helper to create a proper Create activity
+    // Use the activity builder to create a proper Create activity
     const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
       type: 'Event',
       id: REMOTE_EVENT_URL,
@@ -118,7 +118,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a create activity', async () => {
-    // Use Fedify helper to create a proper Create activity with Event object
+    // Use the activity builder to create a proper Create activity with Event object
     const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
       type: 'Event',
       id: REMOTE_EVENT_URL,
@@ -143,7 +143,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an update activity', async () => {
-    // Use Fedify helper to create a proper Update activity
+    // Use the activity builder to create a proper Update activity
     const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
       type: 'Event',
       id: REMOTE_EVENT_URL,
@@ -167,7 +167,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a delete activity', async () => {
-    // Use Fedify helper to create a proper Delete activity
+    // Use the activity builder to create a proper Delete activity
     const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
 
     const message = ActivityPubInboxMessageEntity.build({
@@ -187,7 +187,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a follow activity', async () => {
-    // Use Fedify helper to create a proper Follow activity
+    // Use the activity builder to create a proper Follow activity
     const activityMessage = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
 
     const message = ActivityPubInboxMessageEntity.build({
@@ -248,7 +248,7 @@ describe('processInboxMessage', () => {
       emittedActivity = activity;
     });
 
-    // Use Fedify helper to create a proper Follow activity
+    // Use the activity builder to create a proper Follow activity
     const activityMessage = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
 
     const message = ActivityPubInboxMessageEntity.build({
@@ -383,7 +383,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an announce activity', async () => {
-    // Use Fedify helper to create a proper Announce (share) activity
+    // Use the activity builder to create a proper Announce (share) activity
     const activityMessage = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
 
     const message = ActivityPubInboxMessageEntity.build({
@@ -403,7 +403,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should error an undo activity with no target', async () => {
-    // Use Fedify helper to create an Undo wrapping a Follow activity
+    // Use the activity builder to create an Undo wrapping a Follow activity
     const originalFollow = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
     const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalFollow);
 
@@ -427,7 +427,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an undo follow activity', async () => {
-    // Use Fedify helper to create an Undo wrapping a Follow activity
+    // Use the activity builder to create an Undo wrapping a Follow activity
     const originalFollow = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
     const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalFollow);
 
@@ -458,7 +458,7 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an undo announce activity', async () => {
-    // Use Fedify helper to create an Undo wrapping an Announce activity
+    // Use the activity builder to create an Undo wrapping an Announce activity
     const originalAnnounce = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
     const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalAnnounce);
 

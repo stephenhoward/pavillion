@@ -2,22 +2,17 @@
  * Tests for ProcessOutboxService
  *
  * These tests verify outbox message processing for sending ActivityPub activities.
- * Uses Fedify mock utilities for creating well-formed ActivityPub activities,
+ * Uses the activity builders for creating well-formed ActivityPub activities,
  * and Sinon for mocking HTTP requests, database entities, and services.
  *
- * The Fedify mock helpers provide:
+ * The activity builders provide:
  * - Properly formatted ActivityPub activities with @context
  * - Consistent activity structure matching the ActivityStreams spec
- * - Mock federation context for tracking sent activities
  *
  * Sinon is still used for:
  * - Mocking axios HTTP requests (for WebFinger and actor profile fetching)
  * - Mocking database entity methods (findAll, update)
  * - Stubbing service methods (calendarService.getCalendar)
- *
- * Note: The outbox service currently uses axios directly for HTTP calls.
- * The Fedify mock federation utilities could replace this in the future
- * if the service is refactored to use Fedify's built-in HTTP handling.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -34,14 +29,14 @@ import {
   FollowerCalendarEntity,
 } from '@/server/activitypub/entity/activitypub';
 
-// Import Fedify mock helpers for creating well-formed ActivityPub activities
+// Import activity builders for creating well-formed ActivityPub activities
 import {
   createMockAnnounceActivity,
   createMockCreateActivity,
   createMockDeleteActivity,
   createMockFollowActivity,
   createMockUpdateActivity,
-} from '@/server/activitypub/test/helpers/fedify-mock';
+} from '@/server/activitypub/test/helpers/activity-builders';
 
 // Mock the ip-validation module so tests can control SSRF validation behaviour
 // without performing real DNS lookups. Defaults to resolving safely (no throw).
@@ -355,7 +350,7 @@ describe('processOutboxMessage', () => {
   });
 
   it('should fail without calendar', async () => {
-    // Use Fedify helper to create a proper Create activity
+    // Use the activity builder to create a proper Create activity
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
       id: `${LOCAL_ACTOR_URL}/events/123`,
@@ -395,7 +390,7 @@ describe('processOutboxMessage', () => {
   });
 
   it('should skip message without recipients', async () => {
-    // Use Fedify helper to create a proper Create activity with Event object
+    // Use the activity builder to create a proper Create activity with Event object
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
       id: `${LOCAL_ACTOR_URL}/events/123`,
@@ -427,7 +422,7 @@ describe('processOutboxMessage', () => {
   });
 
   it('should skip recipients without inbox', async () => {
-    // Use Fedify helper to create a proper Create activity
+    // Use the activity builder to create a proper Create activity
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
       id: `${LOCAL_ACTOR_URL}/events/123`,
@@ -459,7 +454,7 @@ describe('processOutboxMessage', () => {
   });
 
   it('should send message to each recipient with signed headers', async () => {
-    // Use Fedify helper to create a proper Create activity
+    // Use the activity builder to create a proper Create activity
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
       id: `${LOCAL_ACTOR_URL}/events/123`,
@@ -617,7 +612,7 @@ describe('processOutboxMessage', () => {
   });
 
   it('should skip delivery and record error when inbox URL resolves to a private IP (SSRF)', async () => {
-    // Use Fedify helper to create a proper Create activity
+    // Use the activity builder to create a proper Create activity
     const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
       type: 'Event',
       id: `${LOCAL_ACTOR_URL}/events/123`,
