@@ -3,6 +3,8 @@
  * Common layout patterns and utilities
  */
 
+@use '../mixins' as *;
+
 /* Flexible Container Layouts */
 .flexible-container {
   display: flex;
@@ -66,8 +68,9 @@
   }
 }
 
-/* Responsive: tighten page-container padding on narrow viewports */
-@media (width <= 768px) {
+/* Responsive: tighten page-container padding below md. pav-media-down stops
+   at 767px, so these never overlap the md shell (the sidebar is an aside) */
+@include pav-media-down(md) {
   main {
     padding: var(--pav-space-md) var(--pav-space-sm);
   }
