@@ -281,8 +281,16 @@ class ActivityPubService {
 
     let actor = await this.actorUrl(calendar);
     for (let following of followings) {
-      // Create Undo activity and explicitly set the recipient to the AP actor URL
-      const undoActivity = new UndoActivity(actor, following.id);
+      // Undo carries the original Follow embedded (its id, our actor, the
+      // followed actor) rather than the Follow id alone: peers match the
+      // Undo to the relationship by the inline activity. Recipient is set
+      // explicitly to the AP actor URL.
+      const undoActivity = new UndoActivity(actor, {
+        id: following.id,
+        type: 'Follow',
+        actor,
+        object: calendarActor.actor_uri,
+      });
       undoActivity.to = [calendarActor.actor_uri];
 
       this.addToOutbox(calendar, undoActivity);

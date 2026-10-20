@@ -282,10 +282,48 @@ describe("unfollowCalendar", () => {
       expect(outboxCall.args[0]).toBe(calendar);
       expect(outboxCall.args[1].type).toBe('Undo');
       expect(outboxCall.args[1].actor).toBe('https://testdomain.com/calendars/testcalendar');
-      expect(outboxCall.args[1].object).toBe('testfollowid');
+      expect(outboxCall.args[1].object.id).toBe('testfollowid');
       // Verify the recipient is set to the AP URL, not the UUID
       expect(outboxCall.args[1].to).toContain(mockRemoteCalendar.actor_uri);
     }
+  });
+
+  it('queues an Undo with the Follow activity embedded rather than referenced by id', async () => {
+    const calendar = Calendar.fromObject({ id: 'testid' });
+    const localActorUrl = 'https://local.example/calendars/mine';
+    const followId = `${localActorUrl}/follows/abc-123`;
+
+    sandbox.stub(service, 'lookupRemoteCalendar').resolves({
+      name: 'Test Calendar',
+      description: undefined,
+      domain: 'testdomain.com',
+      actorUrl: MOCK_CALENDAR_ACTOR_URI,
+      calendarId: undefined,
+    });
+    sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockRemoteCalendar as any);
+    sandbox.stub(FollowingCalendarEntity, 'findAll').resolves([
+      FollowingCalendarEntity.build({
+        id: followId,
+        calendar_actor_id: mockRemoteCalendar.id,
+        calendar_id: calendar.id,
+      }),
+    ]);
+    sandbox.stub(service, 'actorUrl').resolves(localActorUrl);
+    sandbox.stub(FollowingCalendarEntity.prototype, 'destroy').resolves();
+    const addToOutboxStub = sandbox.stub(service, 'addToOutbox').resolves();
+
+    await service.unfollowCalendar(account, calendar, 'testcalendar@testdomain.com');
+
+    expect(addToOutboxStub.calledOnce).toBe(true);
+    const undo = addToOutboxStub.firstCall.args[1];
+    expect(undo.type).toBe('Undo');
+    expect(undo.id).toBe(`${followId}/undo`);
+    expect(undo.object).toEqual({
+      id: followId,
+      type: 'Follow',
+      actor: localActorUrl,
+      object: MOCK_CALENDAR_ACTOR_URI,
+    });
   });
 
   it('emits activitypub:calendar:unfollowed so the calendar domain can clear origin_uri stamps', async () => {
