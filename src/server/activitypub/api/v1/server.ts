@@ -57,8 +57,13 @@ export default class ActivityPubServerRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    // Enable JSON body parsing for ActivityPub endpoints
-    router.use(express.json({ type: ['application/json', 'application/activity+json'] }));
+    // Enable JSON body parsing for ActivityPub endpoints. ActivityPub names
+    // both activity+json and ld+json with the ActivityStreams profile as
+    // request types a server must accept; type matching ignores the profile
+    // parameter, so ld+json is parsed with or without it.
+    router.use(express.json({
+      type: ['application/json', 'application/activity+json', 'application/ld+json'],
+    }));
 
     // Public endpoints (no signature verification required)
     router.get('/.well-known/webfinger', this.lookupUser.bind(this));
