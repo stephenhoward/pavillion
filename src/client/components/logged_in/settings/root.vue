@@ -64,14 +64,16 @@ function onlyCalendarChanged(to: RouteSnapshot, from: RouteSnapshot): boolean {
 // so after a path change focus moves to the new page's h1. Nothing moves at
 // md+ (the tree's skip control serves keyboard users there), on initial load
 // (the watch is not immediate), on a query-only change, on a calendar-only
-// change, or onto a report detail (the reports leaf owns that focus; its gate
-// failure replaces to the list, which retriggers this rule). Watching the
-// route sees only the final route of a guard redirect chain, so a chain moves
-// focus once. pv-ms7c (app-wide SPA focus and title) may replace this.
+// change, or onto the calendar report detail, the one leaf that owns its own
+// focus (its gate failure replaces to the list, which retriggers this rule).
+// Watching the route sees only the final route of a guard redirect chain, so
+// a chain moves focus once. History traversal (Back/Forward) is a path change
+// like any other and moves focus too, by design. pv-ms7c (app-wide SPA focus
+// and title) may replace this.
 watch(
   () => ({ path: route.path, name: route.name, params: { ...route.params } }),
   async (to, from) => {
-    if (treeIsSidebar.value || to.path === from.path || to.params.reportId) {
+    if (treeIsSidebar.value || to.path === from.path || to.name === 'calendar_report_detail') {
       return;
     }
     if (onlyCalendarChanged(to, from)) {

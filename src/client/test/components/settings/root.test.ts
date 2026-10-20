@@ -87,6 +87,7 @@ function makeRouter(): Router {
           { path: 'accounts', component: Pane, name: 'accounts' },
           { path: 'calendars', component: Pane, name: 'admin_calendars' },
           { path: 'moderation', component: Pane, name: 'moderation' },
+          { path: 'moderation/reports/:reportId', component: Pane, name: 'moderation_report_detail' },
           { path: 'federation', component: Pane, name: 'federation' },
           { path: 'funding', component: Pane, name: 'funding' },
         ] },
@@ -280,6 +281,14 @@ describe('settings layout', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('moves nothing when only the calendar changes on a calendar section', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside');
+      await go('/settings/calendar/harbour');
+      expect(router.currentRoute.value.name).toBe('calendar_management');
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('moves focus when the calendar and the leaf both change', async () => {
       media.setMatches(false);
       await mountAt('/settings/calendar/riverside/editors');
@@ -293,6 +302,14 @@ describe('settings layout', () => {
       await go('/settings/calendar/riverside/reports/9d4b2c1e-6f3a-4c8e-9b1d-2a7e5f0c3b64');
       expect(router.currentRoute.value.name).toBe('calendar_report_detail');
       expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves focus onto the admin report detail, which manages no focus of its own', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/admin/moderation', true);
+      await go('/settings/admin/moderation/reports/9d4b2c1e-6f3a-4c8e-9b1d-2a7e5f0c3b64');
+      expect(router.currentRoute.value.name).toBe('moderation_report_detail');
+      expect(document.activeElement).toBe(heading());
     });
 
     it('moves focus once for a redirect chain, on the final route', async () => {
