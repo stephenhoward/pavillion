@@ -1,0 +1,198 @@
+<script setup lang="ts">
+/**
+ * The one header of every settings page: the root, the three sections
+ * (calendar, account, instance) and every leaf. It takes no props; the
+ * state comes from the route and the viewer's loaded calendars alone.
+ *
+ * - Below md a section or leaf shows a visible "Back to {parent}" link. Its
+ *   target is derived from the route, never from history, so a cold-loaded
+ *   leaf still goes to its section.
+ * - At md+ the back link is hidden by CSS and a leaf shows an eyebrow above
+ *   its h1: the group name, or the calendar switcher on a calendar leaf.
+ * - A calendar section puts the switcher beside the h1, never inside it.
+ * - A calendar the viewer cannot resolve (nonexistent, not a member, or not
+ *   loaded) renders the same header at the index and every leaf, titled
+ *   with the group, and never echoes the route param.
+ */
+import { computed, watch } from 'vue';
+import { useRoute, type RouteLocationNamedRaw } from 'vue-router';
+import { useTranslation } from 'i18next-vue';
+import { ChevronLeft } from 'lucide-vue-next';
+import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { calendarDisplayName } from '@/client/service/calendar-display';
+import {
+  accountItems,
+  adminItems,
+  calendarItems,
+  type SettingsNavContext,
+  type SettingsNavLinkItem,
+} from './nav-items';
+
+type Section = 'calendar' | 'account' | 'admin';
+
+type HeaderLevel =
+  | { kind: 'root' }
+  | { kind: 'section'; group: Section }
+  | { kind: 'leaf'; group: Section; item: SettingsNavLinkItem };
+
+const GROUP_TITLE_KEYS: Record<Section, string> = {
+  calendar: 'titles.calendar',
+  account: 'titles.account',
+  admin: 'titles.instance',
+};
+
+// Titles are not visibility: every leaf is searched, whatever the viewer may
+// see. Gating stays with the route guards and calendar-management/root.vue.
+const permissiveContext: SettingsNavContext = {
+  calendarUrlName: 'x',
+  isOwner: true,
+  isAdmin: true,
+  fundingEnabled: true,
+};
+
+const LEAVES: ReadonlyArray<{ group: Section; items: SettingsNavLinkItem[] }> = [
+  { group: 'calendar', items: calendarItems(permissiveContext) },
+  { group: 'account', items: accountItems(permissiveContext) },
+  { group: 'admin', items: adminItems() },
+];
+
+/** The tree item a route belongs to; a sub-route resolves to its parent item. */
+function findLeaf(routeName: string): { group: Section; item: SettingsNavLinkItem } | null {
+  for (const { group, items } of LEAVES) {
+    const item = items.find(
+      (candidate) => candidate.routeName === routeName || (candidate.subRoutes?.includes(routeName) ?? false),
+    );
+    if (item) {
+      return { group, item };
+    }
+  }
+  return null;
+}
+
+function isSection(value: unknown): value is Section {
+  return value === 'calendar' || value === 'account' || value === 'admin';
+}
+
+const route = useRoute();
+const calendarStore = useCalendarStore();
+const { t } = useTranslation('settings');
+const { t: tCal } = useTranslation('calendars');
+
+const level = computed<HeaderLevel>(() => {
+  // Read the matched record's own meta, not the merged route.meta, so a
+  // group set on a parent record never turns its leaves into sections.
+  const record = route.matched[route.matched.length - 1];
+  const group = record?.meta.settingsGroup;
+  if (isSection(group)) {
+    return { kind: 'section', group };
+  }
+  const leaf = typeof route.name === 'string' ? findLeaf(route.name) : null;
+  // The settings root, and any route outside the tree, title as Settings.
+  return leaf ? { kind: 'leaf', ...leaf } : { kind: 'root' };
+});
+
+const group = computed<Section | null>(() => (level.value.kind === 'root' ? null : level.value.group));
+
+// Only the viewer's own loaded list resolves a calendar.
+const calendarInfo = computed(() => {
+  const param = route.params.calendar;
+  return typeof param === 'string' ? calendarStore.getCalendarInfoByUrlName(param) : null;
+});
+
+const calendarName = computed(() => (calendarInfo.value ? calendarDisplayName(calendarInfo.value.calendar) : ''));
+const calendarUrlName = computed(() => calendarInfo.value?.calendar.urlName ?? null);
+
+const unresolved = computed(() => group.value === 'calendar' && !calendarInfo.value);
+
+const heading = computed<string>(() => {
+  const current = level.value;
+  if (current.kind === 'root') {
+    return t('titles.settings');
+  }
+  if (unresolved.value) {
+    return t('titles.calendar');
+  }
+  if (current.kind === 'leaf') {
+    return t(current.item.labelKey);
+  }
+  return current.group === 'calendar' ? calendarName.value : t(GROUP_TITLE_KEYS[current.group]);
+});
+
+const backLink = computed<{ to: RouteLocationNamedRaw; label: string } | null>(() => {
+  const current = level.value;
+  if (current.kind === 'root') {
+    return null;
+  }
+  if (current.kind === 'section' || unresolved.value) {
+    return { to: { name: 'settings' }, label: t('titles.settings') };
+  }
+  if (current.group === 'calendar') {
+    return {
+      to: { name: 'calendar_management', params: { calendar: calendarUrlName.value ?? '' } },
+      label: calendarName.value,
+    };
+  }
+  return { to: { name: current.group }, label: t(GROUP_TITLE_KEYS[current.group]) };
+});
+
+/** Route the switcher keeps on a pick: the current calendar leaf, else the calendar section. */
+const switcherRouteName = computed(() => {
+  const current = level.value;
+  return current.kind === 'leaf' ? current.item.routeName : 'calendar_management';
+});
+
+const showSectionSwitcher = computed(
+  () => level.value.kind === 'section' && group.value === 'calendar' && !unresolved.value,
+);
+
+const eyebrowText = computed(() => {
+  const current = level.value;
+  if (current.kind !== 'leaf' || current.group === 'calendar') {
+    return null;
+  }
+  return t(GROUP_TITLE_KEYS[current.group]);
+});
+
+const showEyebrowSwitcher = computed(
+  () => level.value.kind === 'leaf' && group.value === 'calendar' && !unresolved.value,
+);
+
+const switcherAriaLabel = computed(() => tCal('switcher.aria_switch_calendar', { name: calendarName.value }));
+
+watch(heading, (value) => {
+  document.title = value;
+}, { immediate: true });
+</script>
+
+<template>
+  <header class="settings-page-header">
+    <RouterLink
+      v-if="backLink"
+      :to="backLink.to"
+      class="settings-back-link settings-page-header__back"
+    >
+      <ChevronLeft aria-hidden="true" :stroke-width="2" />
+      {{ t('back_to', { name: backLink.label }) }}
+    </RouterLink>
+    <div v-if="showEyebrowSwitcher" class="settings-page-header__eyebrow">
+      <CalendarSwitcher
+        :label="calendarName"
+        :route-name="switcherRouteName"
+        :current-url-name="calendarUrlName"
+        :aria-label="switcherAriaLabel"
+      />
+    </div>
+    <p v-else-if="eyebrowText" class="settings-page-header__eyebrow">{{ eyebrowText }}</p>
+    <div class="settings-page-header__title-row">
+      <h1 class="settings-page-header__title" tabindex="-1">{{ heading }}</h1>
+      <CalendarSwitcher
+        v-if="showSectionSwitcher"
+        :label="tCal('switcher.title')"
+        route-name="calendar_management"
+        :current-url-name="calendarUrlName"
+        :aria-label="switcherAriaLabel"
+      />
+    </div>
+  </header>
+</template>
