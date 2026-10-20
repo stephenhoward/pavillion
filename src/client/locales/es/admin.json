@@ -401,7 +401,6 @@
     "instance_policy_help": "Se admite el formato Markdown. El contenido se almacena como Markdown y se convierte a HTML al mostrarse."
   },
   "federation": {
-    "title": "Federación",
     "subtitle": "Gestiona la federación con otras instancias de Pavillion",
     "blocked_instances_title": "Instancias bloqueadas",
     "info_text": "Las instancias bloqueadas no pueden enviar eventos a tu instancia ni recibirlos de ella. Los usuarios de instancias bloqueadas no podrán seguir calendarios en tu instancia.",
