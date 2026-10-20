@@ -146,6 +146,9 @@ describe('ROUTE_GUIDES keys', () => {
       setupGuard: pass,
       authRouteGuard: pass,
       currentCalendarRedirect: () => pass,
+      settingsIndexRedirect: () => pass,
+      legacyTabReportsRedirect: pass,
+      fundingEnabledRedirect: pass,
     }));
     for (const key of Object.keys(ROUTE_GUIDES)) {
       expect(names.has(key), `ROUTE_GUIDES has dead key ${key}`).toBe(true);

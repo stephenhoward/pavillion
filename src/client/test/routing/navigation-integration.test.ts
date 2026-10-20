@@ -126,6 +126,9 @@ describe('Navigation Integration - Task Group 4', () => {
         setupGuard: pass,
         authRouteGuard: pass,
         currentCalendarRedirect: () => pass,
+        settingsIndexRedirect: () => pass,
+        legacyTabReportsRedirect: pass,
+        fundingEnabledRedirect: pass,
       }),
     });
   };
@@ -351,6 +354,9 @@ describe('Navigation Integration - Task Group 4', () => {
           setupGuard: pass,
           authRouteGuard: pass,
           currentCalendarRedirect: () => pass,
+          settingsIndexRedirect: () => pass,
+          legacyTabReportsRedirect: pass,
+          fundingEnabledRedirect: pass,
         }),
       });
       await countingRouter.push(from);
@@ -372,6 +378,9 @@ describe('Navigation Integration - Task Group 4', () => {
         routes: buildClientRoutes({
           ...createRouteGuards({ isLoggedIn: () => session.loggedIn, isAdmin: () => session.admin }, () => setupMode),
           currentCalendarRedirect: () => pass,
+          settingsIndexRedirect: () => pass,
+          legacyTabReportsRedirect: pass,
+          fundingEnabledRedirect: pass,
         }),
       });
     };

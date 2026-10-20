@@ -37,6 +37,17 @@ import ReportDetailView from '@/client/components/admin/report-detail.vue';
 import ModerationSettingsView from '@/client/components/admin/moderation-settings.vue';
 import BlockedInstancesView from '@/client/components/admin/blocked-instances.vue';
 
+import type { SettingsGroup } from '@/client/components/logged_in/settings/nav-items';
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    /** At md+ the main sidebar collapses to an icon-only rail on this subtree (applied by CSS). */
+    shellRail?: boolean;
+    /** The settings group whose index this record is, read by the list page. */
+    settingsGroup?: SettingsGroup;
+  }
+}
+
 /** The guards the route table needs; app.ts supplies them, tests pass stand-ins. */
 export interface ClientRouteDeps {
   mustBeLoggedIn: NavigationGuard;
@@ -45,6 +56,12 @@ export interface ClientRouteDeps {
   authRouteGuard: NavigationGuard;
   /** Guard for a bare route: redirect to the current calendar, or to `fallback`. */
   currentCalendarRedirect: (routeName: string, fallback: RouteLocationRaw | true) => NavigationGuard;
+  /** Settings index route: render the list page in page mode, else forward to the group's first visible leaf. */
+  settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
+  /** Temporary: maps the retired `?tab=reports[&report=]` calendar settings form onto the Reports leaf. */
+  legacyTabReportsRedirect: NavigationGuard;
+  /** Funding plan leaf: redirect to Profile when instance funding is disabled. */
+  fundingEnabledRedirect: NavigationGuard;
 }
 
 /** Placeholder component for routes whose guard always redirects. */
