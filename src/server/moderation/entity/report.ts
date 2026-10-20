@@ -45,7 +45,7 @@ class ReportEntity extends Model {
    * reassigned. `notification_activity.object_calendar_id` (see
    * `server/notifications/entity/notification_activity.ts`) denormalizes it
    * as a *live routing key*, so a stale copy routes a calendar owner to a
-   * different calendar's reports tab. Adding a report-reassignment path
+   * different calendar's reports page. Adding a report-reassignment path
    * therefore requires a write-through to that column, not just a comment.
    * See DEC-015 (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`).
    */

@@ -10,7 +10,7 @@
 `notification_activity` rows carry denormalized columns of **two classes with opposite staleness contracts**, and the two must never be conflated:
 
 - **Display snapshots** — `object_label`, `actor_display_name`, `actor_display_url`. These are frozen at write time and their staleness is a **feature**: it is what keeps a row renderable after the underlying object is deleted or renamed. A snapshot is never re-resolved and never routes anything.
-- **Routing keys** — `object_calendar_id`. These are read at render time to build a live destination, so staleness is a **defect**: a wrong value routes a calendar owner to *another calendar's* reports tab.
+- **Routing keys** — `object_calendar_id`. These are read at render time to build a live destination, so staleness is a **defect**: a wrong value routes a calendar owner to *another calendar's* reports page.
 
 Three rules follow.
 
@@ -18,11 +18,11 @@ Three rules follow.
 
 **2. Neither class of column may become a policy surface.** This is the [DEC-013](dec-013-inbox-authenticated-activity-log.md) rule for `auth_source`, transferred unchanged. Authorization comes from live state — for the notification read path, a single per-call `loadAccountRoles` read threaded in as `ctx.isAdmin`. `object_calendar_id` supplies a url name for a link and nothing else; "this row has a calendar id, therefore the viewer owns that calendar" is never a valid inference. The rule forbids *answering an authorization question from a stored copy*; it is not a prohibition on reading stored data for ordinary correctness.
 
-**3. The emitted target is an affordance, never a trust boundary.** Every destination a routing key can produce enforces its own authorization server-side (`userCanReviewReports` on the owner reports tab; `account.hasRole('admin')` in every admin report handler). A mis-routed link is a usability defect, not an access-control one — which is why rule 2 can hold without a membership check on the read path.
+**3. The emitted target is an affordance, never a trust boundary.** Every destination a routing key can produce enforces its own authorization server-side (`userCanReviewReports` on the owner reports page; `account.hasRole('admin')` in every admin report handler). A mis-routed link is a usability defect, not an access-control one — which is why rule 2 can hold without a membership check on the read path.
 
 ## Context
 
-Epic pv-mvfk made inbox notification rows navigable. Its read path needed the calendar that owns a reported event, so a non-admin recipient could be linked to their own calendar's reports tab rather than the admin moderation surface. The epic's original non-goals forbade any schema change to `notification_activity`. That non-goal was retracted mid-epic and one nullable column (`object_calendar_id`, migration `0040`) was added at emit time from a bus payload field the handlers already read.
+Epic pv-mvfk made inbox notification rows navigable. Its read path needed the calendar that owns a reported event, so a non-admin recipient could be linked to their own calendar's reports page rather than the admin moderation surface. The epic's original non-goals forbade any schema change to `notification_activity`. That non-goal was retracted mid-epic and one nullable column (`object_calendar_id`, migration `0040`) was added at emit time from a bus payload field the handlers already read.
 
 The rulings that came out of that retraction — the two-classes-of-denormalization distinction, the source-immutability precondition, and the DEC-013-derived constraint — lived only in bead notes and docstrings. Bead notes stop being read when the bead closes. DEC-013's own "diagnostic, never a policy surface" rule survived a year and three additional ingest paths precisely because it lived in a decision file; this decision gives these rulings the same durability.
 
