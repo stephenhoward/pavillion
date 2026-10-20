@@ -90,8 +90,11 @@
   }
 
   /* Active/current state */
+  /* The current item is outlined on every variant; an inset shadow keeps the
+     item's size unchanged, and forced colours use the outline below instead */
   &--active {
     background-color: var(--pav-nav-active-bg);
+    box-shadow: inset 0 0 0 var(--pav-border-width-1) var(--pav-color-interactive-active);
     color: var(--pav-nav-active-text);
 
     .shell-nav-item__icon {
@@ -141,7 +144,7 @@
   flex: 1;
   text-align: center;
   background-color: transparent;
-  min-height: var(--pav-shell-bottom-nav-height);
+  min-block-size: 0;
 
   .shell-nav-item__icon {
     width: 1.5rem;
