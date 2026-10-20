@@ -231,6 +231,27 @@ test.describe('Public Calendar', () => {
     await page.goBack();
     await expect(page).toHaveTitle(calendarTitle, { timeout: 10000 });
   });
+
+  test('should title the dateless event page after the event', async ({ page }) => {
+    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
+    const eventLinks = page.locator('li.day-event-item h3 a');
+    if (await eventLinks.count() === 0) {
+      test.skip();
+      return;
+    }
+
+    const eventTitle = (await eventLinks.first().textContent())?.trim() ?? '';
+    const href = await eventLinks.first().getAttribute('href');
+    expect(href).toMatch(new RegExp(`/events/[^/]+/${INSTANCE_SLUG_PATTERN}$`));
+
+    // Strip the date slug: the dateless event page is a separate view from the
+    // dated one and must title itself the same way.
+    const datelessPath = href!.replace(new RegExp(`/${INSTANCE_SLUG_PATTERN}$`), '');
+    await page.goto(env.baseURL + datelessPath);
+
+    await expect(page.locator('h1.event-title')).toHaveText(eventTitle, { timeout: 10000 });
+    await expect(page).toHaveTitle(`${eventTitle} | Pavillion`, { timeout: 10000 });
+  });
 });
 
 /**
