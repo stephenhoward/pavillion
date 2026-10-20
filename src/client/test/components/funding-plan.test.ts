@@ -167,6 +167,16 @@ describe('Funding Plan UI Components', () => {
     expect(wrapper.find('.providers-card .card-header button').attributes('disabled')).toBeDefined();
   });
 
+  it('renders no h2 repeating the Funding Plan page title', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+
+    const wrapper = await mountAccount();
+
+    // The settings layout h1 already reads "Funding Plan"; the leaf must not repeat it.
+    expect(wrapper.findAll('h1, h2').map((h) => h.text())).not.toContain('Funding Plan');
+    expect(wrapper.find('section').attributes('aria-labelledby')).toBeUndefined();
+  });
+
   it('points an account with no plan at calendar management when funding is enabled', async () => {
     fundingStubs.getOptions.mockResolvedValue({ enabled: true });
 

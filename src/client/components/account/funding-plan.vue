@@ -173,12 +173,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
+  <section class="settings funding-plan-management">
     <div class="settings-header">
-      <div class="settings-header__title-row">
-        <h2 id="funding-plan-heading">{{ t("title") }}</h2>
-        <HelpButton />
-      </div>
+      <HelpButton />
     </div>
 
     <div role="status" aria-live="polite">
@@ -294,19 +291,9 @@ onMounted(async () => {
 }
 
 .settings-header {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 2rem;
-
-  &__title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  h2 {
-    font-weight: 200;
-    font-size: 2rem;
-    margin: 0;
-  }
 }
 
 h2 {

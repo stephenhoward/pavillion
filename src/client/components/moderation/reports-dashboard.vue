@@ -124,11 +124,6 @@ onMounted(async () => {
 
 <template>
   <div class="reports-dashboard">
-    <!-- Header -->
-    <header class="reports-dashboard__header">
-      <h2 class="reports-dashboard__title">{{ t('dashboard.title') }}</h2>
-    </header>
-
     <!-- Filters -->
     <div class="reports-dashboard__filters" role="search" :aria-label="t('dashboard.title')">
       <div class="reports-dashboard__filter-group">
@@ -291,14 +286,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
-
-  &__header {
-    @include admin-section-header;
-  }
-
-  &__title {
-    @include admin-section-title;
-  }
 
   &__filters {
     display: flex;
