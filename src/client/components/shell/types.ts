@@ -22,6 +22,9 @@ export interface NavigationItem {
 
   /** Accessible label for the badge (pre-translated) */
   badgeLabel?: string;
+
+  /** Renders the row in the error colour (settings Log out) */
+  danger?: boolean;
 }
 
 /**
@@ -35,4 +38,4 @@ export interface NavigationItemWithState extends NavigationItem {
 /**
  * Navigation item variant for styling
  */
-export type NavItemVariant = 'sidebar' | 'bottom';
+export type NavItemVariant = 'sidebar' | 'bottom' | 'list';

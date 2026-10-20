@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronRight } from 'lucide-vue-next';
 import type { NavigationItemWithState, NavItemVariant } from './types';
 
 const props = withDefaults(defineProps<{
@@ -15,7 +16,10 @@ const props = withDefaults(defineProps<{
     class="shell-nav-item"
     :class="[
       `shell-nav-item--${props.variant}`,
-      { 'shell-nav-item--active': props.item.isActive }
+      {
+        'shell-nav-item--active': props.item.isActive,
+        'shell-nav-item--danger': props.item.danger,
+      }
     ]"
     :aria-current="props.item.isActive ? 'page' : undefined"
   >
@@ -33,5 +37,11 @@ const props = withDefaults(defineProps<{
     >
       {{ props.item.badge > 99 ? '99+' : props.item.badge }}
     </span>
+    <ChevronRight
+      v-if="props.variant === 'list'"
+      class="shell-nav-item__chevron"
+      :stroke-width="2"
+      aria-hidden="true"
+    />
   </RouterLink>
 </template>
