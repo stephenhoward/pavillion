@@ -1,0 +1,40 @@
+{
+  "tree_label": "Configuración",
+  "skip_to_content": "Saltar al contenido de la configuración",
+  "back_to": "Volver a {{name}}",
+  "loading_calendar": "Cargando calendario…",
+  "titles": {
+    "settings": "Configuración",
+    "calendar": "Calendario",
+    "account": "Cuenta",
+    "instance": "Instancia"
+  },
+  "nav": {
+    "root": {
+      "calendar": "Calendario",
+      "account": "Cuenta",
+      "instance": "Instancia",
+      "log_out": "Cerrar sesión"
+    },
+    "calendar": {
+      "general": "General",
+      "editors": "Editores",
+      "reports": "Reportes",
+      "import": "Importar",
+      "widget": "Widget"
+    },
+    "account": {
+      "profile": "Perfil",
+      "security": "Seguridad",
+      "funding_plan": "Plan de financiación"
+    },
+    "admin": {
+      "general": "General",
+      "accounts": "Cuentas",
+      "calendars": "Calendarios",
+      "moderation": "Moderación",
+      "federation": "Federación",
+      "funding": "Financiación"
+    }
+  }
+}
