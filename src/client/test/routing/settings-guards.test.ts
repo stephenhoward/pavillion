@@ -262,6 +262,23 @@ describe('settings routes on the real route table', () => {
       },
     );
 
+    it('does not trap Back on the root reached by history traversal at md+', async () => {
+      viewerHolds(owned('o1', 'riverside'));
+      const router = routerAt(false);
+      await router.push('/inbox');
+      await router.push('/settings');
+      await router.push('/settings/calendar/riverside/general');
+      media.setMatches(true);
+
+      // Back onto the root forwards to its first leaf in place of the root entry...
+      await traverse(router, -1);
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/riverside/general');
+
+      // ...so the next Back leaves settings instead of forwarding again.
+      await traverse(router, -1);
+      expect(router.currentRoute.value.fullPath).toBe('/inbox');
+    });
+
     it('replaces a cold load of the root, adding no history entry', async () => {
       viewerHolds(owned('o1', 'riverside'));
       expect(await coldLoadAtMdUp('/settings')).toEqual({
@@ -438,6 +455,7 @@ describe('settings routes on the real route table', () => {
 
   describe('signed out', () => {
     it.each([
+      '/settings',
       '/settings/account',
       '/settings/account/security',
       '/settings/account/funding',
@@ -445,6 +463,14 @@ describe('settings routes on the real route table', () => {
       const router = routerAt(true, accessGuardsFor(false));
       await router.push(path);
       expect(router.currentRoute.value.name).toBe('login');
+    });
+
+    it('checks sign-in before the root forward loads anything at md+', async () => {
+      const router = routerAt(true, accessGuardsFor(false));
+      await router.push('/settings');
+      expect(router.currentRoute.value.name).toBe('login');
+      expect(loadStub().called).toBe(false);
+      expect(getOptions.called).toBe(false);
     });
 
     it('checks sign-in before loading the funding flag', async () => {
@@ -686,7 +712,10 @@ describe('settings routes on the real route table', () => {
       viewerHolds(owned('o1', 'riverside'));
       const { wrapper: w, router } = await mountAt('/settings', false);
 
-      const logOut = w.find('.settings-list-page .settings-nav__logout button');
+      expect(w.findAll('h1')).toHaveLength(1);
+      const rows = w.findAll('.settings-list-page ul > li');
+      expect(rows.length).toBeGreaterThan(1);
+      const logOut = rows[rows.length - 1].find('button');
       expect(logOut.exists()).toBe(true);
       expect(logOut.text()).toBe('Log out');
 
@@ -718,7 +747,7 @@ describe('settings routes on the real route table', () => {
         if (harbour === 'another account') {
           useCalendarStore().selectedCalendarId = 'h1';
           axiosGet.callsFake(async (url: string) => {
-            if (url.includes('harbour')) {
+            if (url.includes('harbour') || url.includes('h1')) {
               return { data: { id: 'h1', urlName: 'harbour', userRelationship: 'owner' } };
             }
             throw notFound;
@@ -750,6 +779,9 @@ describe('settings routes on the real route table', () => {
         expect(another.fullPath).toBe(path);
         expect(another.html).toContain('calendar-management-root');
         expect(another.html).not.toContain('harbour');
+        // No per-calendar request in either case, by url name or stored id.
+        const requested = axiosGet.getCalls().map((call) => String(call.args[0]));
+        expect(requested.filter((url) => url.includes('harbour') || url.includes('h1'))).toEqual([]);
       });
     });
   });
