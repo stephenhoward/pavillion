@@ -3,15 +3,17 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { buildClientRoutes } from '@/client/routes';
 
 /*
- * Server-built emails link to settings leaves by path. The literal below is
+ * Server-built emails link to settings leaves by path. Each literal below is
  * the same one src/server/moderation/test/model/settings-links.test.ts pins
- * for calendarReportsPath(); neither test imports across the layer boundary,
- * so the shared literal is the contract. Change both together.
+ * for the matching settings-links.ts function; neither test imports across
+ * the layer boundary, so the shared literal is the contract. Change both
+ * together.
  */
 describe('settings links built outside the SPA', () => {
-  it('resolves calendar_reports to the path the moderation emails link to', () => {
+  /** The real client route table, with every guard passing through. */
+  function createTestRouter() {
     const pass = () => true;
-    const router = createRouter({
+    return createRouter({
       history: createMemoryHistory(),
       routes: buildClientRoutes({
         mustBeLoggedIn: pass,
@@ -25,9 +27,17 @@ describe('settings links built outside the SPA', () => {
         fundingEnabledRedirect: pass,
       }),
     });
+  }
 
-    const resolved = router.resolve({ name: 'calendar_reports', params: { calendar: 'city-events' } });
+  it('resolves calendar_reports to the path calendarReportsPath() builds', () => {
+    const resolved = createTestRouter().resolve({ name: 'calendar_reports', params: { calendar: 'city-events' } });
 
     expect(resolved.href).toBe('/settings/calendar/city-events/reports');
+  });
+
+  it('resolves moderation_report_detail to the path adminModerationReportPath() builds', () => {
+    const resolved = createTestRouter().resolve({ name: 'moderation_report_detail', params: { reportId: 'report-uuid-123' } });
+
+    expect(resolved.href).toBe('/settings/admin/moderation/reports/report-uuid-123');
   });
 });

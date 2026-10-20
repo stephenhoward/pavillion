@@ -14,3 +14,15 @@
 export function calendarReportsPath(urlName: string): string {
   return `/settings/calendar/${encodeURIComponent(urlName)}/reports`;
 }
+
+/**
+ * Path to one report in the instance admin's moderation settings, the client
+ * route `moderation_report_detail`. Path only: callers add the origin with
+ * `publicUrl`. Pinned by the same two tests as `calendarReportsPath`.
+ *
+ * @param reportId - The report's id
+ * @returns `/settings/admin/moderation/reports/<reportId>`, with the id encoded as one segment
+ */
+export function adminModerationReportPath(reportId: string): string {
+  return `/settings/admin/moderation/reports/${encodeURIComponent(reportId)}`;
+}
