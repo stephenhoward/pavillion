@@ -25,6 +25,7 @@ import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/Ca
 import {
   findLeafByRouteName,
   isSettingsLeafGroup,
+  matchedSettingsGroup,
   SETTINGS_GROUP_INDEX_ROUTES,
   SETTINGS_GROUP_TITLE_KEYS,
   type SettingsLeafGroup,
@@ -42,10 +43,7 @@ const { t } = useTranslation('settings');
 const { t: tCal } = useTranslation('calendars');
 
 const level = computed<HeaderLevel>(() => {
-  // Read the matched record's own meta, not the merged route.meta, so a
-  // group set on a parent record never turns its leaves into sections.
-  const record = route.matched[route.matched.length - 1];
-  const group = record?.meta.settingsGroup;
+  const group = matchedSettingsGroup(route);
   if (isSettingsLeafGroup(group)) {
     return { kind: 'section', group };
   }

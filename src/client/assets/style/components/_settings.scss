@@ -10,6 +10,15 @@
   text-transform: uppercase;
 }
 
+/* PolicyLink sets its own margin and size; in a settings footer it aligns
+   with the rows above it. */
+@mixin settings-footer-policy-link {
+  .policy-link {
+    padding-inline: var(--pav-space-3);
+    color: var(--pav-text-secondary);
+  }
+}
+
 /**
  * Back link: a full-width row with a leading chevron and visible
  * "Back to {parent}" text. Shared by the settings page header and the
@@ -199,11 +208,7 @@
       margin-block-start: 0;
     }
 
-    /* PolicyLink sets its own margin and size; align it with the rows */
-    .policy-link {
-      padding-inline: var(--pav-space-3);
-      color: var(--pav-text-secondary);
-    }
+    @include settings-footer-policy-link;
   }
 }
 
@@ -218,14 +223,10 @@
     display: none;
   }
 
-  /* PolicyLink sets its own size; align it with the rows */
   &__footer {
-    margin-block-start: var(--pav-space-6);
+    @include settings-footer-policy-link;
 
-    .policy-link {
-      padding-inline: var(--pav-space-3);
-      color: var(--pav-text-secondary);
-    }
+    margin-block-start: var(--pav-space-6);
   }
 }
 

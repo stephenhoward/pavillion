@@ -78,6 +78,13 @@ describe('settings tree', () => {
     sandbox.restore();
   });
 
+  /** Swap in a fresh fake whose query starts at `matches`. */
+  function reinstall(matches: boolean): void {
+    media.restore();
+    resetShellLayoutForTesting();
+    media = installMatchMedia(matches);
+  }
+
   async function mountAt(
     path: string,
     options: { isAdmin?: boolean; calendars?: CalendarInfo[]; fundingEnabled?: boolean; attach?: boolean } = {},
@@ -205,9 +212,7 @@ describe('settings tree', () => {
     });
 
     it('leaves focus alone crossing up', async () => {
-      media.restore();
-      resetShellLayoutForTesting();
-      media = installMatchMedia(false);
+      reinstall(false);
       const w = await mountAt('/settings/account/profile', { attach: true });
       const link = w.find('a').element as HTMLElement;
       link.focus();

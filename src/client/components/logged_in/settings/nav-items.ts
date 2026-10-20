@@ -28,7 +28,7 @@
  * architecture (agent-os/product/decisions/dec-021-client-settings-information-architecture.md).
  */
 import type { Component } from 'vue';
-import type { RouteLocationNamedRaw } from 'vue-router';
+import type { RouteLocationNamedRaw, RouteLocationNormalizedLoaded } from 'vue-router';
 import {
   Calendar,
   Download,
@@ -52,6 +52,21 @@ export type SettingsLeafGroup = Exclude<SettingsGroup, 'root'>;
 /** Whether a value (route meta, a param) names a group with leaves of its own. */
 export function isSettingsLeafGroup(value: unknown): value is SettingsLeafGroup {
   return value === 'calendar' || value === 'account' || value === 'admin';
+}
+
+/** Whether a value (route meta, a param) names any settings group, the root included. */
+export function isSettingsGroup(value: unknown): value is SettingsGroup {
+  return value === 'root' || isSettingsLeafGroup(value);
+}
+
+/**
+ * The settings group whose index a route is, or null for any other route.
+ * Read from the last matched record's own meta, not the merged route.meta,
+ * so a group set on a parent record never turns its children into an index.
+ */
+export function matchedSettingsGroup(route: Pick<RouteLocationNormalizedLoaded, 'matched'>): SettingsGroup | null {
+  const group = route.matched[route.matched.length - 1]?.meta.settingsGroup;
+  return isSettingsGroup(group) ? group : null;
 }
 
 /** Each group's title, a key in the `settings` namespace. */

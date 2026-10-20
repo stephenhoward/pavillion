@@ -13,12 +13,14 @@
  *   load, has no target and stays put. The watch is not immediate: the
  *   guard owns the forward on navigation, so mounting at md+ never forwards
  *   a second time.
+ * - Crossing up with focus in the page, which is about to be display: none,
+ *   moves focus to the page h1 rather than letting it fall to the body.
  * - Crossing down does nothing here: this page is never mounted on a leaf.
  *   Focus leaving the hidden tree is the tree's to handle.
  * - An unresolved calendar renders no list, and nothing is built from the
  *   bare route param.
  */
-import { computed, inject, onMounted, onUnmounted, watch } from 'vue';
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
@@ -32,7 +34,8 @@ import {
 } from '@/client/service/settings-guards';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import NavList from './nav-list.vue';
-import { groupItems, type SettingsGroup } from './nav-items';
+import { focusSettingsHeading } from './heading-focus';
+import { groupItems, matchedSettingsGroup } from './nav-items';
 
 const route = useRoute();
 const router = useRouter();
@@ -40,11 +43,7 @@ const { t } = useTranslation('settings');
 const authn = inject<{ isAdmin?: () => boolean }>('authn');
 const isAdmin = () => authn?.isAdmin?.() ?? false;
 
-// The matched record's own meta, not the merged route.meta, so a group set
-// on a parent record never applies to its children.
-const group = computed<SettingsGroup | null>(
-  () => route.matched[route.matched.length - 1]?.meta.settingsGroup ?? null,
-);
+const group = computed(() => matchedSettingsGroup(route));
 
 const items = computed(() => {
   if (!group.value) {
@@ -62,6 +61,18 @@ const forwardDeps: SettingsForwardDeps = {
 
 // Settings borrows the shell breakpoint for its tree; the alias names that.
 const { mainNavIsSidebar: treeIsSidebar } = useShellLayout();
+
+const navEl = ref<HTMLElement | null>(null);
+
+// Kept apart from the async forward below: a sync flush runs inside the
+// matchMedia change callback, before the browser moves focus off the
+// now-hidden page to the body. pv-ms7c may replace this with a general
+// focus rule.
+watch(treeIsSidebar, (isSidebar) => {
+  if (isSidebar && navEl.value?.contains(document.activeElement)) {
+    focusSettingsHeading();
+  }
+}, { flush: 'sync' });
 
 // The watcher is disposed with the component; the shared matchMedia listener
 // belongs to the useShellLayout singleton. This flag drops a forward whose
@@ -90,7 +101,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <nav v-if="items.length > 0" class="settings-list-page" :aria-label="t('tree_label')">
+  <nav
+    v-if="items.length > 0"
+    ref="navEl"
+    class="settings-list-page"
+    :aria-label="t('tree_label')"
+  >
     <NavList :items="items" mode="page" />
     <div v-if="group === 'root'" class="settings-list-page__footer">
       <PolicyLink source="settings" />

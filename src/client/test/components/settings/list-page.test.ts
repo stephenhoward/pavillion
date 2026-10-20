@@ -41,6 +41,10 @@ const createTestRouter = (): Router => createRouter({
     { path: '/settings/admin/funding', name: 'funding', component: Stub },
     { path: '/policy', name: 'instance-policy', component: Stub },
     { path: '/auth/logout', name: 'logout', component: Stub },
+    // A group on a parent record only: its child is not an index.
+    { path: '/settings/nested', component: { template: '<RouterView />' }, meta: { settingsGroup: 'account' }, children: [
+      { path: '', name: 'nested_child', component: Stub },
+    ] },
   ],
 });
 
@@ -84,9 +88,16 @@ describe('settings list page', () => {
     vi.restoreAllMocks();
   });
 
+  /** Swap in a fresh fake whose query starts at `matches`. */
+  function reinstall(matches: boolean): void {
+    media.restore();
+    resetShellLayoutForTesting();
+    media = installMatchMedia(matches);
+  }
+
   async function mountAt(
     path: string,
-    options: { isAdmin?: boolean; calendars?: CalendarInfo[]; fundingEnabled?: boolean } = {},
+    options: { isAdmin?: boolean; calendars?: CalendarInfo[]; fundingEnabled?: boolean; attach?: boolean } = {},
   ): Promise<VueWrapper> {
     useCalendarStore().setCalendarInfos(options.calendars ?? [owned()]);
     useFundingStore().instanceFundingEnabled = options.fundingEnabled ?? false;
@@ -97,6 +108,7 @@ describe('settings list page', () => {
     wrapper = mountComponent(SettingsListPage, router, {
       pinia,
       provide: { authn: { isAdmin: () => options.isAdmin ?? false } },
+      ...(options.attach ? { attachTo: document.body } : {}),
     });
     await flushPromises();
     return wrapper;
@@ -139,15 +151,32 @@ describe('settings list page', () => {
       expect(router.currentRoute.value.name).toBe(expected.name);
     });
 
-    it('replaces only once when the query reports a match twice', async () => {
+    it('forwards once per crossing up', async () => {
       await mountAt('/settings/account');
+      // Hold the page on its index so a second crossing can be observed.
+      replace.mockResolvedValue(undefined);
 
       media.setMatches(true);
       await flushPromises();
-      media.setMatches(true);
-      await flushPromises();
-
       expect(replace).toHaveBeenCalledTimes(1);
+
+      media.setMatches(false);
+      await flushPromises();
+      media.setMatches(true);
+      await flushPromises();
+
+      expect(replace).toHaveBeenCalledTimes(2);
+      expect(replace).toHaveBeenNthCalledWith(2, { name: 'profile' });
+    });
+
+    it('does not forward a route whose group is set only on its parent', async () => {
+      const w = await mountAt('/settings/nested');
+
+      media.setMatches(true);
+      await flushPromises();
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(w.find('ul').exists()).toBe(false);
     });
 
     it('does not forward an unresolved calendar', async () => {
@@ -171,9 +200,7 @@ describe('settings list page', () => {
     });
 
     it('does not forward on mount when already at md+ (the guard owns that)', async () => {
-      media.restore();
-      resetShellLayoutForTesting();
-      media = installMatchMedia(true);
+      reinstall(true);
 
       await mountAt('/settings/account');
 
@@ -183,9 +210,7 @@ describe('settings list page', () => {
 
   describe('resize down', () => {
     it('neither replaces nor navigates', async () => {
-      media.restore();
-      resetShellLayoutForTesting();
-      media = installMatchMedia(true);
+      reinstall(true);
       await mountAt('/settings/account');
       const push = vi.spyOn(router, 'push');
 
@@ -199,10 +224,12 @@ describe('settings list page', () => {
   });
 
   describe('after unmount', () => {
-    it('stops forwarding', async () => {
+    it('stops forwarding, while the shared listener stays with the layout singleton', async () => {
       const w = await mountAt('/settings/account');
+      expect(media.listenerCount()).toBe(1);
       w.unmount();
       wrapper = null;
+      expect(media.listenerCount()).toBe(1);
 
       media.setMatches(true);
       await flushPromises();
@@ -225,6 +252,47 @@ describe('settings list page', () => {
       await flushPromises();
 
       expect(replace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('focus crossing up', () => {
+    let heading: HTMLElement;
+
+    beforeEach(() => {
+      heading = document.createElement('h1');
+      heading.className = 'settings-page-header__title';
+      heading.tabIndex = -1;
+      document.body.appendChild(heading);
+    });
+
+    afterEach(() => {
+      heading.remove();
+    });
+
+    it('moves focus from the hidden page to the page heading', async () => {
+      const w = await mountAt('/settings/account', { attach: true });
+      (w.find('a').element as HTMLElement).focus();
+      expect(w.element.contains(document.activeElement)).toBe(true);
+
+      media.setMatches(true);
+
+      expect(document.activeElement).toBe(heading);
+    });
+
+    it('leaves focus alone when it is outside the page', async () => {
+      await mountAt('/settings/account', { attach: true });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        outside.focus();
+
+        media.setMatches(true);
+
+        expect(document.activeElement).toBe(outside);
+      }
+      finally {
+        outside.remove();
+      }
     });
   });
 
@@ -264,7 +332,7 @@ describe('settings list page', () => {
       expect(w.html()).not.toContain('nope');
     });
 
-    it('lists the Instance rows only to an admin', async () => {
+    it('renders no list on the instance index for a non-admin', async () => {
       const w = await mountAt('/settings/admin', { isAdmin: false });
       expect(w.find('ul').exists()).toBe(false);
     });

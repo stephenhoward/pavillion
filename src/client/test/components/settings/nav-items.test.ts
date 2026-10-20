@@ -12,7 +12,9 @@ import {
   groupItems,
   isVisibleLeaf,
   findLeafByRouteName,
+  isSettingsGroup,
   isSettingsLeafGroup,
+  matchedSettingsGroup,
   SETTINGS_GROUP_INDEX_ROUTES,
   SETTINGS_GROUP_TITLE_KEYS,
   type SettingsNavContext,
@@ -281,6 +283,24 @@ describe('settings nav items', () => {
 
     it.each(['root', 'Calendar', '', undefined, null, 1])('rejects %j', (value) => {
       expect(isSettingsLeafGroup(value)).toBe(false);
+    });
+
+    it.each(['root', 'calendar', 'account', 'admin'])('recognises %s as a group', (value) => {
+      expect(isSettingsGroup(value)).toBe(true);
+    });
+
+    it.each(['Root', '', undefined, null, 1])('rejects %j as a group', (value) => {
+      expect(isSettingsGroup(value)).toBe(false);
+    });
+
+    it('reads the group from the last matched record only, and validates it', () => {
+      const record = (settingsGroup?: unknown) => ({ meta: { settingsGroup } });
+      const route = (...records: object[]) => ({ matched: records }) as unknown as Parameters<typeof matchedSettingsGroup>[0];
+
+      expect(matchedSettingsGroup(route(record(), record('root')))).toBe('root');
+      expect(matchedSettingsGroup(route(record('account'), record()))).toBeNull();
+      expect(matchedSettingsGroup(route(record('bogus')))).toBeNull();
+      expect(matchedSettingsGroup(route())).toBeNull();
     });
 
     it('titles every group with a key that resolves in the settings namespace', () => {

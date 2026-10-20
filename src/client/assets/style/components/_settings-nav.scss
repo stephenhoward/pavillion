@@ -17,10 +17,13 @@
   padding: 0;
   list-style: none;
 
+  /* text-align overrides the global narrow-viewport `nav a` centring in
+     _navigation.scss, which a page-mode list inside a <nav> would inherit */
   .shell-nav-item--list {
     display: flex;
     align-items: center;
     gap: var(--pav-space-3);
+    text-align: start;
     inline-size: 100%;
     min-block-size: var(--pav-shell-nav-item-height);
     padding-block: var(--pav-space-2_5);
