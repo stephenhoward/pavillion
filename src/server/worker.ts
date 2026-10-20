@@ -19,6 +19,7 @@ import { FollowBackfillService, BackfillRateLimitError } from '@/server/activity
 import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
+import { installUnhandledRejectionHandler } from '@/server/common/helper/unhandled-rejection';
 
 const logger = createLogger('worker');
 
@@ -381,6 +382,9 @@ async function handleShutdown(signal: string): Promise<void> {
  * Main worker initialization function.
  */
 async function startWorker(): Promise<void> {
+  // Backstop: keep the process up when a promise rejection is never awaited.
+  installUnhandledRejectionHandler();
+
   try {
     // Initialize database connection
     logger.info('Connecting to database...');

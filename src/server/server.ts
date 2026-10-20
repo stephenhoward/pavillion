@@ -37,6 +37,7 @@ import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 import { createI18nConfig } from '@/common/i18n/config';
 import type { ReservedUrlNameCollision } from '@/server/calendar/interface';
 import logger from '@/server/common/helper/logger';
+import { installUnhandledRejectionHandler } from '@/server/common/helper/unhandled-rejection';
 import { PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 
 /**
@@ -299,6 +300,9 @@ async function reportReservedUrlNameCollisionsSafely(
  * @returns {Promise<Server | null>} HTTP server instance for cleanup, or null in test mode
  */
 const initPavillionServer = async (app: express.Application, port: number): Promise<Server | null> => {
+
+  // Backstop: keep the process up when a promise rejection is never awaited.
+  installUnhandledRejectionHandler();
 
   // Validate production environment configuration before starting
   validateProductionEnvironment();
