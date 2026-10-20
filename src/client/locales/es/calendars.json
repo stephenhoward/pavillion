@@ -26,10 +26,7 @@
     "create_calendar_button": "Crear un calendario nuevo",
     "editor_badge": "Editor",
     "aria_switch_calendar": "Cambiar de calendario: {{name}}",
-    "aria_switch_settings": "Cambiar configuración: {{name}}",
-    "no_calendars": "Todavía no tienes calendarios.",
-    "account_row": "Cuenta",
-    "admin_row": "Administración de la instancia"
+    "no_calendars": "Todavía no tienes calendarios."
   },
   "calendar": {
     "create_button": "Crear evento",

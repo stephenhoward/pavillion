@@ -26,10 +26,7 @@
     "create_calendar_button": "Create a new calendar",
     "editor_badge": "Editor",
     "aria_switch_calendar": "Switch calendar: {{name}}",
-    "aria_switch_settings": "Switch settings: {{name}}",
-    "no_calendars": "You have no calendars yet.",
-    "account_row": "Account",
-    "admin_row": "Instance administration"
+    "no_calendars": "You have no calendars yet."
   },
   "calendar": {
     "create_button": "Create Event",

@@ -236,11 +236,15 @@
  * The content column is an inline-size container, so a wide leaf adapts
  * with @container rather than a second viewport breakpoint. Neither element
  * clips overflow: the tree rows' focus ring extends past their edges.
+ * At md+ the layout fills the viewport and the grid stretches the tree to
+ * it, so the tree's footer sits at the bottom of the screen.
  */
 .settings-layout {
   @include pav-media(md) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
+    min-block-size: 100vh;
+    min-block-size: 100dvh;
   }
 
   &__content {
