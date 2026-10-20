@@ -26,7 +26,7 @@ import { useShellLayout } from '@/client/composables/useShellLayout';
 import { buildSettingsNavContext, readSettingsNavSources } from '@/client/service/settings-guards';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import NavList from './nav-list.vue';
-import { focusSettingsHeading } from './heading-focus';
+import { focusSettingsHeading, useFocusWithin } from './heading-focus';
 import {
   groupItems,
   SETTINGS_GROUP_TITLE_KEYS,
@@ -55,15 +55,16 @@ const groups = computed<Array<{ group: SettingsLeafGroup; items: SettingsNavItem
 const logoutItems = computed(() => groupItems('root', ctx.value).filter((item) => item.action === 'logout'));
 
 const navEl = ref<HTMLElement | null>(null);
+const focusIsInTree = useFocusWithin(navEl);
 
 // Settings borrows the shell breakpoint for its tree; the alias names that.
 const { mainNavIsSidebar: treeIsSidebar } = useShellLayout();
 
-// A sync flush runs inside the matchMedia change callback, before the
-// browser moves focus off the now-hidden tree to the body. pv-ms7c may
-// replace this with a general focus rule.
+// Chromium may already have dropped focus from the now-hidden tree to the
+// body when the matchMedia change fires; useFocusWithin remembers it was
+// here. pv-ms7c may replace this with a general focus rule.
 watch(treeIsSidebar, (isSidebar) => {
-  if (!isSidebar && navEl.value?.contains(document.activeElement)) {
+  if (!isSidebar && focusIsInTree()) {
     focusSettingsHeading();
   }
 }, { flush: 'sync' });

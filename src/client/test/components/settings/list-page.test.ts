@@ -279,6 +279,18 @@ describe('settings list page', () => {
       expect(document.activeElement).toBe(heading);
     });
 
+    it('moves focus to the page heading when the hide already dropped focus to the body', async () => {
+      const w = await mountAt('/settings/account', { attach: true });
+      (w.find('a').element as HTMLElement).focus();
+      // Chromium blurs the display: none page before the matchMedia change fires.
+      (document.activeElement as HTMLElement).blur();
+      expect(document.activeElement).toBe(document.body);
+
+      media.setMatches(true);
+
+      expect(document.activeElement).toBe(heading);
+    });
+
     it('leaves focus alone when it is outside the page', async () => {
       await mountAt('/settings/account', { attach: true });
       const outside = document.createElement('button');

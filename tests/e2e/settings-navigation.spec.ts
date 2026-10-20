@@ -253,7 +253,7 @@ test.describe('resize across md', () => {
     await expect(page).toHaveURL(before);
   });
 
-  test('desktop → phone on a leaf keeps the leaf and shows its back link', async ({ page }) => {
+  test('desktop → phone on a leaf keeps the leaf, shows its back link and focuses the h1', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await loginAsAdmin(page, env.baseURL);
     const editors = calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'editors');
@@ -261,14 +261,15 @@ test.describe('resize across md', () => {
     await gotoSettings(page, env.baseURL, editors);
     await expect(settingsTree(page)).toBeVisible();
 
-    // Not asserted: tree.vue's viewport watch means to move focus from the
-    // hiding tree to the h1, but Chromium has already dropped focus to the
-    // body by the time the matchMedia change fires, so the watch never sees
-    // focus inside the tree.
+    // Focus in the tree as it hides moves to the h1, not the body.
+    await settingsRow(settingsTree(page), 'Editors').focus();
+    await expect(settingsRow(settingsTree(page), 'Editors')).toBeFocused();
+
     await page.setViewportSize(PHONE);
     await expect(backLink(page, ADMIN_CALENDAR_NAME)).toBeVisible();
     await expect(page).toHaveURL(pathPattern(editors.path));
     await expect(settingsTitle(page, 'Editors')).toBeVisible();
+    await expect(settingsTitle(page, 'Editors')).toBeFocused();
     await expect(settingsTree(page)).toHaveCount(0);
   });
 

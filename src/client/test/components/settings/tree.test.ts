@@ -202,6 +202,30 @@ describe('settings tree', () => {
       expect(document.activeElement).toBe(heading);
     });
 
+    it('moves focus to the page heading when the hide already dropped focus to the body', async () => {
+      const w = await mountAt('/settings/account/profile', { attach: true });
+      (w.find('a').element as HTMLElement).focus();
+      // Chromium blurs the display: none tree before the matchMedia change fires.
+      (document.activeElement as HTMLElement).blur();
+      expect(document.activeElement).toBe(document.body);
+
+      media.setMatches(false);
+
+      expect(document.activeElement).toBe(heading);
+    });
+
+    it('leaves focus on the body when focus last left from outside the tree', async () => {
+      const w = await mountAt('/settings/account/profile', { attach: true });
+      (w.find('a').element as HTMLElement).focus();
+      outside.focus();
+      outside.blur();
+      expect(document.activeElement).toBe(document.body);
+
+      media.setMatches(false);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('leaves focus alone when it is outside the tree', async () => {
       await mountAt('/settings/account/profile', { attach: true });
       outside.focus();

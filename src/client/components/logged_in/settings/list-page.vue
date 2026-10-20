@@ -34,7 +34,7 @@ import {
 } from '@/client/service/settings-guards';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import NavList from './nav-list.vue';
-import { focusSettingsHeading } from './heading-focus';
+import { focusSettingsHeading, useFocusWithin } from './heading-focus';
 import { groupItems, matchedSettingsGroup } from './nav-items';
 
 const route = useRoute();
@@ -63,13 +63,15 @@ const forwardDeps: SettingsForwardDeps = {
 const { mainNavIsSidebar: treeIsSidebar } = useShellLayout();
 
 const navEl = ref<HTMLElement | null>(null);
+const focusIsInPage = useFocusWithin(navEl);
 
-// Kept apart from the async forward below: a sync flush runs inside the
-// matchMedia change callback, before the browser moves focus off the
-// now-hidden page to the body. pv-ms7c may replace this with a general
-// focus rule.
+// Kept apart from the async forward below, which would run after the
+// browser has settled focus. Chromium may already have dropped focus from
+// the now-hidden page to the body when the matchMedia change fires;
+// useFocusWithin remembers it was here. pv-ms7c may replace this with a
+// general focus rule.
 watch(treeIsSidebar, (isSidebar) => {
-  if (isSidebar && navEl.value?.contains(document.activeElement)) {
+  if (isSidebar && focusIsInPage()) {
     focusSettingsHeading();
   }
 }, { flush: 'sync' });
