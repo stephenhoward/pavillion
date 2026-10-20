@@ -6,6 +6,20 @@
  * Design: Stone palette with Orange accent for active states
  * Icons: Lucide icons with strokeWidth 2
  */
+@use '../mixins' as *;
+
+/**
+ * Shell navigation width
+ * The sidebar's width and the main column's offset both read
+ * --pav-shell-nav-width. Rail mode (app-shell--rail, set from route meta
+ * shellRail) swaps it at md+ only. Both declarations live in this one global
+ * layer, base first: a scoped base in app-shell.vue would outrank the global
+ * swap and the rail would never apply. Nothing transitions; the width and
+ * the main column snap.
+ */
+.app-shell {
+  --pav-shell-nav-width: var(--pav-shell-sidebar-width);
+}
 
 /**
  * Base navigation item styles
@@ -17,7 +31,7 @@
   text-decoration: none;
   color: var(--pav-nav-inactive-text);
   border-radius: var(--pav-border-radius-lg);
-  transition: all 0.15s ease-in-out;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
   position: relative;
   font-family: var(--pav-font-family-display);
 
@@ -165,5 +179,44 @@
   /* Active state for bottom nav - no background, just color change */
   &.shell-nav-item--active {
     background-color: transparent;
+  }
+}
+
+/**
+ * Rail mode (md+)
+ * Icon-only sidebar: labels stay in the accessibility tree through the
+ * sr-only mixin (never display: none, which would strip the link's name),
+ * and the badge sits over the icon. The list padding override names
+ * .sidebar so it outranks sidebar.vue's scoped .sidebar__list rule.
+ */
+.app-shell--rail {
+  @include pav-media(md) {
+    --pav-shell-nav-width: var(--pav-shell-rail-width);
+
+    .sidebar .sidebar__list {
+      padding: var(--pav-space-2);
+    }
+
+    .shell-nav-item--sidebar {
+      justify-content: center;
+      padding-inline: 0;
+
+      .shell-nav-item__label {
+        @include sr-only;
+      }
+
+      .shell-nav-item__badge {
+        /* Anchored from the item's centre so it overlaps the icon's
+           block-start, inline-end corner in either direction */
+        position: absolute;
+        inset-block-start: var(--pav-space-1);
+        inset-inline-start: 50%;
+        margin-inline-start: 0;
+        min-inline-size: 1rem;
+        block-size: 1rem;
+        padding: 0 var(--pav-space-0_5);
+        font-size: 0.625rem;
+      }
+    }
   }
 }

@@ -30,7 +30,7 @@ defineProps<{
   position: fixed;
   inset-block: 0;
   inset-inline-start: 0;
-  width: var(--pav-shell-sidebar-width);
+  width: var(--pav-shell-nav-width);
   background-color: var(--pav-surface-primary);
   border-inline-end: 1px solid var(--pav-border-subtle);
   z-index: 100;

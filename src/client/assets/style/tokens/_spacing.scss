@@ -71,6 +71,7 @@
 
   /* Shell Layout Tokens */
   --pav-shell-sidebar-width: 15rem;                      /* 240px sidebar width */
+  --pav-shell-rail-width: 4rem;                          /* 64px icon rail width */
   --pav-settings-tree-width: 14rem;                      /* 224px settings tree; rem so it scales with text */
   --pav-shell-bottom-nav-height: 4rem;                   /* 64px bottom nav height */
   --pav-shell-safe-area-bottom: env(safe-area-inset-bottom, 0px);
