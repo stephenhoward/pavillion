@@ -44,7 +44,7 @@ import FundingForm from '@/client/components/account/FundingForm.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
-  { path: '/settings', component: {}, name: 'settings' },
+  { path: '/settings/account/funding', component: {}, name: 'funding_plan' },
   { path: '/settings/calendar/:calendar/general', component: {}, name: 'calendar_general' },
   { path: '/settings/calendar/:calendar/widget', component: {}, name: 'calendar_widget' },
 ];
@@ -536,7 +536,7 @@ describe('FundingForm', () => {
       expect(returnUrl).toBe(`${window.location.origin}/settings/calendar/town-hall/general`);
     });
 
-    it('returns to settings when the route names no calendar', async () => {
+    it('returns to the funding plan leaf when the route names no calendar', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
@@ -554,7 +554,7 @@ describe('FundingForm', () => {
       await flushPromises();
 
       const { returnUrl } = mockCreateCheckoutSession.mock.calls[0][0];
-      expect(returnUrl).toBe(`${window.location.origin}/settings`);
+      expect(returnUrl).toBe(`${window.location.origin}/settings/account/funding`);
     });
 
     it('passes onComplete callback to initEmbeddedCheckout', async () => {

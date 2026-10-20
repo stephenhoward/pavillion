@@ -252,11 +252,13 @@ async function startStripeCheckout() {
     // (validateReturnUrlOrigin). General is owner-only, which is safe because
     // only an owner can create a session for a calendar: the server's
     // verifyCalendarOwnership refuses anyone else, so the target is always
-    // reachable. No calendar in the route falls back to the settings root.
+    // reachable. No calendar in the route falls back to the account's funding
+    // plan page. A provider return URL must address a leaf, never an index:
+    // an index forwards on to a leaf and drops the query, session_id with it.
     const calendar = route.params.calendar;
     const returnPath = typeof calendar === 'string'
       ? router.resolve({ name: 'calendar_general', params: { calendar } }).href
-      : router.resolve({ name: 'settings' }).href;
+      : router.resolve({ name: 'funding_plan' }).href;
 
     // Build checkout session params
     const params: Record<string, any> = {
