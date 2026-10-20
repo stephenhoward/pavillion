@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { gotoSettings, settingsPath } from './helpers/settings-nav';
+import { gotoSettings, settingsLeaf } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -40,7 +40,7 @@ test.describe('Modal Focus Trap & Return Focus', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page, env.baseURL);
-    await gotoSettings(page, env.baseURL, settingsPath.security, 'Security');
+    await gotoSettings(page, env.baseURL, settingsLeaf.security);
   });
 
   test('keyboard focus stays trapped inside modal and returns to trigger on close', async ({ page }) => {

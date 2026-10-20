@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { gotoSettings, settingsPath } from './helpers/settings-nav';
+import { gotoSettings, settingsLeaf } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -40,7 +40,7 @@ test.describe('Profile Display Name', () => {
 
   test('should load profile with display name field', async ({ page }) => {
     // Navigate to profile settings
-    await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
 
     // Wait for profile section to load (loading state should complete)
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
@@ -56,7 +56,7 @@ test.describe('Profile Display Name', () => {
 
   test('should update display name successfully', async ({ page }) => {
     // Navigate to profile settings
-    await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     // Get the display name input
@@ -79,7 +79,7 @@ test.describe('Profile Display Name', () => {
 
   test('should persist display name after page reload', async ({ page }) => {
     // Navigate to profile settings
-    await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     // Set a unique display name
@@ -103,7 +103,7 @@ test.describe('Profile Display Name', () => {
 
   test('should allow clearing display name', async ({ page }) => {
     // First set a display name
-    await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -111,8 +111,8 @@ test.describe('Profile Display Name', () => {
     await displayNameInput.blur();
     await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
 
-    // Wait for feedback to disappear
-    await page.waitForTimeout(1000);
+    // Wait for feedback to disappear, so the next save's feedback is new
+    await expect(page.locator('.save-feedback')).not.toBeVisible({ timeout: 5000 });
 
     // Now clear it
     await displayNameInput.clear();

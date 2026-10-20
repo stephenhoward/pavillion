@@ -1,8 +1,17 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { TEST_ADMIN, waitForPostLoginUrl } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import { clearEmails, waitForEmail, extractLinkFromEmail } from './helpers/emails';
-import { gotoSettings, logOutButton, settingsPath, settingsTree } from './helpers/settings-nav';
+import {
+  DESKTOP,
+  gotoSettings,
+  logOutButton,
+  PHONE,
+  settingsLeaf,
+  settingsList,
+  settingsRootList,
+  settingsTree,
+} from './helpers/settings-nav';
 
 /**
  * E2E Tests: Authentication Workflows
@@ -199,29 +208,49 @@ test.describe('Authentication Workflows', () => {
   });
 
   test.describe('Logout', () => {
-    test('should clear session and redirect to login page', async ({ page }) => {
-      // Since tests are serial, the admin password was changed in the reset test
-      const currentPassword = 'NewSecurePass123!';
+    // Since tests are serial, the admin password was changed in the reset test
+    const currentPassword = 'NewSecurePass123!';
 
-      // Step 1: Log in
+    async function logIn(page: Page) {
       await page.goto(env.baseURL + '/auth/login');
       await page.locator('#login-email').fill(TEST_ADMIN.email);
       await page.locator('#login-password').fill(currentPassword);
       await page.getByRole('button', { name: 'Sign in' }).click();
       await waitForPostLoginUrl(page);
+    }
 
-      // Step 2: Open a settings leaf; at desktop width Log out is in the
-      // settings tree's footer
-      await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
+    test.describe('at desktop width', () => {
+      test.use({ viewport: DESKTOP });
 
-      // Step 3: Click Log out
-      const logoutButton = logOutButton(settingsTree(page));
-      await expect(logoutButton).toBeVisible({ timeout: 5000 });
-      await logoutButton.click();
+      test('Log out in the settings tree footer clears the session and redirects to login', async ({ page }) => {
+        await logIn(page);
 
-      // Step 4: Verify redirect to login page
-      await page.waitForURL('**/auth/login', { timeout: 10000 });
-      expect(page.url()).toContain('/auth/login');
+        // At md+ Log out is in the settings tree's footer on every leaf
+        await gotoSettings(page, env.baseURL, settingsLeaf.profile);
+
+        const logoutButton = logOutButton(settingsTree(page));
+        await expect(logoutButton).toBeVisible({ timeout: 5000 });
+        await logoutButton.click();
+
+        await page.waitForURL('**/auth/login', { timeout: 10000 });
+      });
+    });
+
+    test.describe('at phone width', () => {
+      test.use({ viewport: PHONE });
+
+      test('Log out in the settings root list clears the session and redirects to login', async ({ page }) => {
+        await logIn(page);
+
+        // Below md Log out is a row in the settings root list
+        await gotoSettings(page, env.baseURL, settingsRootList);
+
+        const logoutButton = logOutButton(settingsList(page));
+        await expect(logoutButton).toBeVisible({ timeout: 5000 });
+        await logoutButton.click();
+
+        await page.waitForURL('**/auth/login', { timeout: 10000 });
+      });
     });
   });
 });
