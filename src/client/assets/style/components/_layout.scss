@@ -69,7 +69,8 @@
 }
 
 /* Responsive: tighten page-container padding below md. pav-media-down stops
-   at 767px, so these never overlap the md shell (the sidebar is an aside) */
+   at 767px, so at md (768px and up) every main, article and aside, the shell
+   sidebar included, keeps its desktop spacing */
 @include pav-media-down(md) {
   main {
     padding: var(--pav-space-md) var(--pav-space-sm);
