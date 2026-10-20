@@ -205,6 +205,8 @@ describe('settings page header', () => {
 
       expect(atLeaf).toBe(atIndex);
       expect(atIndex).not.toContain('nope');
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(heading(w).attributes('tabindex')).toBe('-1');
       expect(heading(w).text()).toBe('Calendar');
       expect(backLink(w).attributes('href')).toBe('/settings');
       expect(backLink(w).text()).toBe('Back to Settings');
@@ -223,6 +225,15 @@ describe('settings page header', () => {
       const w = await mountAt(path);
       expect(document.title).toBe(title);
       expect(document.title).toBe(heading(w).text());
+    });
+
+    it('restores the previous title when the header unmounts', async () => {
+      document.title = 'Pavillion';
+      const w = await mountAt('/settings/account/profile');
+      expect(document.title).toBe('Profile');
+      w.unmount();
+      wrapper = null;
+      expect(document.title).toBe('Pavillion');
     });
 
     it('follows navigation', async () => {

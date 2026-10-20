@@ -72,6 +72,20 @@ export function readSettingsNavSources(isAdmin: () => boolean): SettingsNavSourc
 }
 
 /**
+ * The viewer's own calendar a route's `:calendar` param names, or null when
+ * the param is not a single string naming one of `calendars`. Null is the
+ * unresolved calendar: nonexistent, not a member, or not loaded yet. The one
+ * definition of it, shared by buildSettingsNavContext and the settings page
+ * header, so the header's unresolved state and the guards' cannot disagree.
+ */
+export function findViewerCalendar(calendarParam: unknown, calendars: CalendarInfo[]): CalendarInfo | null {
+  if (typeof calendarParam !== 'string') {
+    return null;
+  }
+  return calendars.find((candidate) => candidate.calendar.urlName === calendarParam) ?? null;
+}
+
+/**
  * Build the context the settings tree is evaluated against. The calendar
  * group addresses the route's `:calendar`, looked up in the viewer's own
  * list; every other group addresses the current calendar from
@@ -86,10 +100,7 @@ export function buildSettingsNavContext(
 ): SettingsNavContext | null {
   let info: CalendarInfo | null;
   if (group === 'calendar') {
-    if (typeof calendarParam !== 'string') {
-      return null;
-    }
-    info = sources.calendars.find((candidate) => candidate.calendar.urlName === calendarParam) ?? null;
+    info = findViewerCalendar(calendarParam, sources.calendars);
     if (!info) {
       return null;
     }

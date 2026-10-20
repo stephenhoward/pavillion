@@ -10,6 +10,7 @@ import type { SettingsGroup } from '@/client/components/logged_in/settings/nav-i
 import {
   buildSettingsNavContext,
   createSettingsGuards,
+  findViewerCalendar,
   isReportId,
   readSettingsNavSources,
   settingsIndexTarget,
@@ -197,6 +198,24 @@ describe('settings guards', () => {
 
     it('reports a funding flag that has not loaded as null', () => {
       expect(readSettingsNavSources(() => false).fundingEnabled).toBeNull();
+    });
+  });
+
+  describe('findViewerCalendar', () => {
+    it('returns the viewer\'s calendar the param names', () => {
+      expect(findViewerCalendar('shared', infos)).toBe(infos[1]);
+    });
+
+    it.each([
+      ['a calendar the viewer does not have', 'elsewhere'],
+      ['a repeated param', ['riverside', 'shared']],
+      ['no param', undefined],
+    ])('returns null for %s', (_case, param) => {
+      expect(findViewerCalendar(param, infos)).toBeNull();
+    });
+
+    it('returns null before the calendars have loaded', () => {
+      expect(findViewerCalendar('riverside', [])).toBeNull();
     });
   });
 

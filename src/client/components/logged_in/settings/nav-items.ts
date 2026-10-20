@@ -112,47 +112,105 @@ export function rootItems(ctx: SettingsNavContext): SettingsNavItem[] {
   return items;
 }
 
+/** A leaf of the calendar, account or admin group, before any visibility rule. */
+interface LeafDefinition {
+  id: string;
+  routeName: string;
+  labelKey: string;
+  icon: Component;
+  /** Listed only for the calendar's owner. */
+  ownerOnly?: boolean;
+  /** Listed only when the instance has funding enabled. */
+  fundingOnly?: boolean;
+  subRoutes?: readonly string[];
+}
+
+const CALENDAR_LEAVES: readonly LeafDefinition[] = [
+  { id: 'general', routeName: 'calendar_general', labelKey: 'nav.calendar.general', icon: Settings, ownerOnly: true },
+  { id: 'editors', routeName: 'calendar_editors', labelKey: 'nav.calendar.editors', icon: Users },
+  {
+    id: 'reports', routeName: 'calendar_reports', labelKey: 'nav.calendar.reports', icon: ShieldCheck, ownerOnly: true,
+    subRoutes: ['calendar_report_detail'],
+  },
+  { id: 'import', routeName: 'calendar_import', labelKey: 'nav.calendar.import', icon: Download, ownerOnly: true },
+  { id: 'widget', routeName: 'calendar_widget', labelKey: 'nav.calendar.widget', icon: LayoutTemplate },
+];
+
+const ACCOUNT_LEAVES: readonly LeafDefinition[] = [
+  { id: 'profile', routeName: 'profile', labelKey: 'nav.account.profile', icon: User },
+  { id: 'security', routeName: 'security', labelKey: 'nav.account.security', icon: Shield },
+  { id: 'funding_plan', routeName: 'funding_plan', labelKey: 'nav.account.funding_plan', icon: Sprout, fundingOnly: true },
+];
+
+const ADMIN_LEAVES: readonly LeafDefinition[] = [
+  { id: 'general', routeName: 'admin_settings', labelKey: 'nav.admin.general', icon: Settings },
+  { id: 'accounts', routeName: 'accounts', labelKey: 'nav.admin.accounts', icon: Users },
+  { id: 'calendars', routeName: 'admin_calendars', labelKey: 'nav.admin.calendars', icon: Calendar },
+  {
+    id: 'moderation', routeName: 'moderation', labelKey: 'nav.admin.moderation', icon: ShieldCheck,
+    subRoutes: ['moderation_report_detail', 'moderation_settings', 'blocked_instances'],
+  },
+  { id: 'federation', routeName: 'federation', labelKey: 'nav.admin.federation', icon: Globe },
+  { id: 'funding', routeName: 'funding', labelKey: 'nav.admin.funding', icon: Sprout },
+];
+
+function toLink(leaf: LeafDefinition, params?: Record<string, string>): SettingsNavLinkItem {
+  return link(leaf.id, leaf.routeName, leaf.labelKey, leaf.icon, params, leaf.subRoutes);
+}
+
 export function calendarItems(ctx: SettingsNavContext): SettingsNavLinkItem[] {
   const calendar = ctx.calendarUrlName;
   if (!calendar) {
     return [];
   }
-  const params = () => ({ calendar });
-  return [
-    ctx.isOwner && link('general', 'calendar_general', 'nav.calendar.general', Settings, params()),
-    link('editors', 'calendar_editors', 'nav.calendar.editors', Users, params()),
-    ctx.isOwner && link('reports', 'calendar_reports', 'nav.calendar.reports', ShieldCheck, params(), [
-      'calendar_report_detail',
-    ]),
-    ctx.isOwner && link('import', 'calendar_import', 'nav.calendar.import', Download, params()),
-    link('widget', 'calendar_widget', 'nav.calendar.widget', LayoutTemplate, params()),
-  ].filter((item): item is SettingsNavLinkItem => Boolean(item));
+  return CALENDAR_LEAVES
+    .filter((leaf) => ctx.isOwner || !leaf.ownerOnly)
+    .map((leaf) => toLink(leaf, { calendar }));
 }
 
 export function accountItems(ctx: SettingsNavContext): SettingsNavLinkItem[] {
-  const items = [
-    link('profile', 'profile', 'nav.account.profile', User),
-    link('security', 'security', 'nav.account.security', Shield),
-  ];
-  if (ctx.fundingEnabled) {
-    items.push(link('funding_plan', 'funding_plan', 'nav.account.funding_plan', Sprout));
-  }
-  return items;
+  return ACCOUNT_LEAVES
+    .filter((leaf) => ctx.fundingEnabled || !leaf.fundingOnly)
+    .map((leaf) => toLink(leaf));
 }
 
 export function adminItems(): SettingsNavLinkItem[] {
-  return [
-    link('general', 'admin_settings', 'nav.admin.general', Settings),
-    link('accounts', 'accounts', 'nav.admin.accounts', Users),
-    link('calendars', 'admin_calendars', 'nav.admin.calendars', Calendar),
-    link('moderation', 'moderation', 'nav.admin.moderation', ShieldCheck, undefined, [
-      'moderation_report_detail',
-      'moderation_settings',
-      'blocked_instances',
-    ]),
-    link('federation', 'federation', 'nav.admin.federation', Globe),
-    link('funding', 'funding', 'nav.admin.funding', Sprout),
-  ];
+  return ADMIN_LEAVES.map((leaf) => toLink(leaf));
+}
+
+/** A group other than the root: the groups that have leaves of their own. */
+export type SettingsLeafGroup = Exclude<SettingsGroup, 'root'>;
+
+/** Which leaf a route belongs to, independent of any viewer. */
+export interface SettingsLeafRef {
+  group: SettingsLeafGroup;
+  /** The leaf's own route name; a sub-route resolves to its parent leaf's. */
+  routeName: string;
+  labelKey: string;
+}
+
+const LEAVES_BY_GROUP: ReadonlyArray<[SettingsLeafGroup, readonly LeafDefinition[]]> = [
+  ['calendar', CALENDAR_LEAVES],
+  ['account', ACCOUNT_LEAVES],
+  ['admin', ADMIN_LEAVES],
+];
+
+/**
+ * The leaf a route name belongs to, searched across every leaf whatever the
+ * viewer may see: a title or a parent link is not visibility, which stays
+ * with {@link isVisibleLeaf}. A sub-route resolves to its parent leaf; a name
+ * outside the tree (an index route, or no settings route at all) is null.
+ */
+export function findLeafByRouteName(routeName: string): SettingsLeafRef | null {
+  for (const [group, leaves] of LEAVES_BY_GROUP) {
+    const leaf = leaves.find(
+      (candidate) => candidate.routeName === routeName || (candidate.subRoutes?.includes(routeName) ?? false),
+    );
+    if (leaf) {
+      return { group, routeName: leaf.routeName, labelKey: leaf.labelKey };
+    }
+  }
+  return null;
 }
 
 /** The leaves a group's index can land on, in tree order. */

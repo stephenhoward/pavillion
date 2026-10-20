@@ -15,20 +15,24 @@
   color: var(--pav-text-primary);
   text-decoration: none;
 
-  /* Lucide icons draw with stroke; override the reset's fill. */
+  /* Lucide icons draw with stroke only; a fill would paint the chevron solid. */
   svg {
     flex-shrink: 0;
     fill: none;
+
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
+  }
+
+  &:hover {
+    text-decoration: underline;
   }
 
   &:focus-visible {
     outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
     outline-offset: 2px;
   }
-}
-
-[dir='rtl'] .settings-back-link svg {
-  transform: scaleX(-1);
 }
 
 /**
@@ -66,6 +70,21 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--pav-space-3);
+  }
+
+  /* The switcher trigger, in the eyebrow and beside the h1, takes the
+     shared pointer-target minimum, past WCAG 2.5.8's 24px. */
+  &__eyebrow,
+  &__title-row {
+    .calendar-switcher {
+      min-block-size: var(--pav-touch-target-min);
+    }
+  }
+
+  /* The calendar name is user-entered, so the eyebrow switcher keeps its
+     case rather than taking the eyebrow's uppercase. */
+  &__eyebrow .calendar-switcher__label {
+    text-transform: none;
   }
 
   &__title {

@@ -10,6 +10,7 @@ import {
   adminItems,
   firstVisibleLeaf,
   isVisibleLeaf,
+  findLeafByRouteName,
   type SettingsNavContext,
 } from '@/client/components/logged_in/settings/nav-items';
 
@@ -209,6 +210,44 @@ describe('settings nav items', () => {
       expect(isVisibleLeaf('root', 'calendar_import', ctx({ isOwner: true }))).toBe(true);
       expect(isVisibleLeaf('root', 'security', ctx({ calendarUrlName: null }))).toBe(true);
       expect(isVisibleLeaf('root', 'calendar_editors', ctx({ calendarUrlName: null }))).toBe(false);
+    });
+  });
+
+  describe('findLeafByRouteName', () => {
+    it.each([
+      ['calendar_general', 'calendar', 'calendar_general', 'nav.calendar.general'],
+      ['calendar_report_detail', 'calendar', 'calendar_reports', 'nav.calendar.reports'],
+      ['funding_plan', 'account', 'funding_plan', 'nav.account.funding_plan'],
+      ['admin_settings', 'admin', 'admin_settings', 'nav.admin.general'],
+      ['blocked_instances', 'admin', 'moderation', 'nav.admin.moderation'],
+    ])('resolves %s to its leaf', (name, group, routeName, labelKey) => {
+      expect(findLeafByRouteName(name)).toEqual({ group, routeName, labelKey });
+    });
+
+    it('finds leaves the viewer may not see, since a title is not visibility', () => {
+      const editorWithoutFunding = ctx({ isOwner: false, fundingEnabled: false });
+      expect(isVisibleLeaf('calendar', 'calendar_import', editorWithoutFunding)).toBe(false);
+      expect(findLeafByRouteName('calendar_import')?.group).toBe('calendar');
+      expect(isVisibleLeaf('account', 'funding_plan', editorWithoutFunding)).toBe(false);
+      expect(findLeafByRouteName('funding_plan')?.group).toBe('account');
+    });
+
+    it.each(['settings', 'calendar_management', 'account', 'admin', 'calendar', ''])(
+      'returns null for %j, which is not a leaf',
+      (name) => {
+        expect(findLeafByRouteName(name)).toBeNull();
+      },
+    );
+
+    it('agrees with the tree for every listed leaf', () => {
+      const all = [
+        ...calendarItems(ctx()).map((item) => ['calendar', item] as const),
+        ...accountItems(ctx()).map((item) => ['account', item] as const),
+        ...adminItems().map((item) => ['admin', item] as const),
+      ];
+      for (const [group, item] of all) {
+        expect(findLeafByRouteName(item.routeName)).toEqual({ group, routeName: item.routeName, labelKey: item.labelKey });
+      }
     });
   });
 });
