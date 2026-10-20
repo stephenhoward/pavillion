@@ -25,13 +25,18 @@ interface FlatRecord {
   record: RouteRecordRaw;
 }
 
-/** The access guards the real table is built with, kept for identity checks. */
-const accessGuards = createRouteGuards({ isLoggedIn: () => true, isAdmin: () => false }, () => false);
+/** The real access guards for a session; kept by callers for identity checks. */
+function accessGuardsFor(loggedIn: boolean) {
+  return createRouteGuards({ isLoggedIn: () => loggedIn, isAdmin: () => false }, () => false);
+}
+
+/** The access guards of a signed-in, non-admin session. */
+const accessGuards = accessGuardsFor(true);
 
 /** The real client route table behind the real access and settings guards. */
-function buildRoutes(): RouteRecordRaw[] {
+function buildRoutes(access = accessGuards): RouteRecordRaw[] {
   return buildClientRoutes({
-    ...accessGuards,
+    ...access,
     currentCalendarRedirect: () => () => true,
     ...createSettingsGuards({
       loadCalendars: () => new CalendarService().ensureCalendarsLoaded(),
@@ -99,9 +104,9 @@ describe('settings routes on the real route table', () => {
   });
 
   /** A router over the real table, the viewport fake already set to `sidebar`. */
-  function routerAt(sidebar: boolean): Router {
+  function routerAt(sidebar: boolean, access = accessGuards): Router {
     media.setMatches(sidebar);
-    return createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
+    return createRouter({ history: createMemoryHistory(), routes: buildRoutes(access) });
   }
 
   describe('account index', () => {
@@ -117,6 +122,38 @@ describe('settings routes on the real route table', () => {
       await router.push('/settings/account');
       expect(router.currentRoute.value.name).toBe('profile');
       expect(router.currentRoute.value.path).toBe('/settings/account/profile');
+    });
+
+    it('replaces the history entry when it forwards at md+', async () => {
+      const router = routerAt(true);
+      await router.push('/settings/account/security');
+      const push = sandbox.spy(router.options.history, 'push');
+      const replace = sandbox.spy(router.options.history, 'replace');
+
+      await router.push('/settings/account');
+
+      expect(router.currentRoute.value.name).toBe('profile');
+      expect(push.called).toBe(false);
+      expect(replace.calledOnceWith('/settings/account/profile')).toBe(true);
+    });
+  });
+
+  describe('signed out', () => {
+    it.each([
+      '/settings/account',
+      '/settings/account/security',
+      '/settings/account/funding',
+    ])('sends %s to login', async (path) => {
+      const router = routerAt(true, accessGuardsFor(false));
+      await router.push(path);
+      expect(router.currentRoute.value.name).toBe('login');
+    });
+
+    it('checks sign-in before loading the funding flag', async () => {
+      const router = routerAt(false, accessGuardsFor(false));
+      await router.push('/settings/account/funding');
+      expect(router.currentRoute.value.name).toBe('login');
+      expect(getOptions.called).toBe(false);
     });
   });
 
@@ -169,6 +206,9 @@ describe('settings routes on the real route table', () => {
       (group, prefix) => {
         const records = flatten(settingsRecord(buildRoutes()))
           .filter(({ path }) => path === prefix || path.startsWith(`${prefix}/`));
+        for (const { path, record } of records) {
+          expect(record.name, `unnamed record at /settings/${path}`).toBeDefined();
+        }
         const names = records.map(({ record }) => record.name);
 
         expect(names).toContain(SETTINGS_GROUP_INDEX_ROUTES[group]);
@@ -181,14 +221,15 @@ describe('settings routes on the real route table', () => {
       },
     );
 
-    it.each(Object.keys(CONVERTED_GROUP_PATHS) as SettingsLeafGroup[])(
-      'routes every %s leaf in the tree',
-      (group) => {
+    it.each(Object.entries(CONVERTED_GROUP_PATHS) as [SettingsLeafGroup, string][])(
+      'routes every %s leaf in the tree under its group',
+      (group, prefix) => {
         const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
         const leaves = groupItems(group, { calendarUrlName: 'cal', isOwner: true, isAdmin: true, fundingEnabled: true });
         for (const leaf of leaves) {
           if ('routeName' in leaf && leaf.routeName) {
             expect(router.hasRoute(leaf.routeName), `leaf ${leaf.routeName}`).toBe(true);
+            expect(router.resolve(leaf.to).path, `leaf ${leaf.routeName}`).toMatch(new RegExp(`^/settings/${prefix}/`));
           }
         }
       },
@@ -206,8 +247,9 @@ describe('settings routes on the real route table', () => {
         if (isSettingsLeafGroup(group)) {
           expect(name).toBe(SETTINGS_GROUP_INDEX_ROUTES[group]);
         }
+        // Profile is a leaf, and the forward's empty-group fallback: an index
+        // named after any leaf (Profile included) would forward to itself.
         expect(findLeafByRouteName(name), `index ${name}`).toBeNull();
-        expect(name).not.toBe('profile');
       }
     });
   });
