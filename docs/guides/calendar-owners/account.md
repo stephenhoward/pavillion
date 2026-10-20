@@ -14,4 +14,4 @@ Account-level settings — the things that are about *you* rather than about a p
 - Changing your email address
 - Account-level settings
 
-For now, these settings live in the account section of the editor UI.
+For now, these settings live under **Settings → Account**: **Profile** (display name, username, language) and **Security** (email, password). **Log out** is the last row of the **Settings** list.
