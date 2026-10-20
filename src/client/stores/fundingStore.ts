@@ -112,9 +112,12 @@ function cacheEntry(
  * whether the instance offers funding at all.
  *
  * Data cache only: it holds no loading state, performs no requests, and is
- * written by FundingService (reads, including the instance flag) and by
- * useFundingAccess (402 refusals and failed reads).
- * Components reach it through useFundingAccess, never directly.
+ * written by FundingService (reads, including the instance flag, and the
+ * admin settings write that changes it) and by useFundingAccess (402
+ * refusals and failed reads).
+ * Calendar funding is reached through useFundingAccess, never directly. The
+ * instance flag is loaded through FundingService.ensureInstanceFundingLoaded
+ * and read from `instanceFundingEnabled`.
  *
  * In-memory only — no persistence plugin. A reload starts empty, and
  * logout.vue calls `$reset()` so one session's funding answers cannot describe
@@ -205,11 +208,12 @@ export const useFundingStore = defineStore('funding', {
     },
 
     /**
-     * Cache whether the instance offers funding plans.
+     * Cache whether the instance offers funding plans, or forget it with null
+     * so the next FundingService.ensureInstanceFundingLoaded re-reads it.
      *
-     * @param {boolean} enabled - The instance's funding-enabled flag
+     * @param {boolean | null} enabled - The instance's funding-enabled flag, or null for unknown
      */
-    setInstanceFundingEnabled(enabled: boolean) {
+    setInstanceFundingEnabled(enabled: boolean | null) {
       this.instanceFundingEnabled = enabled;
     },
 

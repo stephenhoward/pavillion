@@ -205,5 +205,13 @@ describe('FundingStore', () => {
       store.setInstanceFundingEnabled(false);
       expect(store.instanceFundingEnabled).toBe(false);
     });
+
+    it('forgets the value when given null', () => {
+      store.setInstanceFundingEnabled(true);
+
+      store.setInstanceFundingEnabled(null);
+
+      expect(store.instanceFundingEnabled).toBeNull();
+    });
   });
 });

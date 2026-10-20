@@ -295,18 +295,27 @@ export default class FundingService {
   /**
    * Update funding settings (admin only)
    *
+   * A successful save keeps the cached instance flag coherent: the response
+   * does not echo the settings, so the flag takes the submitted `enabled`,
+   * or is forgotten (re-read on next use) when the payload omits it.
+   *
    * @param {Partial<FundingSettings>} settings - Settings to update
    * @returns {Promise<boolean>} True if update was successful
    */
   async updateSettings(settings: Partial<FundingSettings>): Promise<boolean> {
+    let success: boolean;
     try {
       const response = await axios.post('/api/funding/v1/admin/settings', settings);
-      return response.status === 200;
+      success = response.status === 200;
     }
     catch (error) {
       console.error('Failed to update funding settings:', error);
       return false;
     }
+    if (success) {
+      this.store.setInstanceFundingEnabled(typeof settings.enabled === 'boolean' ? settings.enabled : null);
+    }
+    return success;
   }
 
   /**

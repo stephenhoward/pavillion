@@ -586,6 +586,70 @@ describe('FundingService.ensureInstanceFundingLoaded', () => {
   });
 });
 
+describe('FundingService.updateSettings', () => {
+  const settings = {
+    enabled: true,
+    monthlyPrice: 500000,
+    yearlyPrice: 5000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+    gracePeriodDays: 7,
+    payWhatYouCanYearlyDiscount: 0,
+  };
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(axios.post).mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('should write the saved enabled flag into the cached instance flag', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockResolvedValue({ status: 200, data: { success: true } });
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+
+    // Act
+    const success = await new FundingService().updateSettings({ ...settings, enabled: false });
+
+    // Assert
+    expect(success).toBe(true);
+    expect(store.instanceFundingEnabled).toBe(false);
+  });
+
+  it('should forget the cached instance flag when the payload omits enabled', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockResolvedValue({ status: 200, data: { success: true } });
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+    const { enabled: _enabled, ...withoutEnabled } = settings;
+
+    // Act
+    await new FundingService().updateSettings(withoutEnabled);
+
+    // Assert
+    expect(store.instanceFundingEnabled).toBeNull();
+  });
+
+  it('should leave the cached instance flag alone when the save fails', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockRejectedValue(new Error('Server error'));
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+
+    // Act
+    const success = await new FundingService().updateSettings({ ...settings, enabled: false });
+
+    // Assert
+    expect(success).toBe(false);
+    expect(store.instanceFundingEnabled).toBe(true);
+  });
+});
+
 describe('fundingGateDenial', () => {
   it('should name the feature a 402 SubscriptionRequiredError refused', () => {
     const error = {
