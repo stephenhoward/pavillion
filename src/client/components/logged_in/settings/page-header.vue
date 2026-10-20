@@ -24,6 +24,9 @@ import { findViewerCalendar } from '@/client/service/settings-guards';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import {
   findLeafByRouteName,
+  isSettingsLeafGroup,
+  SETTINGS_GROUP_INDEX_ROUTES,
+  SETTINGS_GROUP_TITLE_KEYS,
   type SettingsLeafGroup,
   type SettingsLeafRef,
 } from '@/client/components/logged_in/settings/nav-items';
@@ -32,16 +35,6 @@ type HeaderLevel =
   | { kind: 'root' }
   | { kind: 'section'; group: SettingsLeafGroup }
   | { kind: 'leaf'; group: SettingsLeafGroup; leaf: SettingsLeafRef };
-
-const GROUP_TITLE_KEYS: Record<SettingsLeafGroup, string> = {
-  calendar: 'titles.calendar',
-  account: 'titles.account',
-  admin: 'titles.instance',
-};
-
-function isSection(value: unknown): value is SettingsLeafGroup {
-  return value === 'calendar' || value === 'account' || value === 'admin';
-}
 
 const route = useRoute();
 const calendarStore = useCalendarStore();
@@ -53,7 +46,7 @@ const level = computed<HeaderLevel>(() => {
   // group set on a parent record never turns its leaves into sections.
   const record = route.matched[route.matched.length - 1];
   const group = record?.meta.settingsGroup;
-  if (isSection(group)) {
+  if (isSettingsLeafGroup(group)) {
     return { kind: 'section', group };
   }
   const leaf = typeof route.name === 'string' ? findLeafByRouteName(route.name) : null;
@@ -78,12 +71,12 @@ const heading = computed<string>(() => {
     return t('titles.settings');
   }
   if (unresolved.value) {
-    return t('titles.calendar');
+    return t(SETTINGS_GROUP_TITLE_KEYS.calendar);
   }
   if (current.kind === 'leaf') {
     return t(current.leaf.labelKey);
   }
-  return current.group === 'calendar' ? calendarName.value : t(GROUP_TITLE_KEYS[current.group]);
+  return current.group === 'calendar' ? calendarName.value : t(SETTINGS_GROUP_TITLE_KEYS[current.group]);
 });
 
 const backLink = computed<{ to: RouteLocationNamedRaw; label: string } | null>(() => {
@@ -96,17 +89,17 @@ const backLink = computed<{ to: RouteLocationNamedRaw; label: string } | null>((
   }
   if (current.group === 'calendar') {
     return {
-      to: { name: 'calendar_management', params: { calendar: calendarUrlName.value ?? '' } },
+      to: { name: SETTINGS_GROUP_INDEX_ROUTES.calendar, params: { calendar: calendarUrlName.value ?? '' } },
       label: calendarName.value,
     };
   }
-  return { to: { name: current.group }, label: t(GROUP_TITLE_KEYS[current.group]) };
+  return { to: { name: SETTINGS_GROUP_INDEX_ROUTES[current.group] }, label: t(SETTINGS_GROUP_TITLE_KEYS[current.group]) };
 });
 
 /** Route the switcher keeps on a pick: the current calendar leaf, else the calendar section. */
 const switcherRouteName = computed(() => {
   const current = level.value;
-  return current.kind === 'leaf' ? current.leaf.routeName : 'calendar_management';
+  return current.kind === 'leaf' ? current.leaf.routeName : SETTINGS_GROUP_INDEX_ROUTES.calendar;
 });
 
 const showSectionSwitcher = computed(
@@ -118,7 +111,7 @@ const eyebrowText = computed(() => {
   if (current.kind !== 'leaf' || current.group === 'calendar') {
     return null;
   }
-  return t(GROUP_TITLE_KEYS[current.group]);
+  return t(SETTINGS_GROUP_TITLE_KEYS[current.group]);
 });
 
 // The eyebrow switcher's label is the calendar name as the owner typed it;
@@ -164,7 +157,7 @@ onBeforeUnmount(() => {
       <CalendarSwitcher
         v-if="showSectionSwitcher"
         :label="tCal('switcher.title')"
-        route-name="calendar_management"
+        :route-name="SETTINGS_GROUP_INDEX_ROUTES.calendar"
         :current-url-name="calendarUrlName"
         :aria-label="switcherAriaLabel"
       />

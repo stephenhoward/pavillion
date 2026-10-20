@@ -11,6 +11,9 @@ import {
   firstVisibleLeaf,
   isVisibleLeaf,
   findLeafByRouteName,
+  isSettingsLeafGroup,
+  SETTINGS_GROUP_INDEX_ROUTES,
+  SETTINGS_GROUP_TITLE_KEYS,
   type SettingsNavContext,
 } from '@/client/components/logged_in/settings/nav-items';
 
@@ -247,6 +250,38 @@ describe('settings nav items', () => {
       ];
       for (const [group, item] of all) {
         expect(findLeafByRouteName(item.routeName)).toEqual({ group, routeName: item.routeName, labelKey: item.labelKey });
+      }
+    });
+  });
+
+  describe('group vocabulary', () => {
+    it.each(['calendar', 'account', 'admin'])('recognises %s as a leaf group', (value) => {
+      expect(isSettingsLeafGroup(value)).toBe(true);
+    });
+
+    it.each(['root', 'Calendar', '', undefined, null, 1])('rejects %j', (value) => {
+      expect(isSettingsLeafGroup(value)).toBe(false);
+    });
+
+    it('titles every group with a key that resolves in the settings namespace', () => {
+      expect(SETTINGS_GROUP_TITLE_KEYS).toEqual({
+        calendar: 'titles.calendar', account: 'titles.account', admin: 'titles.instance',
+      });
+      for (const key of Object.values(SETTINGS_GROUP_TITLE_KEYS)) {
+        const value = key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], settingsEn);
+        expect(typeof value).toBe('string');
+      }
+    });
+
+    it('names each group index, and the root rows link to them', () => {
+      expect(SETTINGS_GROUP_INDEX_ROUTES).toEqual({ calendar: 'calendar_management', account: 'account', admin: 'admin' });
+      const rows = rootItems(ctx({ isAdmin: true })).filter((item) => !item.action) as { routeName: string }[];
+      expect(rows.map((item) => item.routeName)).toEqual(Object.values(SETTINGS_GROUP_INDEX_ROUTES));
+    });
+
+    it('is not itself a leaf', () => {
+      for (const name of Object.values(SETTINGS_GROUP_INDEX_ROUTES)) {
+        expect(findLeafByRouteName(name)).toBeNull();
       }
     });
   });

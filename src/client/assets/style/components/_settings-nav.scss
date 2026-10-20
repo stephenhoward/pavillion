@@ -7,6 +7,8 @@
  * after it so in-context rules win ties. Placement and hiding at md belong
  * to _settings.scss.
  */
+@use '../mixins' as *;
+
 .settings-nav {
   display: flex;
   flex-direction: column;
@@ -41,10 +43,10 @@
     margin-inline-start: auto;
     color: var(--pav-text-secondary);
     fill: none;
-  }
 
-  &:dir(rtl) .shell-nav-item__chevron {
-    transform: scaleX(-1);
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
   }
 
   /* Page mode: full-width rows divided by a subtle rule */

@@ -46,6 +46,28 @@ import {
 
 export type SettingsGroup = 'root' | 'calendar' | 'account' | 'admin';
 
+/** A group other than the root: the groups that have leaves of their own. */
+export type SettingsLeafGroup = Exclude<SettingsGroup, 'root'>;
+
+/** Whether a value (route meta, a param) names a group with leaves of its own. */
+export function isSettingsLeafGroup(value: unknown): value is SettingsLeafGroup {
+  return value === 'calendar' || value === 'account' || value === 'admin';
+}
+
+/** Each group's title, a key in the `settings` namespace. */
+export const SETTINGS_GROUP_TITLE_KEYS: Readonly<Record<SettingsLeafGroup, string>> = {
+  calendar: 'titles.calendar',
+  account: 'titles.account',
+  admin: 'titles.instance',
+};
+
+/** The route name of each group's index (its list page). */
+export const SETTINGS_GROUP_INDEX_ROUTES: Readonly<Record<SettingsLeafGroup, string>> = {
+  calendar: 'calendar_management',
+  account: 'account',
+  admin: 'admin',
+};
+
 export interface SettingsNavContext {
   /** The calendar the tree addresses; null when the viewer has none. */
   calendarUrlName: string | null;
@@ -71,6 +93,7 @@ export type SettingsNavActionItem = {
   labelKey: string;
   icon: Component;
   action: 'logout';
+  /** A tag, not a setting: marks the destructive action row, which the list renders in the danger style. */
   danger: true;
 };
 
@@ -100,13 +123,13 @@ function link(
 export function rootItems(ctx: SettingsNavContext): SettingsNavItem[] {
   const items: SettingsNavItem[] = [];
   if (ctx.calendarUrlName) {
-    items.push(link('calendar', 'calendar_management', 'nav.root.calendar', Calendar, {
+    items.push(link('calendar', SETTINGS_GROUP_INDEX_ROUTES.calendar, 'nav.root.calendar', Calendar, {
       calendar: ctx.calendarUrlName,
     }));
   }
-  items.push(link('account', 'account', 'nav.root.account', User));
+  items.push(link('account', SETTINGS_GROUP_INDEX_ROUTES.account, 'nav.root.account', User));
   if (ctx.isAdmin) {
-    items.push(link('instance', 'admin', 'nav.root.instance', Server));
+    items.push(link('instance', SETTINGS_GROUP_INDEX_ROUTES.admin, 'nav.root.instance', Server));
   }
   items.push({ id: 'logout', labelKey: 'nav.root.log_out', icon: LogOut, action: 'logout', danger: true });
   return items;
@@ -177,9 +200,6 @@ export function accountItems(ctx: SettingsNavContext): SettingsNavLinkItem[] {
 export function adminItems(): SettingsNavLinkItem[] {
   return ADMIN_LEAVES.map((leaf) => toLink(leaf));
 }
-
-/** A group other than the root: the groups that have leaves of their own. */
-export type SettingsLeafGroup = Exclude<SettingsGroup, 'root'>;
 
 /** Which leaf a route belongs to, independent of any viewer. */
 export interface SettingsLeafRef {
