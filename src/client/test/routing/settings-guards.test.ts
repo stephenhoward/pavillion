@@ -602,12 +602,15 @@ describe('settings routes on the real route table', () => {
   });
 
   describe('route tree invariants', () => {
-    it('gives every admin record its own mustBeAdmin and every other settings record its own mustBeLoggedIn', () => {
+    // First, not merely present: a move between siblings skips the parent's
+    // guard, so only the record's own order keeps a later guard (the admin
+    // index forward among them) from running before access is checked.
+    it('runs mustBeAdmin first on every admin record and mustBeLoggedIn first on every other settings record', () => {
       const records = flatten(settingsRecord(buildRoutes()));
       const isAdminRecord = (path: string) => path === GROUP_PATHS.admin || path.startsWith(`${GROUP_PATHS.admin}/`);
       const misguarded = records
-        .filter(({ path, record }) => !ownGuards(record).includes(
-          isAdminRecord(path) ? accessGuards.mustBeAdmin : accessGuards.mustBeLoggedIn,
+        .filter(({ path, record }) => ownGuards(record)[0] !== (
+          isAdminRecord(path) ? accessGuards.mustBeAdmin : accessGuards.mustBeLoggedIn
         ))
         .map(({ path, record }) => String(record.name ?? path));
 
