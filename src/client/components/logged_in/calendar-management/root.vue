@@ -18,7 +18,7 @@
  */
 import { computed, inject, onBeforeMount, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteUpdate, useRoute, useRouter, type RouteLocationNamedRaw } from 'vue-router';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import Config from '@/client/service/config';
@@ -33,6 +33,7 @@ import {
   firstVisibleLeaf,
   isVisibleLeaf,
   SETTINGS_GROUP_INDEX_ROUTES,
+  type SettingsNavContext,
 } from '@/client/components/logged_in/settings/nav-items';
 import HelpButton from '@/client/components/common/help-button.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -60,7 +61,11 @@ const navContext = computed(() => (
 
 const instanceHost = computed(() => new Config().settings()?.domain);
 
-/** Whether a calendar route may render: the index always, a leaf when visible to the viewer. */
+/**
+ * Whether a calendar route may render: the index always, a leaf when visible
+ * to the viewer. Deliberately separate from gateRedirect: an unknown or
+ * unresolved route renders nothing here but is never redirected.
+ */
 const leafAllowed = (name: unknown): boolean => {
   const ctx = navContext.value;
   if (!ctx || typeof name !== 'string') {
@@ -92,17 +97,39 @@ const leafProps = (name: unknown): Record<string, unknown> => {
   }
 };
 
-// The owner-only gate. Only calendar leaves (and their sub-routes) are
-// gated: the index is skipped by name, and a route outside the calendar
-// group, seen while this pane is leaving, is never redirected.
-watch([() => route.name, navContext], ([name, ctx]) => {
+/**
+ * The owner-only gate: where a route must go instead, or null to let it
+ * through. Only calendar leaves (and their sub-routes) are gated: the index
+ * is skipped by name, and a route outside the calendar group, seen while
+ * this pane is leaving, is never redirected.
+ */
+const gateRedirect = (name: unknown, ctx: SettingsNavContext | null): RouteLocationNamedRaw | null => {
   if (!ctx || typeof name !== 'string' || findLeafByRouteName(name)?.group !== 'calendar') {
-    return;
+    return null;
   }
-  if (!isVisibleLeaf('calendar', name, ctx)) {
-    router.replace(firstVisibleLeaf('calendar', ctx));
+  return isVisibleLeaf('calendar', name, ctx) ? null : firstVisibleLeaf('calendar', ctx);
+};
+
+// Arriving before the calendar resolved (a cold load, or entering from
+// outside this pane), or losing ownership while mounted: replace in place.
+watch([() => route.name, navContext], ([name, ctx]) => {
+  const target = gateRedirect(name, ctx);
+  if (target) {
+    router.replace(target);
   }
 }, { immediate: true });
+
+// An in-app move between leaves is gated before it commits, so a refused
+// leaf leaves no history entry behind. A move to another calendar is judged
+// against that calendar; one the viewer cannot resolve gets no context and
+// passes through to the remounted pane's empty state.
+onBeforeRouteUpdate((to) => {
+  if (!settled.value) {
+    return true;
+  }
+  const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(isAdmin));
+  return gateRedirect(to.name, ctx) ?? true;
+});
 
 onBeforeMount(async () => {
   try {

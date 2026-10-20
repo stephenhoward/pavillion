@@ -1,7 +1,8 @@
 import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, onUnmounted } from 'vue';
 import { createMemoryHistory, createRouter, useRoute, type Router, type RouteRecordRaw } from 'vue-router';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import axios from 'axios';
 import { createPinia, setActivePinia, type Pinia } from 'pinia';
 
 import { Calendar } from '@/common/model/calendar';
@@ -22,6 +23,8 @@ const REPORT_ID = '9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
 
 /** Names of the calendar route stubs mounted so far, in mount order. */
 let mounts: string[] = [];
+/** Names of the calendar route stubs unmounted so far, in unmount order. */
+let unmounts: string[] = [];
 
 /** A stand-in for a calendar route component: records its mount and declares the props root.vue passes. */
 function routeStub(name: string, props: string[], onSetup?: () => void) {
@@ -30,6 +33,7 @@ function routeStub(name: string, props: string[], onSetup?: () => void) {
     props,
     setup() {
       mounts.push(name);
+      onUnmounted(() => unmounts.push(name));
       onSetup?.();
       return () => h('div', { 'data-route-stub': name });
     },
@@ -106,6 +110,7 @@ describe('CalendarManagementRoot', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     mounts = [];
+    unmounts = [];
     wrapper = null;
     resetShellLayoutForTesting();
     media = installMatchMedia(false);
@@ -233,6 +238,40 @@ describe('CalendarManagementRoot', () => {
       expect(mounts).toEqual(['EditorsStub']);
     });
 
+    it('keeps an editor on editors when they navigate in-app to an owner-only leaf', async () => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);
+      const { router } = await mountAt('/settings/calendar/my-calendar/editors');
+      const push = vi.spyOn(router.options.history, 'push');
+      const replace = vi.spyOn(router.options.history, 'replace');
+
+      await router.push({ name: 'calendar_reports', params: { calendar: 'my-calendar' } }).catch(() => {});
+      await flushPromises();
+
+      expect(router.currentRoute.value.name).toBe('calendar_editors');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/editors');
+      expect(mounts).toEqual(['EditorsStub']);
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('unmounts an owner-only leaf and replaces to editors when ownership is lost', async () => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
+      const { router } = await mountAt('/settings/calendar/my-calendar/general');
+      expect(mounts).toEqual(['GeneralStub']);
+      const push = vi.spyOn(router.options.history, 'push');
+      const replace = vi.spyOn(router.options.history, 'replace');
+
+      useCalendarStore().setCalendarInfos([makeCalendarInfo('my-calendar', 'editor')], currentAccountId());
+      await flushPromises();
+
+      expect(router.currentRoute.value.name).toBe('calendar_editors');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/editors');
+      expect(unmounts).toEqual(['GeneralStub']);
+      expect(mounts).toEqual(['GeneralStub', 'EditorsStub']);
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).toHaveBeenCalledTimes(1);
+    });
+
     it('requests no report for an editor at a report detail url', async () => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);
       const getReport = vi.spyOn(ModerationService.prototype, 'getReport').mockResolvedValue({
@@ -290,11 +329,61 @@ describe('CalendarManagementRoot', () => {
       mounts = [];
       stubLoadedCalendars(calendars);
       media.setMatches(sidebar);
+      return capture(path);
+    }
+
+    /**
+     * Like outcome, but the viewer's list is already in the store and the
+     * load never settles, so the gate is still deciding.
+     */
+    async function pendingOutcome(path: string, calendars: CalendarInfo[], sidebar: boolean) {
+      pinia = createPinia();
+      setActivePinia(pinia);
+      mounts = [];
+      useCalendarStore().setCalendarInfos(calendars, currentAccountId());
+      vi.spyOn(CalendarService.prototype, 'ensureCalendarsLoaded').mockReturnValue(new Promise(() => {}));
+      media.setMatches(sidebar);
+      return capture(path);
+    }
+
+    /**
+     * Like outcome, but loads through the real calendar and funding services
+     * over a stubbed transport, and records every request they make.
+     */
+    async function networkOutcome(path: string, calendars: CalendarInfo[], sidebar: boolean) {
+      vi.restoreAllMocks();
+      pinia = createPinia();
+      setActivePinia(pinia);
+      mounts = [];
+      const requests: string[] = [];
+      vi.spyOn(axios, 'get').mockImplementation(async (url: string) => {
+        requests.push(`GET ${url}`);
+        if (url === '/api/v1/calendars') {
+          return { data: calendars.map((info) => ({ ...info.calendar.toObject(), userRelationship: info.userRelationship })) };
+        }
+        if (url === '/api/funding/v1/options') {
+          return { data: { enabled: false } };
+        }
+        throw new Error(`unexpected request ${url}`);
+      });
+      for (const method of ['post', 'put', 'patch', 'delete'] as const) {
+        vi.spyOn(axios, method).mockImplementation(async (url: string) => {
+          requests.push(`${method.toUpperCase()} ${url}`);
+          throw new Error(`unexpected request ${url}`);
+        });
+      }
+      media.setMatches(sidebar);
+      const result = await capture(path);
+      return { ...result, requests: [...requests].sort() };
+    }
+
+    async function capture(path: string) {
       const { wrapper: w, router } = await mountAt(path);
       const result = {
         html: normalizeIds(w.html()),
         fullPath: router.currentRoute.value.fullPath,
         mounts: [...mounts],
+        status: w.find('[role="status"]').text(),
       };
       w.unmount();
       wrapper = null;
@@ -325,6 +414,38 @@ describe('CalendarManagementRoot', () => {
         expect(nonMember.html).not.toContain(PARAM);
         expect(nonMember.mounts).toEqual([]);
         expect(nonexistent.mounts).toEqual([]);
+      });
+
+      // At md+ the index guard awaits the load itself, so a pending load
+      // never reaches the index; every leaf still mounts the gate.
+      it.each(paths.filter((path) => !sidebar || path !== paths[0]))(
+        'renders identical loading markup at %s while the load is pending',
+        async (path) => {
+          const nonMember = await pendingOutcome(path, [makeCalendarInfo('other-calendar', 'owner')], sidebar);
+          const nonexistent = await pendingOutcome(path, [], sidebar);
+
+          expect(nonMember.html).toBe(nonexistent.html);
+          expect(nonMember.status).toBe('Loading calendar…');
+          expect(nonexistent.status).toBe(nonMember.status);
+          expect(nonMember.html).not.toContain(PARAM);
+          expect(nonMember.mounts).toEqual([]);
+          expect(nonexistent.mounts).toEqual([]);
+        },
+      );
+
+      it.each([
+        paths[0],
+        `/settings/calendar/${PARAM}/reports/${REPORT_ID}`,
+        `/settings/calendar/${PARAM}?tab=reports&report=${REPORT_ID}`,
+      ])('requests only the viewer\'s own list and the funding flag at %s', async (path) => {
+        const nonMember = await networkOutcome(path, [makeCalendarInfo('other-calendar', 'owner')], sidebar);
+        const nonexistent = await networkOutcome(path, [], sidebar);
+
+        expect(nonMember.requests).toEqual(['GET /api/funding/v1/options', 'GET /api/v1/calendars']);
+        expect(nonexistent.requests).toEqual(nonMember.requests);
+        expect(nonMember.html).toContain('Calendar not available');
+        expect(nonMember.html).toBe(nonexistent.html);
+        expect(nonMember.fullPath).toBe(nonexistent.fullPath);
       });
 
       it('treats the legacy ?tab=reports deep link identically', async () => {
