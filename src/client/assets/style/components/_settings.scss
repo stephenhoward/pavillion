@@ -1,5 +1,15 @@
 @use '../mixins' as *;
 
+/* The small uppercase label above a group of settings: the tree's group
+   headings and the page header's eyebrow. */
+@mixin settings-group-label {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-xs);
+  font-weight: var(--pav-font-weight-medium);
+  letter-spacing: var(--pav-letter-spacing-wider);
+  text-transform: uppercase;
+}
+
 /**
  * Back link: a full-width row with a leading chevron and visible
  * "Back to {parent}" text. Shared by the settings page header and the
@@ -52,13 +62,10 @@
   }
 
   &__eyebrow {
+    @include settings-group-label;
+
     display: none;
     margin: 0;
-    color: var(--pav-text-secondary);
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-medium);
-    letter-spacing: var(--pav-letter-spacing-wider);
-    text-transform: uppercase;
 
     @include pav-media(md) {
       display: block;
@@ -175,13 +182,10 @@
   }
 
   &__heading {
+    @include settings-group-label;
+
     margin: 0;
     padding-inline: var(--pav-space-3);
-    color: var(--pav-text-secondary);
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-medium);
-    letter-spacing: var(--pav-letter-spacing-wider);
-    text-transform: uppercase;
   }
 
   /* The rule above the footer is what sets Log out apart here, so the
@@ -199,6 +203,52 @@
     .policy-link {
       padding-inline: var(--pav-space-3);
       color: var(--pav-text-secondary);
+    }
+  }
+}
+
+/**
+ * Settings list page (settings/list-page.vue): an index route's rows below
+ * md. At md+ the index forwards to a leaf, and the page is display: none so
+ * no frame of it shows beside the tree. Row styles come from
+ * _settings-nav.scss.
+ */
+.settings-list-page {
+  @include pav-media(md) {
+    display: none;
+  }
+
+  /* PolicyLink sets its own size; align it with the rows */
+  &__footer {
+    margin-block-start: var(--pav-space-6);
+
+    .policy-link {
+      padding-inline: var(--pav-space-3);
+      color: var(--pav-text-secondary);
+    }
+  }
+}
+
+/**
+ * Settings layout (settings/root.vue): a plain block below md; at md+ the
+ * tree, at its own --pav-settings-tree-width, beside the content column.
+ * The content column is an inline-size container, so a wide leaf adapts
+ * with @container rather than a second viewport breakpoint. Neither element
+ * clips overflow: the tree rows' focus ring extends past their edges.
+ */
+.settings-layout {
+  @include pav-media(md) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  &__content {
+    container-type: inline-size;
+    min-inline-size: 0;
+    padding-inline: var(--pav-space-4);
+
+    @include pav-media(md) {
+      padding-inline: var(--pav-space-8);
     }
   }
 }

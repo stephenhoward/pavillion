@@ -9,6 +9,7 @@ import {
   accountItems,
   adminItems,
   firstVisibleLeaf,
+  groupItems,
   isVisibleLeaf,
   findLeafByRouteName,
   isSettingsLeafGroup,
@@ -213,6 +214,25 @@ describe('settings nav items', () => {
       expect(isVisibleLeaf('root', 'calendar_import', ctx({ isOwner: true }))).toBe(true);
       expect(isVisibleLeaf('root', 'security', ctx({ calendarUrlName: null }))).toBe(true);
       expect(isVisibleLeaf('root', 'calendar_editors', ctx({ calendarUrlName: null }))).toBe(false);
+    });
+  });
+
+  describe('groupItems', () => {
+    it('gives the root list its section rows and Log out', () => {
+      expect(ids(groupItems('root', ctx({ isAdmin: true })))).toEqual(['calendar', 'account', 'instance', 'logout']);
+    });
+
+    it.each([
+      { group: 'calendar', context: ctx({ isOwner: false }), expected: ['editors', 'widget'] },
+      { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security'] },
+      { group: 'admin', context: ctx({ isAdmin: true }),
+        expected: ['general', 'accounts', 'calendars', 'moderation', 'federation', 'funding'] },
+    ] as const)('gives the $group list its visible leaves', ({ group, context, expected }) => {
+      expect(ids(groupItems(group, context))).toEqual(expected);
+    });
+
+    it('gates the admin group on isAdmin', () => {
+      expect(groupItems('admin', ctx({ isAdmin: false }))).toEqual([]);
     });
   });
 

@@ -4,6 +4,8 @@ import { flushPromises, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
+import { installMatchMedia, type FakeMatchMedia } from '@/client/test/lib/match-media';
+import { resetShellLayoutForTesting } from '@/client/composables/useShellLayout';
 import SettingsTree from '@/client/components/logged_in/settings/tree.vue';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
@@ -50,8 +52,13 @@ describe('settings tree', () => {
   let loadFunding: sinon.SinonStub;
   let wrapper: VueWrapper | null;
   let host: HTMLElement | null;
+  let media: FakeMatchMedia;
 
   beforeEach(() => {
+    // The tree reads the shell layout, and happy-dom's own matchMedia answers
+    // from its window size; every mount gets the fake, at md+.
+    resetShellLayoutForTesting();
+    media = installMatchMedia(true);
     pinia = createPinia();
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
@@ -66,6 +73,8 @@ describe('settings tree', () => {
   afterEach(() => {
     wrapper?.unmount();
     host?.remove();
+    resetShellLayoutForTesting();
+    media.restore();
     sandbox.restore();
   });
 
@@ -157,6 +166,56 @@ describe('settings tree', () => {
     finally {
       heading.remove();
     }
+  });
+
+  describe('crossing below md', () => {
+    let heading: HTMLElement;
+    let outside: HTMLButtonElement;
+
+    beforeEach(() => {
+      heading = document.createElement('h1');
+      heading.className = 'settings-page-header__title';
+      heading.tabIndex = -1;
+      outside = document.createElement('button');
+      document.body.append(heading, outside);
+    });
+
+    afterEach(() => {
+      heading.remove();
+      outside.remove();
+    });
+
+    it('moves focus from the tree to the page heading', async () => {
+      const w = await mountAt('/settings/account/profile', { attach: true });
+      (w.find('a').element as HTMLElement).focus();
+      expect(w.element.contains(document.activeElement)).toBe(true);
+
+      media.setMatches(false);
+
+      expect(document.activeElement).toBe(heading);
+    });
+
+    it('leaves focus alone when it is outside the tree', async () => {
+      await mountAt('/settings/account/profile', { attach: true });
+      outside.focus();
+
+      media.setMatches(false);
+
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it('leaves focus alone crossing up', async () => {
+      media.restore();
+      resetShellLayoutForTesting();
+      media = installMatchMedia(false);
+      const w = await mountAt('/settings/account/profile', { attach: true });
+      const link = w.find('a').element as HTMLElement;
+      link.focus();
+
+      media.setMatches(true);
+
+      expect(document.activeElement).toBe(link);
+    });
   });
 
   it('lists only the member-visible leaves for an edited calendar', async () => {

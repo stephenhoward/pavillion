@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
  * The settings tree: the persistent secondary sidebar at md+. Below md it is
- * display: none (CSS only; this component has no viewport logic) and the
- * list pages carry the same rows.
+ * display: none, by CSS alone, and the list pages carry the same rows.
  *
  * - The Calendar group addresses the viewer's *current* calendar from the
  *   store, never the route's `:calendar` param, so an unresolvable param is
@@ -15,20 +14,21 @@
  *   tech can tell the Calendar group's General from the Instance group's.
  * - The skip control is a button that moves focus to the page h1 without
  *   navigating.
+ * - Its one viewport watch moves focus and never navigates: crossing below
+ *   md while focus is in the tree, which is about to be display: none, moves
+ *   focus to the page h1 rather than letting it fall to the body.
  */
-import { computed, inject, onMounted, useId } from 'vue';
+import { computed, inject, onMounted, ref, useId, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
+import { useShellLayout } from '@/client/composables/useShellLayout';
 import { buildSettingsNavContext, readSettingsNavSources } from '@/client/service/settings-guards';
 import PolicyLink from '@/client/components/common/PolicyLink.vue';
 import NavList from './nav-list.vue';
 import { focusSettingsHeading } from './heading-focus';
 import {
-  accountItems,
-  adminItems,
-  calendarItems,
-  rootItems,
+  groupItems,
   SETTINGS_GROUP_TITLE_KEYS,
   type SettingsLeafGroup,
   type SettingsNavItem,
@@ -46,16 +46,27 @@ const ctx = computed(() => buildSettingsNavContext('root', undefined, readSettin
 // precede it.
 const labelIdPrefix = useId();
 
-const groups = computed<Array<{ group: SettingsLeafGroup; items: SettingsNavItem[] }>>(() => {
-  const all: Array<{ group: SettingsLeafGroup; items: SettingsNavItem[] }> = [
-    { group: 'calendar', items: calendarItems(ctx.value) },
-    { group: 'account', items: accountItems(ctx.value) },
-    { group: 'admin', items: ctx.value.isAdmin ? adminItems() : [] },
-  ];
-  return all.filter((entry) => entry.items.length > 0);
-});
+const TREE_GROUPS: readonly SettingsLeafGroup[] = ['calendar', 'account', 'admin'];
 
-const logoutItems = computed(() => rootItems(ctx.value).filter((item) => item.action === 'logout'));
+const groups = computed<Array<{ group: SettingsLeafGroup; items: SettingsNavItem[] }>>(() => TREE_GROUPS
+  .map((group) => ({ group, items: groupItems(group, ctx.value) }))
+  .filter((entry) => entry.items.length > 0));
+
+const logoutItems = computed(() => groupItems('root', ctx.value).filter((item) => item.action === 'logout'));
+
+const navEl = ref<HTMLElement | null>(null);
+
+// Settings borrows the shell breakpoint for its tree; the alias names that.
+const { mainNavIsSidebar: treeIsSidebar } = useShellLayout();
+
+// A sync flush runs inside the matchMedia change callback, before the
+// browser moves focus off the now-hidden tree to the body. pv-ms7c may
+// replace this with a general focus rule.
+watch(treeIsSidebar, (isSidebar) => {
+  if (!isSidebar && navEl.value?.contains(document.activeElement)) {
+    focusSettingsHeading();
+  }
+}, { flush: 'sync' });
 
 // A cold load of an account leaf runs no calendar guard, so the tree loads
 // what it reads. Both loaders are cached and log their own failures; a failed
@@ -67,7 +78,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <nav class="settings-tree" :aria-label="t('tree_label')">
+  <nav ref="navEl" class="settings-tree" :aria-label="t('tree_label')">
     <button
       type="button"
       class="settings-tree__skip"

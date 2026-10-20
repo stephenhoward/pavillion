@@ -248,6 +248,16 @@ function leavesOf(group: SettingsGroup, ctx: SettingsNavContext): SettingsNavLin
 }
 
 /**
+ * The rows a group's list shows: the root list's section rows and Log out,
+ * or a group's visible leaves. The tree and the list page both build their
+ * rows here, so visibility (the admin gate included) lives only in this
+ * module. Not the root's landing candidates: those are {@link firstVisibleLeaf}'s.
+ */
+export function groupItems(group: SettingsGroup, ctx: SettingsNavContext): SettingsNavItem[] {
+  return group === 'root' ? rootItems(ctx) : leavesOf(group, ctx);
+}
+
+/**
  * Where a group's index forwards at md+. Profile is visible to every
  * signed-in viewer, so it is the fallback for an empty group and no forward
  * can loop. Callers must short-circuit an unresolved calendar (not in the
