@@ -78,12 +78,17 @@
   /* Holds through hover: this partial loads after _shell-nav.scss, so it
      wins the specificity tie with the base hover rule */
   .shell-nav-item--danger {
-    &,
-    &:hover {
+    color: var(--pav-text-error);
+
+    .shell-nav-item__icon {
       color: var(--pav-text-error);
+    }
+
+    &:hover {
+      color: var(--pav-text-error-hover);
 
       .shell-nav-item__icon {
-        color: var(--pav-text-error);
+        color: var(--pav-text-error-hover);
       }
     }
   }

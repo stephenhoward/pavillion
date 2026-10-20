@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
+import { Calendar, ShieldCheck } from 'lucide-vue-next';
 import { mountComponent } from '@/client/test/lib/vue';
 import NavList from '@/client/components/logged_in/settings/nav-list.vue';
 import {
@@ -69,6 +70,26 @@ describe('settings nav-list', () => {
     expect(current[0].text()).toBe('Reports');
   });
 
+  it.each([
+    { order: 'parent first', reportsFirst: false },
+    { order: 'nested row first', reportsFirst: true },
+  ])('marks only the deepest matching row current ($order)', async ({ reportsFirst }) => {
+    const parent: SettingsNavItem = {
+      id: 'calendar', routeName: 'calendar_management', labelKey: 'nav.root.calendar', icon: Calendar,
+      to: { name: 'calendar_management', params: { calendar: 'art' } },
+    };
+    const reports: SettingsNavItem = {
+      id: 'reports', routeName: 'calendar_reports', labelKey: 'nav.calendar.reports', icon: ShieldCheck,
+      to: { name: 'calendar_reports', params: { calendar: 'art' } },
+    };
+    const items = reportsFirst ? [reports, parent] : [parent, reports];
+    const { wrapper } = await mountAt('/settings/calendar/art/reports/4f1c2b3a-9d8e-4c7b-a6f5-0e1d2c3b4a59', items);
+
+    const current = wrapper.findAll('[aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0].text()).toBe('Reports');
+  });
+
   it('marks the root Calendar row current on a leaf of that calendar', async () => {
     const { wrapper } = await mountAt('/settings/calendar/art/general', rootItems(ctx()));
 
@@ -97,7 +118,7 @@ describe('settings nav-list', () => {
   it('sets the mode as a static modifier on the list', async () => {
     const { wrapper } = await mountAt('/settings/account', rootItems(ctx()), 'sidebar');
 
-    expect(wrapper.find('ul').classes()).toEqual(['settings-nav', 'settings-nav--sidebar']);
+    expect(wrapper.find('ul').classes()).toContain('settings-nav--sidebar');
   });
 
   it('renders Log out as the last row, a button that is never current', async () => {

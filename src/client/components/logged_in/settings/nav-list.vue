@@ -4,6 +4,10 @@
  * sidebar group at md+ (mode="sidebar"). The mode is a static prop; this
  * component has no viewport logic. Two instances can share a page, so the
  * template carries no id attributes.
+ *
+ * Rows match on resolved path at a segment boundary, longest match winning,
+ * rather than on route name as admin/root.vue does: a parent row (Calendar,
+ * Reports) must stay current on leaves beneath it whose route names differ.
  */
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -70,8 +74,7 @@ function logOut() {
     <li v-if="logoutItem" class="settings-nav__logout">
       <button
         type="button"
-        class="shell-nav-item shell-nav-item--list"
-        :class="{ 'shell-nav-item--danger': logoutItem.danger }"
+        class="shell-nav-item shell-nav-item--list shell-nav-item--danger"
         @click="logOut"
       >
         <component
