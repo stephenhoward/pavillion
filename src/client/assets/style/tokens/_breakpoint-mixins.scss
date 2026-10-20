@@ -32,3 +32,15 @@
     @error "Unknown breakpoint `#{$breakpoint}` in $pav-breakpoints.";
   }
 }
+
+// Container query mixin (mobile-first) against the nearest inline-size
+// container, which for every settings leaf is .settings-layout__content.
+@mixin pav-container($breakpoint) {
+  @if map.has-key($pav-container-breakpoints, $breakpoint) {
+    @container (min-width: #{map.get($pav-container-breakpoints, $breakpoint)}) {
+      @content;
+    }
+  } @else {
+    @error "Unknown container breakpoint `#{$breakpoint}` in $pav-container-breakpoints.";
+  }
+}

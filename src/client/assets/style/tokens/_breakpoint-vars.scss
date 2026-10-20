@@ -41,6 +41,19 @@ $pav-breakpoints: (
   '2xl': 1536px
 ) !default;
 
+// Container query map for the settings content column
+// (.settings-layout__content declares container-type: inline-size).
+// Each value is the content box the same-named viewport rule ran at on a
+// phone (breakpoint - 2 x space-4), so a leaf converted from pav-media(sm|md)
+// keeps its phone layout and adapts to the narrower column beside the
+// settings sidebar. Sass map only: a custom property cannot appear in an
+// @container condition, so there is no --pav-* twin. Not to be confused with
+// $pav-containers below, which are max-widths.
+$pav-container-breakpoints: (
+  sm: 38rem,
+  md: 46rem
+) !default;
+
 // Container max-width map
 $pav-containers: (
   xs: 100%,

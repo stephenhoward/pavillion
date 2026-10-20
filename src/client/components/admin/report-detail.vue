@@ -598,7 +598,7 @@ async function handleForward() {
     grid-template-columns: 1fr;
     gap: var(--pav-space-4);
 
-    @include pav-media(sm) {
+    @include pav-container(sm) {
       grid-template-columns: repeat(2, 1fr);
     }
 

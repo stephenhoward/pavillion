@@ -130,6 +130,7 @@ const subTabs = computed(() => [
       >
         <button
           v-for="tab in subTabs"
+          :id="`${tab.id}-tab`"
           :key="tab.id"
           type="button"
           role="tab"
@@ -164,7 +165,12 @@ const subTabs = computed(() => [
       <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
       <div v-else-if="accounts && accounts.length > 0" class="accounts-card">
         <!-- Desktop Table -->
-        <div class="accounts-table-desktop">
+        <div
+          class="accounts-table-desktop"
+          tabindex="0"
+          role="region"
+          aria-labelledby="accounts-tab"
+        >
           <table class="accounts-table" role="table" aria-label="User accounts">
             <thead>
               <tr>
@@ -247,6 +253,7 @@ const subTabs = computed(() => [
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
 @use '../../assets/style/mixins/tabs' as *;
+@use '../../assets/style/mixins/layout' as *;
 
 .accounts-page {
   display: flex;
@@ -358,8 +365,9 @@ const subTabs = computed(() => [
 
     .accounts-table-desktop {
       display: none;
+      @include scroll-region;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: block;
       }
 
@@ -430,7 +438,7 @@ const subTabs = computed(() => [
     .accounts-mobile {
       display: block;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 
