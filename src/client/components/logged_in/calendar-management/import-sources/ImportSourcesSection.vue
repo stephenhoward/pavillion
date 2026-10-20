@@ -470,6 +470,7 @@ defineExpose({ state, loadSources });
 
 <style scoped lang="scss">
 @use '../../../../assets/style/components/calendar-admin' as *;
+@use '../../../../assets/style/tokens/breakpoints' as *;
 
 .import-sources-section {
   display: flex;
@@ -477,7 +478,7 @@ defineExpose({ state, loadSources });
   gap: var(--pav-space-4);
   padding: var(--pav-space-4) 0;
 
-  @media (min-width: 640px) {
+  @include pav-media(sm) {
     padding: var(--pav-space-6) 0;
   }
 }

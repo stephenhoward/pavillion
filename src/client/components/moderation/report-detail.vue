@@ -512,6 +512,7 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '../../assets/style/components/calendar-admin' as *;
+@use '../../assets/style/tokens/breakpoints' as *;
 
 .report-detail {
   display: flex;
@@ -662,12 +663,12 @@ onMounted(async () => {
 
   &__info-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: var(--pav-space-4);
     margin-bottom: var(--pav-space-4);
 
-    @media (max-width: 640px) {
-      grid-template-columns: 1fr;
+    @include pav-container(sm) {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 
