@@ -1,4 +1,4 @@
-import type { NavigationGuard, RouteLocationNamedRaw } from 'vue-router';
+import type { NavigationGuard, RouteLocationNamedRaw, RouteLocationNormalized, Router } from 'vue-router';
 import type { CalendarInfo } from '@/common/model/calendar_info';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useFundingStore } from '@/client/stores/fundingStore';
@@ -29,8 +29,12 @@ import {
  * same calendarLeafRedirect to moves within its subtree and to ownership
  * lost while mounted.
  *
- * Every redirect replaces, and every target is a fixed named route: no URL
- * input is echoed into one. See DEC-021, client settings information
+ * A guard redirect never adds a history entry and never erases the page the
+ * viewer came from: it inherits the navigation's push or replace, and
+ * replaces only when the URL it redirects away from is already in the
+ * address bar (Back/Forward, a first load). withHistoryMode is that one
+ * form. Every target is a fixed named route: no URL input is echoed into
+ * one. See DEC-021, client settings information
  * architecture (agent-os/product/decisions/dec-021-client-settings-information-architecture.md).
  */
 
@@ -137,6 +141,34 @@ export function calendarLeafRedirect(name: unknown, ctx: SettingsNavContext | nu
   return isVisibleLeaf('calendar', name, ctx) ? null : firstVisibleLeaf('calendar', ctx);
 }
 
+/**
+ * The history's current location as a resolved fullPath, so it compares
+ * equal to a route's fullPath whatever its encoding; '' before the first
+ * navigation of a memory history. During a push it is still the URL being
+ * left; during Back/Forward and a first load it is already the URL being
+ * entered.
+ */
+export function historyPath(router: Router): string {
+  const location = router.options.history.location;
+  return location ? router.resolve(location).fullPath : '';
+}
+
+/**
+ * A guard redirect to `target` in the one history form: replace when `to`
+ * is already the history's location (Back/Forward, a first load), so the
+ * redirect neither adds an entry nor leaves one that forwards again;
+ * otherwise no `replace` key, so the navigation's own push or replace
+ * carries through and the page the viewer came from survives.
+ */
+export function withHistoryMode(
+  target: RouteLocationNamedRaw,
+  to: Pick<RouteLocationNormalized, 'fullPath'>,
+  historyLocation: () => string,
+): RouteLocationNamedRaw {
+  const { replace: _ignored, ...location } = target;
+  return historyLocation() === to.fullPath ? { ...location, replace: true } : location;
+}
+
 /** What the index forward needs to load the viewer's context. */
 export interface SettingsForwardDeps {
   /** Loads the viewer's calendars into the calendar store. */
@@ -149,6 +181,8 @@ export interface SettingsForwardDeps {
 export interface SettingsGuardDeps extends SettingsForwardDeps {
   /** Whether the settings tree is a sidebar (md+) rather than a page. */
   treeIsSidebar: () => boolean;
+  /** The history's current location, as {@link historyPath} reads it. */
+  historyLocation: () => string;
 }
 
 /**
@@ -187,6 +221,9 @@ export interface SettingsGuards {
  * bodies, because app.ts builds the route table before Pinia is installed.
  */
 export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
+  const redirect = (target: RouteLocationNamedRaw, to: RouteLocationNormalized) =>
+    withHistoryMode(target, to, deps.historyLocation);
+
   return {
     /**
      * An index route: render the list page in page mode, else forward to the
@@ -198,7 +235,7 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
         return true;
       }
       const target = await settingsIndexTarget(group, to.params.calendar, deps);
-      return target ? { ...target, replace: true } : true;
+      return target ? redirect(target, to) : true;
     },
 
     /**
@@ -218,7 +255,7 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
       await deps.loadInstanceFunding();
       const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(deps.isAdmin));
       const target = calendarLeafRedirect(to.name, ctx);
-      return target ? { ...target, replace: true } : true;
+      return target ? redirect(target, to) : true;
     },
 
     /**
@@ -234,18 +271,18 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
         return true;
       }
       if (isReportId(report)) {
-        return { name: 'calendar_report_detail', params: { calendar, reportId: report }, replace: true };
+        return redirect({ name: 'calendar_report_detail', params: { calendar, reportId: report } }, to);
       }
-      return { name: 'calendar_reports', params: { calendar }, replace: true };
+      return redirect({ name: 'calendar_reports', params: { calendar } }, to);
     },
 
     /** The funding plan leaf: redirect to Profile when the tree hides it. */
-    fundingEnabledRedirect: async () => {
+    fundingEnabledRedirect: async (to) => {
       await deps.loadInstanceFunding();
       const ctx = buildSettingsNavContext('account', undefined, readSettingsNavSources(deps.isAdmin));
       return ctx && isVisibleLeaf('account', 'funding_plan', ctx)
         ? true
-        : { name: 'profile', replace: true };
+        : redirect({ name: 'profile' }, to);
     },
   };
 }

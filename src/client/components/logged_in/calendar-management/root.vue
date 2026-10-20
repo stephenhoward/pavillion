@@ -31,7 +31,9 @@ import {
   buildSettingsNavContext,
   calendarLeafRedirect,
   findViewerCalendar,
+  historyPath,
   readSettingsNavSources,
+  withHistoryMode,
 } from '@/client/service/settings-guards';
 import {
   isVisibleLeaf,
@@ -118,7 +120,8 @@ onBeforeRouteUpdate((to) => {
     return true;
   }
   const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(isAdmin));
-  return calendarLeafRedirect(to.name, ctx) ?? true;
+  const target = calendarLeafRedirect(to.name, ctx);
+  return target ? withHistoryMode(target, to, () => historyPath(router)) : true;
 });
 
 onBeforeMount(async () => {

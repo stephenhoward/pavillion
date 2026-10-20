@@ -9,7 +9,7 @@ import { mountComponent } from '@/client/test/lib/vue';
 import { installMatchMedia, type FakeMatchMedia } from '@/client/test/lib/match-media';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
-import { createSettingsGuards } from '@/client/service/settings-guards';
+import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -87,6 +87,7 @@ describe('calendar settings gate with the settings layout', () => {
           isAdmin: () => false,
           loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
           treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
+          historyLocation: () => historyPath(router),
         }),
       }),
     });

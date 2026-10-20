@@ -13,7 +13,7 @@ import CalendarManagementRoot from '@/client/components/logged_in/calendar-manag
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import ModerationService from '@/client/service/moderation';
-import { createSettingsGuards } from '@/client/service/settings-guards';
+import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
 import { useShellLayout, resetShellLayoutForTesting } from '@/client/composables/useShellLayout';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { currentAccountId } from '@/client/service/authn';
@@ -62,6 +62,7 @@ function buildRouter(): Router {
     isAdmin: () => false,
     loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
     treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
+    historyLocation: () => historyPath(router),
   });
   const routes: RouteRecordRaw[] = [
     { path: '/settings/calendar/:calendar', component: CalendarManagementRoot, children: [
@@ -76,7 +77,8 @@ function buildRouter(): Router {
     ] },
     { path: '/settings/account/profile', name: 'profile', component: { render: () => null } },
   ];
-  return createRouter({ history: createMemoryHistory(), routes });
+  const router = createRouter({ history: createMemoryHistory(), routes });
+  return router;
 }
 
 const App = { template: '<RouterView />' };

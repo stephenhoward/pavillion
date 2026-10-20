@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { createPinia, setActivePinia } from 'pinia';
-import { createMemoryHistory, createRouter, type NavigationGuard, type RouteRecordRaw, type Router } from 'vue-router';
+import { createMemoryHistory, createRouter, createWebHistory, type NavigationGuard, type RouteRecordRaw, type Router } from 'vue-router';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -10,7 +10,7 @@ import PageHeader from '@/client/components/logged_in/settings/page-header.vue';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
-import { createSettingsGuards } from '@/client/service/settings-guards';
+import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -39,6 +39,9 @@ function accessGuardsFor(loggedIn: boolean) {
 /** The access guards of a signed-in, non-admin session. */
 const accessGuards = accessGuardsFor(true);
 
+/** The router the guards read history from; set by every test that navigates. */
+let activeRouter: Router | null = null;
+
 /** The real client route table behind the real access and settings guards. */
 function buildRoutes(access = accessGuards): RouteRecordRaw[] {
   return buildClientRoutes({
@@ -49,6 +52,7 @@ function buildRoutes(access = accessGuards): RouteRecordRaw[] {
       isAdmin: () => false,
       loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
       treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
+      historyLocation: () => (activeRouter ? historyPath(activeRouter) : ''),
     }),
   });
 }
@@ -118,7 +122,14 @@ describe('settings routes on the real route table', () => {
   /** A router over the real table, the viewport fake already set to `sidebar`. */
   function routerAt(sidebar: boolean, access = accessGuards): Router {
     media.setMatches(sidebar);
-    return createRouter({ history: createMemoryHistory(), routes: buildRoutes(access) });
+    activeRouter = createRouter({ history: createMemoryHistory(), routes: buildRoutes(access) });
+    return activeRouter;
+  }
+
+  /** Back or Forward, then let the guards and the navigation settle. */
+  async function traverse(router: Router, delta: number): Promise<void> {
+    router.go(delta);
+    await flushPromises();
   }
 
   describe('account index', () => {
@@ -136,17 +147,62 @@ describe('settings routes on the real route table', () => {
       expect(router.currentRoute.value.path).toBe('/settings/account/profile');
     });
 
-    it('replaces the history entry when it forwards at md+', async () => {
+    it('keeps the page the viewer came from when it forwards at md+', async () => {
       const router = routerAt(true);
       await router.push('/settings/account/security');
-      const push = sandbox.spy(router.options.history, 'push');
-      const replace = sandbox.spy(router.options.history, 'replace');
 
       await router.push('/settings/account');
-
       expect(router.currentRoute.value.name).toBe('profile');
-      expect(push.called).toBe(false);
-      expect(replace.calledOnceWith('/settings/account/profile')).toBe(true);
+
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/settings/account/security');
+    });
+
+    it('keeps a page outside settings the viewer came from', async () => {
+      const router = routerAt(true);
+      await router.push('/inbox');
+
+      await router.push('/settings/account');
+      expect(router.currentRoute.value.name).toBe('profile');
+
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/inbox');
+    });
+
+    it('does not trap Back on an index reached by history traversal at md+', async () => {
+      const router = routerAt(false);
+      await router.push('/settings/account/security');
+      await router.push('/settings/account');
+      await router.push('/settings/account/profile');
+      media.setMatches(true);
+
+      // Back onto the index forwards to its first leaf in place of the index entry...
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/settings/account/profile');
+
+      // ...so the next Back leaves the index behind instead of forwarding again.
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/settings/account/security');
+    });
+
+    it('replaces a cold load of an index, adding no history entry', async () => {
+      const original = window.location.pathname;
+      window.history.replaceState({}, '', '/settings/account');
+      try {
+        media.setMatches(true);
+        activeRouter = createRouter({ history: createWebHistory(), routes: buildRoutes() });
+        const lengthBefore = window.history.length;
+
+        await activeRouter.push(activeRouter.options.history.location);
+
+        expect(activeRouter.currentRoute.value.path).toBe('/settings/account/profile');
+        expect(window.location.pathname).toBe('/settings/account/profile');
+        expect(window.history.length).toBe(lengthBefore);
+      }
+      finally {
+        activeRouter?.options.history.destroy();
+        window.history.replaceState({}, '', original);
+      }
     });
   });
 
@@ -170,6 +226,18 @@ describe('settings routes on the real route table', () => {
       const router = routerAt(false);
       await router.push(path);
       expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+    });
+
+    it('keeps Profile when an editor is refused on entry from it', async () => {
+      viewerHas('editor');
+      const router = routerAt(false);
+      await router.push('/settings/account/profile');
+
+      await router.push('/settings/calendar/shared/general');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/settings/account/profile');
     });
 
     it('lets an owner onto an owner-only leaf', async () => {

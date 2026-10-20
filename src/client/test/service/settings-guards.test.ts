@@ -14,6 +14,7 @@ import {
   isReportId,
   readSettingsNavSources,
   settingsIndexTarget,
+  withHistoryMode,
   type SettingsGuardDeps,
 } from '@/client/service/settings-guards';
 
@@ -25,8 +26,11 @@ const REPORT_ID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
 type Query = Record<string, unknown>;
 type Params = Record<string, unknown>;
 
+/** The path every test route is entered at. */
+const TO_PATH = '/settings/to';
+
 function route(params: Params = {}, query: Query = {}): RouteLocationNormalized {
-  return { params, query } as unknown as RouteLocationNormalized;
+  return { params, query, fullPath: TO_PATH } as unknown as RouteLocationNormalized;
 }
 
 /** Call a guard directly with only the `to` location the guards read. */
@@ -44,6 +48,8 @@ describe('settings guards', () => {
   let admin: boolean;
   let funding: boolean;
   let deps: SettingsGuardDeps & { loadCalendars: ReturnType<typeof vi.fn> };
+  /** The history's location: the page being left during a push, TO_PATH on Back/Forward. */
+  let historyAt: string;
 
   beforeEach(() => {
     // setSelectedCalendar persists, and a new store reads the key back.
@@ -53,6 +59,7 @@ describe('settings guards', () => {
     sidebar = true;
     admin = false;
     funding = true;
+    historyAt = '/settings/from';
     deps = {
       loadCalendars: vi.fn(async () => {
         useCalendarStore().setCalendarInfos(infos);
@@ -64,6 +71,7 @@ describe('settings guards', () => {
         return funding;
       },
       treeIsSidebar: () => sidebar,
+      historyLocation: () => historyAt,
     };
   });
 
@@ -80,7 +88,7 @@ describe('settings guards', () => {
     it('forwards root to the current calendar\'s general leaf for an owner', async () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('root'), route())).toEqual({
-        name: 'calendar_general', params: { calendar: 'riverside' }, replace: true,
+        name: 'calendar_general', params: { calendar: 'riverside' },
       });
     });
 
@@ -88,35 +96,35 @@ describe('settings guards', () => {
       useCalendarStore().setSelectedCalendar('e1');
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('root'), route())).toEqual({
-        name: 'calendar_editors', params: { calendar: 'shared' }, replace: true,
+        name: 'calendar_editors', params: { calendar: 'shared' },
       });
     });
 
     it('forwards root to profile when the viewer has no calendars', async () => {
       infos = [];
       const { settingsIndexRedirect } = createSettingsGuards(deps);
-      expect(await run(settingsIndexRedirect('root'), route())).toEqual({ name: 'profile', replace: true });
+      expect(await run(settingsIndexRedirect('root'), route())).toEqual({ name: 'profile' });
     });
 
     it('ignores a stale persisted calendar id in favour of the resolved current calendar', async () => {
       useCalendarStore().setSelectedCalendar('gone');
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('root'), route())).toEqual({
-        name: 'calendar_general', params: { calendar: 'riverside' }, replace: true,
+        name: 'calendar_general', params: { calendar: 'riverside' },
       });
     });
 
     it('forwards a calendar the viewer owns to its general leaf', async () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('calendar'), route({ calendar: 'riverside' }))).toEqual({
-        name: 'calendar_general', params: { calendar: 'riverside' }, replace: true,
+        name: 'calendar_general', params: { calendar: 'riverside' },
       });
     });
 
     it('forwards a calendar the viewer edits to its editors leaf', async () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('calendar'), route({ calendar: 'shared' }))).toEqual({
-        name: 'calendar_editors', params: { calendar: 'shared' }, replace: true,
+        name: 'calendar_editors', params: { calendar: 'shared' },
       });
     });
 
@@ -145,22 +153,48 @@ describe('settings guards', () => {
 
     it('forwards account to profile', async () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
-      expect(await run(settingsIndexRedirect('account'), route())).toEqual({ name: 'profile', replace: true });
+      expect(await run(settingsIndexRedirect('account'), route())).toEqual({ name: 'profile' });
     });
 
     it('forwards admin to the instance general leaf for an admin', async () => {
       admin = true;
       const { settingsIndexRedirect } = createSettingsGuards(deps);
-      expect(await run(settingsIndexRedirect('admin'), route())).toEqual({ name: 'admin_settings', replace: true });
+      expect(await run(settingsIndexRedirect('admin'), route())).toEqual({ name: 'admin_settings' });
     });
 
     it('uses the calendars the loader brings in on a cold load', async () => {
       expect(useCalendarStore().calendarInfos).toEqual([]);
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('calendar'), route({ calendar: 'riverside' }))).toEqual({
-        name: 'calendar_general', params: { calendar: 'riverside' }, replace: true,
+        name: 'calendar_general', params: { calendar: 'riverside' },
       });
       expect(deps.loadCalendars).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('history mode', () => {
+    it('leaves push or replace to the navigation while the page being left is in the address bar', async () => {
+      const { settingsIndexRedirect } = createSettingsGuards(deps);
+      const result = await run(settingsIndexRedirect('account'), route());
+      expect(result).toEqual({ name: 'profile' });
+      expect('replace' in (result as object)).toBe(false);
+    });
+
+    it.each([
+      ['settingsIndexRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.settingsIndexRedirect('account'), route()],
+      ['calendarLeafGate', (g: ReturnType<typeof createSettingsGuards>) => g.calendarLeafGate, Object.assign(route({ calendar: 'shared' }), { name: 'calendar_general' })],
+      ['legacyTabReportsRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.legacyTabReportsRedirect, route({ calendar: 'riverside' }, { tab: 'reports' })],
+      ['fundingEnabledRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.fundingEnabledRedirect, route()],
+    ] as const)('%s replaces when the URL it leaves is already in the address bar', async (_name, pick, to) => {
+      funding = false;
+      historyAt = TO_PATH;
+      const result = await run(pick(createSettingsGuards(deps)), to);
+      expect(result).toMatchObject({ replace: true });
+    });
+
+    it('drops a replace the target carries when the navigation is a push', () => {
+      expect(withHistoryMode({ name: 'profile', replace: true }, { fullPath: TO_PATH }, () => '/settings/from'))
+        .toEqual({ name: 'profile' });
     });
   });
 
@@ -176,7 +210,7 @@ describe('settings guards', () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       const result = await run(settingsIndexRedirect(group), route({ calendar }));
       expect(target === null).toBe(unresolved);
-      expect(result).toEqual(target === null ? true : { ...target, replace: true });
+      expect(result).toEqual(target === null ? true : target);
     });
 
     it('returns null when the calendar load fails', async () => {
@@ -243,14 +277,14 @@ describe('settings guards', () => {
     it('maps tab=reports to the reports leaf', async () => {
       const { legacyTabReportsRedirect } = createSettingsGuards(deps);
       expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports' }))).toEqual({
-        name: 'calendar_reports', params: { calendar }, replace: true,
+        name: 'calendar_reports', params: { calendar },
       });
     });
 
     it('maps tab=reports with a v4 report id to the report detail', async () => {
       const { legacyTabReportsRedirect } = createSettingsGuards(deps);
       expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports', report: REPORT_ID }))).toEqual({
-        name: 'calendar_report_detail', params: { calendar, reportId: REPORT_ID }, replace: true,
+        name: 'calendar_report_detail', params: { calendar, reportId: REPORT_ID },
       });
     });
 
@@ -262,7 +296,7 @@ describe('settings guards', () => {
     ])('ignores %s as the report and lands on the reports leaf', async (_label, report) => {
       const { legacyTabReportsRedirect } = createSettingsGuards(deps);
       expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports', report }))).toEqual({
-        name: 'calendar_reports', params: { calendar }, replace: true,
+        name: 'calendar_reports', params: { calendar },
       });
     });
 
@@ -304,7 +338,7 @@ describe('settings guards', () => {
     it('redirects to profile when instance funding is disabled', async () => {
       funding = false;
       const { fundingEnabledRedirect } = createSettingsGuards(deps);
-      expect(await run(fundingEnabledRedirect, route())).toEqual({ name: 'profile', replace: true });
+      expect(await run(fundingEnabledRedirect, route())).toEqual({ name: 'profile' });
     });
 
     it('lets the funding plan through when instance funding is enabled', async () => {

@@ -14,7 +14,7 @@ import CalendarService from '@/client/service/calendar';
 import { createCurrentCalendarRedirect, createCurrentCalendarSync } from '@/client/service/current-calendar';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
-import { createSettingsGuards } from '@/client/service/settings-guards';
+import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
 import FundingService from '@/client/service/funding';
 import { useShellLayout } from '@/client/composables/useShellLayout';
 
@@ -60,6 +60,8 @@ checkSetupMode().then((setupRequired) => {
         isAdmin: () => authentication.isAdmin(),
         loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
         treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
+        // Read only inside guard bodies, after the router below exists.
+        historyLocation: () => historyPath(router),
       }),
     });
 
