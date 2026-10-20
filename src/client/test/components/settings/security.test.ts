@@ -70,6 +70,15 @@ describe('Security settings leaf', () => {
     expect(wrapper.text()).toContain('session@example.com');
   });
 
+  it('keeps the session email on screen when the profile fails to load', async () => {
+    vi.spyOn(AccountService.prototype, 'getProfile').mockRejectedValue(new Error('network'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const wrapper = mountSecurity();
+    await flushPromises();
+
+    expect(wrapper.findAll('.security-settings__value')[0].text()).toBe('session@example.com');
+  });
+
   it('renders the email row with the address from the profile', async () => {
     const wrapper = mountSecurity();
     await flushPromises();
@@ -82,7 +91,8 @@ describe('Security settings leaf', () => {
     const wrapper = mountSecurity();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Password');
+    const labels = wrapper.findAll('.security-settings__label').map(l => l.text());
+    expect(labels).toEqual(['Email Address', 'Password']);
     expect(buttonByText(wrapper, 'Change Password').exists()).toBe(true);
   });
 

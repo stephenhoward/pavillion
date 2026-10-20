@@ -236,6 +236,17 @@ describe('Profile settings leaf', () => {
       expect(wrapper.find('select#language').attributes('disabled')).toBeUndefined();
     });
 
+    it('clears loading and enables the fields when the profile fails to load', async () => {
+      vi.spyOn(AccountService.prototype, 'getProfile').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const { wrapper } = mountProfile();
+      await flushPromises();
+
+      expect(wrapper.find('select#language').attributes('disabled')).toBeUndefined();
+      expect(wrapper.find('input#display-name').attributes('disabled')).toBeUndefined();
+    });
+
     it('keeps the Preferences heading but does not repeat the layout title', async () => {
       const { wrapper } = mountProfile();
       await flushPromises();

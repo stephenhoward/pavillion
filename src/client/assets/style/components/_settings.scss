@@ -30,16 +30,16 @@
  * settings/security.vue). The settings layout owns the column, so the card
  * sets no width, margin or outer padding of its own.
  */
-.settings-card {
+.account-settings-card {
   background: var(--pav-surface-primary);
-  border: 1px solid var(--pav-border-secondary);
-  border-radius: 1rem;
+  border: var(--pav-border-width-1) solid var(--pav-border-secondary);
+  border-radius: var(--pav-border-radius-xl);
   box-shadow: var(--pav-shadow-xs);
   overflow: hidden;
 
   &__section {
     padding: var(--pav-space-6);
-    border-block-end: 1px solid var(--pav-border-subtle);
+    border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
 
     &:last-child {
       border-block-end: none;

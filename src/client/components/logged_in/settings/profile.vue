@@ -105,8 +105,8 @@ onMounted(loadProfile);
       <HelpButton />
     </div>
 
-    <div class="settings-card">
-      <section class="settings-card__section">
+    <div class="account-settings-card">
+      <section class="account-settings-card__section">
         <div class="profile-settings__fields">
           <div class="profile-settings__field">
             <label for="display-name" class="profile-settings__label">
@@ -143,7 +143,7 @@ onMounted(loadProfile);
         </div>
       </section>
 
-      <section class="settings-card__section">
+      <section class="account-settings-card__section">
         <h2 class="profile-settings__section-title">{{ t("preferences_section", { defaultValue: "PREFERENCES" }) }}</h2>
 
         <div class="profile-settings__field">

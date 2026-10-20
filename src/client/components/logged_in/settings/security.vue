@@ -48,8 +48,8 @@ onMounted(loadEmail);
 </script>
 
 <template>
-  <div class="settings-card">
-    <div class="settings-card__section security-settings">
+  <div class="account-settings-card">
+    <div class="account-settings-card__section security-settings">
       <div class="security-settings__row">
         <div class="security-settings__info">
           <p class="security-settings__label">{{ t("account_email_label", { defaultValue: "Email Address" }) }}</p>
