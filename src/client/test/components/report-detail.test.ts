@@ -103,6 +103,44 @@ describe('ReportDetail', () => {
 
       expect(wrapper.find('h2.report-detail__title').attributes('id')).toBeUndefined();
     });
+
+    it('leaves the report section unnamed when a surrounding region is named by the heading', async () => {
+      wrapper = await mountWithReport(createMockReport(false), { headingId: 'report-heading-1' });
+
+      expect(wrapper.findAll('[aria-label="detail.title"]')).toHaveLength(0);
+    });
+
+    it('names the report section itself when no headingId is given', async () => {
+      wrapper = await mountWithReport(createMockReport(false));
+
+      expect(wrapper.findAll('section[aria-label="detail.title"]')).toHaveLength(1);
+    });
+  });
+
+  describe('Stale store report', () => {
+    it('does not render a previous report left in the store by a failed fetch', async () => {
+      const previous = createMockReport(false);
+      previous.id = 'report-previous';
+      previous.description = 'Previous report text';
+      store.currentReport = { report: previous, escalationHistory: [] };
+      sandbox.stub(store, 'fetchReport').callsFake(async () => {
+        store.error = 'Report not found';
+        throw new Error('Report not found');
+      });
+
+      wrapper = mount(ReportDetail, {
+        props: { calendarId: 'calendar-789', reportId: 'report-123' },
+        global: {
+          plugins: [pinia],
+          stubs: { LoadingMessage: true, PillButton: true, ArrowLeft: true },
+        },
+      });
+      await flushPromises();
+
+      expect(wrapper.find('.report-detail__title').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Previous report text');
+      expect(wrapper.find('.report-detail__error').exists()).toBe(true);
+    });
   });
 
   describe('Pattern warning badges', () => {

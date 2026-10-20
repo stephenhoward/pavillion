@@ -58,14 +58,23 @@ const state = reactive({
 });
 
 /**
+ * The store's current report, only when it is the one this view names: a
+ * failed fetch leaves the previous report in the store, which must not render
+ * under another report's id.
+ */
+const currentReport = computed(() => (
+  store.currentReport?.report.id === props.reportId ? store.currentReport : null
+));
+
+/**
  * The current report from the store.
  */
-const report = computed(() => store.currentReport?.report ?? null);
+const report = computed(() => currentReport.value?.report ?? null);
 
 /**
  * The escalation history from the store.
  */
-const escalationHistory = computed(() => store.currentReport?.escalationHistory ?? []);
+const escalationHistory = computed(() => currentReport.value?.escalationHistory ?? []);
 
 /**
  * Whether the report can be acted upon (not already resolved/dismissed).
@@ -220,8 +229,8 @@ onMounted(async () => {
     await store.fetchReport(props.calendarId, props.reportId);
 
     // Initialize owner notes from fetched report
-    if (store.currentReport?.report.ownerNotes) {
-      state.ownerNotes = store.currentReport.report.ownerNotes;
+    if (report.value?.ownerNotes) {
+      state.ownerNotes = report.value.ownerNotes;
     }
   }
   catch {
@@ -311,7 +320,8 @@ onMounted(async () => {
       </div>
 
       <!-- Report Information -->
-      <section class="report-detail__section" :aria-label="t('detail.title')">
+      <!-- Unnamed when a surrounding region is already named by the heading. -->
+      <section class="report-detail__section" :aria-label="headingId ? undefined : t('detail.title')">
         <div class="report-detail__info-grid">
           <div class="report-detail__info-item">
             <span class="report-detail__info-label">{{ t('dashboard.column_category') }}</span>

@@ -1,5 +1,5 @@
 import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, type Component } from 'vue';
 import { createMemoryHistory, createRouter, type Router, type RouteRecordRaw } from 'vue-router';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia, type Pinia } from 'pinia';
@@ -14,12 +14,15 @@ import FundingService from '@/client/service/funding';
 import ModerationService from '@/client/service/moderation';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 
 /*
  * The calendar Reports leaf under the real calendar-management/root.vue gate:
  * how a reports/:reportId path resolves, falls back and takes focus. The
- * dashboard and the detail view are stand-ins, so what is under test is the
- * leaf's gate, its route handling and its report region.
+ * dashboard and (unless a test asks for the real one) the detail view are
+ * stand-ins, so what is under test is the leaf's gate, its route handling and
+ * its report region. The app renders a settings-style page heading so focus
+ * moves to it can be observed.
  */
 
 // Strict v4 shape, matching the server's path-parameter validation.
@@ -44,9 +47,13 @@ vi.mock('@/client/components/moderation/reports-dashboard.vue', () => ({
   }),
 }));
 
-vi.mock('@/client/components/moderation/report-detail.vue', () => ({
-  default: defineComponent({
-    name: 'ReportDetail',
+/** Whether the detail slot renders the real ReportDetail instead of the stand-in. */
+const detail = vi.hoisted(() => ({ real: false }));
+
+vi.mock('@/client/components/moderation/report-detail.vue', async (importOriginal) => {
+  const actual = await importOriginal<{ default: Component }>();
+  const StandIn = defineComponent({
+    name: 'ReportDetailStandIn',
     props: ['calendarId', 'reportId', 'headingId'],
     emits: ['back'],
     setup(props, { emit }) {
@@ -55,8 +62,18 @@ vi.mock('@/client/components/moderation/report-detail.vue', () => ({
         h('button', { class: 'back', onClick: () => emit('back') }, 'Back to reports'),
       ]);
     },
-  }),
-}));
+  });
+  return {
+    default: defineComponent({
+      name: 'ReportDetail',
+      props: ['calendarId', 'reportId', 'headingId'],
+      emits: ['back'],
+      setup(props, { emit }) {
+        return () => h(detail.real ? actual.default : StandIn, { ...props, onBack: () => emit('back') });
+      },
+    }),
+  };
+});
 
 const Leaf = defineComponent({ props: ['calendarId', 'isOwner', 'instanceHost', 'calendarUrlName'], render: () => h('div') });
 const EditorsLeaf = defineComponent({ props: ['calendarId', 'isOwner'], render: () => h('div', { 'data-editors': '' }) });
@@ -72,11 +89,27 @@ function buildRouter(): Router {
       { path: 'import', name: 'calendar_import', component: Leaf },
       { path: 'widget', name: 'calendar_widget', component: Leaf },
     ] },
+    { path: '/admin/moderation/reports/:reportId', name: 'moderation_report_detail', component: Leaf },
   ];
   return createRouter({ history: createMemoryHistory(), routes });
 }
 
-const App = { template: '<RouterView />' };
+const App = {
+  template: '<div><h1 class="settings-page-header__title" tabindex="-1">Reports</h1><RouterView /></div>',
+};
+
+/**
+ * A region's accessible name and its source, as accname computes it for these
+ * two attributes: aria-labelledby when its id resolves, otherwise aria-label.
+ */
+function regionName(region: Element): { from: 'labelledby' | 'label'; name: string; labelledBy: HTMLElement | null } {
+  const id = region.getAttribute('aria-labelledby');
+  const labelledBy = id ? document.getElementById(id) : null;
+  const text = labelledBy?.textContent?.trim();
+  return text
+    ? { from: 'labelledby', name: text, labelledBy }
+    : { from: 'label', name: region.getAttribute('aria-label') ?? '', labelledBy: null };
+}
 
 const calendarInfo = (id: string, urlName: string, role: 'owner' | 'editor') =>
   new CalendarInfo(new Calendar(id, urlName), role);
@@ -124,6 +157,7 @@ describe('Calendar reports leaf', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     wrapper = null;
+    detail.real = false;
     viewerHas(calendarInfo('cal-uuid-1', 'my-calendar', 'owner'), calendarInfo('cal-uuid-2', 'other', 'owner'));
     vi.spyOn(FundingService.prototype, 'ensureInstanceFundingLoaded').mockResolvedValue(false);
   });
@@ -160,6 +194,7 @@ describe('Calendar reports leaf', () => {
   }
 
   const region = (w: VueWrapper) => w.find('[role="region"]');
+  const pageHeading = () => document.querySelector('h1.settings-page-header__title');
   const fullPath = () => router.currentRoute.value.fullPath;
 
   describe('opening a report', () => {
@@ -238,6 +273,43 @@ describe('Calendar reports leaf', () => {
       expect(fullPath()).toBe(LIST_PATH);
       expect(w.find('[data-dashboard]').exists()).toBe(true);
       expect(region(w).exists()).toBe(false);
+      // Not stranded on the removed region: at md+ no layout rule moves it.
+      expect(document.activeElement).toBe(pageHeading());
+    });
+
+    it('names the region with the fallback while the real report loads, then by its heading', async () => {
+      detail.real = true;
+      mockReportFound();
+      const store = useModerationStore(pinia);
+      let finishLoad!: () => void;
+      vi.spyOn(store, 'fetchReport').mockImplementation(() => new Promise<void>((resolve) => {
+        finishLoad = () => {
+          const report = new Report(REPORT_ID);
+          report.calendarId = 'cal-uuid-1';
+          report.category = ReportCategory.INAPPROPRIATE;
+          report.status = ReportStatus.SUBMITTED;
+          report.reporterType = 'anonymous';
+          store.currentReport = { report, escalationHistory: [] };
+          resolve();
+        };
+      }));
+
+      const w = await mountAt(detailPath(REPORT_ID));
+
+      const loading = regionName(region(w).element);
+      expect(loading).toMatchObject({ from: 'label', name: 'Report Detail' });
+      expect(document.activeElement).toBe(region(w).element);
+
+      finishLoad();
+      await flushPromises();
+
+      const loaded = regionName(region(w).element);
+      expect(loaded.from).toBe('labelledby');
+      expect(loaded.name).toBe('Report Detail');
+      expect(loaded.labelledBy?.tagName).toBe('H2');
+      expect(region(w).element.contains(loaded.labelledBy)).toBe(true);
+      // The region is the one landmark carrying that name.
+      expect(w.findAll('[aria-label="Report Detail"]').map((el) => el.element)).toEqual([region(w).element]);
     });
 
     it('issues no request on the list route', async () => {
@@ -284,9 +356,12 @@ describe('Calendar reports leaf', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
-    it('replaces to the list when a new reportId on the mounted leaf fails', async () => {
+    it('replaces to the list, focusing the page heading, when a report opened in-app gives way to a failing one', async () => {
       const getReport = mockReportFound();
-      const w = await mountAt(detailPath(REPORT_ID));
+      const w = await mountAt(LIST_PATH);
+      await w.find('.open-report').trigger('click');
+      await flushPromises();
+      expect(w.find(`[data-report-detail="${REPORT_ID}"]`).exists()).toBe(true);
       getReport.mockRejectedValue(new Error('Report not found'));
 
       await navigate(detailPath(OTHER_REPORT_ID));
@@ -294,6 +369,28 @@ describe('Calendar reports leaf', () => {
       expect(fullPath()).toBe(LIST_PATH);
       expect(w.find('[data-report-detail]').exists()).toBe(false);
       expect(w.find('[data-dashboard]').exists()).toBe(true);
+      expect(document.activeElement).toBe(pageHeading());
+    });
+
+    it.each([
+      ['another calendar\'s report path', '/settings/calendar/other/reports/' + REPORT_ID],
+      ['the admin report detail', '/admin/moderation/reports/' + REPORT_ID],
+    ])('drops a failure that settles after the viewer moved to %s', async (_label, destination) => {
+      let rejectFirst!: (error: Error) => void;
+      const getReport = vi.spyOn(ModerationService.prototype, 'getReport').mockImplementationOnce(() =>
+        new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        }));
+      getReport.mockResolvedValue({ report: {} as any, escalationHistory: [] });
+      await mountAt(detailPath(REPORT_ID));
+      await navigate(destination);
+      const replace = vi.spyOn(router, 'replace');
+
+      rejectFirst(new Error('Report not found'));
+      await flushPromises();
+
+      expect(replace).not.toHaveBeenCalled();
+      expect(fullPath()).toBe(destination);
     });
 
     it('never mounts the leaf or requests the report for a non-owner', async () => {
