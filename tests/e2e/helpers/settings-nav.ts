@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
 
 /**
  * Settings navigation for e2e specs: the leaf URLs and the role-based
@@ -28,6 +29,7 @@ const LOG_OUT_LABEL = 'Log out';
 const BACK_TO_PREFIX = 'Back to';
 const MAIN_NAV_LABEL = 'Main navigation';
 const MOBILE_NAV_LABEL = 'Mobile navigation';
+const LOADING_CALENDAR_TEXT = 'Loading calendar…';
 
 /** Phone viewport, matching calendar-switcher.spec.ts. */
 export const PHONE = { width: 390, height: 844 };
@@ -36,11 +38,11 @@ export const PHONE = { width: 390, height: 844 };
 export const DESKTOP = { width: 1280, height: 800 };
 
 /**
- * The md breakpoint at which the settings tree appears. Mirrors
- * SHELL_SIDEBAR_UP_PX in src/client/assets/breakpoints.ts; e2e cannot import
- * client code that pulls in Vue, so the literal is kept here.
+ * The md breakpoint at which the settings tree appears and the main nav
+ * leaves the bottom bar: the client's own constant, so a spec probing
+ * either side of it follows the app if the breakpoint moves.
  */
-export const SHELL_MD = 768;
+export const SHELL_MD = SHELL_SIDEBAR_UP_PX;
 
 export type CalendarLeaf = 'general' | 'editors' | 'reports' | 'import' | 'widget';
 
@@ -344,6 +346,39 @@ export function mainNav(page: Page): Locator {
  */
 export function mobileNav(page: Page): Locator {
   return page.getByRole('navigation', { name: MOBILE_NAV_LABEL, exact: true });
+}
+
+/**
+ * A main-nav link's text label. On a settings route at md+ the nav is an icon
+ * rail and the label is visually hidden (sr-only) while staying in the link's
+ * accessible name; elsewhere it is drawn. A class selector because the label
+ * has no role of its own.
+ *
+ * @param link - A link in mainNav(page)
+ */
+export function mainNavLinkLabel(link: Locator): Locator {
+  return link.locator('.shell-nav-item__label');
+}
+
+/**
+ * The calendar settings loading announcement, which must be gone once the
+ * page has settled.
+ *
+ * @param page - Playwright page instance
+ */
+export function calendarLoadingStatus(page: Page): Locator {
+  return page.getByRole('status').filter({ hasText: LOADING_CALENDAR_TEXT });
+}
+
+/**
+ * The empty state a calendar settings page shows when its calendar does not
+ * resolve for the viewer (nonexistent, or not a member): a section named by
+ * its own heading. A class selector because its name is the message text.
+ *
+ * @param scope - The page or a region within it
+ */
+export function emptyState(scope: Page | Locator): Locator {
+  return scope.locator('.empty-state');
 }
 
 /**
