@@ -22,9 +22,6 @@ export interface NavigationItem {
 
   /** Accessible label for the badge (pre-translated) */
   badgeLabel?: string;
-
-  /** Renders the row in the error colour (settings Log out) */
-  danger?: boolean;
 }
 
 /**

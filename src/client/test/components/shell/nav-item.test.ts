@@ -38,17 +38,16 @@ describe('shell nav-item', () => {
     expect(wrapper.find('.shell-nav-item__chevron').exists()).toBe(false);
   });
 
-  it('marks a danger item and an active item', () => {
-    const wrapper = mountItem('list', { danger: true, isActive: true });
+  it('marks an active item as the current page', () => {
+    const wrapper = mountItem('list', { isActive: true });
 
-    expect(wrapper.classes()).toContain('shell-nav-item--danger');
+    expect(wrapper.classes()).toContain('shell-nav-item--active');
     expect(wrapper.attributes('aria-current')).toBe('page');
   });
 
-  it('omits the danger class and aria-current by default', () => {
+  it('omits aria-current by default', () => {
     const wrapper = mountItem('sidebar');
 
-    expect(wrapper.classes()).not.toContain('shell-nav-item--danger');
     expect(wrapper.attributes('aria-current')).toBeUndefined();
   });
 });

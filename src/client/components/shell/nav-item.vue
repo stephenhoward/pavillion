@@ -16,10 +16,7 @@ const props = withDefaults(defineProps<{
     class="shell-nav-item"
     :class="[
       `shell-nav-item--${props.variant}`,
-      {
-        'shell-nav-item--active': props.item.isActive,
-        'shell-nav-item--danger': props.item.danger,
-      }
+      { 'shell-nav-item--active': props.item.isActive },
     ]"
     :aria-current="props.item.isActive ? 'page' : undefined"
   >
