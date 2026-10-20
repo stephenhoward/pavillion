@@ -1396,10 +1396,9 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
 
   it('Undo: local recipient routes to handleLocalActivityDispatch instead of HTTP', async () => {
     const localCalendar = Calendar.fromObject({ id: 'local-cal-undo' });
-    // UndoActivity.fromObject expects `object` to be a string (the AP id
-    // of the activity being undone), so we build the payload directly
-    // rather than going through createMockUndoActivity which wraps a
-    // nested object.
+    // Build the payload directly with `object` as the AP id of the activity
+    // being undone (the Undo(Announce) shape) rather than going through
+    // createMockUndoActivity, which wraps a nested object.
     const undoTargetId = `${LOCAL_ACTOR_URL}/activities/announce-undone-1`;
     const undoMsg: Record<string, unknown> = {
       '@context': 'https://www.w3.org/ns/activitystreams',
@@ -1432,6 +1431,44 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
       'Undo: local dispatch must fire for local recipient',
     ).toBe(true);
     expect(postStub.called, 'Undo: HTTP POST must not be used for local recipient').toBe(false);
+  });
+
+  it('Undo: delivers an embedded Follow intact rather than collapsing it to its id', async () => {
+    const localCalendar = Calendar.fromObject({ id: 'local-cal-undo-follow' });
+    const embeddedFollow = {
+      id: `${LOCAL_ACTOR_URL}/follows/follow-1`,
+      type: 'Follow',
+      actor: LOCAL_ACTOR_URL,
+      object: TARGETED_ACTOR_URI,
+    };
+    const undoMsg: Record<string, unknown> = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Undo',
+      actor: LOCAL_ACTOR_URL,
+      object: embeddedFollow,
+      id: `${embeddedFollow.id}/undo`,
+      to: [TARGETED_ACTOR_URI],
+    };
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Undo',
+      message: undoMsg,
+    });
+
+    resolveLocalStub.resolves(localCalendar);
+    sandbox.stub(service.calendarService, 'getCalendar').resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    sandbox.stub(service, 'resolveInboxUrl');
+
+    await service.processOutboxMessage(message);
+
+    const dispatchStub = mockInbox.handleLocalActivityDispatch as sinon.SinonStub;
+    expect(dispatchStub.calledOnce).toBe(true);
+    const dispatched = dispatchStub.firstCall.args[1];
+    expect(dispatched.type).toBe('Undo');
+    expect(dispatched.id).toBe(`${embeddedFollow.id}/undo`);
+    expect(dispatched.object).toEqual(embeddedFollow);
   });
 });
 

@@ -722,19 +722,37 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result).toBeNull();
     });
 
-    it('should normalize an embedded activity object to its id', () => {
-      // Mastodon inlines the activity being undone rather than referencing it.
+    it('should preserve an embedded activity object and derive the id from its id', () => {
+      // Mastodon inlines the activity being undone rather than referencing
+      // it, and our own outbound Undo(Follow) does the same. The outbox
+      // rebuilds the activity through fromObject before delivery, so the
+      // embedded shape must survive the round trip.
+      const embedded = {
+        id: 'https://example.com/activities/follow/1',
+        type: 'Follow',
+        actor: 'https://example.com/users/1',
+        object: 'https://other.example/calendars/cal',
+      };
       const result = UndoActivity.fromObject({
         actor: 'https://example.com/users/1',
-        object: {
-          id: 'https://example.com/activities/follow/1',
-          type: 'Follow',
-          actor: 'https://example.com/users/1',
-          object: 'https://other.example/calendars/cal',
-        },
+        object: embedded,
       });
       expect(result).not.toBeNull();
-      expect(result?.object).toBe('https://example.com/activities/follow/1');
+      expect(result?.object).toEqual(embedded);
+      expect(result?.id).toBe('https://example.com/activities/follow/1/undo');
+    });
+
+    it('should accept an embedded activity in the constructor and keep the id scheme', () => {
+      const embedded = {
+        id: 'https://example.com/calendars/cal/follows/1',
+        type: 'Follow',
+        actor: 'https://example.com/calendars/cal',
+        object: 'https://other.example/calendars/cal',
+      };
+      const activity = new UndoActivity('https://example.com/calendars/cal', embedded);
+      expect(activity.object).toEqual(embedded);
+      expect(activity.id).toBe('https://example.com/calendars/cal/follows/1/undo');
+      expect(activity.toObject().object).toEqual(embedded);
     });
 
     it('should return null when an embedded object carries no string id', () => {

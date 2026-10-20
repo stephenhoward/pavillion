@@ -1,13 +1,34 @@
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 
-class UndoActivity extends ActivityPubActivity {
+/**
+ * The activity being undone, carried inline on the Undo's `object`. Used
+ * for outbound Undo(Follow): peers (Mastodon among them) match an Undo to
+ * the Follow it reverses by the embedded activity, not by the Follow id
+ * alone, so a bare URI is not enough for them to drop the relationship.
+ */
+interface EmbeddedUndoTarget {
+  id: string;
+  type: string;
+  actor: string;
+  object: string;
+}
 
-  constructor( actorUrl: string, objectUrl: string ) {
+type UndoTarget = string | EmbeddedUndoTarget;
+
+class UndoActivity extends ActivityPubActivity {
+  declare object: UndoTarget;
+
+  /**
+   * @param actorUrl - The actor performing the Undo
+   * @param target - The undone activity's id, or the activity embedded
+   *   inline. The Undo's own id is always `{targetId}/undo` either way.
+   */
+  constructor( actorUrl: string, target: UndoTarget ) {
     super(actorUrl);
 
     this.type = 'Undo';
-    this.object = objectUrl;
-    this.id = objectUrl + '/undo';
+    this.object = target;
+    this.id = UndoActivity.targetIdOf(target) + '/undo';
   }
 
   /**
@@ -32,6 +53,12 @@ class UndoActivity extends ActivityPubActivity {
     return null;
   }
 
+  /**
+   * Rebuilds an Undo from its wire form. An embedded `object` is kept as
+   * sent so the outbox can re-serialize our own Undo(Follow) with the
+   * Follow still inline; inbound handlers must keep resolving the target
+   * through `targetIdOf` rather than reading the embedded contents.
+   */
   static fromObject(object: Record<string,any>): UndoActivity | null {
     if (!object || typeof object !== 'object') {
       return null;
@@ -46,7 +73,8 @@ class UndoActivity extends ActivityPubActivity {
       return null;
     }
 
-    let activity = new UndoActivity(object.actor, targetId);
+    const target: UndoTarget = typeof object.object === 'string' ? targetId : object.object;
+    let activity = new UndoActivity(object.actor, target);
     if ( object.id ) {
       activity.id = object.id;
     }
@@ -60,3 +88,4 @@ class UndoActivity extends ActivityPubActivity {
 }
 
 export default UndoActivity;
+export type { EmbeddedUndoTarget, UndoTarget };
