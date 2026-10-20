@@ -19,6 +19,8 @@ import PillButton from '@/client/components/common/pill-button.vue';
 const props = defineProps<{
   calendarId: string;
   reportId: string;
+  /** An id for the report heading, so a surrounding region can be named by it. */
+  headingId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -253,7 +255,7 @@ onMounted(async () => {
     <template v-else-if="report">
       <!-- Header -->
       <header class="report-detail__header">
-        <h2 class="report-detail__title">{{ t('detail.title') }}</h2>
+        <h2 :id="headingId" class="report-detail__title">{{ t('detail.title') }}</h2>
         <span
           class="status-badge"
           :class="statusBadgeClass(report.status)"

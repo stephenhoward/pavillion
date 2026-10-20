@@ -58,7 +58,7 @@ describe('ReportDetail', () => {
   /**
    * Helper to mount component with mocked store state
    */
-  const mountWithReport = async (report: Report) => {
+  const mountWithReport = async (report: Report, extraProps: { headingId?: string } = {}) => {
     // Set store state before mounting
     store.currentReport = {
       report,
@@ -72,6 +72,7 @@ describe('ReportDetail', () => {
       props: {
         calendarId: 'calendar-789',
         reportId: 'report-123',
+        ...extraProps,
       },
       global: {
         plugins: [pinia],
@@ -89,6 +90,20 @@ describe('ReportDetail', () => {
 
     return wrapper;
   };
+
+  describe('Heading id', () => {
+    it('puts the given headingId on the report heading, so a region can be named by it', async () => {
+      wrapper = await mountWithReport(createMockReport(false), { headingId: 'report-heading-1' });
+
+      expect(wrapper.find('h2.report-detail__title').attributes('id')).toBe('report-heading-1');
+    });
+
+    it('renders the heading without an id when none is given', async () => {
+      wrapper = await mountWithReport(createMockReport(false));
+
+      expect(wrapper.find('h2.report-detail__title').attributes('id')).toBeUndefined();
+    });
+  });
 
   describe('Pattern warning badges', () => {
     it('should display source flooding pattern badge when hasSourceFloodingPattern is true', async () => {
