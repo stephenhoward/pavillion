@@ -1,6 +1,7 @@
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { calendarReportsPath } from '@/server/moderation/model/settings-links';
 
 const textTemplate = compileTemplate('src/server/moderation', 'admin-report-notification.text.hbs');
 const htmlTemplate = compileTemplate('src/server/moderation', 'admin-report-notification.html.hbs');
@@ -10,7 +11,7 @@ const htmlTemplate = compileTemplate('src/server/moderation', 'admin-report-noti
  * has created a report about an event on their calendar.
  *
  * Includes priority indicator in the subject line, deadline display,
- * and a link to the owner review dashboard.
+ * and a link to the calendar's Reports settings page.
  */
 class AdminReportNotificationEmail extends EmailMessage {
   recipientEmail: string;
@@ -58,8 +59,7 @@ class AdminReportNotificationEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    // The reports tab of the calendar's management view, keyed by url name.
-    const reviewUrl = publicUrl('/settings/calendar/' + encodeURIComponent(this.calendarUrlName) + '?tab=reports');
+    const reviewUrl = publicUrl(calendarReportsPath(this.calendarUrlName));
     const priorityLabel = this.priority.toUpperCase();
 
     const templateData = {

@@ -213,9 +213,10 @@ describe('EscalationReminderEmail', () => {
 
     const mailData = email.buildMessage('en');
 
-    const reviewUrl = `https://${config.get('domain')}/settings/calendar/city-events?tab=reports`;
+    const reviewUrl = `https://${config.get('domain')}/settings/calendar/city-events/reports`;
     expect(mailData.textMessage).toContain(reviewUrl);
     expect(mailData.htmlMessage).toContain(Handlebars.escapeExpression(reviewUrl));
+    expect(mailData.textMessage).not.toContain('?tab=');
   });
 
   it('should pass the language to template rendering', () => {

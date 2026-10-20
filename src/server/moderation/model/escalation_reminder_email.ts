@@ -1,6 +1,7 @@
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { calendarReportsPath } from '@/server/moderation/model/settings-links';
 
 const textTemplate = compileTemplate('src/server/moderation', 'escalation-reminder.text.hbs');
 const htmlTemplate = compileTemplate('src/server/moderation', 'escalation-reminder.html.hbs');
@@ -10,7 +11,7 @@ const htmlTemplate = compileTemplate('src/server/moderation', 'escalation-remind
  * is approaching its auto-escalation deadline.
  *
  * Sent X hours before auto-escalation, includes a link
- * to the review dashboard and the time remaining.
+ * to the calendar's Reports settings page and the time remaining.
  */
 class EscalationReminderEmail extends EmailMessage {
   recipientEmail: string;
@@ -52,8 +53,7 @@ class EscalationReminderEmail extends EmailMessage {
       ? this.reportDescription.substring(0, 200) + '...'
       : this.reportDescription;
 
-    // The reports tab of the calendar's management view, keyed by url name.
-    const reviewUrl = publicUrl('/settings/calendar/' + encodeURIComponent(this.calendarUrlName) + '?tab=reports');
+    const reviewUrl = publicUrl(calendarReportsPath(this.calendarUrlName));
 
     const templateData = {
       eventName: truncatedName,
