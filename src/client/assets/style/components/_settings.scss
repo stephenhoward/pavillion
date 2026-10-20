@@ -120,3 +120,78 @@
     }
   }
 }
+
+/**
+ * Settings tree (settings/tree.vue): the persistent secondary sidebar at
+ * md+. Below md it is display: none, never only visually hidden, so its
+ * rows leave the accessibility tree while the list pages carry them. Row
+ * styles come from _settings-nav.scss. No ancestor clips overflow: the
+ * rows' focus ring extends past their edges.
+ */
+.settings-tree {
+  display: none;
+
+  @include pav-media(md) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-6);
+    flex-shrink: 0;
+    inline-size: var(--pav-settings-tree-width);
+    min-block-size: 100%;
+    padding: var(--pav-space-6) var(--pav-space-3);
+    background: var(--pav-surface-primary);
+    border-inline-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
+  }
+
+  &__skip {
+    @include sr-only;
+
+    &:focus-visible {
+      @include not-sr-only;
+
+      padding: var(--pav-space-2) var(--pav-space-4);
+      background: var(--pav-surface-primary);
+      color: var(--pav-text-primary);
+      border: 0;
+      border-radius: var(--pav-border-radius-md);
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
+      text-align: start;
+      cursor: pointer;
+    }
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-2);
+  }
+
+  &__heading {
+    margin: 0;
+    padding-inline: var(--pav-space-3);
+    color: var(--pav-text-secondary);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    letter-spacing: var(--pav-letter-spacing-wider);
+    text-transform: uppercase;
+  }
+
+  /* The rule above the footer is what sets Log out apart here, so the
+     list's own gap above it is not repeated */
+  &__footer {
+    margin-block-start: auto;
+    padding-block-start: var(--pav-space-4);
+    border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
+
+    .settings-nav__logout {
+      margin-block-start: 0;
+    }
+
+    /* PolicyLink sets its own margin and size; align it with the rows */
+    .policy-link {
+      padding-inline: var(--pav-space-3);
+      color: var(--pav-text-secondary);
+    }
+  }
+}
