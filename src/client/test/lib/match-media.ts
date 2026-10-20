@@ -4,7 +4,13 @@
  * happy-dom ships a real matchMedia whose answer depends on its own window
  * size, so tests that branch on a media query replace it with this fake and
  * drive the result directly. Every query passed to matchMedia is answered by
- * the same fake MediaQueryList, which keeps the listener count observable.
+ * the same fake MediaQueryList, which keeps the listener count observable;
+ * because one MediaQueryList answers every query, its `media` reflects only
+ * the most recent matchMedia call.
+ *
+ * useShellLayout() caches the first MediaQueryList it receives, so tests of any
+ * of its consumers must call resetShellLayoutForTesting() whenever they install
+ * a new fake, or the singleton keeps listening to the previous one.
  *
  * The helper does not register its own afterEach: callers call restore() in
  * their afterEach so the original matchMedia is back before the next file.

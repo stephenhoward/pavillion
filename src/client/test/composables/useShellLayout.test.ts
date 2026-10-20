@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { nextTick, watch } from 'vue';
 
 import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
@@ -81,8 +81,20 @@ describe('useShellLayout', () => {
     expect(mainNavIsSidebar.value).toBe(false);
   });
 
-  it('does not attach a listener until first called', () => {
+  it('does not query matchMedia at import time, only on the first call', async () => {
+    // Import a fresh copy of the module with the fake already installed, so an
+    // import-time matchMedia call would be recorded.
+    vi.resetModules();
+    const fresh = await import('@/client/composables/useShellLayout');
+
     expect(fake.queries).toHaveLength(0);
     expect(fake.listenerCount()).toBe(0);
+
+    fresh.useShellLayout();
+
+    expect(fake.queries).toHaveLength(1);
+    expect(fake.listenerCount()).toBe(1);
+
+    fresh.resetShellLayoutForTesting();
   });
 });
