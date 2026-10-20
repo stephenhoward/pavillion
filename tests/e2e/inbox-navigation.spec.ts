@@ -15,10 +15,11 @@ import {
   seedNotificationFixtures,
   type NotificationFixtures,
 } from './helpers/notification-fixtures';
+import { calendarLeafPath, calendarReportPath, reportRegion } from './helpers/settings-nav';
 
 /**
- * E2E Tests: inbox row navigation, the `?report=` deep link, and row keyboard
- * order (pv-mvfk.7).
+ * E2E Tests: inbox row navigation, the `reports/:reportId` deep link, and
+ * row keyboard order.
  *
  * Kept out of `inbox-notifications.spec.ts` deliberately: that file is a
  * serial block covering the PATCH write surface, and these concerns share
@@ -112,17 +113,20 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     expect(page.url()).toBe(`${env.baseURL}/event/${ADMIN_EVENT_ID}`);
   });
 
-  test('calendar target (verb: EditorInvited) opens calendar management', async ({ page }) => {
+  test('calendar target (verb: EditorInvited) opens the calendar\'s Editors page', async ({ page }) => {
     // `EditorInvited` stands in for the `calendar` kind. `EditorRevoked`
     // stores the same object shape but deliberately derives `null`, which is
     // a unit-tier distinction, not a routing one.
     await loginViaUi(page, env.baseURL, FRESHUSER_EMAIL, FRESHUSER_PASSWORD);
 
     const row = await inboxRow(page, 'invited you to edit');
-    await row.locator('a.object-link').click();
+    const objectLink = row.locator('a.object-link');
+    const editorsPath = calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'editors');
+    await expect(objectLink).toHaveAttribute('href', editorsPath);
+    await objectLink.click();
 
-    await page.waitForURL(`**/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`, { timeout: 10000 });
-    expect(page.url()).toBe(`${env.baseURL}/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`);
+    await page.waitForURL(`**${editorsPath}`, { timeout: 10000 });
+    expect(page.url()).toBe(`${env.baseURL}${editorsPath}`);
   });
 
   test('moderation_report target (verb: Flag, viewed as instance admin) opens the moderation queue', async ({ page }) => {
@@ -139,7 +143,7 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     expect(page.url()).toBe(`${env.baseURL}/settings/admin/moderation/reports/${fixtures.ownedReportId}`);
   });
 
-  test('owner_report target (verb: Flag, same report viewed as the calendar owner) opens the calendar reports tab', async ({ page }) => {
+  test('owner_report target (verb: Flag, same report viewed as the calendar owner) opens the report on the calendar\'s Reports page', async ({ page }) => {
     // The same `Flag` row and the SAME reportId as the case above, viewed by
     // TestUser — a calendar owner who is not an instance admin. Two viewers,
     // one report, two destinations: that is the server-side role branch this
@@ -149,143 +153,125 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     const row = await inboxReportRow(page, fixtures.ownedReportId);
     const objectLink = row.locator('a.object-link');
 
-    // Nothing in the app emits a `?report=` URL as a string — `routeFor`
+    // Nothing in the app emits the report URL as a string — `routeFor`
     // returns a structured location and vue-router serializes it at render
     // time. Reading the rendered href is the only way to assert the exact
-    // query the producer actually emits.
-    await expect(objectLink).toHaveAttribute(
-      'href',
-      `/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}?tab=reports&report=${fixtures.ownedReportId}`,
-    );
+    // path the producer actually emits.
+    const reportPath = calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId);
+    await expect(objectLink).toHaveAttribute('href', reportPath);
 
     await objectLink.click();
-    await page.waitForURL('**/settings/calendar/*?tab=reports&report=*', { timeout: 10000 });
-    expect(page.url()).toBe(
-      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
-      + `?tab=reports&report=${fixtures.ownedReportId}`,
-    );
+    await page.waitForURL('**/settings/calendar/*/reports/*', { timeout: 10000 });
+    expect(page.url()).toBe(`${env.baseURL}${reportPath}`);
 
-    // The click path is a cross-route navigation, so the management view
-    // mounts fresh and its `onBeforeMount` deep-link handler fires.
+    // The Reports leaf watches `route.params.reportId`, so the report opens
+    // on the click path as it does on a fresh load.
     await expect(page.locator('.report-detail')).toBeVisible({ timeout: 10000 });
   });
 });
 
 /**
- * Observable state of the calendar management view, reduced to the things a
- * viewer could use to tell one `?report=` outcome from another.
+ * Observable state of the calendar's Reports page, reduced to the things a
+ * viewer could use to tell one deep-link outcome from another.
  *
  * The deep link must not disclose whether a report exists, so the malformed,
  * non-existent and unauthorised cases have to be identical to the absent
- * case — not merely "no crash". Comparing a structured snapshot makes the
- * failure legible when they diverge.
+ * case — not merely "no crash". `path` is part of the snapshot so equality
+ * also proves each rejected id was replaced to the reports list. Comparing a
+ * structured snapshot makes the failure legible when they diverge.
  */
-async function managementViewState(page: Page) {
+async function reportsViewState(page: Page) {
   return page.evaluate(() => ({
-    // `|| null` rather than `?? null`: an unfocused page leaves
-    // `document.activeElement` on `<body>`, whose id is the empty string.
-    activeElementId: document.activeElement?.id || null,
+    path: location.pathname + location.search,
+    activeElementRole: document.activeElement?.getAttribute('role') ?? null,
     activeElementTag: document.activeElement?.tagName.toLowerCase() ?? null,
-    reportsTabSelected: document.getElementById('reports-tab')?.getAttribute('aria-selected') ?? null,
-    reportsPanelHidden: document.getElementById('reports-panel')?.hasAttribute('hidden') ?? null,
-    tabIds: Array.from(document.querySelectorAll('[role="tab"]')).map(tab => tab.id),
     reportDetailCount: document.querySelectorAll('.report-detail').length,
     reportsDashboardCount: document.querySelectorAll('.reports-dashboard').length,
     alertCount: document.querySelectorAll('[role="alert"]').length,
   }));
 }
 
+const REPORTS_LIST_URL = /\/reports$/;
+
 /**
- * Load the owner's management view at `query` and wait for the reports
- * dashboard's table to finish rendering, so the snapshot is taken against a
- * settled view rather than a loading state.
+ * Load the owner's Reports page at `suffix` (empty for the list, or
+ * `/<id>`) and wait for the dashboard's table to finish rendering, so the
+ * snapshot is taken against a settled view rather than a loading state.
  *
- * Only for cases that issue NO report-detail request — the baseline with no
- * `?report=`, and the malformed id that `root.vue`'s `UUID_REGEX` rejects
- * before any fetch. The dashboard's own list request is on a different
- * timeline from the detail fetch, so for cases that do fetch, this settle
- * point proves nothing about the thing under test: use
+ * Only for cases that issue NO report-detail request — the baseline list, and
+ * the malformed id that `calendar-management/reports.vue`'s `UUID_REGEX`
+ * rejects before any fetch. The dashboard's own list request is on a
+ * different timeline from the detail fetch, so for cases that do fetch, this
+ * settle point proves nothing about the thing under test: use
  * `loadRejectedReportView`.
  */
-async function loadPlainReportsView(page: Page, query: string) {
-  await page.goto(`${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}${query}`);
+async function loadPlainReportsView(page: Page, suffix: string) {
+  await page.goto(`${env.baseURL}${calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')}${suffix}`);
+  await expect(page).toHaveURL(REPORTS_LIST_URL, { timeout: 10000 });
   await expect(page.locator('.reports-dashboard__table-container')).toBeVisible({ timeout: 10000 });
-  return managementViewState(page);
+  return reportsViewState(page);
 }
 
 /**
- * Load the owner's management view deep-linked at `reportId`, wait for the
+ * Load the owner's Reports page deep-linked at `reportId`, wait for the
  * report-detail request the deep link issues, and assert the server refused
- * it — then snapshot.
+ * it — then wait for the replace to the list and snapshot.
  *
  * Settling on the response rather than on the dashboard table is the point.
- * The dashboard's list request and the detail fetch are independent; the
- * detail fetch happening to resolve first is incidental to the order
- * `root.vue` awaits them in, not enforced by anything. Waiting on the
- * dashboard would let a regression that DID render a foreign report still
- * snapshot green, because the snapshot could be taken before that render
- * landed. Asserting the 404 also upgrades the case from "nothing rendered" to
- * "the server refused", which is where the guarantee actually has to live.
+ * The dashboard's list request and the detail fetch are independent; waiting
+ * on the dashboard alone would let a regression that DID render a foreign
+ * report still snapshot green, because the snapshot could be taken before
+ * that render landed. Asserting the 404 also upgrades the case from "nothing
+ * rendered" to "the server refused", which is where the guarantee actually
+ * has to live.
  */
 async function loadRejectedReportView(page: Page, reportId: string) {
   const detailResponse = page.waitForResponse(
-    response => response.url().includes(`/reports/${reportId}`),
+    // The API request, not the page navigation, whose path also ends in the id.
+    response => response.url().includes('/api/v1/') && response.url().includes(`/reports/${reportId}`),
     { timeout: 10000 },
   );
 
-  await page.goto(
-    `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
-    + `?tab=reports&report=${reportId}`,
-  );
+  await page.goto(`${env.baseURL}${calendarReportPath(TESTUSER_CALENDAR_URL_NAME, reportId)}`);
 
   expect((await detailResponse).status()).toBe(404);
+  await expect(page).toHaveURL(REPORTS_LIST_URL, { timeout: 10000 });
   await expect(page.locator('.reports-dashboard__table-container')).toBeVisible({ timeout: 10000 });
-  return managementViewState(page);
+  return reportsViewState(page);
 }
 
-test.describe('Reports deep link (?report=)', () => {
+test.describe('Reports deep link (reports/:reportId)', () => {
   // Every case here is an OWNER on their own calendar. A viewer with no
-  // relationship to the calendar renders a blank management page by
-  // pre-existing route design, unrelated to `?report=` — filed as pv-gfm9 and
-  // out of scope.
-  //
-  // Every case also holds `?tab=reports` constant. `routeFor` emits both query
-  // keys, and the tab is restored from `?tab=` before and independently of the
-  // report gate, so the reports tab activates even when the report id is
-  // rejected. Baselining against a bare no-query URL would compare two
-  // different views and fail on a non-defect.
+  // relationship to the calendar is covered by settings-navigation.spec.ts,
+  // as is the legacy `?tab=reports&report=` link.
 
-  test('a valid owned report activates the reports tab and moves focus to the panel', async ({ page }) => {
+  test('a valid owned report opens and moves focus to the report region', async ({ page }) => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
 
-    await page.goto(
-      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
-      + `?tab=reports&report=${fixtures.ownedReportId}`,
-    );
+    const reportPath = calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId);
+    await page.goto(`${env.baseURL}${reportPath}`);
 
     await expect(page.locator('.report-detail')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#reports-tab')).toHaveAttribute('aria-selected', 'true');
 
     // Focus, not merely visibility: the whole point of the deep link is that
-    // a keyboard or screen-reader user arrives inside the panel.
-    const focusedId = await page.evaluate(() => document.activeElement?.id ?? null);
-    expect(focusedId).toBe('reports-panel');
+    // a keyboard or screen-reader user arrives inside the report.
+    await expect(reportRegion(page)).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe(reportPath);
   });
 
   test('malformed, non-existent and unauthorised report ids are indistinguishable from absent', async ({ page }) => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
 
-    // Baseline: the reports tab requested, no report named.
-    const absent = await loadPlainReportsView(page, '?tab=reports');
-    expect(absent.reportsTabSelected).toBe('true');
+    // Baseline: the reports list, no report named.
+    const absent = await loadPlainReportsView(page, '');
+    expect(absent.path).toBe(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports'));
     expect(absent.reportDetailCount).toBe(0);
-    expect(absent.activeElementId).toBeNull();
     expect(absent.activeElementTag).toBe('body');
 
-    // Malformed ids never reach the network: `root.vue` rejects them on shape
-    // before the fetch, so this is the one negative case with no response to
-    // settle on and it stays on the dashboard settle point.
-    const malformed = await loadPlainReportsView(page, '?tab=reports&report=not-a-uuid');
+    // Malformed ids never reach the network: the Reports leaf rejects them on
+    // shape before the fetch, so this is the one negative case with no
+    // response to settle on and it stays on the dashboard settle point.
+    const malformed = await loadPlainReportsView(page, '/not-a-uuid');
     expect(malformed).toEqual(absent);
 
     // Well-formed UUID v4, no such report anywhere.
