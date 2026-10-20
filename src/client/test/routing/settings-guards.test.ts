@@ -1,12 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
-import { createPinia, setActivePinia } from 'pinia';
+import axios from 'axios';
+import { defineComponent, h } from 'vue';
+import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, createWebHistory, type NavigationGuard, type RouteRecordRaw, type Router } from 'vue-router';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { mountComponent } from '@/client/test/lib/vue';
 import PageHeader from '@/client/components/logged_in/settings/page-header.vue';
+import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
@@ -24,6 +27,21 @@ import {
   isSettingsLeafGroup,
   type SettingsLeafGroup,
 } from '@/client/components/logged_in/settings/nav-items';
+
+// The real-layout cases mount the real settings layout under these stand-ins,
+// so the shell around it and the sign-out page stay out of the test.
+vi.mock('@/client/components/logged_in/root.vue', () => ({
+  default: defineComponent({ name: 'AppShell', template: '<RouterView />' }),
+}));
+vi.mock('@/client/components/logged_out/root.vue', () => ({
+  default: defineComponent({ name: 'AuthShell', template: '<RouterView />' }),
+}));
+vi.mock('@/client/components/logged_out/logout.vue', () => ({
+  default: defineComponent({ name: 'LogoutPage', render: () => h('main', { 'data-page': 'logout' }) }),
+}));
+
+const owned = (id: string, urlName: string) => new CalendarInfo(new Calendar(id, urlName), 'owner');
+const edited = (id: string, urlName: string) => new CalendarInfo(new Calendar(id, urlName), 'editor');
 
 /** A route record with its path joined to every ancestor's below /settings. */
 interface FlatRecord {
@@ -76,11 +94,25 @@ function flatten(record: RouteRecordRaw, path = ''): FlatRecord[] {
   return [own, ...children];
 }
 
-/** Path prefix (below /settings) of each group whose records have been converted to the tree. */
-const CONVERTED_GROUP_PATHS: Partial<Record<SettingsLeafGroup, string>> = {
+/** Path prefix (below /settings) of each group's records. */
+const GROUP_PATHS: Readonly<Record<SettingsLeafGroup, string>> = {
   calendar: 'calendar/:calendar',
   account: 'account',
+  admin: 'admin',
 };
+
+/** Route names of the index records: the root's and each group's list page. */
+const INDEX_ROUTE_NAMES = new Set<string>(['settings', ...Object.values(SETTINGS_GROUP_INDEX_ROUTES)]);
+
+/** A named route's path, every `:param` in its record path filled with a placeholder. */
+function resolvedPathOf(router: Router, name: string): string {
+  const record = router.getRoutes().find((candidate) => candidate.name === name);
+  if (!record) {
+    throw new Error(`no route named ${name}`);
+  }
+  const params = Object.fromEntries([...record.path.matchAll(/:(\w+)/g)].map(([, key]) => [key, `${key}-x`]));
+  return router.resolve({ name, params }).path;
+}
 
 /** A record path prefix as a pattern over resolved paths: each `:param` matches one segment. */
 function resolvedPrefix(prefix: string): RegExp {
@@ -100,9 +132,11 @@ describe('settings routes on the real route table', () => {
   let sandbox: sinon.SinonSandbox;
   let getOptions: sinon.SinonStub;
   let media: FakeMatchMedia;
+  let pinia: Pinia;
 
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
     sandbox = sinon.createSandbox();
     sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded').callsFake(async () => {
       useCalendarStore().setCalendarInfos([]);
@@ -131,6 +165,158 @@ describe('settings routes on the real route table', () => {
     router.go(delta);
     await flushPromises();
   }
+
+  const loadStub = () => CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub;
+
+  /** The viewer's own calendars, put in the store whenever a guard loads them. */
+  function viewerHolds(...infos: CalendarInfo[]): void {
+    loadStub().callsFake(async () => {
+      useCalendarStore().setCalendarInfos(infos);
+      return infos;
+    });
+  }
+
+  /**
+   * A first page load of `path` at md+ through the browser history, as
+   * app.ts starts the router: where it lands, and whether it added an entry.
+   */
+  async function coldLoadAtMdUp(path: string): Promise<{ path: string; addressBar: string; addedEntry: boolean }> {
+    const original = window.location.pathname;
+    window.history.replaceState({}, '', path);
+    try {
+      media.setMatches(true);
+      activeRouter = createRouter({ history: createWebHistory(), routes: buildRoutes() });
+      const lengthBefore = window.history.length;
+
+      await activeRouter.push(activeRouter.options.history.location);
+
+      return {
+        path: activeRouter.currentRoute.value.path,
+        addressBar: window.location.pathname,
+        addedEntry: window.history.length !== lengthBefore,
+      };
+    }
+    finally {
+      activeRouter?.options.history.destroy();
+      window.history.replaceState({}, '', original);
+    }
+  }
+
+  describe('root index', () => {
+    it('renders the root list page below md', async () => {
+      viewerHolds(owned('o1', 'riverside'));
+      const router = routerAt(false);
+      await router.push('/settings');
+
+      expect(router.currentRoute.value.name).toBe('settings');
+      expect(router.currentRoute.value.path).toBe('/settings');
+      expect(router.currentRoute.value.matched.at(-1)?.components?.default).toBe(SettingsListPage);
+    });
+
+    it.each([
+      ['an owner on General', [owned('o1', 'riverside')], '/settings/calendar/riverside/general'],
+      ['an editor on Editors', [edited('e1', 'shared')], '/settings/calendar/shared/editors'],
+      ['a viewer with no calendars on Profile', [], '/settings/account/profile'],
+    ])('lands %s at md+', async (_who, infos, expected) => {
+      viewerHolds(...infos);
+      const router = routerAt(true);
+      await router.push('/settings');
+      expect(router.currentRoute.value.fullPath).toBe(expected);
+    });
+
+    it('forwards to the persisted current calendar while it is still the viewer\'s', async () => {
+      viewerHolds(owned('o1', 'riverside'), owned('o2', 'harbour'));
+      useCalendarStore().selectedCalendarId = 'o2';
+      const router = routerAt(true);
+      await router.push('/settings');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/harbour/general');
+    });
+
+    it('ignores a persisted calendar the viewer no longer holds', async () => {
+      viewerHolds(owned('o1', 'riverside'));
+      useCalendarStore().selectedCalendarId = 'gone';
+      const router = routerAt(true);
+      await router.push('/settings');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/riverside/general');
+    });
+
+    it('stays on the root list at md+ when the calendar load fails, never falling back to Profile', async () => {
+      loadStub().rejects(new Error('offline'));
+      const router = routerAt(true);
+      await router.push('/settings');
+      expect(router.currentRoute.value.fullPath).toBe('/settings');
+    });
+
+    it.each(['/calendar/riverside', '/inbox'])(
+      'leaves settings for %s on Back after a forward at md+',
+      async (from) => {
+        viewerHolds(owned('o1', 'riverside'));
+        const router = routerAt(true);
+        await router.push(from);
+
+        await router.push('/settings');
+        expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/riverside/general');
+
+        await traverse(router, -1);
+        expect(router.currentRoute.value.fullPath).toBe(from);
+      },
+    );
+
+    it('replaces a cold load of the root, adding no history entry', async () => {
+      viewerHolds(owned('o1', 'riverside'));
+      expect(await coldLoadAtMdUp('/settings')).toEqual({
+        path: '/settings/calendar/riverside/general',
+        addressBar: '/settings/calendar/riverside/general',
+        addedEntry: false,
+      });
+    });
+  });
+
+  describe('calendar index', () => {
+    it.each([
+      ['owner', false, '/settings/calendar/riverside'],
+      ['owner', true, '/settings/calendar/riverside/general'],
+      ['editor', false, '/settings/calendar/riverside'],
+      ['editor', true, '/settings/calendar/riverside/editors'],
+    ] as const)('lands an %s at md+ = %s on %s', async (role, sidebar, expected) => {
+      viewerHolds(role === 'owner' ? owned('c1', 'riverside') : edited('c1', 'riverside'));
+      const router = routerAt(sidebar);
+      await router.push('/settings/calendar/riverside');
+      expect(router.currentRoute.value.fullPath).toBe(expected);
+    });
+
+    it.each([false, true])('stays at the index for a calendar the viewer does not hold (md+ = %s)', async (sidebar) => {
+      viewerHolds(owned('c1', 'riverside'));
+      const router = routerAt(sidebar);
+      await router.push('/settings/calendar/elsewhere');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/elsewhere');
+    });
+
+    it.each([false, true])('stays at the index when the calendar load fails (md+ = %s)', async (sidebar) => {
+      loadStub().rejects(new Error('offline'));
+      const router = routerAt(sidebar);
+      await router.push('/settings/calendar/riverside');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/riverside');
+    });
+  });
+
+  describe('cold load at md+ before the stores have loaded', () => {
+    it.each(['/settings', '/settings/calendar/shared'])('waits for the calendars, then forwards %s', async (path) => {
+      const infos = [edited('e1', 'shared')];
+      loadStub().callsFake(() => new Promise<CalendarInfo[]>((resolve) => {
+        setTimeout(() => {
+          useCalendarStore().setCalendarInfos(infos);
+          resolve(infos);
+        }, 5);
+      }));
+      const router = routerAt(true);
+      expect(useCalendarStore().loaded).toBe(false);
+
+      await router.push(path);
+
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+    });
+  });
 
   describe('account index', () => {
     it('renders the account list page below md', async () => {
@@ -186,35 +372,17 @@ describe('settings routes on the real route table', () => {
     });
 
     it('replaces a cold load of an index, adding no history entry', async () => {
-      const original = window.location.pathname;
-      window.history.replaceState({}, '', '/settings/account');
-      try {
-        media.setMatches(true);
-        activeRouter = createRouter({ history: createWebHistory(), routes: buildRoutes() });
-        const lengthBefore = window.history.length;
-
-        await activeRouter.push(activeRouter.options.history.location);
-
-        expect(activeRouter.currentRoute.value.path).toBe('/settings/account/profile');
-        expect(window.location.pathname).toBe('/settings/account/profile');
-        expect(window.history.length).toBe(lengthBefore);
-      }
-      finally {
-        activeRouter?.options.history.destroy();
-        window.history.replaceState({}, '', original);
-      }
+      expect(await coldLoadAtMdUp('/settings/account')).toEqual({
+        path: '/settings/account/profile',
+        addressBar: '/settings/account/profile',
+        addedEntry: false,
+      });
     });
   });
 
   describe('calendar leaf gate', () => {
-    const loadStub = () => CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub;
-
     function viewerHas(role: 'owner' | 'editor') {
-      const infos = [new CalendarInfo(new Calendar('c1', 'shared'), role)];
-      loadStub().callsFake(async () => {
-        useCalendarStore().setCalendarInfos(infos);
-        return infos;
-      });
+      viewerHolds(role === 'owner' ? owned('c1', 'shared') : edited('c1', 'shared'));
     }
 
     it.each([
@@ -331,7 +499,7 @@ describe('settings routes on the real route table', () => {
       expect(unguarded).toEqual([]);
     });
 
-    it.each(Object.entries(CONVERTED_GROUP_PATHS) as [SettingsLeafGroup, string][])(
+    it.each(Object.entries(GROUP_PATHS) as [SettingsLeafGroup, string][])(
       'names every %s record after its index or a leaf in the tree',
       (group, prefix) => {
         const records = flatten(settingsRecord(buildRoutes()))
@@ -353,7 +521,7 @@ describe('settings routes on the real route table', () => {
       },
     );
 
-    it.each(Object.entries(CONVERTED_GROUP_PATHS) as [SettingsLeafGroup, string][])(
+    it.each(Object.entries(GROUP_PATHS) as [SettingsLeafGroup, string][])(
       'routes every %s leaf in the tree under its group',
       (group, prefix) => {
         const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
@@ -366,6 +534,43 @@ describe('settings routes on the real route table', () => {
         }
       },
     );
+
+    // Enumerated from the router, not from the tree, so a record the tree
+    // does not list (a sub-route missing from subRoutes) fails here.
+    it('places every named settings record other than an index in the tree', () => {
+      const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
+      const named = router.getRoutes()
+        .filter((record) => record.path.startsWith('/settings') && typeof record.name === 'string')
+        .map((record) => String(record.name))
+        .filter((name) => !INDEX_ROUTE_NAMES.has(name));
+
+      expect(named).toEqual(expect.arrayContaining(['calendar_report_detail', 'moderation_report_detail', 'funding_plan']));
+      const outsideTree = named.filter((name) => findLeafByRouteName(name) === null);
+      expect(outsideTree).toEqual([]);
+    });
+
+    // nav-list.vue marks the current row by path, the page header titles by
+    // route name through subRoutes; they agree only while a sub-route nests
+    // beneath its leaf.
+    it('resolves every sub-route to a path beneath its leaf\'s path', () => {
+      const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
+      const everyLeaf = (['calendar', 'account', 'admin'] as const).flatMap((group) => groupItems(
+        group, { calendarUrlName: 'cal', isOwner: true, isAdmin: true, fundingEnabled: true },
+      ));
+      const subRouted = everyLeaf.filter((leaf) => 'subRoutes' in leaf && leaf.subRoutes);
+
+      expect(subRouted.length).toBeGreaterThan(0);
+      for (const leaf of subRouted) {
+        if (!('routeName' in leaf) || !leaf.subRoutes) {
+          continue;
+        }
+        const leafPath = resolvedPathOf(router, leaf.routeName);
+        for (const subRoute of leaf.subRoutes) {
+          expect(resolvedPathOf(router, subRoute), `${subRoute} under ${leaf.routeName}`)
+            .toMatch(new RegExp(`^${leafPath}/`));
+        }
+      }
+    });
 
     // settings/root.vue keys its pane on these record paths.
     it('matches the group record paths the settings layout keys its pane on', () => {
@@ -382,15 +587,15 @@ describe('settings routes on the real route table', () => {
         .map(({ record }) => record)
         .filter((record) => record.meta?.settingsGroup !== undefined);
 
-      expect(indexes.map((record) => record.meta?.settingsGroup)).toEqual(expect.arrayContaining(['calendar', 'account']));
+      expect(indexes.map((record) => record.meta?.settingsGroup))
+        .toEqual(expect.arrayContaining(['root', 'calendar', 'account']));
       for (const record of indexes) {
         const group = record.meta!.settingsGroup!;
         const name = String(record.name);
-        if (isSettingsLeafGroup(group)) {
-          expect(name).toBe(SETTINGS_GROUP_INDEX_ROUTES[group]);
-        }
+        expect(name).toBe(isSettingsLeafGroup(group) ? SETTINGS_GROUP_INDEX_ROUTES[group] : 'settings');
         // Profile is a leaf, and the forward's empty-group fallback: an index
         // named after any leaf (Profile included) would forward to itself.
+        expect(name).not.toBe('profile');
         expect(findLeafByRouteName(name), `index ${name}`).toBeNull();
       }
     });
@@ -444,6 +649,108 @@ describe('settings routes on the real route table', () => {
       expect(w.find('h1').text()).toBe('Editors');
       expect(w.find('.settings-page-header__eyebrow button.calendar-switcher').exists()).toBe(true);
       expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_editors');
+    });
+  });
+
+  // The real settings layout and calendar-management/root.vue, under the
+  // stand-in app shell mocked at the top of this file.
+  describe('in the real settings layout', () => {
+    const session = { isLoggedIn: () => true, isAdmin: () => false, logout: () => {} };
+    let wrapper: VueWrapper | null = null;
+    let axiosGet: sinon.SinonStub;
+
+    beforeEach(() => {
+      // A tripwire: any per-calendar request the layout makes sees the two
+      // unresolved cases differently.
+      axiosGet = sandbox.stub(axios, 'get');
+    });
+
+    afterEach(() => {
+      wrapper?.unmount();
+      wrapper = null;
+      document.body.innerHTML = '';
+    });
+
+    async function mountAt(path: string, sidebar: boolean): Promise<{ wrapper: VueWrapper; router: Router }> {
+      const router = routerAt(sidebar);
+      await router.push(path);
+      await router.isReady();
+      wrapper = mountComponent({ template: '<RouterView />' }, router, {
+        pinia, attachTo: document.body, provide: { authn: session },
+      });
+      await flushPromises();
+      return { wrapper, router };
+    }
+
+    it('offers Log out in the root list below md, as a button that signs the viewer out', async () => {
+      viewerHolds(owned('o1', 'riverside'));
+      const { wrapper: w, router } = await mountAt('/settings', false);
+
+      const logOut = w.find('.settings-list-page .settings-nav__logout button');
+      expect(logOut.exists()).toBe(true);
+      expect(logOut.text()).toBe('Log out');
+
+      await logOut.trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('logout');
+    });
+
+    describe('a calendar the viewer does not hold', () => {
+      const notFound = Object.assign(new Error('Not Found'), { response: { status: 404 } });
+      beforeEach(() => {
+        // The empty state draws its heading id from Math.random; pin it so
+        // the two renders can be compared whole.
+        sandbox.stub(Math, 'random').returns(0.5);
+      });
+
+      /**
+       * What the viewer sees at `path` when `harbour` is another account's
+       * calendar (the instance serves it, and a stale selection on this
+       * browser names it) or no calendar at all. The viewer holds only
+       * riverside in both cases.
+       */
+      async function seenAt(path: string, sidebar: boolean, harbour: 'another account' | 'nonexistent') {
+        wrapper?.unmount();
+        document.body.innerHTML = '';
+        pinia = createPinia();
+        setActivePinia(pinia);
+        viewerHolds(owned('o1', 'riverside'));
+        if (harbour === 'another account') {
+          useCalendarStore().selectedCalendarId = 'h1';
+          axiosGet.callsFake(async (url: string) => {
+            if (url.includes('harbour')) {
+              return { data: { id: 'h1', urlName: 'harbour', userRelationship: 'owner' } };
+            }
+            throw notFound;
+          });
+        }
+        else {
+          axiosGet.rejects(notFound);
+        }
+
+        const { wrapper: w, router } = await mountAt(path, sidebar);
+        return {
+          fullPath: router.currentRoute.value.fullPath,
+          title: document.title,
+          h1: w.find('h1').text(),
+          html: document.body.innerHTML,
+        };
+      }
+
+      it.each([
+        ['/settings/calendar/harbour', false],
+        ['/settings/calendar/harbour', true],
+        ['/settings/calendar/harbour/general', false],
+        ['/settings/calendar/harbour/general', true],
+      ])('renders %s identically for either, at the unchanged URL (md+ = %s)', async (path, sidebar) => {
+        const another = await seenAt(path, sidebar, 'another account');
+        const nonexistent = await seenAt(path, sidebar, 'nonexistent');
+
+        expect(another).toEqual(nonexistent);
+        expect(another.fullPath).toBe(path);
+        expect(another.html).toContain('calendar-management-root');
+        expect(another.html).not.toContain('harbour');
+      });
     });
   });
 });

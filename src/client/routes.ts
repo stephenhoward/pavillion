@@ -81,7 +81,8 @@ const RedirectOnly = { render: () => null };
  * in `src/common/routing/reserved-segments.ts` (DEC-018); a client route needs
  * only that reservation, never a `SERVER_OWNED_SEGMENTS` entry.
  *
- * Bare `/calendar`, `/feed` and `/settings` resolve to the current calendar.
+ * Bare `/calendar` and `/feed` resolve to the current calendar; bare `/settings`
+ * is the settings root list, forwarding to a leaf of it at md+.
  * Old paths (`/profile`, `/funding`, `/admin/*`, `/calendar/:calendar/manage`)
  * have no redirects.
  */
@@ -113,8 +114,10 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
         { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn, meta: { shellRail: true },
           children: [
             // A parent's beforeEnter does not run between siblings, so each child guards itself.
-            { path: '', component: RedirectOnly, name: 'settings',
-              beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
+            // The root: the root list below md; at md+ the current calendar's first visible leaf
+            // (Profile with no calendars).
+            { path: '', component: SettingsListPage, name: 'settings', meta: { settingsGroup: 'root' },
+              beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('root')] },
             // Calendar: the parent has no name. Its gate refuses an owner-only leaf on entry;
             // root.vue resolves the calendar and gates moves within the subtree.
             { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: [mustBeLoggedIn, calendarLeafGate],

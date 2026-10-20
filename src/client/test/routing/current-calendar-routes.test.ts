@@ -42,10 +42,6 @@ describe('current calendar route guards', () => {
         { path: '/feed', component: Stub, name: 'feed_root',
           beforeEnter: createCurrentCalendarRedirect('feed', { name: 'calendars' }, load) },
         { path: '/feed/:calendar', component: Stub, name: 'feed' },
-        { path: '/settings', component: Stub, name: 'settings',
-          beforeEnter: createCurrentCalendarRedirect('calendar_management', { name: 'profile' }, load) },
-        { path: '/settings/calendar/:calendar', component: Stub, name: 'calendar_management' },
-        { path: '/settings/account/profile', component: Stub, name: 'profile' },
       ],
     });
     router.beforeEach(createCurrentCalendarSync(() => loggedIn, load));
@@ -72,20 +68,18 @@ describe('current calendar route guards', () => {
 
   it('overwrites a stale persisted id', async () => {
     useCalendarStore().selectedCalendarId = 'gone';
-    await router.push('/settings');
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/first');
+    await router.push('/calendar');
+    expect(router.currentRoute.value.fullPath).toBe('/calendar/first');
     expect(useCalendarStore().selectedCalendarId).toBe('o1');
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('o1');
   });
 
-  it('null resolution renders /calendar in place and sends /feed and /settings to their fallbacks', async () => {
+  it('null resolution renders /calendar in place and sends /feed to its fallback', async () => {
     infos = [];
     await router.push('/calendar');
     expect(router.currentRoute.value.name).toBe('calendars');
     await router.push('/feed');
     expect(router.currentRoute.value.name).toBe('calendars');
-    await router.push('/settings');
-    expect(router.currentRoute.value.name).toBe('profile');
   });
 
   it('an unknown name leaves the selection untouched', async () => {

@@ -11,7 +11,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: {}, name: 'login' },
   { path: '/auth/register', component: {}, name: 'register' },
   { path: '/auth/apply', component: {}, name: 'register-apply' },
-  { path: '/settings/account', component: {}, name: 'profile' },
+  { path: '/settings', component: {}, name: 'settings' },
+  { path: '/settings/account/profile', component: {}, name: 'profile' },
   { path: '/policy', component: {}, name: 'instance-policy' },
 ];
 
@@ -165,35 +166,35 @@ describe('InstancePolicy back link', () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=login' });
     const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/login');
-    expect(link.text()).toContain('sign in');
+    expect(link.text()).toBe('Back to sign in');
   });
 
   it('routes back to register when from=register', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register' });
     const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/auth/register');
-    expect(link.text()).toContain('registration');
+    expect(link.text()).toBe('Back to registration');
   });
 
   it('routes back to the application page when from=register-apply', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=register-apply' });
     const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/auth/apply');
-    expect(link.text()).toContain('application');
+    expect(link.text()).toBe('Back to your application');
   });
 
   it('routes back to settings when from=settings', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=settings' });
     const link = wrapper.find('a.policy-page__back');
-    expect(link.attributes('href')).toBe('/settings/account');
-    expect(link.text()).toContain('settings');
+    expect(link.attributes('href')).toBe('/settings');
+    expect(link.text()).toBe('Back to settings');
   });
 
   it('falls back to settings when no source is given but the visitor is logged in', async () => {
     const { wrapper } = await mountInstancePolicy({ settings, isLoggedIn: true });
     const link = wrapper.find('a.policy-page__back');
-    expect(link.attributes('href')).toBe('/settings/account');
-    expect(link.text()).toContain('settings');
+    expect(link.attributes('href')).toBe('/settings');
+    expect(link.text()).toBe('Back to settings');
   });
 
   it('uses the shared settings back-link with a decorative chevron in place of a text arrow', async () => {
@@ -208,6 +209,6 @@ describe('InstancePolicy back link', () => {
     const { wrapper } = await mountInstancePolicy({ settings });
     const link = wrapper.find('a.policy-page__back');
     expect(link.attributes('href')).toBe('/login');
-    expect(link.text()).toContain('sign in');
+    expect(link.text()).toBe('Back to sign in');
   });
 });

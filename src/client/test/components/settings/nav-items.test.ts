@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import {
   Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
 } from 'lucide-vue-next';
 import settingsEn from '@/client/locales/en/settings.json';
+import { Calendar as CalendarModel } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFundingStore } from '@/client/stores/fundingStore';
+import {
+  buildSettingsNavContext,
+  createSettingsGuards,
+  readSettingsNavSources,
+  settingsIndexTarget,
+  type SettingsGuardDeps,
+} from '@/client/service/settings-guards';
 import {
   rootItems,
   calendarItems,
@@ -324,5 +337,87 @@ describe('settings nav items', () => {
         expect(findLeafByRouteName(name)).toBeNull();
       }
     });
+  });
+});
+
+/*
+ * Every consumer of leaf visibility asks nav-items.ts, so a visibility input
+ * moves all of the consumers that read it at once. No single input feeds all
+ * four: isOwner drives the index forward, the resize forward and the
+ * owner-only redirect; fundingEnabled drives the funding redirect and the
+ * Funding Plan row. Each scenario flips one input and reads every consumer
+ * through the helpers the real callers use: the index guard and the owner
+ * gate from createSettingsGuards, list-page.vue's resize target from
+ * settingsIndexTarget, the funding guard, and the tree's own rows.
+ */
+describe('one visibility input moves every consumer that reads it', () => {
+  /** Guard deps, over a fresh store, for a viewer at md+ who holds their one calendar, riverside, as `role`. */
+  function viewer(role: 'owner' | 'editor', fundingEnabled: boolean): SettingsGuardDeps {
+    setActivePinia(createPinia());
+    const infos = [new CalendarInfo(new CalendarModel('c1', 'riverside'), role)];
+    return {
+      loadCalendars: async () => {
+        useCalendarStore().setCalendarInfos(infos);
+        return infos;
+      },
+      isAdmin: () => false,
+      loadInstanceFunding: async () => {
+        useFundingStore().instanceFundingEnabled = fundingEnabled;
+        return fundingEnabled;
+      },
+      treeIsSidebar: () => true,
+      historyLocation: () => '',
+    };
+  }
+
+  /** Runs a guard for a navigation to `fullPath`; returns its verdict as a route name, or true to pass. */
+  async function verdict(guard: NavigationGuard, fullPath: string, name: string, params: Record<string, string> = {}) {
+    const to = { fullPath, name, params, query: {}, matched: [] } as unknown as RouteLocationNormalized;
+    const result = await guard.call(undefined, to, to, () => {});
+    return typeof result === 'object' && result !== null && 'name' in result ? result.name : result;
+  }
+
+  async function isOwnerConsumers(role: 'owner' | 'editor') {
+    const deps = viewer(role, true);
+    const guards = createSettingsGuards(deps);
+    const calendar = { calendar: 'riverside' };
+    return {
+      indexForward: await verdict(guards.settingsIndexRedirect('calendar'), '/settings/calendar/riverside', 'calendar_management', calendar),
+      resizeForward: (await settingsIndexTarget('calendar', 'riverside', deps))?.name,
+      ownerOnlyRedirect: await verdict(guards.calendarLeafGate, '/settings/calendar/riverside/general', 'calendar_general', calendar),
+      generalRowShown: isVisibleLeaf('calendar', 'calendar_general',
+        buildSettingsNavContext('calendar', 'riverside', readSettingsNavSources(deps.isAdmin))!),
+    };
+  }
+
+  async function fundingConsumers(fundingEnabled: boolean) {
+    const deps = viewer('owner', fundingEnabled);
+    const guards = createSettingsGuards(deps);
+    const fundingRedirect = await verdict(guards.fundingEnabledRedirect, '/settings/account/funding', 'funding_plan');
+    const ctx = buildSettingsNavContext('account', undefined, readSettingsNavSources(deps.isAdmin))!;
+    return {
+      fundingRedirect,
+      fundingRowShown: ids(groupItems('account', ctx)).includes('funding_plan'),
+    };
+  }
+
+  it('isOwner moves the index forward, the resize forward and the owner-only redirect together', async () => {
+    expect(await isOwnerConsumers('owner')).toEqual({
+      indexForward: 'calendar_general',
+      resizeForward: 'calendar_general',
+      ownerOnlyRedirect: true,
+      generalRowShown: true,
+    });
+    expect(await isOwnerConsumers('editor')).toEqual({
+      indexForward: 'calendar_editors',
+      resizeForward: 'calendar_editors',
+      ownerOnlyRedirect: 'calendar_editors',
+      generalRowShown: false,
+    });
+  });
+
+  it('fundingEnabled moves the funding redirect and the Funding Plan row together', async () => {
+    expect(await fundingConsumers(true)).toEqual({ fundingRedirect: true, fundingRowShown: true });
+    expect(await fundingConsumers(false)).toEqual({ fundingRedirect: 'profile', fundingRowShown: false });
   });
 });

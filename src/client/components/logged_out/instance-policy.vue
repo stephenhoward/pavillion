@@ -69,11 +69,11 @@ const backLink = computed<{ name: string; label: string }>(() => {
     case 'register-apply':
       return { name: 'register-apply', label: t('back_to_apply') };
     case 'settings':
-      return { name: 'profile', label: t('back_to_settings') };
+      return { name: 'settings', label: t('back_to_settings') };
   }
 
   if (authn?.isLoggedIn?.()) {
-    return { name: 'profile', label: t('back_to_settings') };
+    return { name: 'settings', label: t('back_to_settings') };
   }
   return { name: 'login', label: t('back_to_login') };
 });
