@@ -126,13 +126,6 @@
     "error_resending_invitation": "Échec du renvoi de l'invitation"
   },
   "management": {
-    "tabs_label": "Onglets de gestion du calendrier",
-    "editors_tab": "Éditeurs",
-    "settings_tab": "Paramètres",
-    "widget_tab": "Widget",
-    "reports_tab": "Rapports",
-    "import_tab": "Importer",
-    "loading_calendar": "Chargement du calendrier...",
     "error_loading_calendar": "Impossible de charger le calendrier. Veuillez réessayer plus tard.",
     "calendar_not_available": "Calendrier non disponible",
     "calendar_not_available_description": "Ce calendrier n'existe pas ou vous n'avez pas accès à sa gestion.",

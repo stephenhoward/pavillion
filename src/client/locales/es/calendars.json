@@ -126,13 +126,6 @@
     "error_resending_invitation": "Error al reenviar la invitación"
   },
   "management": {
-    "tabs_label": "Pestañas de gestión del calendario",
-    "editors_tab": "Editores",
-    "settings_tab": "Configuración",
-    "widget_tab": "Widget",
-    "reports_tab": "Informes",
-    "import_tab": "Importar",
-    "loading_calendar": "Cargando calendario...",
     "error_loading_calendar": "No se pudo cargar el calendario. Por favor, inténtalo de nuevo más tarde.",
     "calendar_not_available": "Calendario no disponible",
     "calendar_not_available_description": "Este calendario no existe o no tienes acceso para administrarlo.",

@@ -55,6 +55,12 @@ describe('guidesForRoute', () => {
     );
   });
 
+  it('returns the ICS import guide for the calendar import leaf', () => {
+    expect(guidesForRoute('calendar_import')).toEqual([
+      { slug: 'guides/calendar-owners/ics-import', key: 'ics_import' },
+    ]);
+  });
+
   it('returns an empty array for an unknown route name', () => {
     expect(guidesForRoute('not_a_real_route')).toEqual([]);
   });
