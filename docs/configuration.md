@@ -29,7 +29,7 @@ Pavillion requires six secrets for secure operation:
 | `JWT_SECRET` | Signs API authentication tokens | Attacker can forge API tokens |
 | `SESSION_SECRET` | Signs browser session cookies | Attacker can forge sessions |
 | `DB_PASSWORD` | PostgreSQL database access | Full database access |
-| `EMAIL_HASH_SECRET` | Hashes reporter emails for moderation | Attacker can de-anonymize report submitters |
+| `EMAIL_HASH_SECRET` | Keys the hashes of reporter emails and IP addresses for moderation | With database access, attacker can check whether a given email filed a report and recover retained reporter IP addresses |
 | `ENCRYPTION_KEY` | Encrypts funding provider API keys at rest | Attacker can decrypt stored provider keys |
 | `CALENDAR_IMPORT_HMAC_SECRET` | Signs ICS import DNS/rel-me verification snippets | Attacker can forge import verification challenges |
 
@@ -114,7 +114,7 @@ Environment variables are the recommended way to pass secrets to the container.
 | `JWT_SECRET` | Yes* | Development default | Secret for signing JWT tokens |
 | `SESSION_SECRET` | Yes* | Development default | Secret for signing session cookies |
 | `DB_PASSWORD` | Yes | - | PostgreSQL database password |
-| `EMAIL_HASH_SECRET` | Yes* | Development default | Hashes reporter emails for moderation. Rotation de-anonymizes prior reports. |
+| `EMAIL_HASH_SECRET` | Yes* | Development default | Keys the hashes of reporter emails and IPs for moderation. Rotation stops existing hashes matching: blocked reporters, email rate limits and report-pattern history reset. |
 | `ENCRYPTION_KEY` | Yes* | Development default | Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys. |
 | `CALENDAR_IMPORT_HMAC_SECRET` | Yes* | Development default | HMAC for ICS import DNS/rel-me verification snippets. Rotation only invalidates pending verification challenges. |
 
