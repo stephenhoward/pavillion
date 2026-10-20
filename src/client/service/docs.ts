@@ -81,6 +81,9 @@ export const ROUTE_GUIDES: Record<string, GuideRef[]> = {
   profile: [
     { slug: 'guides/calendar-owners/account', key: 'account' },
   ],
+  security: [
+    { slug: 'guides/calendar-owners/account', key: 'account' },
+  ],
 
   // Instance-administrator surfaces
   admin_settings: [

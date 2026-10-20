@@ -20,10 +20,10 @@
 }
 
 /**
- * Back link: a full-width row with a leading chevron and visible
- * "Back to {parent}" text. Shared by the settings page header and the
- * pages that link back into settings (funding plan, instance policy), so
- * it carries no breakpoint rule of its own.
+ * Back link: the shared back-link row, a full-width row with a leading
+ * chevron and visible "Back to {parent}" text, rendered by the settings
+ * page header; also used by the instance policy page, whatever its back
+ * target. It carries no breakpoint rule of its own.
  */
 .settings-back-link {
   display: flex;

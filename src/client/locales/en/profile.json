@@ -1,22 +1,15 @@
 {
-  "funding_link": "Funding Plan",
-  "title": "Settings",
-  "subtitle": "Manage your account preferences",
-  "profile_section": "PROFILE",
   "display_name_label": "Display Name",
   "display_name_placeholder": "Your display name",
   "username_label": "Username",
   "readonly_badge": "Read-only",
   "preferences_section": "PREFERENCES",
   "language_preference_label": "Preferred Language",
-  "security_section": "SECURITY",
   "account_email_label": "Email Address",
   "change_email_button": "Change Email",
   "account_password_label": "Password",
   "last_changed_unknown": "Last changed: Unknown",
   "change_password_button": "Change Password",
-  "logout": "Log Out",
-  "logout_description": "Sign out of your account",
   "change_email_form": {
     "title": "Change your email address",
     "email_placeholder": "new email address",
@@ -37,14 +30,5 @@
     "close_button": "Close",
     "link_sent_message": "Password reset link sent to {{email}}",
     "change_email_failed_message": "Failed to change email address"
-  },
-  "funding_section": "FUNDING",
-  "funding_card_title": "Funding Plan",
-  "funding_card_status_active": "Active",
-  "funding_card_status_none": "No active plan",
-  "funding_card_cycle_month": "/mo",
-  "funding_card_cycle_year": "/yr",
-  "funding_card_summary": "{{count}} calendars, {{amount}}",
-  "funding_card_summary_one": "{{count}} calendar, {{amount}}",
-  "funding_card_action": "Manage Funding Plan"
+  }
 }

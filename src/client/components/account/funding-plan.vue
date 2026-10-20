@@ -175,7 +175,6 @@ onMounted(async () => {
 <template>
   <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
     <div class="settings-header">
-      <router-link :to="{ name: 'profile' }" class="back-button">{{ t("back_to_settings") }}</router-link>
       <div class="settings-header__title-row">
         <h2 id="funding-plan-heading">{{ t("title") }}</h2>
         <HelpButton />
@@ -296,18 +295,6 @@ onMounted(async () => {
 
 .settings-header {
   margin-bottom: 2rem;
-
-  .back-button {
-    display: inline-block;
-    margin-bottom: 1rem;
-    color: var(--pav-color-interactive-primary);
-    text-decoration: none;
-    font-size: 0.875rem;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
 
   &__title-row {
     display: flex;

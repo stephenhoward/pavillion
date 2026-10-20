@@ -209,14 +209,4 @@ describe('Funding Plan UI Components', () => {
     expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
   });
 
-  it('links back to the account settings page', () => {
-    const wrapper = mount(FundingPlanManagement, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }], createPinia()],
-      },
-    });
-
-    expect(wrapper.find('a.back-button').attributes('href')).toBe('/settings/account');
-  });
-
 });

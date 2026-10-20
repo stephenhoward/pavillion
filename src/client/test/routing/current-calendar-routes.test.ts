@@ -45,7 +45,7 @@ describe('current calendar route guards', () => {
         { path: '/settings', component: Stub, name: 'settings',
           beforeEnter: createCurrentCalendarRedirect('calendar_management', { name: 'profile' }, load) },
         { path: '/settings/calendar/:calendar', component: Stub, name: 'calendar_management' },
-        { path: '/settings/account', component: Stub, name: 'profile' },
+        { path: '/settings/account/profile', component: Stub, name: 'profile' },
       ],
     });
     router.beforeEach(createCurrentCalendarSync(() => loggedIn, load));

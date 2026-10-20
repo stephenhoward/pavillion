@@ -21,7 +21,9 @@ import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue
 import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
 import FeedView from '@/client/components/logged_in/feed/root.vue';
 import SettingsRootView from '@/client/components/logged_in/settings/root.vue';
-import ProfileView from '@/client/components/logged_in/settings/account.vue';
+import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
+import ProfileView from '@/client/components/logged_in/settings/profile.vue';
+import SecurityView from '@/client/components/logged_in/settings/security.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import FundingPlanView from '@/client/components/account/funding-plan.vue';
@@ -77,7 +79,10 @@ const RedirectOnly = { render: () => null };
  * have no redirects.
  */
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
-  const { mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect } = deps;
+  const {
+    mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect,
+    settingsIndexRedirect, fundingEnabledRedirect,
+  } = deps;
 
   const routes: RouteRecordRaw[] = [
     { path: '/', component: AppViews, name: 'app', beforeEnter: mustBeLoggedIn,
@@ -98,14 +103,19 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
           props: true,
         },
         // Settings: calendar management, the account, and instance admin.
-        { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn,
+        { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn, meta: { shellRail: true },
           children: [
             // A parent's beforeEnter does not run between siblings, so each child guards itself.
             { path: '', component: RedirectOnly, name: 'settings',
               beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
             { path: 'calendar/:calendar', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
-            { path: 'account', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
-            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan', beforeEnter: mustBeLoggedIn },
+            // Account: the index is a list page below md and forwards to its first leaf at md+.
+            { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' },
+              beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('account')] },
+            { path: 'account/profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
+            { path: 'account/security', component: SecurityView, name: 'security', beforeEnter: mustBeLoggedIn },
+            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan',
+              beforeEnter: [mustBeLoggedIn, fundingEnabledRedirect] },
             { path: 'admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
               children: [
                 { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },

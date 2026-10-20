@@ -326,6 +326,16 @@ describe('settings list page', () => {
       expect(rowLabels(w)).toEqual(['Profile', 'Security']);
     });
 
+    it('links the account list to its own leaves only, even for an admin with funding on', async () => {
+      const w = await mountAt('/settings/account', { fundingEnabled: true, isAdmin: true });
+      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Funding Plan']);
+      expect(w.findAll('li a').map((a) => a.attributes('href'))).toEqual([
+        '/settings/account/profile',
+        '/settings/account/security',
+        '/settings/account/funding',
+      ]);
+    });
+
     it('renders no list for an unresolved calendar and never echoes the param', async () => {
       const w = await mountAt('/settings/calendar/nope');
       expect(w.find('ul').exists()).toBe(false);

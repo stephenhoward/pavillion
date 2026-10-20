@@ -314,7 +314,9 @@ describe('Navigation Integration - Task Group 4', () => {
       [{ name: 'calendar_category_mappings', params: { calendar: 'cal', actorId: 'a1' } }, '/feed/cal/following/a1/category-mappings'],
       [{ name: 'settings' }, '/settings'],
       [{ name: 'calendar_management', params: { calendar: 'cal' } }, '/settings/calendar/cal'],
-      [{ name: 'profile' }, '/settings/account'],
+      [{ name: 'account' }, '/settings/account'],
+      [{ name: 'profile' }, '/settings/account/profile'],
+      [{ name: 'security' }, '/settings/account/security'],
       [{ name: 'funding_plan' }, '/settings/account/funding'],
       [{ name: 'admin_settings' }, '/settings/admin/settings'],
       [{ name: 'moderation_report_detail', params: { reportId: 'r1' } }, '/settings/admin/moderation/reports/r1'],
@@ -415,13 +417,13 @@ describe('Navigation Integration - Task Group 4', () => {
 
     it('lets a signed-in non-admin into the account page', async () => {
       const guarded = routerFor({ loggedIn: true, admin: false });
-      await guarded.push('/settings/account');
+      await guarded.push('/settings/account/profile');
       expect(guarded.currentRoute.value.name).toBe('profile');
     });
 
     it('sends a signed-out visitor from the account page to login', async () => {
       const guarded = routerFor({ loggedIn: false, admin: false });
-      await guarded.push('/settings/account');
+      await guarded.push('/settings/account/profile');
       expect(guarded.currentRoute.value.name).toBe('login');
     });
 
