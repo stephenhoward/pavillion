@@ -1,6 +1,6 @@
 # Pavillion
 
-Pavillion is a federated events calendar. Using federation it aims to provide an easy way for organizatioins to share their own events with the public, and also make it simple to share and aggregate events from across multiple sources to make community calendars that can be curated by cities, chambers of commerce, tourism boards, or other community-oriented organizations.
+Pavillion is a federated events calendar. Using federation it aims to provide an easy way for organizations to share their own events with the public, and also make it simple to share and aggregate events from across multiple sources to make community calendars that can be curated by cities, chambers of commerce, tourism boards, or other community-oriented organizations.
 
 ## Project Principles
 
@@ -9,7 +9,7 @@ Pavillion is a federated events calendar. Using federation it aims to provide an
 - Multilingual out of the box. Providing translation tools for both the software interfaces and the content shared.
 - Allowing for content to be translated into multiple languages to support multilingual communities.
 - Designing the software to be usable with screen readers and other accessibility technology
-- Providing structures in the content that encourage event hosts to describe the accessiblity of their events to those who attend them.
+- Providing structures in the content that encourage event hosts to describe the accessibility of their events to those who attend them.
 
 ### Autonomy
 
@@ -21,11 +21,11 @@ Pavillion is a federated events calendar. Using federation it aims to provide an
 ### Flexibility
 
 - Provide an embeddable version of a calendar for easy inclusion in an organization's website.
-- Provide syncing/exporting to popular platforms (eg, Facebook) to reduce the effort of sharing events far and wide.
+- Provide export and one-time import in standard formats, so moving a calendar into Pavillion is easy and moving it out is never blocked.
 
 ### Community
 
-The goal of the project, both in it's open source development, and it's end use, is to find help people find more connections with their communities.
+The goal of the project, both in its open source development, and its end use, is to find help people find more connections with their communities.
 
 ## Getting Involved
 
