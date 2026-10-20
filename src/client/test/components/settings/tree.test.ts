@@ -46,6 +46,8 @@ function calendar(id: string, urlName: string, name: string): Calendar {
 describe('settings tree', () => {
   let pinia: Pinia;
   let sandbox: sinon.SinonSandbox;
+  let loadCalendars: sinon.SinonStub;
+  let loadFunding: sinon.SinonStub;
   let wrapper: VueWrapper | null;
   let host: HTMLElement | null;
 
@@ -53,9 +55,9 @@ describe('settings tree', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
-    sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded')
+    loadCalendars = sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded')
       .callsFake(async () => useCalendarStore().calendarInfos);
-    sandbox.stub(FundingService.prototype, 'ensureInstanceFundingLoaded')
+    loadFunding = sandbox.stub(FundingService.prototype, 'ensureInstanceFundingLoaded')
       .callsFake(async () => useFundingStore().instanceFundingEnabled === true);
     wrapper = null;
     host = null;
@@ -91,8 +93,10 @@ describe('settings tree', () => {
     return wrapper;
   }
 
-  const group = (w: VueWrapper, title: string) => w.findAll('section')
-    .find((section) => section.find('h2').text() === title);
+  const groups = (w: VueWrapper) => w.findAll('[role="group"]');
+
+  const group = (w: VueWrapper, title: string) => groups(w)
+    .find((candidate) => candidate.find('.settings-tree__heading').text() === title);
 
   const rows = (w: VueWrapper, title: string) => group(w, title)?.findAll('li').map((li) => li.text()) ?? null;
 
@@ -102,14 +106,37 @@ describe('settings tree', () => {
     expect(w.attributes('aria-label')).toBe('Settings');
   });
 
-  it('names each group section by its heading', async () => {
+  it('names each group by its label, without adding landmarks or headings', async () => {
     const w = await mountAt('/settings/account/profile', { isAdmin: true });
-    const sections = w.findAll('section');
-    expect(sections.map((s) => s.find('h2').text())).toEqual(['Calendar', 'Account', 'Instance']);
-    for (const section of sections) {
-      const heading = section.find('h2');
-      expect(section.attributes('aria-labelledby')).toBe(heading.attributes('id'));
+    const named = groups(w);
+    expect(named.map((g) => g.find('.settings-tree__heading').text())).toEqual(['Calendar', 'Account', 'Instance']);
+    for (const g of named) {
+      const label = g.find('.settings-tree__heading');
+      expect(label.attributes('id')).toBeTruthy();
+      expect(g.attributes('aria-labelledby')).toBe(label.attributes('id'));
     }
+    expect(w.findAll('section, h1, h2, h3, h4, h5, h6')).toHaveLength(0);
+  });
+
+  it('renders every list in sidebar mode', async () => {
+    const w = await mountAt('/settings/account/profile', { isAdmin: true });
+    const lists = w.findAll('ul.settings-nav');
+    expect(lists).toHaveLength(4);
+    expect(lists.every((list) => list.classes('settings-nav--sidebar'))).toBe(true);
+  });
+
+  it('loads calendars and the funding flag on mount', async () => {
+    loadCalendars.callsFake(async () => {
+      useCalendarStore().setCalendarInfos([
+        new CalendarInfo(calendar('o1', 'riverside', 'Riverside Arts'), 'owner'),
+      ]);
+      return useCalendarStore().calendarInfos;
+    });
+    const w = await mountAt('/settings/account/profile', { calendars: [] });
+
+    expect(loadCalendars.calledOnce).toBe(true);
+    expect(loadFunding.calledOnce).toBe(true);
+    expect(rows(w, 'Calendar')).toEqual(['General', 'Editors', 'Reports', 'Import', 'Widget']);
   });
 
   it('opens with a skip button that focuses the page heading', async () => {

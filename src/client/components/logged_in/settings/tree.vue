@@ -11,6 +11,8 @@
  * - The context comes from buildSettingsNavContext over
  *   readSettingsNavSources, the one derivation the guards share, so the tree
  *   never lists a leaf a redirect rejects.
+ * - Each group is a role="group" named by its label, so tests and assistive
+ *   tech can tell the Calendar group's General from the Instance group's.
  * - The skip control is a button that moves focus to the page h1 without
  *   navigating.
  */
@@ -39,7 +41,10 @@ const isAdmin = () => authn?.isAdmin?.() ?? false;
 // The root group never resolves a param, so the context is always built.
 const ctx = computed(() => buildSettingsNavContext('root', undefined, readSettingsNavSources(isAdmin))!);
 
-const headingIdPrefix = useId();
+// Each group is a named group, not a section: a named section is a region
+// landmark, and the page's h1 comes after the tree, so a heading here would
+// precede it.
+const labelIdPrefix = useId();
 
 const groups = computed<Array<{ group: SettingsLeafGroup; items: SettingsNavItem[] }>>(() => {
   const all: Array<{ group: SettingsLeafGroup; items: SettingsNavItem[] }> = [
@@ -70,17 +75,18 @@ onMounted(() => {
     >
       {{ t('skip_to_content') }}
     </button>
-    <section
+    <div
       v-for="entry in groups"
       :key="entry.group"
+      role="group"
       class="settings-tree__group"
-      :aria-labelledby="`${headingIdPrefix}-${entry.group}`"
+      :aria-labelledby="`${labelIdPrefix}-${entry.group}`"
     >
-      <h2 :id="`${headingIdPrefix}-${entry.group}`" class="settings-tree__heading">
+      <p :id="`${labelIdPrefix}-${entry.group}`" class="settings-tree__heading">
         {{ t(SETTINGS_GROUP_TITLE_KEYS[entry.group]) }}
-      </h2>
+      </p>
       <NavList :items="entry.items" mode="sidebar" />
-    </section>
+    </div>
     <div class="settings-tree__footer">
       <NavList :items="logoutItems" mode="sidebar" />
       <PolicyLink source="settings" />
