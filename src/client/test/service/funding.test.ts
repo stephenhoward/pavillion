@@ -455,6 +455,137 @@ describe('FundingService.loadFundingSummary', () => {
   });
 });
 
+describe('FundingService.ensureInstanceFundingLoaded', () => {
+  const optionsResponse = (enabled: boolean) => ({
+    data: {
+      enabled,
+      providers: [],
+      monthlyPrice: 0,
+      yearlyPrice: 0,
+      currency: 'USD',
+      payWhatYouCan: false,
+      payWhatYouCanYearlyDiscount: 0,
+    },
+  });
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Reset, not clear: an unconsumed mock*Once queue would leak into later describes.
+    vi.mocked(axios.get).mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('should resolve the instance flag and cache it in the funding store', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+
+    // Act
+    const enabled = await new FundingService().ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(enabled).toBe(true);
+    expect(axios.get).toHaveBeenCalledWith('/api/funding/v1/options');
+    expect(useFundingStore().instanceFundingEnabled).toBe(true);
+  });
+
+  it('should cache a disabled instance as false', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(false));
+
+    // Act
+    const enabled = await new FundingService().ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(enabled).toBe(false);
+    expect(useFundingStore().instanceFundingEnabled).toBe(false);
+  });
+
+  it('should request the options once across sequential calls', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    await service.ensureInstanceFundingLoaded();
+    const second = await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(second).toBe(true);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should share one request between concurrent callers', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    const results = await Promise.all([
+      service.ensureInstanceFundingLoaded(),
+      service.ensureInstanceFundingLoaded(),
+    ]);
+
+    // Assert
+    expect(results).toEqual([true, true]);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should share one request between separate service instances', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+
+    // Act
+    const results = await Promise.all([
+      new FundingService().ensureInstanceFundingLoaded(),
+      new FundingService().ensureInstanceFundingLoaded(),
+    ]);
+
+    // Assert
+    expect(results).toEqual([true, true]);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should resolve false on failure and retry on the next call', async () => {
+    // Arrange
+    vi.mocked(axios.get)
+      .mockRejectedValueOnce(new Error('Server error'))
+      .mockResolvedValueOnce(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    const failed = await service.ensureInstanceFundingLoaded();
+
+    // Assert: failure reads as disabled but is not cached as an answer
+    expect(failed).toBe(false);
+    expect(useFundingStore().instanceFundingEnabled).toBeNull();
+
+    // Act: the next call asks again
+    const retried = await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(retried).toBe(true);
+    expect(axios.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('should fetch again after the store is reset at logout', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+    await service.ensureInstanceFundingLoaded();
+
+    // Act
+    useFundingStore().$reset();
+    await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(axios.get).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('fundingGateDenial', () => {
   it('should name the feature a 402 SubscriptionRequiredError refused', () => {
     const error = {

@@ -183,5 +183,27 @@ describe('FundingStore', () => {
       expect(store.statusFor('cal-1')).toBeNull();
       expect(store.featureAccess('cal-1', 'widget_embedding')).toBeNull();
     });
+
+    it('forgets the instance funding flag so the next session asks again', () => {
+      store.setInstanceFundingEnabled(true);
+
+      store.$reset();
+
+      expect(store.instanceFundingEnabled).toBeNull();
+    });
+  });
+
+  describe('instanceFundingEnabled', () => {
+    it('is unknown until it has been loaded', () => {
+      expect(store.instanceFundingEnabled).toBeNull();
+    });
+
+    it('holds the value it was given', () => {
+      store.setInstanceFundingEnabled(true);
+      expect(store.instanceFundingEnabled).toBe(true);
+
+      store.setInstanceFundingEnabled(false);
+      expect(store.instanceFundingEnabled).toBe(false);
+    });
   });
 });

@@ -221,6 +221,13 @@ export type CheckoutSessionStatus = {
 };
 
 /**
+ * In-flight instance-flag loads keyed by store instance, so every
+ * FundingService sharing a Pinia shares one request. The flag is
+ * instance-wide, so unlike calendar loads no account scoping is needed.
+ */
+const inFlightInstanceFundingLoads = new WeakMap<object, Promise<boolean>>();
+
+/**
  * Funding service for managing funding plan payments.
  * Provides methods to configure funding settings (admin) and
  * manage user funding plans.
@@ -622,6 +629,37 @@ export default class FundingService {
     const summary = await this.getFundingStatus(calendarId);
     this.store.setSummary(calendarId, summary);
     return summary;
+  }
+
+  /**
+   * Load whether this instance offers funding plans, once per session.
+   *
+   * Concurrent callers, including separate FundingService instances, share
+   * one request. A failed read resolves false — callers treat only true as
+   * enabled — but is not cached, so the store stays unknown and the next
+   * call asks again. getOptions already logs the failure.
+   *
+   * @returns {Promise<boolean>} Whether funding is enabled on this instance
+   */
+  async ensureInstanceFundingLoaded(): Promise<boolean> {
+    const store = this.store;
+    if (store.instanceFundingEnabled !== null) {
+      return store.instanceFundingEnabled;
+    }
+    const existing = inFlightInstanceFundingLoads.get(store);
+    if (existing) {
+      return existing;
+    }
+    const pending: Promise<boolean> = this.getOptions()
+      .then((options) => {
+        const enabled = options.enabled === true;
+        store.setInstanceFundingEnabled(enabled);
+        return enabled;
+      })
+      .catch(() => false)
+      .finally(() => inFlightInstanceFundingLoads.delete(store));
+    inFlightInstanceFundingLoads.set(store, pending);
+    return pending;
   }
 
   // ========================================

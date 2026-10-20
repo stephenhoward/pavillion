@@ -44,6 +44,11 @@ export interface CalendarFundingCache {
  */
 interface FundingState {
   calendars: Record<string, CalendarFundingCache>;
+  /**
+   * Whether this instance offers funding plans at all, or null until it has
+   * been loaded. Instance-wide, unlike everything in `calendars`.
+   */
+  instanceFundingEnabled: boolean | null;
 }
 
 /**
@@ -103,11 +108,12 @@ function cacheEntry(
 }
 
 /**
- * Pinia store caching what the client knows about calendar funding.
+ * Pinia store caching what the client knows about calendar funding, and
+ * whether the instance offers funding at all.
  *
  * Data cache only: it holds no loading state, performs no requests, and is
- * written by FundingService (reads) and by useFundingAccess (402 refusals and
- * failed reads).
+ * written by FundingService (reads, including the instance flag) and by
+ * useFundingAccess (402 refusals and failed reads).
  * Components reach it through useFundingAccess, never directly.
  *
  * In-memory only — no persistence plugin. A reload starts empty, and
@@ -117,6 +123,7 @@ function cacheEntry(
 export const useFundingStore = defineStore('funding', {
   state: (): FundingState => ({
     calendars: prototypeFreeRecord<Record<string, CalendarFundingCache>>(),
+    instanceFundingEnabled: null,
   }),
 
   getters: {
@@ -195,6 +202,15 @@ export const useFundingStore = defineStore('funding', {
         features: prototypeFreeRecord(),
         loadFailed: true,
       };
+    },
+
+    /**
+     * Cache whether the instance offers funding plans.
+     *
+     * @param {boolean} enabled - The instance's funding-enabled flag
+     */
+    setInstanceFundingEnabled(enabled: boolean) {
+      this.instanceFundingEnabled = enabled;
     },
 
     /**
