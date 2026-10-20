@@ -89,7 +89,7 @@ Once the default is uploaded, the same **Image description for screen readers** 
 
 The **Default Date Filter** sets how far ahead a visitor sees when they open your public calendar without choosing dates: the list starts today and runs for the window you pick. It applies to your public page and your embedded widget. Visitors can still widen or move the range with the date control at the top of the page; the filter only decides what they see first. The filter and the date control apply to the list view; a visitor looking at the week or month view sees that week or month instead.
 
-The choices are **1 week**, **2 weeks**, **1 month**, **3 months**, **6 months**, **9 months**, and **12 months**. Until you pick one, your public page uses your instance's default window — two weeks, unless your administrator has set another.
+The choices are **1 week**, **2 weeks**, **1 month**, **3 months**, **6 months**, **9 months**, and **12 months**. Until you pick one, the control reads **Instance default** and your public page uses your instance's default window — two weeks, unless your administrator has set another. Picking a window replaces **Instance default**, and the control can't return to it.
 
 **Match the window to how often you publish.** A calendar with a few events a month reads as empty on a one- or two-week window, and a first-time visitor who sees an empty page rarely goes looking for the date control. A busy calendar with something every day can stay short, so the list opens on what's coming up soon rather than a long scroll.
 

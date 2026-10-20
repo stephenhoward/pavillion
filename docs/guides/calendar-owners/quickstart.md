@@ -39,7 +39,7 @@ Submit the form. You'll land on your new calendar's page. It's empty. We'll fix 
 
 The two things you just entered are the bare minimum to create the calendar. Before publishing an event, fill in the rest of the basics:
 
-1. Open **Settings** in the main navigation. The page opens on the **Editors** tab under your calendar's name; open the **Settings** tab beside it.
+1. Open **Settings** in the main navigation. The page opens on the **Editors** tab under your calendar's name; open the **Settings** tab in that row.
 2. Add a **description**. One or two sentences: who this calendar is for and what kinds of events it lists. Visitors to your public page will read this. So will other calendar owners deciding whether to follow your calendar.
 3. The **primary language** is set to your account's language by default. If you only plan to publish in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
 

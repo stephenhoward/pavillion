@@ -6,7 +6,7 @@ description: Manage your Pavillion account — password, email address, and acco
 
 > Status: placeholder. This guide may be written after launch if it's needed; the account UI is mostly self-explanatory.
 
-Account-level settings — the things that are about *you* rather than about a particular calendar. Password, email, notification preferences.
+Account-level settings — the things that are about *you* rather than about a particular calendar. Password and email.
 
 ## Planned scope
 
