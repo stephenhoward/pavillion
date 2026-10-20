@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  Calendar, User, Server, LogOut, Settings, ShieldCheck, Sprout,
+  Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
 } from 'lucide-vue-next';
+import settingsEn from '@/client/locales/en/settings.json';
 import {
   rootItems,
   calendarItems,
@@ -94,6 +95,17 @@ describe('settings nav items', () => {
       }
     });
 
+    it('addresses the root Account and Instance rows to their group indexes', () => {
+      const root = rootItems(ctx({ isAdmin: true }));
+      const toOf = (id: string) => {
+        const item = root.find((candidate) => candidate.id === id);
+        return item && 'to' in item ? item.to : undefined;
+      };
+
+      expect(toOf('account')).toEqual({ name: 'account' });
+      expect(toOf('instance')).toEqual({ name: 'admin' });
+    });
+
     it('gives each link item its route name', () => {
       expect(calendarItems(ctx()).map((item) => item.routeName)).toEqual([
         'calendar_general', 'calendar_editors', 'calendar_reports', 'calendar_import', 'calendar_widget',
@@ -115,12 +127,25 @@ describe('settings nav items', () => {
     });
 
     it('uses lucide-vue-next components for icons', () => {
-      const root = rootItems(ctx({ isAdmin: true }));
+      const icons = (items: { icon: unknown }[]) => items.map((item) => item.icon);
 
-      expect(root.map((item) => item.icon)).toEqual([Calendar, User, Server, LogOut]);
-      expect(calendarItems(ctx())[0].icon).toBe(Settings);
-      expect(accountItems(ctx())[2].icon).toBe(Sprout);
-      expect(adminItems()[3].icon).toBe(ShieldCheck);
+      expect(icons(rootItems(ctx({ isAdmin: true })))).toEqual([Calendar, User, Server, LogOut]);
+      expect(icons(calendarItems(ctx()))).toEqual([Settings, Users, ShieldCheck, Download, LayoutTemplate]);
+      expect(icons(accountItems(ctx()))).toEqual([User, Shield, Sprout]);
+      // The six icons of the admin pane's own navigation.
+      expect(icons(adminItems())).toEqual([Settings, Users, Calendar, ShieldCheck, Globe, Sprout]);
+    });
+
+    it('gives every row a label key that resolves in the settings namespace', () => {
+      const context = ctx({ isAdmin: true });
+      const items = [...rootItems(context), ...calendarItems(context), ...accountItems(context), ...adminItems()];
+      const resolve = (key: string): unknown => key
+        .split('.')
+        .reduce<unknown>((node, segment) => (node as Record<string, unknown> | undefined)?.[segment], settingsEn);
+
+      for (const item of items) {
+        expect(typeof resolve(item.labelKey), item.labelKey).toBe('string');
+      }
     });
   });
 
@@ -136,6 +161,8 @@ describe('settings nav items', () => {
         expected: { name: 'calendar_general', params: { calendar: 'riverside' } } },
       { group: 'calendar', context: ctx({ isOwner: false }),
         expected: { name: 'calendar_editors', params: { calendar: 'riverside' } } },
+      { group: 'calendar', context: ctx({ calendarUrlName: null }),
+        expected: { name: 'profile' } },
       { group: 'account', context: ctx({ fundingEnabled: false }),
         expected: { name: 'profile' } },
       { group: 'admin', context: ctx({ isAdmin: true }),
