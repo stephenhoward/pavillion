@@ -62,6 +62,7 @@ function makeRouter(): Router {
           { path: 'general', component: Pane, name: 'calendar_general' },
           { path: 'editors', component: Pane, name: 'calendar_editors' },
           { path: 'reports', component: Pane, name: 'calendar_reports' },
+          { path: 'reports/:reportId', component: Pane, name: 'calendar_report_detail' },
           { path: 'import', component: Pane, name: 'calendar_import' },
           { path: 'widget', component: Pane, name: 'calendar_widget' },
         ] },
@@ -69,6 +70,17 @@ function makeRouter(): Router {
         { path: 'account/profile', component: CountingLeaf, name: 'profile' },
         { path: 'account/security', component: CountingLeaf, name: 'security' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
+        // A two-hop guard chain ending on a leaf, and an index stub whose
+        // guard forwards the way the real index guards do at md+.
+        { path: 'forward-a', component: Pane, name: 'forward_a', beforeEnter: () => ({ name: 'forward_b', replace: true }) },
+        { path: 'forward-b', component: Pane, name: 'forward_b', beforeEnter: () => ({ name: 'profile', replace: true }) },
+        {
+          path: 'account-index',
+          component: SettingsListPage,
+          name: 'account_index_stub',
+          meta: { settingsGroup: 'account' },
+          beforeEnter: () => ({ name: 'profile', replace: true }),
+        },
         { path: 'admin', component: Outlet, children: [
           { path: '', component: SettingsListPage, name: 'admin', meta: { settingsGroup: 'admin' } },
           { path: 'settings', component: CountingLeaf, name: 'admin_settings' },
@@ -91,6 +103,7 @@ describe('settings layout', () => {
   let sandbox: sinon.SinonSandbox;
   let wrapper: VueWrapper | null;
   let media: FakeMatchMedia;
+  let host: HTMLElement;
 
   beforeEach(() => {
     // The tree and list page read the shell layout; every mount gets the
@@ -112,10 +125,14 @@ describe('settings layout', () => {
     calendarParentSetups = 0;
     leafSetups = 0;
     wrapper = null;
+    // Attached so focus moves land on document.activeElement.
+    host = document.createElement('div');
+    document.body.appendChild(host);
   });
 
   afterEach(() => {
     wrapper?.unmount();
+    host.remove();
     resetShellLayoutForTesting();
     media.restore();
     sandbox.restore();
@@ -126,6 +143,7 @@ describe('settings layout', () => {
     wrapper = mountComponent(App, router, {
       pinia,
       provide: { authn: { isAdmin: () => isAdmin } },
+      attachTo: host,
     });
     await flushPromises();
     return wrapper;
@@ -220,5 +238,82 @@ describe('settings layout', () => {
     const back = w.find('.settings-page-header__back');
     expect(back.text()).toBe('Back to Account');
     expect(back.attributes('href')).toBe('/settings/account');
+  });
+
+  describe('focus rule', () => {
+    const heading = () => document.querySelector('h1');
+
+    it('moves focus to the h1 after a path change in page mode', async () => {
+      media.setMatches(false);
+      await mountAt('/settings');
+      await go('/settings/account');
+      expect(document.activeElement).toBe(heading());
+      expect(heading()?.textContent).toBe('Account');
+    });
+
+    it('moves nothing at md+', async () => {
+      await mountAt('/settings');
+      await go('/settings/account');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves nothing on initial load', async () => {
+      media.setMatches(false);
+      const focus = sandbox.spy(HTMLElement.prototype, 'focus');
+      await mountAt('/settings/account/profile');
+      expect(focus.called).toBe(false);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves nothing on a query-only change', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/account/profile');
+      await go('/settings/account/profile?section=email');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves nothing when only the calendar changes', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/editors');
+      await go('/settings/calendar/harbour/editors');
+      expect(router.currentRoute.value.params.calendar).toBe('harbour');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves focus when the calendar and the leaf both change', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/editors');
+      await go('/settings/calendar/harbour/widget');
+      expect(document.activeElement).toBe(heading());
+    });
+
+    it('leaves focus to the reports leaf for a destination with a reportId', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/reports');
+      await go('/settings/calendar/riverside/reports/9d4b2c1e-6f3a-4c8e-9b1d-2a7e5f0c3b64');
+      expect(router.currentRoute.value.name).toBe('calendar_report_detail');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves focus once for a redirect chain, on the final route', async () => {
+      media.setMatches(false);
+      await mountAt('/settings');
+      const focus = sandbox.spy(HTMLElement.prototype, 'focus');
+      await go('/settings/forward-a');
+      expect(router.currentRoute.value.name).toBe('profile');
+      expect(focus.callCount).toBe(1);
+      expect(focus.firstCall.thisValue).toBe(heading());
+      expect(document.activeElement).toBe(heading());
+      expect(heading()?.textContent).toBe('Profile');
+    });
+
+    it('adds no forward of its own after a guard forward at md+', async () => {
+      await mountAt('/settings/account/security');
+      const replace = sandbox.spy(router, 'replace');
+      await go('/settings/account-index');
+      expect(router.currentRoute.value.name).toBe('profile');
+      expect(replace.called).toBe(false);
+      expect(document.activeElement).toBe(document.body);
+    });
   });
 });

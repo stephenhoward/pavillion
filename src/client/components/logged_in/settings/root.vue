@@ -12,11 +12,15 @@
  *   while moving between leaves of one calendar does not. Off a calendar the
  *   key is the group; the prefixes keep a calendar named like a group from
  *   sharing that group's key.
+ * - In page mode (below md) a path change moves focus to the h1; see the
+ *   focus rule below.
  */
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, nextTick, watch } from 'vue';
+import { useRoute, type RouteParamsGeneric } from 'vue-router';
+import { useShellLayout } from '@/client/composables/useShellLayout';
 import SettingsTree from './tree.vue';
 import SettingsPageHeader from './page-header.vue';
+import { focusSettingsHeading } from './heading-focus';
 
 const route = useRoute();
 
@@ -37,6 +41,46 @@ const paneKey = computed(() => {
   const calendar = route.params.calendar;
   return typeof calendar === 'string' ? `calendar:${calendar}` : `pane:${pathGroup.value}`;
 });
+
+// Settings borrows the shell breakpoint for its tree; the alias names that.
+const { mainNavIsSidebar: treeIsSidebar } = useShellLayout();
+
+interface RouteSnapshot {
+  path: string;
+  name: unknown;
+  params: RouteParamsGeneric;
+}
+
+/** The same leaf on another calendar: the switcher restores its own focus. */
+function onlyCalendarChanged(to: RouteSnapshot, from: RouteSnapshot): boolean {
+  if (to.name !== from.name || to.params.calendar === from.params.calendar) {
+    return false;
+  }
+  const keys = new Set([...Object.keys(to.params), ...Object.keys(from.params)]);
+  return [...keys].every((key) => key === 'calendar' || to.params[key] === from.params[key]);
+}
+
+// Focus rule for the page-mode drill-down: each level replaces the whole page,
+// so after a path change focus moves to the new page's h1. Nothing moves at
+// md+ (the tree's skip control serves keyboard users there), on initial load
+// (the watch is not immediate), on a query-only change, on a calendar-only
+// change, or onto a report detail (the reports leaf owns that focus; its gate
+// failure replaces to the list, which retriggers this rule). Watching the
+// route sees only the final route of a guard redirect chain, so a chain moves
+// focus once. pv-ms7c (app-wide SPA focus and title) may replace this.
+watch(
+  () => ({ path: route.path, name: route.name, params: { ...route.params } }),
+  async (to, from) => {
+    if (treeIsSidebar.value || to.path === from.path || to.params.reportId) {
+      return;
+    }
+    if (onlyCalendarChanged(to, from)) {
+      return;
+    }
+    await nextTick();
+    focusSettingsHeading();
+  },
+);
 </script>
 
 <template>
