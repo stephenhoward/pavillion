@@ -136,7 +136,7 @@ describe('notification read path — target derivation (integration)', () => {
     return notificationService.getNotifications(account.id, 50, 0);
   }
 
-  it('sends the calendar owner to their own calendar\'s reports tab', async () => {
+  it('sends the calendar owner to their own calendar\'s reports page', async () => {
     const inbox = await inboxFor(ownerAccount);
 
     expect(inbox).toHaveLength(1);
@@ -163,7 +163,7 @@ describe('notification read path — target derivation (integration)', () => {
 
   it('never emits owner_report to an account outside owners ∪ instance admins', async () => {
     // Invariant 1, as live data rather than code inspection. Editors have
-    // edit rights on the calendar but the reports tab is owner-gated, so an
+    // edit rights on the calendar but the reports page is owner-gated, so an
     // owner_report target would point them at a blocked surface. The
     // protection is that they are not in the report audience at all.
     const owners = await calendarInterface.getOwnersForCalendar(calendar.id);
@@ -371,7 +371,7 @@ describe('notification read path — target derivation (integration)', () => {
       // of ReportEntity.calendar_id, and it is only safe because the source
       // is write-once. A reassignment path would leave stored notifications
       // pointing at the previous calendar — routing an owner to a DIFFERENT
-      // calendar's reports tab. If this test starts failing, the copy needs a
+      // calendar's reports page. If this test starts failing, the copy needs a
       // write-through, not a relaxed assertion.
       const source = readFileSync(
         path.resolve(__dirname, '../../../moderation/service/moderation.ts'),
