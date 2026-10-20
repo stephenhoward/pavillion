@@ -14,6 +14,8 @@
  *   tech can tell the Calendar group's General from the Instance group's.
  * - The skip control is a button that moves focus to the page h1 without
  *   navigating.
+ * - The groups sit in their own wrapper so they scroll on a short window
+ *   while the Log out footer stays pinned at the tree's bottom.
  * - Its one viewport watch moves focus and never navigates: crossing below
  *   md while focus is in the tree, which is about to be display: none, moves
  *   focus to the page h1 rather than letting it fall to the body.
@@ -80,24 +82,26 @@ onMounted(() => {
 
 <template>
   <nav ref="navEl" class="settings-tree" :aria-label="t('tree_label')">
-    <button
-      type="button"
-      class="settings-tree__skip"
-      @click="focusSettingsHeading()"
-    >
-      {{ t('skip_to_content') }}
-    </button>
-    <div
-      v-for="entry in groups"
-      :key="entry.group"
-      role="group"
-      class="settings-tree__group"
-      :aria-labelledby="`${labelIdPrefix}-${entry.group}`"
-    >
-      <p :id="`${labelIdPrefix}-${entry.group}`" class="settings-tree__heading">
-        {{ t(SETTINGS_GROUP_TITLE_KEYS[entry.group]) }}
-      </p>
-      <NavList :items="entry.items" mode="sidebar" />
+    <div class="settings-tree__groups">
+      <button
+        type="button"
+        class="settings-tree__skip"
+        @click="focusSettingsHeading()"
+      >
+        {{ t('skip_to_content') }}
+      </button>
+      <div
+        v-for="entry in groups"
+        :key="entry.group"
+        role="group"
+        class="settings-tree__group"
+        :aria-labelledby="`${labelIdPrefix}-${entry.group}`"
+      >
+        <p :id="`${labelIdPrefix}-${entry.group}`" class="settings-tree__heading">
+          {{ t(SETTINGS_GROUP_TITLE_KEYS[entry.group]) }}
+        </p>
+        <NavList :items="entry.items" mode="sidebar" />
+      </div>
     </div>
     <div class="settings-tree__footer">
       <NavList :items="logoutItems" mode="sidebar" />

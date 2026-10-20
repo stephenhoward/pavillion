@@ -144,12 +144,17 @@
  * styles come from _settings-nav.scss.
  *
  * At md+ it sticks to the top of the viewport at most one viewport tall,
- * so Log out in its footer stays on screen beside a tall leaf; the grid
- * stretches it to that cap and the footer's auto margin pins it to the
- * bottom. Taller rows scroll inside the tree. That scroll container clips,
- * so its padding must stay at or above the rows' 4px focus-ring reach
- * (2px outline, 2px offset) on every side a row sits against: space-3
- * inline, space-6 block. No ancestor clips overflow.
+ * and the grid stretches it to that cap. The groups take the free height
+ * and scroll on their own, so the Log out footer stays pinned to the
+ * bottom of the screen however short the window. The groups wrapper is the
+ * one scroll container and clips, so its padding must stay at or above the
+ * rows' 4px focus-ring reach (2px outline, 2px offset) on every side a row
+ * sits against: space-3 inline, space-6 block. The footer is outside it
+ * and nothing else clips.
+ *
+ * Its width is --pav-settings-tree-width, capped by the viewport so
+ * enlarged text cannot squeeze the content column at md; the row labels
+ * wrap.
  */
 .settings-tree {
   display: none;
@@ -159,15 +164,24 @@
     inset-block-start: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--pav-space-6);
     flex-shrink: 0;
     inline-size: var(--pav-settings-tree-width);
     max-block-size: 100vh;
     max-block-size: 100dvh;
-    overflow-y: auto;
-    padding: var(--pav-space-6) var(--pav-space-3);
+    padding-block-end: var(--pav-space-6);
     background: var(--pav-surface-primary);
     border-inline-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
+    overflow-wrap: anywhere;
+  }
+
+  &__groups {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--pav-space-6);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--pav-space-6) var(--pav-space-3);
   }
 
   /* Hidden, it drops the global 44px button floor so the 1px clip holds;
@@ -211,7 +225,8 @@
   /* The rule above the footer is what sets Log out apart here, so the
      list's own gap above it is not repeated */
   &__footer {
-    margin-block-start: auto;
+    flex: none;
+    margin-inline: var(--pav-space-3);
     padding-block-start: var(--pav-space-4);
     border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
 

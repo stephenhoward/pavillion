@@ -840,6 +840,9 @@ onMounted(() => {
   color: var(--pav-text-error);
   font-size: 0.875rem;
   font-weight: 500;
+  text-align: start;
+  /* The global button style does not wrap; enlarged text in the md content column needs it to */
+  white-space: normal;
   cursor: pointer;
   transition: color 0.15s ease;
 

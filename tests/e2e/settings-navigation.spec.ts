@@ -36,8 +36,10 @@ import {
   settingsPath,
   settingsRootList,
   settingsRow,
+  settingsContent,
   settingsTitle,
   settingsTree,
+  treeSkipControl,
 } from './helpers/settings-nav';
 
 /**
@@ -71,6 +73,15 @@ const RAIL_MAX_WIDTH = 65;
 
 /** Full sidebar width is --pav-shell-sidebar-width (15rem, 240px); anything well over the rail. */
 const FULL_SIDEBAR_MIN_WIDTH = 200;
+
+/** A rail link narrower than this has been collapsed by a stray layout rule. */
+const RAIL_LINK_MIN_WIDTH = 40;
+
+/** A short desktop window: the tree is taller than the viewport here. */
+const SHORT_DESKTOP = { width: 1280, height: 500 };
+
+/** 200% text: the root font size a browser zoom-text setting would give. */
+const ENLARGED_ROOT_FONT = '32px';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -144,6 +155,7 @@ test.describe('phone drill-down', () => {
     await expect(settingsTitle(page, 'Security')).not.toBeFocused();
 
     // The target comes from the route, not history: this tab never visited the account list.
+    await expect(backLink(page, 'Account')).toBeVisible();
     await backLink(page, 'Account').click();
     await expect(page).toHaveURL(pathPattern(settingsPath.account));
     await expect(settingsTitle(page, 'Account')).toBeVisible();
@@ -283,6 +295,8 @@ test.describe('resize across md', () => {
     await expect(settingsRow(page.getByRole('main'), 'Account')).toBeVisible();
     await expect(mobileNav(page)).toBeVisible();
     await expect(mainNav(page)).toBeHidden();
+    // The skip control lives only in the tree, so its absence is the tree's.
+    await expect(treeSkipControl(page)).toHaveCount(0);
 
     // At md: the script forwards and the CSS shows the tree and the rail.
     await page.setViewportSize({ width: SHELL_MD, height: DESKTOP.height });
@@ -292,7 +306,73 @@ test.describe('resize across md', () => {
     await expect(mainNav(page)).toBeVisible();
     await expect(mobileNav(page)).toBeHidden();
     expect(await mainNavWidth(page)).toBeLessThanOrEqual(RAIL_MAX_WIDTH);
+    for (const link of await mainNav(page).getByRole('link').all()) {
+      const box = await link.boundingBox();
+      expect(box, 'rail link is rendered').not.toBeNull();
+      expect(box!.width, 'rail link keeps its width at md').toBeGreaterThanOrEqual(RAIL_LINK_MIN_WIDTH);
+    }
   });
+});
+
+test.describe('tree layout', () => {
+  test('Log out stays inside the viewport while a tall leaf is scrolled', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+
+    for (const viewport of [SHORT_DESKTOP, DESKTOP]) {
+      await page.setViewportSize(viewport);
+      await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'));
+      for (const position of ['top', 'bottom'] as const) {
+        await page.evaluate((to) => {
+          const root = document.scrollingElement ?? document.documentElement;
+          root.scrollTo(0, to === 'top' ? 0 : root.scrollHeight);
+        }, position);
+        const box = await logOutButton(settingsTree(page)).boundingBox();
+        expect(box, 'Log out is rendered').not.toBeNull();
+        expect(box!.y, `Log out top at ${viewport.height}px, ${position}`).toBeGreaterThanOrEqual(0);
+        expect(box!.y + box!.height, `Log out bottom at ${viewport.height}px, ${position}`)
+          .toBeLessThanOrEqual(viewport.height);
+      }
+    }
+  });
+
+  test('the tree keeps its full width at default text size', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
+
+    const box = await settingsTree(page).boundingBox();
+    // --pav-settings-tree-width caps at 14rem, 224px at the default root size.
+    expect(box!.width).toBeCloseTo(224, 0);
+  });
+
+  for (const width of [SHELL_MD, 900]) {
+    test(`nothing overflows sideways at ${width}px with 200% text`, async ({ page }) => {
+      await page.setViewportSize({ width, height: DESKTOP.height });
+      await loginAsAdmin(page, env.baseURL);
+
+      for (const leaf of [calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'), settingsLeaf.profile]) {
+        await gotoSettings(page, env.baseURL, leaf);
+        // Set on the element, not with addStyleTag, which the CSP blocks.
+        await page.evaluate((size) => {
+          document.documentElement.style.fontSize = size;
+        }, ENLARGED_ROOT_FONT);
+        await expect(settingsTree(page)).toBeVisible();
+
+        const documentWidth = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth,
+        }));
+        expect(documentWidth.scrollWidth, `document overflows on ${leaf.path}`)
+          .toBeLessThanOrEqual(documentWidth.innerWidth);
+        const column = await settingsContent(page).evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+        expect(column.scrollWidth, `content column overflows on ${leaf.path}`)
+          .toBeLessThanOrEqual(column.clientWidth);
+      }
+    });
+  }
 });
 
 // The legacy query form dies with its redirect (follow-up pv-y5xy); delete these cases with it.
