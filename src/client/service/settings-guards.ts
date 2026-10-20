@@ -1,6 +1,7 @@
 import type { NavigationGuard, RouteLocationNamedRaw } from 'vue-router';
 import type { CalendarInfo } from '@/common/model/calendar_info';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFundingStore } from '@/client/stores/fundingStore';
 import { resolveCurrentCalendar, type CalendarLoader } from '@/client/service/current-calendar';
 import {
   firstVisibleLeaf,
@@ -18,8 +19,8 @@ import {
  * settingsIndexTarget, is shared with list-page.vue's resize watch so the two
  * cannot disagree. Leaf visibility itself lives in nav-items.ts; every
  * consumer (tree, list page, layout, these guards, the calendar owner gate)
- * builds its context with buildSettingsNavContext so the tree never shows a
- * leaf a redirect rejects.
+ * builds its context with buildSettingsNavContext over readSettingsNavSources,
+ * so the tree never shows a leaf a redirect rejects.
  *
  * Every redirect replaces, and every target is a fixed named route: no URL
  * input is echoed into one. See DEC-021, client settings information
@@ -46,6 +47,28 @@ export interface SettingsNavSources {
   isAdmin: boolean;
   /** The cached instance funding flag; null (not yet loaded) reads as disabled. */
   fundingEnabled: boolean | null;
+}
+
+/**
+ * Read the viewer's loaded settings data from the calendar and funding
+ * stores. Every consumer passes this to buildSettingsNavContext rather than
+ * assembling the sources itself.
+ *
+ * Reactive-safe inside a computed(): it reads store state directly, so the
+ * computed re-evaluates when the calendars, the selection or the funding
+ * flag change. It loads nothing. A null funding flag means "not loaded yet"
+ * and is read as disabled, so a component must call
+ * FundingService.ensureInstanceFundingLoaded() itself (and the calendar
+ * loader likewise) for the context to reach its final value.
+ */
+export function readSettingsNavSources(isAdmin: () => boolean): SettingsNavSources {
+  const calendarStore = useCalendarStore();
+  return {
+    calendars: calendarStore.calendarInfos,
+    selectedCalendarId: calendarStore.selectedCalendarId,
+    isAdmin: isAdmin(),
+    fundingEnabled: useFundingStore().instanceFundingEnabled,
+  };
 }
 
 /**
@@ -84,9 +107,10 @@ export function buildSettingsNavContext(
 
 /** What the index forward needs to load the viewer's context. */
 export interface SettingsForwardDeps {
+  /** Loads the viewer's calendars into the calendar store. */
   loadCalendars: CalendarLoader;
   isAdmin: () => boolean;
-  /** Resolves the cached instance funding flag; never rejects. */
+  /** Loads the instance funding flag into the funding store; never rejects. */
   loadInstanceFunding: () => Promise<boolean>;
 }
 
@@ -98,7 +122,8 @@ export interface SettingsGuardDeps extends SettingsForwardDeps {
 /**
  * The one index-forward target computation: the group's first visible leaf
  * for the viewer, or null for no forward. Loads the viewer's calendars and
- * the funding flag first, so a cold load decides on loaded data. A failed
+ * the funding flag into their stores first, so a cold load decides on
+ * loaded data. A failed
  * calendar load, or a calendar the viewer cannot resolve, is null — never
  * the Profile fallback, which only guards against an empty group.
  */
@@ -107,20 +132,14 @@ export async function settingsIndexTarget(
   calendarParam: unknown,
   deps: SettingsForwardDeps,
 ): Promise<RouteLocationNamedRaw | null> {
-  let calendars: CalendarInfo[];
   try {
-    calendars = await deps.loadCalendars();
+    await deps.loadCalendars();
   }
   catch {
     return null;
   }
-  const fundingEnabled = await deps.loadInstanceFunding();
-  const ctx = buildSettingsNavContext(group, calendarParam, {
-    calendars,
-    selectedCalendarId: useCalendarStore().selectedCalendarId,
-    isAdmin: deps.isAdmin(),
-    fundingEnabled,
-  });
+  await deps.loadInstanceFunding();
+  const ctx = buildSettingsNavContext(group, calendarParam, readSettingsNavSources(deps.isAdmin));
   return ctx ? firstVisibleLeaf(group, ctx) : null;
 }
 
@@ -169,14 +188,8 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
 
     /** The funding plan leaf: redirect to Profile when the tree hides it. */
     fundingEnabledRedirect: async () => {
-      const fundingEnabled = await deps.loadInstanceFunding();
-      const store = useCalendarStore();
-      const ctx = buildSettingsNavContext('account', undefined, {
-        calendars: store.calendarInfos,
-        selectedCalendarId: store.selectedCalendarId,
-        isAdmin: deps.isAdmin(),
-        fundingEnabled,
-      });
+      await deps.loadInstanceFunding();
+      const ctx = buildSettingsNavContext('account', undefined, readSettingsNavSources(deps.isAdmin));
       return ctx && isVisibleLeaf('account', 'funding_plan', ctx)
         ? true
         : { name: 'profile', replace: true };

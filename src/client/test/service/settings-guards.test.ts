@@ -4,11 +4,14 @@ import type { RouteLocationNormalized } from 'vue-router';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFundingStore } from '@/client/stores/fundingStore';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 import type { SettingsGroup } from '@/client/components/logged_in/settings/nav-items';
 import {
   buildSettingsNavContext,
   createSettingsGuards,
   isReportId,
+  readSettingsNavSources,
   settingsIndexTarget,
   type SettingsGuardDeps,
 } from '@/client/service/settings-guards';
@@ -42,6 +45,8 @@ describe('settings guards', () => {
   let deps: SettingsGuardDeps & { loadCalendars: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
+    // setSelectedCalendar persists, and a new store reads the key back.
+    localStorage.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
     setActivePinia(createPinia());
     infos = [owned('o1', 'riverside'), edited('e1', 'shared')];
     sidebar = true;
@@ -53,7 +58,10 @@ describe('settings guards', () => {
         return infos;
       }),
       isAdmin: () => admin,
-      loadInstanceFunding: async () => funding,
+      loadInstanceFunding: async () => {
+        useFundingStore().setInstanceFundingEnabled(funding);
+        return funding;
+      },
       treeIsSidebar: () => sidebar,
     };
   });
@@ -120,6 +128,14 @@ describe('settings guards', () => {
       expect(await run(settingsIndexRedirect('calendar'), route({ calendar }))).toBe(true);
     });
 
+    it('leaves the selection untouched for a calendar the viewer cannot resolve', async () => {
+      useCalendarStore().setSelectedCalendar('o1');
+      const { settingsIndexRedirect } = createSettingsGuards(deps);
+      await run(settingsIndexRedirect('calendar'), route({ calendar: 'elsewhere' }));
+      expect(useCalendarStore().selectedCalendarId).toBe('o1');
+      expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('o1');
+    });
+
     it.each(groups)('does not forward %s when the calendar load fails', async (group) => {
       deps.loadCalendars.mockRejectedValue(new Error('offline'));
       const { settingsIndexRedirect } = createSettingsGuards(deps);
@@ -165,6 +181,22 @@ describe('settings guards', () => {
     it('returns null when the calendar load fails', async () => {
       deps.loadCalendars.mockRejectedValue(new Error('offline'));
       expect(await settingsIndexTarget('root', undefined, deps)).toBeNull();
+    });
+  });
+
+  describe('readSettingsNavSources', () => {
+    it('reads the loaded calendars, selection and funding flag from the stores', () => {
+      useCalendarStore().setCalendarInfos(infos);
+      useCalendarStore().setSelectedCalendar('e1');
+      useFundingStore().setInstanceFundingEnabled(true);
+      admin = true;
+      expect(readSettingsNavSources(() => admin)).toEqual({
+        calendars: infos, selectedCalendarId: 'e1', isAdmin: true, fundingEnabled: true,
+      });
+    });
+
+    it('reports a funding flag that has not loaded as null', () => {
+      expect(readSettingsNavSources(() => false).fundingEnabled).toBeNull();
     });
   });
 
@@ -222,10 +254,19 @@ describe('settings guards', () => {
       ['a protocol-relative tab', { tab: '//evil.example' }],
       ['an absolute URL tab', { tab: 'https://evil.example' }],
       ['tab=settings with a checkout session', { tab: 'settings', session_id: 'cs_test_123' }],
+      ['a bare ?tab', { tab: null }],
       ['no tab', {}],
     ])('lets %s through untouched', async (_label, query) => {
       const { legacyTabReportsRedirect } = createSettingsGuards(deps);
       expect(await run(legacyTabReportsRedirect, route({ calendar }, query))).toBe(true);
+    });
+
+    it.each<[string, Params]>([
+      ['a missing calendar param', {}],
+      ['an array calendar param', { calendar: [calendar] }],
+    ])('lets tab=reports with %s through untouched', async (_label, params) => {
+      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
+      expect(await run(legacyTabReportsRedirect, route(params, { tab: 'reports', report: REPORT_ID }))).toBe(true);
     });
 
     it('carries no other query key into the target', async () => {
