@@ -99,13 +99,12 @@ describe('CalendarSwitcherSheet', () => {
     expect(wrapper.find('[aria-current="true"]').exists()).toBe(false);
   });
 
-  it('emits create from the create row, which closes the list', async () => {
+  it('emits create, and not close, from the create row', async () => {
     seed();
     const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
     await wrapper.find('[data-testid="switcher-create"]').trigger('click');
-    expect(wrapper.emitted('create')).toBeTruthy();
-    const items = wrapper.findAll('li');
-    expect(items[items.length - 1].find('[data-testid="switcher-create"]').exists()).toBe(true);
+    expect(wrapper.emitted('create')).toHaveLength(1);
+    expect(wrapper.emitted('close')).toBeUndefined();
   });
 
   it('shows only the create row for an account with no calendars', () => {
