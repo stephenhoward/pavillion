@@ -51,7 +51,7 @@ defineProps<{
     flex-direction: column;
     list-style: none;
     margin: 0;
-    padding: var(--pav-space-4);
+    padding: var(--pav-shell-nav-padding);
     gap: var(--pav-space-1);
   }
 }

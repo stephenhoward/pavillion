@@ -9,16 +9,19 @@
 @use '../mixins' as *;
 
 /**
- * Shell navigation width
+ * Shell navigation geometry
  * The sidebar's width and the main column's offset both read
- * --pav-shell-nav-width. Rail mode (app-shell--rail, set from route meta
- * shellRail) swaps it at md+ only. Both declarations live in this one global
- * layer, base first: a scoped base in app-shell.vue would outrank the global
- * swap and the rail would never apply. Nothing transitions; the width and
- * the main column snap.
+ * --pav-shell-nav-width; the sidebar list's padding reads
+ * --pav-shell-nav-padding. Rail mode (app-shell--rail, set from route meta
+ * shellRail) swaps both at md+ only. This file sits in a cascade layer, and
+ * an unlayered scoped rule beats any layered one whatever its specificity, so
+ * the components read these properties rather than being overridden from
+ * here, and the base values live beside the swap rather than in a scoped
+ * block. Nothing transitions; the width and the main column snap.
  */
 .app-shell {
   --pav-shell-nav-width: var(--pav-shell-sidebar-width);
+  --pav-shell-nav-padding: var(--pav-space-4);
 }
 
 /**
@@ -186,16 +189,12 @@
  * Rail mode (md+)
  * Icon-only sidebar: labels stay in the accessibility tree through the
  * sr-only mixin (never display: none, which would strip the link's name),
- * and the badge sits over the icon. The list padding override names
- * .sidebar so it outranks sidebar.vue's scoped .sidebar__list rule.
+ * and the badge sits over the icon.
  */
 .app-shell--rail {
   @include pav-media(md) {
     --pav-shell-nav-width: var(--pav-shell-rail-width);
-
-    .sidebar .sidebar__list {
-      padding: var(--pav-space-2);
-    }
+    --pav-shell-nav-padding: var(--pav-space-2);
 
     .shell-nav-item--sidebar {
       justify-content: center;
@@ -216,6 +215,12 @@
         block-size: 1rem;
         padding: 0 var(--pav-space-0_5);
         font-size: 0.625rem;
+
+        /* Forced colours drop the badge's background, so a border keeps
+           its digits apart from the icon beneath */
+        @media (forced-colors: active) {
+          border: var(--pav-border-width-1) solid CanvasText;
+        }
       }
     }
   }

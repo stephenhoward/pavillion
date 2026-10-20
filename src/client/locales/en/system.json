@@ -5,7 +5,8 @@
     "new_event": "New Event",
     "settings_button": "Settings",
     "feed_button": "Feed",
-    "inbox_badge_label": "{{count}} unread notification"
+    "inbox_badge_label_one": "{{count}} unread notification",
+    "inbox_badge_label_other": "{{count}} unread notifications"
   },
   "powered_by": "Powered by Pavillion",
   "language_picker": {

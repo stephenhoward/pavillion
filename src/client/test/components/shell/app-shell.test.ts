@@ -40,6 +40,21 @@ const navigationItems: NavigationItem[] = [
   { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' },
 ];
 
+/** Stubs both viewport readings a script branch could consult. */
+const stubViewport = (width: number, matches: boolean) => {
+  vi.stubGlobal('innerWidth', width);
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
+};
+
 const mountAt = async (path: string) => {
   const router = createRouterForTest();
   await router.push(path);
@@ -81,22 +96,28 @@ describe('app shell rail mode', () => {
     expect(wrapper.classes()).not.toContain('app-shell--rail');
   });
 
-  it('sets the rail class regardless of viewport width', async () => {
-    vi.stubGlobal('innerWidth', 375);
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }));
+  it('sets the rail class on a phone-width viewport', async () => {
+    stubViewport(375, false);
 
     const { wrapper } = await mountAt('/settings');
 
     expect(wrapper.classes()).toContain('app-shell--rail');
+  });
+
+  it('leaves the rail class to route meta on a wide viewport', async () => {
+    stubViewport(1280, true);
+
+    const { wrapper: railWrapper } = await mountAt('/settings');
+    const { wrapper: plainWrapper } = await mountAt('/calendar');
+
+    expect(railWrapper.classes()).toContain('app-shell--rail');
+    expect(plainWrapper.classes()).not.toContain('app-shell--rail');
+  });
+
+  it('labels the skip link from the system translations', async () => {
+    const { wrapper } = await mountAt('/calendar');
+
+    expect(wrapper.find('.app-shell__skip-link').text()).toBe('Skip to main content');
   });
 
   it('keeps each sidebar link named by its label, with the badge count in the name', async () => {
