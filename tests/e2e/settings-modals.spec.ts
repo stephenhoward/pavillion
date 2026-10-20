@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { paneHeading } from './helpers/pane-heading';
+import { gotoSettings, settingsPath } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -44,12 +44,10 @@ test.describe('Settings Page Modals', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Log in as admin and navigate to settings
+    // Log in as admin and open the Security leaf, where Change Email and
+    // Change Password live
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/settings/account');
-
-    // Wait for settings page to load
-    await expect(paneHeading(page, 'Settings')).toBeVisible();
+    await gotoSettings(page, env.baseURL, settingsPath.security, 'Security');
   });
 
   test.describe('Change Email Modal', () => {

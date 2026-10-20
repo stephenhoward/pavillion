@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { calendarLeafPath, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -80,14 +81,8 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
 
     await loginAsAdmin(page, env.baseURL);
 
-    // Open the admin calendar's management pane, where the language picker
-    // lives on the pane's own Settings tab.
-    await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-    await page.waitForLoadState('networkidle');
-
-    const settingsTab = page.locator('button[role="tab"]#settings-tab');
-    await expect(settingsTab).toBeVisible();
-    await settingsTab.click();
+    // Open the admin calendar's General page, where the language picker lives.
+    await gotoSettings(page, env.baseURL, calendarLeafPath('test_calendar', 'general'), 'General');
     await page.waitForLoadState('networkidle');
 
     // Find and click a button that opens the language picker (add language)

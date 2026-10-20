@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { TEST_ADMIN, waitForPostLoginUrl } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import { clearEmails, waitForEmail, extractLinkFromEmail } from './helpers/emails';
+import { gotoSettings, logOutButton, settingsPath, settingsTree } from './helpers/settings-nav';
 
 /**
  * E2E Tests: Authentication Workflows
@@ -209,12 +210,12 @@ test.describe('Authentication Workflows', () => {
       await page.getByRole('button', { name: 'Sign in' }).click();
       await waitForPostLoginUrl(page);
 
-      // Step 2: Navigate to profile/settings page
-      await page.goto(env.baseURL + '/settings/account');
-      await page.waitForTimeout(2000);
+      // Step 2: Open a settings leaf; at desktop width Log out is in the
+      // settings tree's footer
+      await gotoSettings(page, env.baseURL, settingsPath.profile, 'Profile');
 
-      // Step 3: Click logout button
-      const logoutButton = page.locator('.logout-button');
+      // Step 3: Click Log out
+      const logoutButton = logOutButton(settingsTree(page));
       await expect(logoutButton).toBeVisible({ timeout: 5000 });
       await logoutButton.click();
 
