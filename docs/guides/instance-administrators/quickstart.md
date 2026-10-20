@@ -78,7 +78,7 @@ Use a mailbox you check daily. Password resets, account applications, and modera
 
 The one-event smoke test confirms the app is wired end-to-end — database writes, the public site renders, the URL handle resolves, images upload — before you invite anyone else in.
 
-From the dashboard:
+After you sign in, Pavillion opens on **Calendar**. With no calendar on the account yet, that page is a single prompt — *Create your first calendar* — with a <Btn>Create Your Calendar</Btn> button. From there:
 
 1. Create a calendar. Pick a short, durable handle — see [Customize your calendar's identity](/guides/calendar-owners/identity) for the longer version of why. A throwaway calendar named `test` is fine for the smoke test; you can delete it later.
 2. Publish one event. Any title, any future date. Save it.
@@ -92,7 +92,7 @@ This is the part that's easy to silently get wrong. The app can come up green, t
 
 The fastest test is to follow another live Pavillion instance and confirm at least one event arrives. You'll need the handle of a calendar on another instance to follow — ask in the community channels if you don't have one yet, or set up a second test instance and federate the two.
 
-From your dashboard, find the **Follow a calendar** field, type the handle (`somecalendar@their-instance.example`), and submit. Within a few seconds the follow should be accepted; within a few seconds more, any recent public events from that calendar should appear in your view of theirs.
+Open **Feed** and click <Btn>Follow a Calendar</Btn>. In the dialog that opens, type the handle (`somecalendar@their-instance.example`) into the **Calendar Identifier** field, check the preview that appears, and click <Btn>Follow</Btn>. Within a few seconds the follow should be accepted; within a few seconds more, any recent public events from that calendar should appear in the feed's **Events** tab. The [follow-and-repost](/guides/calendar-owners/follow-and-repost) guide has the longer version.
 
 If nothing arrives within a minute or two, head to [Testing federation](./testing-federation). The most common causes are DNS that resolves locally but not externally, TLS that isn't trusted by the other instance, and clock skew breaking signature verification.
 
