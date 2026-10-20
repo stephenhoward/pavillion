@@ -20,6 +20,8 @@ import SettingsPageHeader from './page-header.vue';
 
 const route = useRoute();
 
+// The literals are the real table's record paths, pinned by the "group
+// record paths" case in test/routing/settings-guards.test.ts.
 const pathGroup = computed<'admin' | 'account' | 'root'>(() => {
   const paths = route.matched.map((record) => record.path);
   if (paths.includes('/settings/admin')) {

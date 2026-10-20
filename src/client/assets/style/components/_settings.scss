@@ -141,19 +141,30 @@
  * Settings tree (settings/tree.vue): the persistent secondary sidebar at
  * md+. Below md it is display: none, never only visually hidden, so its
  * rows leave the accessibility tree while the list pages carry them. Row
- * styles come from _settings-nav.scss. No ancestor in the settings layout
- * clips overflow: the rows' focus ring extends past their edges.
+ * styles come from _settings-nav.scss.
+ *
+ * At md+ it sticks to the top of the viewport at most one viewport tall,
+ * so Log out in its footer stays on screen beside a tall leaf; the grid
+ * stretches it to that cap and the footer's auto margin pins it to the
+ * bottom. Taller rows scroll inside the tree. That scroll container clips,
+ * so its padding must stay at or above the rows' 4px focus-ring reach
+ * (2px outline, 2px offset) on every side a row sits against: space-3
+ * inline, space-6 block. No ancestor clips overflow.
  */
 .settings-tree {
   display: none;
 
   @include pav-media(md) {
+    position: sticky;
+    inset-block-start: 0;
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-6);
     flex-shrink: 0;
     inline-size: var(--pav-settings-tree-width);
-    min-block-size: 100%;
+    max-block-size: 100vh;
+    max-block-size: 100dvh;
+    overflow-y: auto;
     padding: var(--pav-space-6) var(--pav-space-3);
     background: var(--pav-surface-primary);
     border-inline-end: var(--pav-border-width-1) solid var(--pav-border-subtle);

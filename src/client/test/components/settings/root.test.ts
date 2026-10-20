@@ -31,6 +31,17 @@ const CalendarParent = {
   template: '<div data-testid="calendar-parent" :data-mounted-for="mountedFor"><RouterView /></div>',
 };
 
+// Shared by leaves of more than one group, so the component alone never
+// forces a remount between them and only the pane key can.
+let leafSetups = 0;
+const CountingLeaf = {
+  setup() {
+    leafSetups += 1;
+    return {};
+  },
+  template: '<div data-testid="pane" />',
+};
+
 function calendar(id: string, urlName: string, name: string): Calendar {
   const cal = new Calendar(id, urlName);
   cal.content('en').name = name;
@@ -55,12 +66,12 @@ function makeRouter(): Router {
           { path: 'widget', component: Pane, name: 'calendar_widget' },
         ] },
         { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' } },
-        { path: 'account/profile', component: Pane, name: 'profile' },
-        { path: 'account/security', component: Pane, name: 'security' },
+        { path: 'account/profile', component: CountingLeaf, name: 'profile' },
+        { path: 'account/security', component: CountingLeaf, name: 'security' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
         { path: 'admin', component: Outlet, children: [
           { path: '', component: SettingsListPage, name: 'admin', meta: { settingsGroup: 'admin' } },
-          { path: 'settings', component: Pane, name: 'admin_settings' },
+          { path: 'settings', component: CountingLeaf, name: 'admin_settings' },
           { path: 'accounts', component: Pane, name: 'accounts' },
           { path: 'calendars', component: Pane, name: 'admin_calendars' },
           { path: 'moderation', component: Pane, name: 'moderation' },
@@ -99,6 +110,7 @@ describe('settings layout', () => {
     ]);
     router = makeRouter();
     calendarParentSetups = 0;
+    leafSetups = 0;
     wrapper = null;
   });
 
@@ -173,6 +185,14 @@ describe('settings layout', () => {
     await go('/settings/calendar/riverside/editors');
     await go('/settings/calendar/riverside');
     expect(calendarParentSetups).toBe(1);
+  });
+
+  it('keeps the pane mounted between account leaves and remounts it for admin', async () => {
+    await mountAt('/settings/account/profile', true);
+    await go('/settings/account/security');
+    expect(leafSetups).toBe(1);
+    await go('/settings/admin/settings');
+    expect(leafSetups).toBe(2);
   });
 
   it('renders no Account or Instance rows in the calendar switcher', async () => {

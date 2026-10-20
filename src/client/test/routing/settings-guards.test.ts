@@ -235,6 +235,16 @@ describe('settings routes on the real route table', () => {
       },
     );
 
+    // settings/root.vue keys its pane on these record paths.
+    it('matches the group record paths the settings layout keys its pane on', () => {
+      const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
+      const matchedPaths = (path: string) => router.resolve(path).matched.map((record) => record.path);
+
+      expect(matchedPaths('/settings/admin/settings')).toContain('/settings/admin');
+      expect(matchedPaths('/settings/account')).toContain('/settings/account');
+      expect(matchedPaths('/settings/account/profile')).toContain('/settings/account/profile');
+    });
+
     it('never names an index record after a leaf or Profile, so no forward can loop', () => {
       const indexes = flatten(settingsRecord(buildRoutes()))
         .map(({ record }) => record)
