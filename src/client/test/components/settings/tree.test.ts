@@ -226,6 +226,20 @@ describe('settings tree', () => {
       expect(document.activeElement).toBe(document.body);
     });
 
+    it('leaves focus on the body when a pointer press outside the tree blurred it', async () => {
+      const w = await mountAt('/settings/account/profile', { attach: true });
+      const row = w.find('a').element as HTMLElement;
+      row.focus();
+      // A press on non-focusable space blurs to the body without a focusin
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      row.blur();
+      expect(document.activeElement).toBe(document.body);
+
+      media.setMatches(false);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
     it('leaves focus alone when it is outside the tree', async () => {
       await mountAt('/settings/account/profile', { attach: true });
       outside.focus();

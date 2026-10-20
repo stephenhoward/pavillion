@@ -20,16 +20,30 @@ export function focusSettingsHeading(): void {
  * event fires, so a viewport watch that reads document.activeElement alone
  * sees the body. A document-level focusin listener records whether focus last
  * landed inside `el`; the blur that a hide causes fires no focusin, so the
- * record survives it. Page-mode only; pv-ms7c may replace this with a
- * general focus rule.
+ * record survives it. A press on non-focusable space also blurs to the body
+ * without a focusin, so a pointerdown outside `el` clears the record.
+ * Page-mode only; pv-ms7c may replace this with a general focus rule.
  */
 export function useFocusWithin(el: Ref<HTMLElement | null>): () => boolean {
   let lastFocusInside = false;
+  const isInside = (target: EventTarget | null): boolean =>
+    !!el.value && target instanceof Node && el.value.contains(target);
   const onFocusIn = (event: FocusEvent): void => {
-    lastFocusInside = !!el.value && event.target instanceof Node && el.value.contains(event.target);
+    lastFocusInside = isInside(event.target);
   };
-  onMounted(() => document.addEventListener('focusin', onFocusIn));
-  onUnmounted(() => document.removeEventListener('focusin', onFocusIn));
+  const onPointerDown = (event: Event): void => {
+    if (!isInside(event.target)) {
+      lastFocusInside = false;
+    }
+  };
+  onMounted(() => {
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('pointerdown', onPointerDown, true);
+  });
+  onUnmounted(() => {
+    document.removeEventListener('focusin', onFocusIn);
+    document.removeEventListener('pointerdown', onPointerDown, true);
+  });
 
   return () => {
     const active = document.activeElement;
