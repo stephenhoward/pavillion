@@ -40,11 +40,14 @@ Use Serena tools for efficient code navigation instead of reading entire files:
 
 ## Verdict System
 
-Use one of these three verdicts in every audit:
+Use one of these four verdicts in every audit:
 
 - **PASS** -- No significant issues found. Code is clean in this domain.
 - **PASS WITH WARNINGS** -- Minor concerns found that should be noted but don't block merging. List the warnings.
 - **FAIL** -- Significant issues found that should be addressed before merging. List the issues that must be fixed.
+- **PARTIAL** -- The audit stopped early under the budget rule (see "Budget" below) and did not cover every changed file. List the files actually reviewed under `### Scope covered`. Findings so far stand.
+
+PARTIAL is a fourth verdict, not a flavour of FAIL. A FAIL returns findings to the implementer for a retry round; a partial audit has no such finding, and treating it as FAIL would burn a retry on nothing. The orchestrator reruns the auditor on the uncovered files instead.
 
 ## Base Report Structure
 
@@ -77,9 +80,12 @@ Your domain-specific agent defines the full report format. Use this as the struc
 ### Strengths
 - [Code that correctly follows standards in this domain]
 
-### Verdict: [PASS / PASS WITH WARNINGS / FAIL]
+### Verdict: [PASS / PASS WITH WARNINGS / FAIL / PARTIAL]
 
 [If FAIL, list the issues that must be fixed before merging]
+
+### Scope covered
+[PARTIAL only: the changed files actually reviewed, one per line]
 ```
 
 Domain-specific agents extend this with additional sections and columns (e.g., "Zoom Out Assessment", "Neighborhood" column, "Missing Tests", "Vulnerability Checklist").
@@ -91,6 +97,14 @@ Unless your domain-specific agent defines a different scale:
 - **HIGH**: Significant issue that should block merging
 - **MEDIUM**: Concern that should be addressed but may not block
 - **LOW**: Minor issue or best practice gap
+
+## Budget
+
+Auditors are short, read-only and cheap to rerun, so the `[budget]` rules in `AGENTS.md` reduce to one rule here:
+
+- Ignore `[budget]` lines below 80% context and below 90% five-hour.
+- At or past either: stop opening new files. Finish the finding you are writing. Emit the report with `### Verdict: PARTIAL` and a `### Scope covered` list naming the files actually reviewed. Findings so far stand.
+- Never write a handoff. You have no bead to hand off to and nothing durable to checkpoint; the orchestrator reruns the auditor on the remainder.
 
 ## Critical Rules
 
