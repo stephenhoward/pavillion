@@ -24,7 +24,8 @@ function unrecognisedKind(_target: never): null {
  * Maps a server-decided notification target to the route it opens.
  *
  * Takes no viewer context and reads no store: the target already encodes the
- * recipient's authority over the resource.
+ * recipient's authority over the resource. Every target addresses a settings
+ * leaf, never an index route.
  *
  * @param target - The target from `NotificationResponse['object']`
  * @returns The route to link to, or `null` when the row is not navigable
@@ -38,14 +39,16 @@ export function routeFor(target: NotificationTarget | null): RouteLocationRaw | 
     case 'event':
       return { name: 'event_edit', params: { eventId: target.eventId } };
     case 'calendar':
-      return { name: 'calendar_management', params: { calendar: target.calendarUrlName } };
+      // Emitted for an editor invitation; the editors leaf is visible to every member.
+      return { name: 'calendar_editors', params: { calendar: target.calendarUrlName } };
     case 'moderation_report':
       return { name: 'moderation_report_detail', params: { reportId: target.reportId } };
     case 'owner_report':
+      // The stored ids only build the destination (DEC-015 rule 3); the reports
+      // leaf's owner gate and its reportId gate decide what the viewer may open.
       return {
-        name: 'calendar_management',
-        params: { calendar: target.calendarUrlName },
-        query: { tab: 'reports', report: target.reportId },
+        name: 'calendar_report_detail',
+        params: { calendar: target.calendarUrlName, reportId: target.reportId },
       };
     default:
       return unrecognisedKind(target);

@@ -12,9 +12,9 @@ describe('routeFor', () => {
     });
   });
 
-  it('maps a calendar target to the calendar_management route', () => {
+  it('maps a calendar target to the calendar_editors leaf', () => {
     expect(routeFor({ kind: 'calendar', calendarUrlName: 'my-calendar' })).toEqual({
-      name: 'calendar_management',
+      name: 'calendar_editors',
       params: { calendar: 'my-calendar' },
     });
   });
@@ -26,17 +26,15 @@ describe('routeFor', () => {
     });
   });
 
-  it('maps an owner_report target to calendar_management with the reports tab and report query', () => {
-    const route = routeFor({
+  it('maps an owner_report target to the calendar_report_detail leaf with no query', () => {
+    expect(routeFor({
       kind: 'owner_report',
       reportId: 'rep-1',
       calendarUrlName: 'my-calendar',
-    }) as { name: string; params: Record<string, string>; query: Record<string, string> };
-
-    expect(route.name).toBe('calendar_management');
-    expect(route.params.calendar).toBe('my-calendar');
-    expect(route.query.tab).toBe('reports');
-    expect(route.query.report).toBe('rep-1');
+    })).toEqual({
+      name: 'calendar_report_detail',
+      params: { calendar: 'my-calendar', reportId: 'rep-1' },
+    });
   });
 
   it('returns null for a null target', () => {

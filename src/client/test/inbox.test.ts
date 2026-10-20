@@ -14,7 +14,8 @@ import { mountComponent } from '@/client/test/lib/vue';
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
   { path: '/event/:eventId', component: {}, name: 'event_edit' },
-  { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
+  { path: '/settings/calendar/:calendar/editors', component: {}, name: 'calendar_editors' },
+  { path: '/settings/calendar/:calendar/reports/:reportId', component: {}, name: 'calendar_report_detail' },
   { path: '/settings/admin/moderation/reports/:reportId', component: {}, name: 'moderation_report_detail' },
 ];
 
@@ -552,7 +553,7 @@ describe('InboxView', () => {
       expect(link.text()).not.toContain('opens in new tab');
     });
 
-    it('routes an owner_report target to the calendar reports tab', async () => {
+    it('routes an owner_report target to the calendar reports page', async () => {
       const store = useNotificationStore();
       vi.spyOn(store, 'fetchNotifications').mockResolvedValue(undefined);
       store.notifications = [
@@ -571,7 +572,7 @@ describe('InboxView', () => {
       const wrapper = await mountInbox();
 
       const link = wrapper.find('a.object-link');
-      expect(link.attributes('href')).toBe('/settings/calendar/my-calendar?tab=reports&report=rep-1');
+      expect(link.attributes('href')).toBe('/settings/calendar/my-calendar/reports/rep-1');
     });
 
     it('renders the object label as plain text when the target is null', async () => {
