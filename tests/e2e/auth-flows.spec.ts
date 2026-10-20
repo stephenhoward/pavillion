@@ -3,6 +3,7 @@ import { TEST_ADMIN, waitForPostLoginUrl } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import { clearEmails, waitForEmail, extractLinkFromEmail } from './helpers/emails';
 import {
+  adminLeaf,
   DESKTOP,
   gotoSettings,
   logOutButton,
@@ -99,8 +100,8 @@ test.describe('Authentication Workflows', () => {
       await waitForPostLoginUrl(page);
 
       // Navigate to admin settings page to set registration mode
-      await page.goto(env.baseURL + '/settings/admin/settings');
-      await page.waitForTimeout(2000);
+      await gotoSettings(page, env.baseURL, adminLeaf('settings'));
+      await expect(page).toHaveURL(new RegExp(adminLeaf('settings').path + '$'));
 
       // Find and change registration mode to 'open'
       const registrationSelect = page.locator('select#registrationMode');
