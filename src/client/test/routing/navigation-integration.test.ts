@@ -319,6 +319,7 @@ describe('Navigation Integration - Task Group 4', () => {
       [{ name: 'profile' }, '/settings/account/profile'],
       [{ name: 'security' }, '/settings/account/security'],
       [{ name: 'funding_plan' }, '/settings/account/funding'],
+      [{ name: 'admin' }, '/settings/admin'],
       [{ name: 'admin_settings' }, '/settings/admin/settings'],
       [{ name: 'moderation_report_detail', params: { reportId: 'r1' } }, '/settings/admin/moderation/reports/r1'],
     ])('resolves %o to %s', (location, path) => {
@@ -394,6 +395,7 @@ describe('Navigation Integration - Task Group 4', () => {
     };
 
     it.each([
+      '/settings/admin',
       '/settings/admin/settings',
       '/settings/admin/moderation/settings',
     ])('sends a signed-in non-admin from %s to login', async (path) => {

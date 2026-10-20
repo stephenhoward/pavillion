@@ -8,7 +8,8 @@
  * Rows match on resolved path at a segment boundary, longest match winning,
  * rather than on route name. Root rows need it: the root list's Calendar row
  * must stay current on every calendar leaf, and none of those leaves shares
- * its route name. The same rule keeps Reports current on report detail.
+ * its route name. The same rule keeps Reports current on report detail and
+ * Moderation current on its sub-pages.
  */
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

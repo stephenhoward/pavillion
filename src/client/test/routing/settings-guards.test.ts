@@ -50,24 +50,30 @@ interface FlatRecord {
 }
 
 /** The real access guards for a session; kept by callers for identity checks. */
-function accessGuardsFor(loggedIn: boolean) {
-  return createRouteGuards({ isLoggedIn: () => loggedIn, isAdmin: () => false }, () => false);
+function accessGuardsFor(loggedIn: boolean, admin = false) {
+  return createRouteGuards({ isLoggedIn: () => loggedIn, isAdmin: () => admin }, () => false);
 }
 
 /** The access guards of a signed-in, non-admin session. */
 const accessGuards = accessGuardsFor(true);
 
+/** The access guards of a signed-in admin's session. */
+const adminAccessGuards = accessGuardsFor(true, true);
+
 /** The router the guards read history from; set by every test that navigates. */
 let activeRouter: Router | null = null;
 
-/** The real client route table behind the real access and settings guards. */
-function buildRoutes(access = accessGuards): RouteRecordRaw[] {
+/**
+ * The real client route table behind the real access and settings guards;
+ * `isAdmin` is the settings guards' view of the same session as `access`.
+ */
+function buildRoutes(access = accessGuards, isAdmin = false): RouteRecordRaw[] {
   return buildClientRoutes({
     ...access,
     currentCalendarRedirect: () => () => true,
     ...createSettingsGuards({
       loadCalendars: () => new CalendarService().ensureCalendarsLoaded(),
-      isAdmin: () => false,
+      isAdmin: () => isAdmin,
       loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
       treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
       historyLocation: () => (activeRouter ? historyPath(activeRouter) : ''),
@@ -154,9 +160,9 @@ describe('settings routes on the real route table', () => {
   });
 
   /** A router over the real table, the viewport fake already set to `sidebar`. */
-  function routerAt(sidebar: boolean, access = accessGuards): Router {
+  function routerAt(sidebar: boolean, access = accessGuards, isAdmin = false): Router {
     media.setMatches(sidebar);
-    activeRouter = createRouter({ history: createMemoryHistory(), routes: buildRoutes(access) });
+    activeRouter = createRouter({ history: createMemoryHistory(), routes: buildRoutes(access, isAdmin) });
     return activeRouter;
   }
 
@@ -180,12 +186,16 @@ describe('settings routes on the real route table', () => {
    * A first page load of `path` at md+ through the browser history, as
    * app.ts starts the router: where it lands, and whether it added an entry.
    */
-  async function coldLoadAtMdUp(path: string): Promise<{ path: string; addressBar: string; addedEntry: boolean }> {
+  async function coldLoadAtMdUp(
+    path: string,
+    access = accessGuards,
+    isAdmin = false,
+  ): Promise<{ path: string; addressBar: string; addedEntry: boolean }> {
     const original = window.location.pathname;
     window.history.replaceState({}, '', path);
     try {
       media.setMatches(true);
-      activeRouter = createRouter({ history: createWebHistory(), routes: buildRoutes() });
+      activeRouter = createRouter({ history: createWebHistory(), routes: buildRoutes(access, isAdmin) });
       const lengthBefore = window.history.length;
 
       await activeRouter.push(activeRouter.options.history.location);
@@ -397,6 +407,85 @@ describe('settings routes on the real route table', () => {
     });
   });
 
+  describe('admin index', () => {
+    it('renders the instance list page below md', async () => {
+      const router = routerAt(false, adminAccessGuards, true);
+      await router.push('/settings/admin');
+
+      expect(router.currentRoute.value.name).toBe('admin');
+      expect(router.currentRoute.value.path).toBe('/settings/admin');
+      expect(router.currentRoute.value.matched.at(-1)?.components?.default).toBe(SettingsListPage);
+    });
+
+    it('forwards to General at md+, keeping the page the viewer came from', async () => {
+      const router = routerAt(true, adminAccessGuards, true);
+      await router.push('/settings/account/profile');
+
+      await router.push('/settings/admin');
+      expect(router.currentRoute.value.name).toBe('admin_settings');
+      expect(router.currentRoute.value.path).toBe('/settings/admin/settings');
+
+      await traverse(router, -1);
+      expect(router.currentRoute.value.path).toBe('/settings/account/profile');
+    });
+
+    it('replaces a cold load of the admin index, adding no history entry', async () => {
+      expect(await coldLoadAtMdUp('/settings/admin', adminAccessGuards, true)).toEqual({
+        path: '/settings/admin/settings',
+        addressBar: '/settings/admin/settings',
+        addedEntry: false,
+      });
+    });
+  });
+
+  // mustBeAdmin sends a non-admin to login (service/route-guards.ts); the
+  // admin index forward must never run ahead of it.
+  describe('admin routes for a non-admin', () => {
+    it.each([
+      ['/settings/admin', false],
+      ['/settings/admin', true],
+      ['/settings/admin/federation', false],
+      ['/settings/admin/federation', true],
+    ])('sends a cold load of %s to login (md+ = %s)', async (path, sidebar) => {
+      const router = routerAt(sidebar);
+      await router.push(path);
+
+      expect(router.currentRoute.value.name).toBe('login');
+      expect(router.currentRoute.value.path).toBe('/auth/login');
+      expect(loadStub().called).toBe(false);
+    });
+
+    it('sends a cold load of the admin index at md+ through the browser history to login', async () => {
+      expect(await coldLoadAtMdUp('/settings/admin')).toEqual({
+        path: '/auth/login',
+        addressBar: '/auth/login',
+        addedEntry: false,
+      });
+      expect(loadStub().called).toBe(false);
+    });
+
+    it.each([
+      ['/settings/admin', false],
+      ['/settings/admin', true],
+      ['/settings/admin/federation', false],
+      ['/settings/admin/federation', true],
+    ])('sends an in-app jump from the account group to %s to login (md+ = %s)', async (path, sidebar) => {
+      const router = routerAt(sidebar);
+      await router.push('/settings/account/profile');
+      loadStub().resetHistory();
+      getOptions.resetHistory();
+
+      await router.push(path);
+
+      expect(router.currentRoute.value.name).toBe('login');
+      expect(router.currentRoute.value.path).toBe('/auth/login');
+      // The index forward loads the viewer's calendars and funding flag first;
+      // neither load means it never ran.
+      expect(loadStub().called).toBe(false);
+      expect(getOptions.called).toBe(false);
+    });
+  });
+
   describe('calendar leaf gate', () => {
     function viewerHas(role: 'owner' | 'editor') {
       viewerHolds(role === 'owner' ? owned('c1', 'shared') : edited('c1', 'shared'));
@@ -513,16 +602,18 @@ describe('settings routes on the real route table', () => {
   });
 
   describe('route tree invariants', () => {
-    it('gives every settings record its own mustBeLoggedIn or mustBeAdmin', () => {
+    it('gives every admin record its own mustBeAdmin and every other settings record its own mustBeLoggedIn', () => {
       const records = flatten(settingsRecord(buildRoutes()));
-      const unguarded = records
-        .filter(({ record }) => !ownGuards(record).some(
-          (guard) => guard === accessGuards.mustBeLoggedIn || guard === accessGuards.mustBeAdmin,
+      const isAdminRecord = (path: string) => path === GROUP_PATHS.admin || path.startsWith(`${GROUP_PATHS.admin}/`);
+      const misguarded = records
+        .filter(({ path, record }) => !ownGuards(record).includes(
+          isAdminRecord(path) ? accessGuards.mustBeAdmin : accessGuards.mustBeLoggedIn,
         ))
         .map(({ path, record }) => String(record.name ?? path));
 
-      expect(records.length).toBeGreaterThan(1);
-      expect(unguarded).toEqual([]);
+      expect(records.filter(({ path }) => isAdminRecord(path)).length).toBeGreaterThan(1);
+      expect(records.filter(({ path }) => !isAdminRecord(path)).length).toBeGreaterThan(1);
+      expect(misguarded).toEqual([]);
     });
 
     it.each(Object.entries(GROUP_PATHS) as [SettingsLeafGroup, string][])(
@@ -570,7 +661,9 @@ describe('settings routes on the real route table', () => {
         .map((record) => String(record.name))
         .filter((name) => !INDEX_ROUTE_NAMES.has(name));
 
-      expect(named).toEqual(expect.arrayContaining(['calendar_report_detail', 'moderation_report_detail', 'funding_plan']));
+      expect(named).toEqual(expect.arrayContaining([
+        'calendar_report_detail', 'moderation_report_detail', 'moderation_settings', 'blocked_instances', 'funding_plan',
+      ]));
       const outsideTree = named.filter((name) => findLeafByRouteName(name) === null);
       expect(outsideTree).toEqual([]);
     });
@@ -603,6 +696,7 @@ describe('settings routes on the real route table', () => {
       const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
       const matchedPaths = (path: string) => router.resolve(path).matched.map((record) => record.path);
 
+      expect(matchedPaths('/settings/admin')).toContain('/settings/admin');
       expect(matchedPaths('/settings/admin/settings')).toContain('/settings/admin');
       expect(matchedPaths('/settings/account')).toContain('/settings/account');
       expect(matchedPaths('/settings/account/profile')).toContain('/settings/account/profile');
@@ -614,7 +708,7 @@ describe('settings routes on the real route table', () => {
         .filter((record) => record.meta?.settingsGroup !== undefined);
 
       expect(indexes.map((record) => record.meta?.settingsGroup))
-        .toEqual(expect.arrayContaining(['root', 'calendar', 'account']));
+        .toEqual(expect.arrayContaining(['root', 'calendar', 'account', 'admin']));
       for (const record of indexes) {
         const group = record.meta!.settingsGroup!;
         const name = String(record.name);
@@ -675,6 +769,51 @@ describe('settings routes on the real route table', () => {
       expect(w.find('h1').text()).toBe('Editors');
       expect(w.find('.settings-page-header__eyebrow button.calendar-switcher').exists()).toBe(true);
       expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_editors');
+    });
+  });
+
+  describe('admin page header', () => {
+    const HeaderOnly = { components: { PageHeader }, template: '<PageHeader />' };
+    let wrapper: VueWrapper | null = null;
+
+    afterEach(() => {
+      wrapper?.unmount();
+      wrapper = null;
+    });
+
+    async function headerAt(path: string): Promise<{ wrapper: VueWrapper; router: Router }> {
+      const router = routerAt(false, adminAccessGuards, true);
+      await router.push(path);
+      wrapper = mountComponent(HeaderOnly, router, { pinia });
+      await flushPromises();
+      return { wrapper, router };
+    }
+
+    it('titles the admin index as the Instance section, back to Settings', async () => {
+      const { wrapper: w, router } = await headerAt('/settings/admin');
+
+      expect(router.currentRoute.value.name).toBe('admin');
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(w.find('h1').text()).toBe('Instance');
+      expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
+      const back = w.find('a.settings-page-header__back');
+      expect(back.attributes('href')).toBe('/settings');
+      expect(back.text()).toBe('Back to Settings');
+    });
+
+    it.each([
+      ['/settings/admin/federation', 'federation', 'Federation'],
+      ['/settings/admin/moderation/settings', 'moderation_settings', 'Moderation'],
+    ])('titles %s as its leaf under an Instance eyebrow, back to Instance', async (path, name, title) => {
+      const { wrapper: w, router } = await headerAt(path);
+
+      expect(router.currentRoute.value.name).toBe(name);
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(w.find('h1').text()).toBe(title);
+      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Instance');
+      const back = w.find('a.settings-page-header__back');
+      expect(back.attributes('href')).toBe('/settings/admin');
+      expect(back.text()).toBe('Back to Instance');
     });
   });
 

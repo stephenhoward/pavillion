@@ -7,19 +7,6 @@
     "invite_button": "Envoyer l’invitation",
     "close_button": "Annuler"
   },
-  "menu": {
-    "navigation_label": "Administration de l'instance",
-    "needs_attention": "Nécessite votre attention",
-    "general_settings": "Général",
-    "instance_name_title": "Nom/Titre de l’instance",
-    "registration_mode": "Mode d’inscription",
-    "accounts_link": "Comptes",
-    "calendars_link": "Calendriers",
-    "federation_settings": "Fédération",
-    "blocked_instances": "Liste des instances bloquées",
-    "payment_details": "Financement",
-    "moderation": "Modération"
-  },
   "calendars": {
     "page_title": "Calendriers locaux",
     "page_subtitle": "Consultez les calendriers hébergés sur cette instance",

@@ -7,19 +7,6 @@
     "invite_button": "Enviar invitación",
     "close_button": "Cancelar"
   },
-  "menu": {
-    "navigation_label": "Administración de la instancia",
-    "needs_attention": "Requiere atención",
-    "general_settings": "General",
-    "instance_name_title": "Nombre/Título de la instancia",
-    "registration_mode": "Modo de registro",
-    "accounts_link": "Cuentas",
-    "calendars_link": "Calendarios",
-    "federation_settings": "Federación",
-    "blocked_instances": "Lista de instancias bloqueadas",
-    "payment_details": "Financiación",
-    "moderation": "Moderación"
-  },
   "calendars": {
     "page_title": "Calendarios Locales",
     "page_subtitle": "Revisa los calendarios alojados en esta instancia",

@@ -139,8 +139,12 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
             { path: 'account/security', component: SecurityView, name: 'security', beforeEnter: mustBeLoggedIn },
             { path: 'account/funding', component: FundingPlanView, name: 'funding_plan',
               beforeEnter: [mustBeLoggedIn, fundingEnabledRedirect] },
-            { path: 'admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
+            // Admin: the parent has no name; its index child is the list page below md and
+            // forwards to the first admin leaf at md+.
+            { path: 'admin', component: AdminViews, beforeEnter: mustBeAdmin,
               children: [
+                { path: '', component: SettingsListPage, name: 'admin', meta: { settingsGroup: 'admin' },
+                  beforeEnter: [mustBeAdmin, settingsIndexRedirect('admin')] },
                 { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
                 { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
                 { path: 'calendars', component: CalendarsDashboardView, name: 'admin_calendars', beforeEnter: mustBeAdmin },
