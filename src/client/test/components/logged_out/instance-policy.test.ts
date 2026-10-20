@@ -196,6 +196,14 @@ describe('InstancePolicy back link', () => {
     expect(link.text()).toContain('settings');
   });
 
+  it('uses the shared settings back-link with a decorative chevron in place of a text arrow', async () => {
+    const { wrapper } = await mountInstancePolicy({ settings, policyPath: '/policy?from=settings' });
+    const link = wrapper.find('a.policy-page__back');
+    expect(link.classes()).toContain('settings-back-link');
+    expect(link.find('svg').attributes('aria-hidden')).toBe('true');
+    expect(link.text()).not.toContain('←');
+  });
+
   it('falls back to login when no source is given and the visitor is anonymous', async () => {
     const { wrapper } = await mountInstancePolicy({ settings });
     const link = wrapper.find('a.policy-page__back');

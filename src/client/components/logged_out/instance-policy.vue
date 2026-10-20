@@ -3,6 +3,7 @@ import { computed, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
+import { ChevronLeft } from 'lucide-vue-next';
 import { renderPolicyMarkdown } from '@/common/utils/render-markdown';
 
 /**
@@ -87,8 +88,9 @@ const backLink = computed<{ name: string; label: string }>(() => {
     <div class="policy-page__body"
          v-html="policyHtml" />
 
-    <router-link class="policy-page__back"
+    <router-link class="settings-back-link policy-page__back"
                  :to="{ name: backLink.name }">
+      <ChevronLeft aria-hidden="true" :stroke-width="2" />
       {{ backLink.label }}
     </router-link>
   </article>
@@ -204,9 +206,8 @@ const backLink = computed<{ name: string; label: string }>(() => {
   }
 }
 
+/* Layout, colour and icon come from the shared .settings-back-link. */
 .policy-page__back {
-  display: inline-block;
   margin-block-start: var(--pav-space-8);
-  color: var(--pav-color-brand-primary);
 }
 </style>
