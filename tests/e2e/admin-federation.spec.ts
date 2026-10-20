@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { adminLeaf, adminLeafPath, settingsRow, settingsTitle, settingsTree } from './helpers/settings-nav';
+import { adminLeaf, adminLeafPath, gotoSettings, settingsRow, settingsTitle, settingsTree } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -37,10 +37,8 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should display federation settings page with header and info panel', async ({ page }) => {
-    await page.goto(env.baseURL + adminLeafPath('federation'));
-
-    // Verify page header
-    await expect(settingsTitle(page, adminLeaf('federation').title)).toBeVisible({ timeout: 10000 });
+    // gotoSettings waits for the 'Federation' page title
+    await gotoSettings(page, env.baseURL, adminLeaf('federation'));
 
     // Verify subtitle
     const subtitle = page.locator('.federation-subtitle');
@@ -59,7 +57,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should navigate to blocked instances page via manage link', async ({ page }) => {
-    await page.goto(env.baseURL + adminLeafPath('federation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('federation'));
 
     // Click the manage blocked instances link
     const manageLink = page.locator('.federation-manage-link');

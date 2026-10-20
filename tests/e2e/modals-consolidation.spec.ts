@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { adminLeafPath, calendarLeaf, gotoSettings } from './helpers/settings-nav';
+import { adminLeaf, calendarLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -47,7 +47,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     });
 
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + adminLeafPath('moderation/blocked-instances'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/blocked-instances'));
     await page.waitForLoadState('networkidle');
 
     // Submit a dummy domain to trigger the unblock confirmation modal if

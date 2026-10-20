@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { adminLeafPath } from './helpers/settings-nav';
+import { adminLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -35,7 +35,7 @@ test.describe('Admin Funding Management', () => {
   });
 
   test('should display funding page with tab navigation', async ({ page }) => {
-    await page.goto(env.baseURL + adminLeafPath('funding'));
+    await gotoSettings(page, env.baseURL, adminLeaf('funding'));
 
     // Wait for page to load (loading state disappears)
     await page.waitForSelector('.funding-page', { timeout: 10000 });
@@ -61,7 +61,7 @@ test.describe('Admin Funding Management', () => {
   });
 
   test('should show empty funding plan state', async ({ page }) => {
-    await page.goto(env.baseURL + adminLeafPath('funding'));
+    await gotoSettings(page, env.baseURL, adminLeaf('funding'));
 
     // Wait for loading to complete
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });
@@ -89,7 +89,7 @@ test.describe('Admin Funding Management', () => {
   });
 
   test('should switch to settings tab and display enable toggle', async ({ page }) => {
-    await page.goto(env.baseURL + adminLeafPath('funding'));
+    await gotoSettings(page, env.baseURL, adminLeaf('funding'));
 
     // Wait for loading to complete
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });
@@ -173,7 +173,7 @@ test.describe('Admin Funding Management', () => {
       });
     });
 
-    await page.goto(env.baseURL + adminLeafPath('funding'));
+    await gotoSettings(page, env.baseURL, adminLeaf('funding'));
 
     // Wait for page to load
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });

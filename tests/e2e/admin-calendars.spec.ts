@@ -3,7 +3,7 @@ import axios from 'axios';
 
 import { loginAsAdmin } from './helpers/auth';
 import { paneHeading } from './helpers/pane-heading';
-import { adminLeafPath } from './helpers/settings-nav';
+import { adminLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -68,7 +68,7 @@ test.afterAll(async () => {
  * filter controls to render.
  */
 async function gotoAdminCalendars(page: Page): Promise<void> {
-  await page.goto(env.baseURL + adminLeafPath('calendars'));
+  await gotoSettings(page, env.baseURL, adminLeaf('calendars'));
   await expect(paneHeading(page, 'Local Calendars')).toBeVisible({ timeout: 10000 });
   await page.waitForSelector('input#search-filter', { timeout: 10000 });
   // Wait for the initial load to settle (either rows or empty state).

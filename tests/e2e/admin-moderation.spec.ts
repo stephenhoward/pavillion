@@ -1,7 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import axios from 'axios';
 import { loginAsAdmin } from './helpers/auth';
 import { paneHeading } from './helpers/pane-heading';
-import { adminLeaf, adminLeafPath, settingsRow, settingsTitle, settingsTree } from './helpers/settings-nav';
+import {
+  adminLeaf,
+  adminLeafPath,
+  adminReportPath,
+  gotoSettings,
+  settingsRow,
+  settingsTitle,
+  settingsTree,
+} from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -23,7 +32,11 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+// A seeded event from layouts/development/db/
+const TEST_EVENT_ID = '37d1bb5a-452b-432e-ac46-268b9c565bde';
+
 let env: TestEnvironment;
+let seededReportId: string;
 
 // Configure tests to run serially since they may share state
 test.describe.configure({ mode: 'serial' });
@@ -31,7 +44,36 @@ test.describe.configure({ mode: 'serial' });
 // Start server once for entire file
 test.beforeAll(async () => {
   env = await startTestServer();
+
+  // Seed one admin-initiated report so the dashboard always lists a report
+  // and the report-detail tests have something to open.
+  const loginResponse = await axios.post(`${env.baseURL}/api/auth/v1/login`, {
+    email: 'admin@pavillion.dev',
+    password: 'admin',
+  });
+  const reportResponse = await axios.post(
+    `${env.baseURL}/api/v1/admin/reports`,
+    {
+      eventId: TEST_EVENT_ID,
+      category: 'spam',
+      description: 'E2E seed: a report for the admin report-detail tests.',
+      priority: 'medium',
+      adminNotes: 'Seeded by admin-moderation.spec.ts',
+    },
+    { headers: { Authorization: `Bearer ${loginResponse.data}` } },
+  );
+  seededReportId = reportResponse.data.report.id;
 });
+
+/**
+ * Opens the seeded report from the moderation dashboard's View Details
+ * button and waits for the report detail page.
+ */
+async function openSeededReport(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'View Details' }).first().click();
+  await expect(page).toHaveURL(new RegExp(adminReportPath(seededReportId) + '$'));
+  await expect(paneHeading(page, 'Report Details')).toBeVisible({ timeout: 10000 });
+}
 
 test.afterAll(async () => {
   await env.cleanup();
@@ -44,7 +86,7 @@ test.describe('Admin Moderation Dashboard', () => {
 
   test('should display moderation dashboard with reports', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
 
     // Wait for the moderation dashboard to load
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
@@ -53,19 +95,13 @@ test.describe('Admin Moderation Dashboard', () => {
     const statusFilter = page.locator('select#status-filter').first();
     await expect(statusFilter).toBeVisible();
 
-    // Verify either reports are displayed or empty state
-    const reportsTable = page.locator('table.reports-table').first();
-    const emptyState = page.locator('text=/No reports/i').first();
-
-    const hasReportsOrEmpty = await reportsTable.isVisible().catch(() => false) ||
-                             await emptyState.isVisible().catch(() => false);
-
-    expect(hasReportsOrEmpty).toBeTruthy();
+    // The seeded report is listed
+    await expect(page.locator('table.reports-table').first()).toBeVisible();
   });
 
   test('should filter reports by status', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     // Find and use the status filter
@@ -82,19 +118,15 @@ test.describe('Admin Moderation Dashboard', () => {
 
   test('should navigate to report detail', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
-    // Look for a View button or report link
-    const viewButton = page.locator('button:has-text("View"), a[href*="/reports/"]').first();
+    await openSeededReport(page);
 
-    if (await viewButton.isVisible().catch(() => false)) {
-      await viewButton.click();
-      await page.waitForTimeout(1000);
-
-      // Verify we're on the report detail page
-      await expect(paneHeading(page, 'Report Details')).toBeVisible();
-    }
+    // The report sub-page takes its parent's title, and the tree keeps
+    // Moderation current
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
+    await expect(settingsRow(settingsTree(page), 'Moderation')).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -105,60 +137,30 @@ test.describe('Admin Pattern Warning Indicators', () => {
 
   test('should support pattern warning display on reports', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
-    // The UI should support displaying pattern warnings even if none exist
-    // Verify the dashboard loaded with either reports or empty state
-    await page.waitForTimeout(1000);
+    await expect(page.locator('select#status-filter')).toBeVisible();
 
-    // Verify page structure exists
-    const hasFilters = await page.locator('select#status-filter').isVisible().catch(() => false);
-    expect(hasFilters).toBeTruthy();
-
-    // If reports exist, check if clicking into one shows detailed view
-    const viewButton = page.locator('button:has-text("View")').first();
-    const hasViewButton = await viewButton.isVisible().catch(() => false);
-
-    if (hasViewButton) {
-      await viewButton.click();
-      await page.waitForTimeout(1000);
-
-      // Verify report detail page loaded
-      // Pattern indicators would appear here if present in the data
-      const detailPage = page.locator('.admin-report-detail, .report-content, .info-card').first();
-      const hasDetailPage = await detailPage.isVisible().catch(() => false);
-
-      expect(hasDetailPage).toBeTruthy();
-    } else {
-      // No reports exist - verify empty state or structure
-      await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible();
-    }
+    // Pattern indicators would appear on the report detail page if present
+    // in the data
+    await openSeededReport(page);
+    await expect(page.locator('.admin-report-detail .info-card').first()).toBeVisible();
   });
 
   test('should display report details with metadata', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
-    // Try to access a report detail
-    const viewButton = page.locator('button:has-text("View")').first();
+    await openSeededReport(page);
 
-    if (await viewButton.isVisible().catch(() => false)) {
-      await viewButton.click();
-      await page.waitForTimeout(1000);
-
-      // Verify report information sections exist
-      const infoSections = page.locator('.info-card, .info-grid, section').first();
-      const hasInfoSections = await infoSections.isVisible().catch(() => false);
-
-      expect(hasInfoSections).toBeTruthy();
-
-      // Pattern warnings would be displayed in info sections
-      // Check for common report fields
-      const hasMetadata = await page.locator('text=/Category|Status|Priority/i').first().isVisible().catch(() => false);
-      expect(hasMetadata).toBeTruthy();
-    }
+    // Report information section with the report's metadata fields
+    const infoCard = page.getByRole('region', { name: 'Report Information' });
+    await expect(infoCard).toBeVisible();
+    await expect(infoCard.getByText('Category', { exact: true })).toBeVisible();
+    await expect(infoCard.getByText('Status', { exact: true })).toBeVisible();
+    await expect(infoCard.getByText('E2E seed: a report for the admin report-detail tests.')).toBeVisible();
   });
 });
 
@@ -169,7 +171,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should access moderation settings page', async ({ page }) => {
     // Navigate directly to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
 
     // Wait for page to load (give more time for loading state)
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
@@ -186,7 +188,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should display IP retention settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
 
     // Wait for loading to complete
@@ -212,7 +214,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should display escalation threshold settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
 
     // Wait for loading to complete
@@ -237,7 +239,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should update and save moderation settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
 
     // Wait for loading to complete
@@ -272,7 +274,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should persist settings across page reload', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
 
     // Wait for loading to complete
@@ -311,7 +313,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should validate IP retention day inputs', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto(env.baseURL + adminLeafPath('moderation/settings'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
     await expect(paneHeading(page, 'Moderation Settings')).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(2000);
 
@@ -358,7 +360,7 @@ test.describe('Admin Create Report', () => {
 
   test('should open create report modal', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     // Look for "Create Report" button
@@ -384,7 +386,7 @@ test.describe('Admin Moderation Integration', () => {
 
   test('should navigate between moderation dashboard and settings', async ({ page }) => {
     // Start at moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     // The dashboard's gear button opens moderation settings
@@ -404,7 +406,7 @@ test.describe('Admin Moderation Integration', () => {
 
   test('should maintain admin context across navigation', async ({ page }) => {
     // Start at moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     const tree = settingsTree(page);
@@ -422,7 +424,7 @@ test.describe('Admin Moderation Integration', () => {
 
   test('should apply and reset filters', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     // Apply a filter
@@ -451,7 +453,7 @@ test.describe('Admin Moderation Pagination', () => {
 
   test('should display pagination if many reports exist', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto(env.baseURL + adminLeafPath('moderation'));
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
 
     // Look for pagination controls
