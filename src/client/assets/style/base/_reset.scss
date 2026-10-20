@@ -47,7 +47,9 @@ body {
   text-rendering: optimizelegibility;
   font-feature-settings: "kern" 1;
   
-  /* Prevent horizontal scrolling */
+  /* Prevent horizontal scrolling. html must carry no overflow so this
+     propagates to the viewport; the settings tree's sticky positioning
+     depends on that */
   overflow-x: hidden;
 }
 

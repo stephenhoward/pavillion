@@ -42,7 +42,6 @@
   @include meta.load-css('./layout/flexbox');
   @include meta.load-css('./layout/logical-properties');
   @include meta.load-css('./layout/app');
-  @include meta.load-css('./layout/shell');
 }
 
 // 5. Component Library (semantic components)

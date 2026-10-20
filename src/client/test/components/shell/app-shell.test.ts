@@ -7,10 +7,12 @@
  * (pav-media(md) gating, rail width, sr-only labels) is verified by the
  * settings-navigation e2e spec, not here; do not add CSS assertions to this file.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { Calendar, Inbox, Settings } from 'lucide-vue-next';
 import { mountComponent } from '@/client/test/lib/vue';
+import { installMatchMedia, type FakeMatchMedia } from '@/client/test/lib/match-media';
+import { resetShellLayoutForTesting } from '@/client/composables/useShellLayout';
 import AppShell from '@/client/components/shell/app-shell.vue';
 import type { NavigationItem } from '@/client/components/shell/types';
 
@@ -40,21 +42,6 @@ const navigationItems: NavigationItem[] = [
   { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' },
 ];
 
-/** Stubs both viewport readings a script branch could consult. */
-const stubViewport = (width: number, matches: boolean) => {
-  vi.stubGlobal('innerWidth', width);
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
-  }));
-};
-
 const mountAt = async (path: string) => {
   const router = createRouterForTest();
   await router.push(path);
@@ -64,8 +51,18 @@ const mountAt = async (path: string) => {
 };
 
 describe('app shell rail mode', () => {
+  let matchMedia: FakeMatchMedia | undefined;
+
+  /** Answers every media query as wide (md+) or narrow. */
+  const stubViewport = (wide: boolean) => {
+    resetShellLayoutForTesting();
+    matchMedia = installMatchMedia(wide);
+  };
+
   afterEach(() => {
-    vi.unstubAllGlobals();
+    matchMedia?.restore();
+    matchMedia = undefined;
+    resetShellLayoutForTesting();
   });
 
   it('does not set the rail class on a route without shellRail meta', async () => {
@@ -97,7 +94,7 @@ describe('app shell rail mode', () => {
   });
 
   it('sets the rail class on a phone-width viewport', async () => {
-    stubViewport(375, false);
+    stubViewport(false);
 
     const { wrapper } = await mountAt('/settings');
 
@@ -105,7 +102,7 @@ describe('app shell rail mode', () => {
   });
 
   it('leaves the rail class to route meta on a wide viewport', async () => {
-    stubViewport(1280, true);
+    stubViewport(true);
 
     const { wrapper: railWrapper } = await mountAt('/settings');
     const { wrapper: plainWrapper } = await mountAt('/calendar');
