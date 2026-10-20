@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter, type NavigationGuard, type RouteRecordRaw, type Router } from 'vue-router';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import { mountComponent } from '@/client/test/lib/vue';
+import PageHeader from '@/client/components/logged_in/settings/page-header.vue';
+import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
 import { createSettingsGuards } from '@/client/service/settings-guards';
@@ -68,8 +74,14 @@ function flatten(record: RouteRecordRaw, path = ''): FlatRecord[] {
 
 /** Path prefix (below /settings) of each group whose records have been converted to the tree. */
 const CONVERTED_GROUP_PATHS: Partial<Record<SettingsLeafGroup, string>> = {
+  calendar: 'calendar/:calendar',
   account: 'account',
 };
+
+/** A record path prefix as a pattern over resolved paths: each `:param` matches one segment. */
+function resolvedPrefix(prefix: string): RegExp {
+  return new RegExp(`^/settings/${prefix.replace(/:[^/]+/g, '[^/]+')}/`);
+}
 
 /** A record's own beforeEnter guards, as an array. */
 function ownGuards(record: RouteRecordRaw): NavigationGuard[] {
@@ -205,7 +217,9 @@ describe('settings routes on the real route table', () => {
       'names every %s record after its index or a leaf in the tree',
       (group, prefix) => {
         const records = flatten(settingsRecord(buildRoutes()))
-          .filter(({ path }) => path === prefix || path.startsWith(`${prefix}/`));
+          .filter(({ path }) => path === prefix || path.startsWith(`${prefix}/`))
+          // A parent that only lays out its children names nothing; its index child does.
+          .filter(({ record }) => !record.children?.some((child) => child.path === ''));
         for (const { path, record } of records) {
           expect(record.name, `unnamed record at /settings/${path}`).toBeDefined();
         }
@@ -229,7 +243,7 @@ describe('settings routes on the real route table', () => {
         for (const leaf of leaves) {
           if ('routeName' in leaf && leaf.routeName) {
             expect(router.hasRoute(leaf.routeName), `leaf ${leaf.routeName}`).toBe(true);
-            expect(router.resolve(leaf.to).path, `leaf ${leaf.routeName}`).toMatch(new RegExp(`^/settings/${prefix}/`));
+            expect(router.resolve(leaf.to).path, `leaf ${leaf.routeName}`).toMatch(resolvedPrefix(prefix));
           }
         }
       },
@@ -250,7 +264,7 @@ describe('settings routes on the real route table', () => {
         .map(({ record }) => record)
         .filter((record) => record.meta?.settingsGroup !== undefined);
 
-      expect(indexes.map((record) => record.meta?.settingsGroup)).toContain('account');
+      expect(indexes.map((record) => record.meta?.settingsGroup)).toEqual(expect.arrayContaining(['calendar', 'account']));
       for (const record of indexes) {
         const group = record.meta!.settingsGroup!;
         const name = String(record.name);
@@ -261,6 +275,51 @@ describe('settings routes on the real route table', () => {
         // named after any leaf (Profile included) would forward to itself.
         expect(findLeafByRouteName(name), `index ${name}`).toBeNull();
       }
+    });
+  });
+
+  // The page header reads the index level from the matched record's meta and
+  // a leaf's title from its route name, so pin both against the real table.
+  describe('calendar page header', () => {
+    const HeaderOnly = { components: { PageHeader }, template: '<PageHeader />' };
+    let wrapper: VueWrapper | null = null;
+
+    afterEach(() => {
+      wrapper?.unmount();
+      wrapper = null;
+    });
+
+    async function headerAt(path: string): Promise<{ wrapper: VueWrapper; router: Router }> {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      const calendar = new Calendar('o1', 'riverside');
+      calendar.content('en').name = 'Riverside Arts';
+      useCalendarStore().setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
+      const router = routerAt(false);
+      await router.push(path);
+      wrapper = mountComponent(HeaderOnly, router, { pinia });
+      await flushPromises();
+      return { wrapper, router };
+    }
+
+    it('titles the calendar index as its section, with the switcher beside the h1', async () => {
+      const { wrapper: w, router } = await headerAt('/settings/calendar/riverside');
+
+      expect(router.currentRoute.value.name).toBe('calendar_management');
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(w.find('h1').text()).toBe('Riverside Arts');
+      expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
+      expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_management');
+    });
+
+    it('titles a calendar leaf as the leaf, with the switcher in the eyebrow', async () => {
+      const { wrapper: w, router } = await headerAt('/settings/calendar/riverside/editors');
+
+      expect(router.currentRoute.value.name).toBe('calendar_editors');
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(w.find('h1').text()).toBe('Editors');
+      expect(w.find('.settings-page-header__eyebrow button.calendar-switcher').exists()).toBe(true);
+      expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_editors');
     });
   });
 });

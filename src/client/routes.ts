@@ -17,6 +17,11 @@ import AppViews from '@/client/components/logged_in/root.vue';
 import NoCalendarsView from '@/client/components/logged_in/calendar/NoCalendars.vue';
 import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
 import CalendarManagementView from '@/client/components/logged_in/calendar-management/root.vue';
+import CalendarGeneralView from '@/client/components/logged_in/calendar-management/settings.vue';
+import CalendarEditorsView from '@/client/components/logged_in/calendar-management/editors.vue';
+import CalendarReportsView from '@/client/components/logged_in/calendar-management/reports.vue';
+import CalendarImportView from '@/client/components/logged_in/calendar-management/import-sources/ImportSourcesSection.vue';
+import CalendarWidgetView from '@/client/components/logged_in/calendar-management/widget-tab.vue';
 import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
 import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
 import FeedView from '@/client/components/logged_in/feed/root.vue';
@@ -81,7 +86,7 @@ const RedirectOnly = { render: () => null };
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
   const {
     mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect,
-    settingsIndexRedirect, fundingEnabledRedirect,
+    settingsIndexRedirect, legacyTabReportsRedirect, fundingEnabledRedirect,
   } = deps;
 
   const routes: RouteRecordRaw[] = [
@@ -108,7 +113,19 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
             // A parent's beforeEnter does not run between siblings, so each child guards itself.
             { path: '', component: RedirectOnly, name: 'settings',
               beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
-            { path: 'calendar/:calendar', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
+            // Calendar: root.vue resolves the calendar and gates owner-only leaves; the parent has no name.
+            { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: mustBeLoggedIn,
+              children: [
+                { path: '', component: SettingsListPage, name: 'calendar_management', meta: { settingsGroup: 'calendar' },
+                  beforeEnter: [mustBeLoggedIn, legacyTabReportsRedirect, settingsIndexRedirect('calendar')] },
+                { path: 'general', component: CalendarGeneralView, name: 'calendar_general', beforeEnter: mustBeLoggedIn },
+                { path: 'editors', component: CalendarEditorsView, name: 'calendar_editors', beforeEnter: mustBeLoggedIn },
+                { path: 'reports', component: CalendarReportsView, name: 'calendar_reports', beforeEnter: mustBeLoggedIn },
+                { path: 'reports/:reportId', component: CalendarReportsView, name: 'calendar_report_detail', beforeEnter: mustBeLoggedIn },
+                { path: 'import', component: CalendarImportView, name: 'calendar_import', beforeEnter: mustBeLoggedIn },
+                { path: 'widget', component: CalendarWidgetView, name: 'calendar_widget', beforeEnter: mustBeLoggedIn },
+              ],
+            },
             // Account: the index is a list page below md and forwards to its first leaf at md+.
             { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' },
               beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('account')] },
