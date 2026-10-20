@@ -291,12 +291,13 @@ onMounted(async () => {
   &__filters {
     display: flex;
     flex-direction: column;
-    flex-wrap: wrap;
     gap: var(--pav-space-4);
-    align-items: flex-end;
 
+    // In a row the selects align on their bottom edge; stacked, they fill the column
     @include pav-container(sm) {
       flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-end;
     }
   }
 
