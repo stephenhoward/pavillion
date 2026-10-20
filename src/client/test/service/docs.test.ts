@@ -147,6 +147,7 @@ describe('ROUTE_GUIDES keys', () => {
       authRouteGuard: pass,
       currentCalendarRedirect: () => pass,
       settingsIndexRedirect: () => pass,
+      calendarLeafGate: pass,
       legacyTabReportsRedirect: pass,
       fundingEnabledRedirect: pass,
     }));

@@ -8,8 +8,12 @@
  *   remounts it. No child mounts until the calendar has resolved.
  * - A leaf the viewer may not see (an owner-only leaf, for an editor) is
  *   replaced with the group's first visible leaf, query dropped, and never
- *   mounts. Visibility is nav-items.ts's; hiding a leaf is a convenience,
- *   and the server endpoints each leaf calls stay the enforcement point.
+ *   mounts: on entry by the parent record's calendarLeafGate, on a move
+ *   within the subtree by onBeforeRouteUpdate here, both before commit, and
+ *   in place when ownership is lost while mounted. One predicate,
+ *   calendarLeafRedirect in settings-guards.ts, decides all three.
+ *   Visibility is nav-items.ts's; hiding a leaf is a convenience, and the
+ *   server endpoints each leaf calls stay the enforcement point.
  * - A nonexistent calendar and one the viewer is not a member of are the
  *   same unresolved calendar: one empty state at the unchanged URL, for the
  *   index and every leaf, and nothing renders the route param.
@@ -18,22 +22,20 @@
  */
 import { computed, inject, onBeforeMount, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { onBeforeRouteUpdate, useRoute, useRouter, type RouteLocationNamedRaw } from 'vue-router';
+import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import CalendarService from '@/client/service/calendar';
 import FundingService from '@/client/service/funding';
 import Config from '@/client/service/config';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import {
   buildSettingsNavContext,
+  calendarLeafRedirect,
   findViewerCalendar,
   readSettingsNavSources,
 } from '@/client/service/settings-guards';
 import {
-  findLeafByRouteName,
-  firstVisibleLeaf,
   isVisibleLeaf,
   SETTINGS_GROUP_INDEX_ROUTES,
-  type SettingsNavContext,
 } from '@/client/components/logged_in/settings/nav-items';
 import HelpButton from '@/client/components/common/help-button.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -63,7 +65,7 @@ const instanceHost = computed(() => new Config().settings()?.domain);
 
 /**
  * Whether a calendar route may render: the index always, a leaf when visible
- * to the viewer. Deliberately separate from gateRedirect: an unknown or
+ * to the viewer. Deliberately separate from calendarLeafRedirect: an unknown or
  * unresolved route renders nothing here but is never redirected.
  */
 const leafAllowed = (name: unknown): boolean => {
@@ -97,23 +99,11 @@ const leafProps = (name: unknown): Record<string, unknown> => {
   }
 };
 
-/**
- * The owner-only gate: where a route must go instead, or null to let it
- * through. Only calendar leaves (and their sub-routes) are gated: the index
- * is skipped by name, and a route outside the calendar group, seen while
- * this pane is leaving, is never redirected.
- */
-const gateRedirect = (name: unknown, ctx: SettingsNavContext | null): RouteLocationNamedRaw | null => {
-  if (!ctx || typeof name !== 'string' || findLeafByRouteName(name)?.group !== 'calendar') {
-    return null;
-  }
-  return isVisibleLeaf('calendar', name, ctx) ? null : firstVisibleLeaf('calendar', ctx);
-};
-
-// Arriving before the calendar resolved (a cold load, or entering from
-// outside this pane), or losing ownership while mounted: replace in place.
+// Entering the subtree is gated before commit by the parent record's
+// calendarLeafGate. This catches what reaches a mounted pane anyway:
+// ownership lost while mounted, or a gate that passed on a failed load.
 watch([() => route.name, navContext], ([name, ctx]) => {
-  const target = gateRedirect(name, ctx);
+  const target = calendarLeafRedirect(name, ctx);
   if (target) {
     router.replace(target);
   }
@@ -128,7 +118,7 @@ onBeforeRouteUpdate((to) => {
     return true;
   }
   const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(isAdmin));
-  return gateRedirect(to.name, ctx) ?? true;
+  return calendarLeafRedirect(to.name, ctx) ?? true;
 });
 
 onBeforeMount(async () => {

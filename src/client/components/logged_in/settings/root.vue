@@ -68,8 +68,9 @@ function onlyCalendarChanged(to: RouteSnapshot, from: RouteSnapshot): boolean {
 // focus (its gate failure replaces to the list, which retriggers this rule).
 // Watching the route sees only the final route of a guard redirect chain, so
 // a chain moves focus once. History traversal (Back/Forward) is a path change
-// like any other and moves focus too, by design. pv-ms7c (app-wide SPA focus
-// and title) may replace this.
+// like any other and moves focus too, by design, with one exception: Back or
+// Forward between the same leaf on two calendars is a calendar-only change,
+// so it is skipped. pv-ms7c (app-wide SPA focus and title) may replace this.
 watch(
   () => ({ path: route.path, name: route.name, params: { ...route.params } }),
   async (to, from) => {

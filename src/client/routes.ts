@@ -65,6 +65,8 @@ export interface ClientRouteDeps {
   currentCalendarRedirect: (routeName: string, fallback: RouteLocationRaw | true) => NavigationGuard;
   /** Settings index route: render the list page in page mode, else forward to the group's first visible leaf. */
   settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
+  /** Calendar subtree entry: replace an owner-only leaf the viewer may not see, before commit. */
+  calendarLeafGate: NavigationGuard;
   /** Temporary: maps the retired `?tab=reports[&report=]` calendar settings form onto the Reports leaf. */
   legacyTabReportsRedirect: NavigationGuard;
   /** Funding plan leaf: redirect to Profile when instance funding is disabled. */
@@ -86,7 +88,7 @@ const RedirectOnly = { render: () => null };
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
   const {
     mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect,
-    settingsIndexRedirect, legacyTabReportsRedirect, fundingEnabledRedirect,
+    settingsIndexRedirect, calendarLeafGate, legacyTabReportsRedirect, fundingEnabledRedirect,
   } = deps;
 
   const routes: RouteRecordRaw[] = [
@@ -113,8 +115,9 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
             // A parent's beforeEnter does not run between siblings, so each child guards itself.
             { path: '', component: RedirectOnly, name: 'settings',
               beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
-            // Calendar: root.vue resolves the calendar and gates owner-only leaves; the parent has no name.
-            { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: mustBeLoggedIn,
+            // Calendar: the parent has no name. Its gate refuses an owner-only leaf on entry;
+            // root.vue resolves the calendar and gates moves within the subtree.
+            { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: [mustBeLoggedIn, calendarLeafGate],
               children: [
                 { path: '', component: SettingsListPage, name: 'calendar_management', meta: { settingsGroup: 'calendar' },
                   beforeEnter: [mustBeLoggedIn, legacyTabReportsRedirect, settingsIndexRedirect('calendar')] },

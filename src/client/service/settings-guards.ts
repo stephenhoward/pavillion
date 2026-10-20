@@ -4,6 +4,7 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useFundingStore } from '@/client/stores/fundingStore';
 import { resolveCurrentCalendar, type CalendarLoader } from '@/client/service/current-calendar';
 import {
+  findLeafByRouteName,
   firstVisibleLeaf,
   isVisibleLeaf,
   type SettingsGroup,
@@ -21,6 +22,12 @@ import {
  * consumer (tree, list page, layout, these guards, the calendar owner gate)
  * builds its context with buildSettingsNavContext over readSettingsNavSources,
  * so the tree never shows a leaf a redirect rejects.
+ *
+ * calendarLeafGate refuses an owner-only calendar leaf before the
+ * navigation commits, so the page header (and the focus rule that reads it)
+ * never shows the refused leaf. calendar-management/root.vue applies the
+ * same calendarLeafRedirect to moves within its subtree and to ownership
+ * lost while mounted.
  *
  * Every redirect replaces, and every target is a fixed named route: no URL
  * input is echoed into one. See DEC-021, client settings information
@@ -116,6 +123,20 @@ export function buildSettingsNavContext(
   };
 }
 
+/**
+ * The owner-only calendar gate: where a route must go instead, or null to
+ * let it through. Only calendar leaves (and their sub-routes) are gated: the
+ * index is not a leaf, a route outside the calendar group is never
+ * redirected, and an unresolved calendar (null context) gets no forward, so
+ * its empty state stays non-disclosing.
+ */
+export function calendarLeafRedirect(name: unknown, ctx: SettingsNavContext | null): RouteLocationNamedRaw | null {
+  if (!ctx || typeof name !== 'string' || findLeafByRouteName(name)?.group !== 'calendar') {
+    return null;
+  }
+  return isVisibleLeaf('calendar', name, ctx) ? null : firstVisibleLeaf('calendar', ctx);
+}
+
 /** What the index forward needs to load the viewer's context. */
 export interface SettingsForwardDeps {
   /** Loads the viewer's calendars into the calendar store. */
@@ -156,6 +177,7 @@ export async function settingsIndexTarget(
 
 export interface SettingsGuards {
   settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
+  calendarLeafGate: NavigationGuard;
   legacyTabReportsRedirect: NavigationGuard;
   fundingEnabledRedirect: NavigationGuard;
 }
@@ -176,6 +198,26 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
         return true;
       }
       const target = await settingsIndexTarget(group, to.params.calendar, deps);
+      return target ? { ...target, replace: true } : true;
+    },
+
+    /**
+     * Entering a calendar's subtree: replace an owner-only leaf the viewer
+     * may not see with the group's first visible leaf, before the navigation
+     * commits. Loads the viewer's calendars and the funding flag first. A
+     * failed load or an unresolved calendar passes, so the pane's error or
+     * empty state renders at the unchanged URL; the index always passes.
+     */
+    calendarLeafGate: async (to) => {
+      try {
+        await deps.loadCalendars();
+      }
+      catch {
+        return true;
+      }
+      await deps.loadInstanceFunding();
+      const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(deps.isAdmin));
+      const target = calendarLeafRedirect(to.name, ctx);
       return target ? { ...target, replace: true } : true;
     },
 

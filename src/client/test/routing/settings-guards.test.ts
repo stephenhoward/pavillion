@@ -150,6 +150,56 @@ describe('settings routes on the real route table', () => {
     });
   });
 
+  describe('calendar leaf gate', () => {
+    const loadStub = () => CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub;
+
+    function viewerHas(role: 'owner' | 'editor') {
+      const infos = [new CalendarInfo(new Calendar('c1', 'shared'), role)];
+      loadStub().callsFake(async () => {
+        useCalendarStore().setCalendarInfos(infos);
+        return infos;
+      });
+    }
+
+    it.each([
+      ['/settings/calendar/shared/general'],
+      ['/settings/calendar/shared/reports/9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
+      ['/settings/calendar/shared?tab=reports&report=9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
+    ])('replaces an editor entering %s with editors, query dropped', async (path) => {
+      viewerHas('editor');
+      const router = routerAt(false);
+      await router.push(path);
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+    });
+
+    it('lets an owner onto an owner-only leaf', async () => {
+      viewerHas('owner');
+      const router = routerAt(false);
+      await router.push('/settings/calendar/shared/general');
+      expect(router.currentRoute.value.name).toBe('calendar_general');
+    });
+
+    it('lets an editor onto the index', async () => {
+      viewerHas('editor');
+      const router = routerAt(false);
+      await router.push('/settings/calendar/shared');
+      expect(router.currentRoute.value.name).toBe('calendar_management');
+    });
+
+    it('does not forward an unresolved calendar', async () => {
+      const router = routerAt(false);
+      await router.push('/settings/calendar/nope/general');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/nope/general');
+    });
+
+    it('does not forward when the calendar load fails', async () => {
+      loadStub().rejects(new Error('offline'));
+      const router = routerAt(false);
+      await router.push('/settings/calendar/shared/general');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/general');
+    });
+  });
+
   describe('signed out', () => {
     it.each([
       '/settings/account',
@@ -294,7 +344,13 @@ describe('settings routes on the real route table', () => {
       setActivePinia(pinia);
       const calendar = new Calendar('o1', 'riverside');
       calendar.content('en').name = 'Riverside Arts';
-      useCalendarStore().setCalendarInfos([new CalendarInfo(calendar, 'owner')]);
+      const infos = [new CalendarInfo(calendar, 'owner')];
+      useCalendarStore().setCalendarInfos(infos);
+      // The calendar gate loads the viewer's list on entry.
+      (CalendarService.prototype.ensureCalendarsLoaded as sinon.SinonStub).callsFake(async () => {
+        useCalendarStore().setCalendarInfos(infos);
+        return infos;
+      });
       const router = routerAt(false);
       await router.push(path);
       wrapper = mountComponent(HeaderOnly, router, { pinia });
