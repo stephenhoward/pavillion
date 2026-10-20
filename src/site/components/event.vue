@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, ref, computed } from 'vue';
+import { reactive, onBeforeMount, ref, computed, watchEffect } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft, Calendar, MapPin, Accessibility } from 'lucide-vue-next';
@@ -136,6 +136,14 @@ const safePrompt = computed<UrlPrompt | null>(() => {
   const raw = state.event?.urlPrompt;
   if (raw == null) return null;
   return URL_PROMPT_VALUES.includes(raw as UrlPrompt) ? (raw as UrlPrompt) : null;
+});
+
+// The page title follows the loaded event, as event-instance.vue titles the
+// dated view, so in-SPA navigation never keeps the previous page's title.
+watchEffect(() => {
+  if (!state.event) return;
+  const eventName = localizedContent(state.event).name;
+  document.title = `${eventName} | Pavillion`;
 });
 
 onBeforeMount(async () => {
