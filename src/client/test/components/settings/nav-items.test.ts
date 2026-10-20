@@ -161,8 +161,6 @@ describe('settings nav items', () => {
         expected: { name: 'calendar_general', params: { calendar: 'riverside' } } },
       { group: 'calendar', context: ctx({ isOwner: false }),
         expected: { name: 'calendar_editors', params: { calendar: 'riverside' } } },
-      { group: 'calendar', context: ctx({ calendarUrlName: null }),
-        expected: { name: 'profile' } },
       { group: 'account', context: ctx({ fundingEnabled: false }),
         expected: { name: 'profile' } },
       { group: 'admin', context: ctx({ isAdmin: true }),
@@ -171,6 +169,10 @@ describe('settings nav items', () => {
         expected: { name: 'profile' } },
     ] as const)('$group → $expected.name', ({ group, context, expected }) => {
       expect(firstVisibleLeaf(group, context)).toEqual(expected);
+    });
+
+    it('falls back to profile for an empty calendar group as a loop guard, not as unresolved-calendar handling', () => {
+      expect(firstVisibleLeaf('calendar', ctx({ calendarUrlName: null }))).toEqual({ name: 'profile' });
     });
 
     it('returns a fresh object each call', () => {

@@ -14,6 +14,12 @@
  *   md and forward to the group's first visible leaf at md+. So every URL
  *   emitted outside the SPA (server emails, the Stripe return, notification
  *   targets) addresses a leaf, never an index.
+ * - **Profile is a loop guard, not an answer.** An empty group forwards to
+ *   Profile so no forward can loop. A calendar the viewer cannot resolve
+ *   (not in their loaded list, or the load failed) is not an empty group:
+ *   callers short-circuit it before asking for a leaf, so it gets no forward
+ *   and the same URL with the empty state at either viewport, which keeps
+ *   non-member and nonexistent calendars non-disclosing.
  * - **The legacy `?tab=reports` redirect is temporary.** It maps only
  *   `tab=reports` onto the Reports leaf because sent moderation emails hold
  *   that form, and is removed once those emails have aged out.
@@ -166,7 +172,11 @@ function leavesOf(group: SettingsGroup, ctx: SettingsNavContext): SettingsNavLin
 /**
  * Where a group's index forwards at md+. Profile is visible to every
  * signed-in viewer, so it is the fallback for an empty group and no forward
- * can loop. Each call returns a fresh location the caller may extend.
+ * can loop. Callers must short-circuit an unresolved calendar (not in the
+ * viewer's loaded list, or the load failed) before calling: it gets no
+ * forward, so non-member and nonexistent calendars stay non-disclosing, and
+ * the Profile fallback is never its answer. Each call returns a fresh
+ * location the caller may extend.
  */
 export function firstVisibleLeaf(group: SettingsGroup, ctx: SettingsNavContext): RouteLocationNamedRaw {
   const [first] = leavesOf(group, ctx);
