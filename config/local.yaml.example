@@ -85,8 +85,3 @@ media:
 # Host configuration
 # host:
 #   port: 3000  # Application port (default: 3000)
-
-# ActivityPub federation settings
-# federation:
-#   enabled: true
-#   autoRepost: false  # Automatically repost events from trusted instances

@@ -28,6 +28,6 @@
 JWT_SECRET	openssl_rand_base64_32	stable	Signs API authentication tokens. Rotation logs out all users.
 SESSION_SECRET	openssl_rand_base64_32	stable	Signs browser session cookies. Rotation invalidates all sessions.
 DB_PASSWORD	openssl_rand_base64_32	stable	PostgreSQL password. Must match the existing database volume.
-EMAIL_HASH_SECRET	openssl_rand_base64_32	stable	Hashes reporter emails for moderation. Rotation de-anonymizes prior reports.
+EMAIL_HASH_SECRET	openssl_rand_base64_32	stable	Keys the hashes of reporter emails and IPs for moderation. Rotation stops existing hashes matching: blocked reporters, email rate limits and report-pattern history reset.
 ENCRYPTION_KEY	openssl_rand_hex_32	stable	Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys.
 CALENDAR_IMPORT_HMAC_SECRET	openssl_rand_base64_32	regenerable	HMAC for ICS import DNS/rel-me verification snippets. Rotation only invalidates pending verification challenges.
