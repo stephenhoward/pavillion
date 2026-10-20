@@ -104,25 +104,9 @@
     }
   }
 
-  /* Non-colour active cue, shared by every variant: an inline-start bar */
-  &[aria-current='page']::before {
-    content: '';
-    position: absolute;
-    inset-inline-start: 0;
-    inset-block: var(--pav-space-2);
-    inline-size: var(--pav-border-width-4);
-    border-radius: var(--pav-border-radius-full);
-    background-color: var(--pav-color-interactive-active);
-  }
-
-  /* Forced colours repaint the bar's author colour, so the bar takes the
-     system Highlight and an inset outline marks the current item, stepping
-     aside for the focus ring; the bar stays as the cue while focused */
+  /* Forced colours discard the active colour, so an inset outline marks the
+     current item, stepping aside for the focus ring */
   @media (forced-colors: active) {
-    &[aria-current='page']::before {
-      background-color: Highlight;
-    }
-
     &[aria-current='page']:not(:focus-visible) {
       outline: var(--pav-border-width-2) solid Highlight;
       outline-offset: calc(-1 * var(--pav-border-width-2));
