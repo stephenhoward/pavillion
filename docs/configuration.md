@@ -22,13 +22,16 @@ For most deployments, you only need to configure:
 
 ### Overview
 
-Pavillion requires three secrets for secure operation:
+Pavillion requires six secrets for secure operation:
 
 | Secret | Purpose | Impact if Compromised |
 |--------|---------|----------------------|
 | `JWT_SECRET` | Signs API authentication tokens | Attacker can forge API tokens |
 | `SESSION_SECRET` | Signs browser session cookies | Attacker can forge sessions |
 | `DB_PASSWORD` | PostgreSQL database access | Full database access |
+| `EMAIL_HASH_SECRET` | Hashes reporter emails for moderation | Attacker can de-anonymize report submitters |
+| `ENCRYPTION_KEY` | Encrypts funding provider API keys at rest | Attacker can decrypt stored provider keys |
+| `CALENDAR_IMPORT_HMAC_SECRET` | Signs ICS import DNS/rel-me verification snippets | Attacker can forge import verification challenges |
 
 ### Generating Secrets
 
@@ -60,6 +63,9 @@ For enhanced security, Pavillion supports Docker secrets using the `_FILE` suffi
 | `DB_PASSWORD` | `DB_PASSWORD_FILE` | `/run/secrets/db_password` |
 | `JWT_SECRET` | `JWT_SECRET_FILE` | `/run/secrets/jwt_secret` |
 | `SESSION_SECRET` | `SESSION_SECRET_FILE` | `/run/secrets/session_secret` |
+| `EMAIL_HASH_SECRET` | `EMAIL_HASH_SECRET_FILE` | `/run/secrets/email_hash_secret` |
+| `ENCRYPTION_KEY` | `ENCRYPTION_KEY_FILE` | `/run/secrets/encryption_key` |
+| `CALENDAR_IMPORT_HMAC_SECRET` | `CALENDAR_IMPORT_HMAC_SECRET_FILE` | `/run/secrets/calendar_import_hmac_secret` |
 | `S3_SECRET_KEY` | `S3_SECRET_KEY_FILE` | `/run/secrets/s3_secret_key` |
 | `SMTP_PASSWORD` | `SMTP_PASSWORD_FILE` | `/run/secrets/smtp_password` |
 
@@ -108,6 +114,9 @@ Environment variables are the recommended way to pass secrets to the container.
 | `JWT_SECRET` | Yes* | Development default | Secret for signing JWT tokens |
 | `SESSION_SECRET` | Yes* | Development default | Secret for signing session cookies |
 | `DB_PASSWORD` | Yes | - | PostgreSQL database password |
+| `EMAIL_HASH_SECRET` | Yes* | Development default | Hashes reporter emails for moderation. Rotation de-anonymizes prior reports. |
+| `ENCRYPTION_KEY` | Yes* | Development default | Encrypts funding provider API keys at rest. Rotation breaks decryption of stored keys. |
+| `CALENDAR_IMPORT_HMAC_SECRET` | Yes* | Development default | HMAC for ICS import DNS/rel-me verification snippets. Rotation only invalidates pending verification challenges. |
 
 *Required in production; development uses defaults from config files.
 
@@ -285,14 +294,6 @@ mail:
     # pass: your_password
 ```
 
-### Federation Settings
-
-```yaml
-federation:
-  enabled: true           # Enable ActivityPub federation
-  autoRepost: false       # Automatically repost events from trusted instances
-```
-
 ## Complete Configuration Example
 
 Here's a complete `config/local.yaml` example:
@@ -336,11 +337,6 @@ media:
     # driver: 's3'
     # bucket: 'your-bucket-name'
     # region: 'us-east-1'
-
-# Federation settings
-federation:
-  enabled: true
-  autoRepost: false
 ```
 
 ## Environment File Example
@@ -352,6 +348,9 @@ Complete `.env` file example:
 JWT_SECRET=your_jwt_secret_here
 SESSION_SECRET=your_session_secret_here
 DB_PASSWORD=your_secure_database_password
+EMAIL_HASH_SECRET=your_email_hash_secret_here
+ENCRYPTION_KEY=your_encryption_key_here
+CALENDAR_IMPORT_HMAC_SECRET=your_import_hmac_secret_here
 
 # Optional database settings
 DB_NAME=pavillion
@@ -431,6 +430,5 @@ For local development with PostgreSQL (instead of SQLite):
 4. **Restrict database access** - Don't expose PostgreSQL port in production
 5. **Use HTTPS** - Always use a reverse proxy with SSL in production
 6. **Limit file uploads** - Configure appropriate `maxFileSize` limits
-7. **Review federation settings** - Be cautious with `autoRepost` in production
-8. **Enable full-disk encryption** - Use LUKS or equivalent for production servers
-9. **Backup secrets** - Store secrets in a password manager for disaster recovery
+7. **Enable full-disk encryption** - Use LUKS or equivalent for production servers
+8. **Backup secrets** - Store secrets in a password manager for disaster recovery
