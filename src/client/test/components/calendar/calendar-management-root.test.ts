@@ -53,7 +53,7 @@ const ReportsStub = routeStub('ReportsStub', ['calendarId'], () => {
   }
 });
 const ImportStub = routeStub('ImportStub', ['calendarId', 'instanceHost']);
-const WidgetStub = routeStub('WidgetStub', ['calendarId', 'calendarUrlName']);
+const WidgetStub = routeStub('WidgetStub', ['calendarId', 'calendarUrlName', 'isOwner']);
 
 /** The calendar subtree with the real route names and the real index guards. */
 function buildRouter(): Router {
@@ -215,6 +215,17 @@ describe('CalendarManagementRoot', () => {
       const { wrapper } = await mountAt('/settings/calendar/my-calendar/widget');
 
       expect(wrapper.findComponent(WidgetStub).props('calendarUrlName')).toBe('my-calendar');
+    });
+
+    it.each([
+      ['owner', true],
+      ['editor', false],
+    ] as const)('passes ownership to the widget leaf for an %s', async (relationship, isOwner) => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', relationship)]);
+
+      const { wrapper } = await mountAt('/settings/calendar/my-calendar/widget');
+
+      expect(wrapper.findComponent(WidgetStub).props('isOwner')).toBe(isOwner);
     });
 
     it('renders the index list page for a resolved calendar', async () => {

@@ -551,7 +551,8 @@
       "error_adding": "Échec de l'ajout du domaine",
       "error_removing": "Échec de la suppression du domaine",
       "error_invalid_domain": "Format de domaine invalide. Le domaine ne doit pas inclure de protocole ni de chemin (par exemple, utilisez « exemple.com » au lieu de « https://exemple.com/ »).",
-      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés"
+      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés",
+      "owner_can_enable": "L'intégration de ce calendrier dans un autre site web est une fonctionnalité étendue. Le propriétaire du calendrier peut l'activer."
     },
     "config": {
       "configuration_title": "Paramètres du widget",

@@ -551,7 +551,8 @@
       "error_adding": "Error al añadir el dominio",
       "error_removing": "Error al eliminar el dominio",
       "error_invalid_domain": "Formato de dominio no válido. El dominio no debe incluir protocolo ni ruta (p. ej., usa 'ejemplo.com' en lugar de 'https://ejemplo.com/').",
-      "error_duplicate": "Este dominio ya está en la lista de permitidos"
+      "error_duplicate": "Este dominio ya está en la lista de permitidos",
+      "owner_can_enable": "La incrustación de este calendario en otro sitio web es una función extendida. El propietario del calendario puede activarla."
     },
     "config": {
       "configuration_title": "Configuración del widget",
