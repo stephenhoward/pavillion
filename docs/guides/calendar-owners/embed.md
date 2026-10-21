@@ -6,11 +6,11 @@ description: Embed your Pavillion calendar on your own website — generate the 
 
 > Status: partial. The allowed-domain and starting-view sections below are written; the rest of this guide will be written after launch.
 
-If your community already has a website — an organization page, a venue site, a project landing page — you can put your Pavillion calendar directly on it instead of asking visitors to click through to a separate URL. You do that with the embed widget: a short piece of code, copied from your calendar's **Widget** tab under **Settings** in the main navigation, that shows your calendar inside a page on your site.
+If your community already has a website — an organization page, a venue site, a project landing page — you can put your Pavillion calendar directly on it instead of asking visitors to click through to a separate URL. You do that with the embed widget: a short piece of code, copied from **Settings → Calendar → Widget**, that shows your calendar inside a page on your site.
 
 ## Choose where your calendar can appear
 
-Your widget appears on exactly one website: the one you name as the calendar's **Allowed Domain**. Until you name one, the embed code does nothing on other sites — paste it anywhere and visitors' browsers will refuse to show it. The preview on the **Widget** tab under **Settings** works either way, so you can set up how the widget looks before deciding where it goes.
+Your widget appears on exactly one website: the one you name as the calendar's **Allowed Domain**. Until you name one, the embed code does nothing on other sites — paste it anywhere and visitors' browsers will refuse to show it. The preview on the Widget page works either way, so you can set up how the widget looks before deciding where it goes.
 
 This is a real restriction, not a label. When a page tries to show your widget, Pavillion tells the visitor's browser which sites are allowed to display it, using a standard web rule (a *Content-Security-Policy* header). Every current browser follows that rule. A site that isn't your allowed domain gets an empty box, or the browser's own "refused" message, where your calendar would have been.
 
@@ -45,7 +45,7 @@ On instances that ask calendars to be [covered by a funding plan](funding.md) fo
 
 ## Choose the starting view
 
-The view you pick on the **Widget** tab — list, week or month — is the one visitors see when the widget first loads, not the only one: they can switch views themselves. Which views the widget offers depends on how much width it has on your page:
+The view you pick on the Widget page — list, week or month — is the one visitors see when the widget first loads, not the only one: they can switch views themselves. Which views the widget offers depends on how much width it has on your page:
 
 - **Small**, like a phone screen or a narrow sidebar: list only.
 - **Medium**, like a small tablet or the main column of a typical web page: list and month.

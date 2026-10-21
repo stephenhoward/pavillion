@@ -126,6 +126,10 @@ describe('Navigation Integration - Task Group 4', () => {
         setupGuard: pass,
         authRouteGuard: pass,
         currentCalendarRedirect: () => pass,
+        settingsIndexRedirect: () => pass,
+        calendarLeafGate: pass,
+        legacyTabReportsRedirect: pass,
+        fundingEnabledRedirect: pass,
       }),
     });
   };
@@ -311,8 +315,11 @@ describe('Navigation Integration - Task Group 4', () => {
       [{ name: 'calendar_category_mappings', params: { calendar: 'cal', actorId: 'a1' } }, '/feed/cal/following/a1/category-mappings'],
       [{ name: 'settings' }, '/settings'],
       [{ name: 'calendar_management', params: { calendar: 'cal' } }, '/settings/calendar/cal'],
-      [{ name: 'profile' }, '/settings/account'],
+      [{ name: 'account' }, '/settings/account'],
+      [{ name: 'profile' }, '/settings/account/profile'],
+      [{ name: 'security' }, '/settings/account/security'],
       [{ name: 'funding_plan' }, '/settings/account/funding'],
+      [{ name: 'admin' }, '/settings/admin'],
       [{ name: 'admin_settings' }, '/settings/admin/settings'],
       [{ name: 'moderation_report_detail', params: { reportId: 'r1' } }, '/settings/admin/moderation/reports/r1'],
     ])('resolves %o to %s', (location, path) => {
@@ -333,11 +340,14 @@ describe('Navigation Integration - Task Group 4', () => {
   });
 
   describe('Settings guards', () => {
+    // Entering the calendar subtree runs its parent's guard as well as the
+    // leaf's; between leaves of one calendar the parent is not re-entered.
     it.each([
-      ['/settings/account', '/settings/account/funding'],
-      ['/settings/account/funding', '/settings/calendar/test-calendar'],
-      ['/settings/calendar/test-calendar', '/settings/account'],
-    ])('runs mustBeLoggedIn when moving from %s to its sibling %s', async (from, to) => {
+      ['/settings/account', '/settings/account/funding', 1],
+      ['/settings/account/funding', '/settings/calendar/test-calendar', 2],
+      ['/settings/calendar/test-calendar', '/settings/account', 1],
+      ['/settings/calendar/test-calendar/editors', '/settings/calendar/test-calendar/general', 1],
+    ])('runs mustBeLoggedIn when moving from %s to its sibling %s (%i checks)', async (from, to, expectedChecks) => {
       const pass = () => true;
       let loginChecks = 0;
       const countingRouter = createRouter({
@@ -351,6 +361,10 @@ describe('Navigation Integration - Task Group 4', () => {
           setupGuard: pass,
           authRouteGuard: pass,
           currentCalendarRedirect: () => pass,
+          settingsIndexRedirect: () => pass,
+          calendarLeafGate: pass,
+          legacyTabReportsRedirect: pass,
+          fundingEnabledRedirect: pass,
         }),
       });
       await countingRouter.push(from);
@@ -359,7 +373,7 @@ describe('Navigation Integration - Task Group 4', () => {
       await countingRouter.push(to);
 
       expect(countingRouter.currentRoute.value.path).toBe(to);
-      expect(loginChecks).toBe(1);
+      expect(loginChecks).toBe(expectedChecks);
     });
   });
 
@@ -372,11 +386,16 @@ describe('Navigation Integration - Task Group 4', () => {
         routes: buildClientRoutes({
           ...createRouteGuards({ isLoggedIn: () => session.loggedIn, isAdmin: () => session.admin }, () => setupMode),
           currentCalendarRedirect: () => pass,
+          settingsIndexRedirect: () => pass,
+          calendarLeafGate: pass,
+          legacyTabReportsRedirect: pass,
+          fundingEnabledRedirect: pass,
         }),
       });
     };
 
     it.each([
+      '/settings/admin',
       '/settings/admin/settings',
       '/settings/admin/moderation/settings',
     ])('sends a signed-in non-admin from %s to login', async (path) => {
@@ -406,13 +425,13 @@ describe('Navigation Integration - Task Group 4', () => {
 
     it('lets a signed-in non-admin into the account page', async () => {
       const guarded = routerFor({ loggedIn: true, admin: false });
-      await guarded.push('/settings/account');
+      await guarded.push('/settings/account/profile');
       expect(guarded.currentRoute.value.name).toBe('profile');
     });
 
     it('sends a signed-out visitor from the account page to login', async () => {
       const guarded = routerFor({ loggedIn: false, admin: false });
-      await guarded.push('/settings/account');
+      await guarded.push('/settings/account/profile');
       expect(guarded.currentRoute.value.name).toBe('login');
     });
 

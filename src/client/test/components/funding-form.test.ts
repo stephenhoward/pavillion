@@ -44,7 +44,17 @@ import FundingForm from '@/client/components/account/FundingForm.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
+  { path: '/settings/account/funding', component: {}, name: 'funding_plan' },
+  { path: '/settings/calendar/:calendar/general', component: {}, name: 'calendar_general' },
+  { path: '/settings/calendar/:calendar/widget', component: {}, name: 'calendar_widget' },
 ];
+
+/**
+ * Where the form mounts by default: a calendar leaf carrying junk query. Memory
+ * history never writes window.location, so a return URL built from the live
+ * href could not match the resolved calendar_general path asserted below.
+ */
+const LEAF_WITH_JUNK_QUERY = '/settings/calendar/town-hall/widget?tab=settings&foo=1';
 
 function makeStripeOptions(overrides: Record<string, any> = {}) {
   return {
@@ -128,13 +138,13 @@ function makeMockStripeWithCallbackCapture() {
   };
 }
 
-const mountFundingForm = async (props: Record<string, any> = {}) => {
+const mountFundingForm = async (props: Record<string, any> = {}, startPath: string = LEAF_WITH_JUNK_QUERY) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
   });
 
-  await router.push('/');
+  await router.push(startPath);
   await router.isReady();
 
   const wrapper = mountComponent(FundingForm, router, { props });
@@ -503,6 +513,48 @@ describe('FundingForm', () => {
           returnUrl: expect.any(String),
         }),
       );
+    });
+
+    it('returns to the calendar General leaf with no inherited query', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
+      });
+
+      const wrapper = await mountFundingForm({ calendarId: 'cal-123' });
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      const { returnUrl } = mockCreateCheckoutSession.mock.calls[0][0];
+      expect(returnUrl).toBe(`${window.location.origin}/settings/calendar/town-hall/general`);
+    });
+
+    it('returns to the funding plan leaf when the route names no calendar', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
+      });
+
+      const wrapper = await mountFundingForm({}, '/?foo=1');
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      const { returnUrl } = mockCreateCheckoutSession.mock.calls[0][0];
+      expect(returnUrl).toBe(`${window.location.origin}/settings/account/funding`);
     });
 
     it('passes onComplete callback to initEmbeddedCheckout', async () => {

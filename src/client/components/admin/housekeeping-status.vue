@@ -457,7 +457,7 @@ onMounted(() => {
       grid-template-columns: 1fr;
       gap: var(--pav-space-3);
 
-      @include pav-media(sm) {
+      @include pav-container(sm) {
         grid-template-columns: repeat(3, 1fr);
       }
 

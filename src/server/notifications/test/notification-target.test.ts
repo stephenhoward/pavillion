@@ -119,7 +119,7 @@ describe('deriveTarget', () => {
           .toEqual({ kind: 'moderation_report', reportId: REPORT_ID });
       });
 
-      it('sends a calendar owner to their own calendar\'s reports tab', () => {
+      it('sends a calendar owner to their own calendar\'s reports page', () => {
         const row = activity({ verb, object_id: REPORT_ID, object_calendar_id: CALENDAR_ID });
 
         expect(deriveTarget(row, context(false, { [CALENDAR_ID]: 'mycal' })))

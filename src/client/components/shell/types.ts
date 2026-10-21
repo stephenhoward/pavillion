@@ -35,4 +35,4 @@ export interface NavigationItemWithState extends NavigationItem {
 /**
  * Navigation item variant for styling
  */
-export type NavItemVariant = 'sidebar' | 'bottom';
+export type NavItemVariant = 'sidebar' | 'bottom' | 'list';

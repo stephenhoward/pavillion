@@ -66,10 +66,9 @@ vi.mock('i18next-vue', () => ({
   }),
 }));
 
-// Mock services at module level so every `new CalendarService()` /
-// `new AuthenticationService()` in the component returns our stub instance.
+// Mock the service at module level so every `new CalendarService()` in the
+// component returns our stub instance.
 vi.mock('@/client/service/calendar');
-vi.mock('@/client/service/authn');
 
 const mountEditors = (props: Record<string, any> = {}, extraOptions: Record<string, any> = {}) => {
   return mount(EditorsTab, {
@@ -86,7 +85,6 @@ const mountEditors = (props: Record<string, any> = {}, extraOptions: Record<stri
 
 describe('Editors Component', () => {
   let calendarServiceMock: any;
-  let authServiceMock: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,13 +98,6 @@ describe('Editors Component', () => {
     };
     vi.mocked(CalendarService).mockImplementation(function () {
       return calendarServiceMock;
-    });
-
-    authServiceMock = {
-      userEmail: vi.fn().mockReturnValue(null),
-    };
-    vi.mocked(AuthenticationService).mockImplementation(function () {
-      return authServiceMock;
     });
   });
 
@@ -272,7 +263,8 @@ describe('Editors Component', () => {
     });
   });
 
-  describe('isOwner prop — Add Editor visibility', () => {
+  describe('Add Editor visibility', () => {
+    // The Editors leaf is owner-only, so every viewer who reaches it may add.
     beforeEach(() => {
       calendarServiceMock.listCalendarEditors.mockResolvedValue({
         activeEditors: [],
@@ -280,66 +272,27 @@ describe('Editors Component', () => {
       });
     });
 
-    it('shows Add Editor button in empty state when isOwner is true', async () => {
-      const wrapper = mountEditors({ isOwner: true });
+    it('shows the Add Editor button in the empty state', async () => {
+      const wrapper = mountEditors();
       await flushPromises();
 
-      // Empty state PillButton should be present for owners.
-      const pillButtons = wrapper.findAll('.btn--cta');
-      expect(pillButtons.length).toBeGreaterThan(0);
+      expect(wrapper.findAll('.btn--cta').length).toBeGreaterThan(0);
     });
 
-    it('hides Add Editor button in empty state when isOwner is false', async () => {
-      const wrapper = mountEditors({ isOwner: false });
-      await flushPromises();
-
-      // No primary pill button should appear for non-owners in empty state.
-      const pillButtons = wrapper.findAll('.btn--cta');
-      expect(pillButtons.length).toBe(0);
-    });
-
-    it('shows Add Editor button in header when editors exist and isOwner is true', async () => {
+    it('shows the Add Editor button in the header when editors exist', async () => {
       calendarServiceMock.listCalendarEditors.mockResolvedValue({
         activeEditors: [new CalendarEditor('1', 'test-calendar', 'user1@example.com')],
         pendingInvitations: [],
       });
 
-      const wrapper = mountEditors({ isOwner: true });
+      const wrapper = mountEditors();
       await flushPromises();
 
-      const headerAddButton = wrapper.find('.admin-section-header .pill-button--primary');
-      expect(headerAddButton.exists()).toBe(true);
+      expect(wrapper.find('.admin-section-header .pill-button--primary').exists()).toBe(true);
     });
 
-    it('hides Add Editor button in header when editors exist and isOwner is false', async () => {
-      calendarServiceMock.listCalendarEditors.mockResolvedValue({
-        activeEditors: [new CalendarEditor('1', 'test-calendar', 'user1@example.com')],
-        pendingInvitations: [],
-      });
-
-      const wrapper = mountEditors({ isOwner: false });
-      await flushPromises();
-
-      const headerAddButton = wrapper.find('.admin-section-header .pill-button--primary');
-      expect(headerAddButton.exists()).toBe(false);
-    });
-
-    it('defaults isOwner to false when prop is not provided', async () => {
-      // Mount without an explicit isOwner prop — the component default should
-      // suppress the Add Editor primary button.
-      const wrapper = mount(EditorsTab, {
-        props: {
-          calendarId: 'test-calendar',
-        },
-        global: {
-          stubs: globalStubs,
-        },
-      });
-
-      await flushPromises();
-
-      const pillButtons = wrapper.findAll('.btn--cta');
-      expect(pillButtons.length).toBe(0);
+    it('declares no isOwner prop', () => {
+      expect(Object.keys(EditorsTab.props ?? {})).toEqual(['calendarId']);
     });
   });
 
@@ -352,7 +305,7 @@ describe('Editors Component', () => {
     });
 
     it('opens add editor form when button clicked', async () => {
-      const wrapper = mountEditors({ isOwner: true });
+      const wrapper = mountEditors();
       await flushPromises();
       await nextTick();
 
@@ -374,7 +327,6 @@ describe('Editors Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'test-calendar',
-          isOwner: true,
         },
         attachTo: document.body,
         global: {
@@ -418,7 +370,7 @@ describe('Editors Component', () => {
         .mockResolvedValueOnce({ activeEditors: [], pendingInvitations: [] })
         .mockResolvedValueOnce({ activeEditors: [newEditor], pendingInvitations: [] });
 
-      const wrapper = mountEditors({ isOwner: true });
+      const wrapper = mountEditors();
       await flushPromises();
       await nextTick();
 
@@ -464,7 +416,7 @@ describe('Editors Component', () => {
         new EditorAlreadyExistsError(),
       );
 
-      const wrapper = mountEditors({ isOwner: true });
+      const wrapper = mountEditors();
       await flushPromises();
       await nextTick();
 
@@ -488,7 +440,7 @@ describe('Editors Component', () => {
         new AccountInviteAlreadyExistsError(),
       );
 
-      const wrapper = mountEditors({ isOwner: true });
+      const wrapper = mountEditors();
       await flushPromises();
       await nextTick();
 
@@ -529,9 +481,6 @@ describe('Editors Component', () => {
 
     beforeEach(() => {
       testEditor = new CalendarEditor('1', 'test-calendar', 'user1@example.com');
-      // Set the current user to someone OTHER than the editor under test so
-      // the leave-calendar UI doesn't render and confuse the .btn-ghost lookup.
-      authServiceMock.userEmail.mockReturnValue('owner@example.com');
       calendarServiceMock.listCalendarEditors.mockResolvedValue({
         activeEditors: [testEditor],
         pendingInvitations: [],
@@ -629,21 +578,15 @@ describe('Editors Component', () => {
     });
   });
 
-  describe('Editor Role Display', () => {
-    it('should distinguish current user as editor vs owner', async () => {
-      const mockEditors = [
-        CalendarEditor.fromObject({
+  describe('Leave control', () => {
+    it('renders no leave control, even when an active editor shares the viewer\'s email', async () => {
+      vi.spyOn(AuthenticationService.prototype, 'userEmail').mockReturnValue('alice@example.com');
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({
+        activeEditors: [CalendarEditor.fromObject({
           id: 'editor-1',
           calendarId: 'calendar-123',
           email: 'alice@example.com',
-        }),
-      ];
-
-      // Set current user email to match an editor — they can leave the calendar.
-      authServiceMock.userEmail.mockReturnValue('alice@example.com');
-
-      calendarServiceMock.listCalendarEditors.mockResolvedValue({
-        activeEditors: mockEditors,
+        })],
         pendingInvitations: [],
       });
 
@@ -651,37 +594,8 @@ describe('Editors Component', () => {
       await flushPromises();
       await nextTick();
 
-      // Current user should be able to leave (is an editor).
-      expect(wrapper.vm.canLeaveCalendar()).toBe(true);
-
-      // Leave button should be visible.
-      const leaveButton = wrapper.find('.btn-ghost--danger');
-      expect(leaveButton.exists()).toBe(true);
-    });
-
-    it('should not show leave button if user is not an editor', async () => {
-      const mockEditors = [
-        CalendarEditor.fromObject({
-          id: 'editor-1',
-          calendarId: 'calendar-123',
-          email: 'bob@example.com',
-        }),
-      ];
-
-      // Current user is the owner (not in editors list).
-      authServiceMock.userEmail.mockReturnValue('owner@example.com');
-
-      calendarServiceMock.listCalendarEditors.mockResolvedValue({
-        activeEditors: mockEditors,
-        pendingInvitations: [],
-      });
-
-      const wrapper = mountEditors({ calendarId: 'calendar-123' });
-      await flushPromises();
-      await nextTick();
-
-      expect(wrapper.vm.canLeaveCalendar()).toBe(false);
       expect(wrapper.find('.btn-ghost--danger').exists()).toBe(false);
+      expect(wrapper.find('.leave-calendar-section').exists()).toBe(false);
     });
   });
 

@@ -5,7 +5,8 @@
     "new_event": "Nouvel événement",
     "settings_button": "Paramètres",
     "feed_button": "Fil d'actualité",
-    "inbox_badge_label": "{{count}} notification non lue"
+    "inbox_badge_label_one": "{{count}} notification non lue",
+    "inbox_badge_label_other": "{{count}} notifications non lues"
   },
   "powered_by": "Propulsé par Pavillion",
   "language_picker": {

@@ -30,7 +30,7 @@ defineProps<{
   position: fixed;
   inset-block: 0;
   inset-inline-start: 0;
-  width: var(--pav-shell-sidebar-width);
+  width: var(--pav-shell-nav-width);
   background-color: var(--pav-surface-primary);
   border-inline-end: 1px solid var(--pav-border-subtle);
   z-index: 100;
@@ -51,7 +51,7 @@ defineProps<{
     flex-direction: column;
     list-style: none;
     margin: 0;
-    padding: var(--pav-space-4);
+    padding: var(--pav-shell-nav-padding);
     gap: var(--pav-space-1);
   }
 }

@@ -7,19 +7,6 @@
     "invite_button": "Send Invitation",
     "close_button": "Cancel"
   },
-  "menu": {
-    "navigation_label": "Instance administration",
-    "needs_attention": "Needs attention",
-    "general_settings": "General",
-    "instance_name_title": "Instance Name/Title",
-    "registration_mode": "Registration Mode",
-    "accounts_link": "Accounts",
-    "calendars_link": "Calendars",
-    "federation_settings": "Federation",
-    "blocked_instances": "List of blocked instances",
-    "payment_details": "Funding",
-    "moderation": "Moderation"
-  },
   "calendars": {
     "page_title": "Local Calendars",
     "page_subtitle": "Review calendars hosted on this instance",
@@ -414,7 +401,6 @@
     "instance_policy_help": "Markdown formatting is supported. Content is stored as Markdown and rendered as HTML when displayed."
   },
   "federation": {
-    "title": "Federation",
     "subtitle": "Manage federation with other Pavillion instances",
     "blocked_instances_title": "Blocked Instances",
     "info_text": "Blocked instances cannot send events to or receive events from your instance. Users on blocked instances will not be able to follow calendars on your instance.",

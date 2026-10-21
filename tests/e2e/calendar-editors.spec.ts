@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers/auth';
+import { loginAsAdmin, loginViaUi } from './helpers/auth';
+import {
+  calendarLeaf,
+  calendarLeafPath,
+  gotoSettings,
+  settingsGroup,
+  settingsRow,
+  settingsTitle,
+  settingsTree,
+} from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import { clearEmails, waitForEmail } from './helpers/emails';
 import axios from 'axios';
@@ -54,12 +63,8 @@ test.describe('Calendar Editor Collaboration', () => {
       // Clear any previously stored emails
       await clearEmails(env.baseURL);
 
-      // Navigate to calendar management page - Editors tab is the default
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
-
-      // Wait for editors content to load
-      await page.waitForTimeout(1000);
+      // Open the calendar's Editors page
+      await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'editors'));
 
       // Click the Add Editor button
       const addEditorButton = page.locator('button.btn--cta').filter({ hasText: /Add Editor/i });
@@ -149,10 +154,8 @@ test.describe('Calendar Editor Collaboration', () => {
       );
       expect(acceptResponse.status).toBe(200);
 
-      // Navigate to calendar management page and verify editor appears
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
-      await page.waitForTimeout(1000);
+      // Open the calendar's Editors page and verify the editor appears
+      await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'editors'));
 
       // The editor's email should appear in the active editors list
       const editorCard = page.locator('.editor-card:not(.editor-card--invitation)').filter({
@@ -161,11 +164,37 @@ test.describe('Calendar Editor Collaboration', () => {
       await expect(editorCard).toBeVisible({ timeout: 5000 });
     });
 
+    // Runs while the invitee holds editor access, between the accept and
+    // remove tests. The describe's beforeEach logs `page` in as admin, so the
+    // editor gets a context of their own.
+    test('an editor\'s direct request for an owner-only leaf lands on Widget', async ({ browser }) => {
+      const context = await browser.newContext();
+      const editorPage = await context.newPage();
+      try {
+        await loginViaUi(editorPage, env.baseURL, INVITEE_EMAIL, INVITEE_PASSWORD);
+
+        // Reports and Editors are owner-only: the editor is replaced to Widget, query dropped
+        for (const leaf of ['reports', 'editors'] as const) {
+          await editorPage.goto(env.baseURL + calendarLeafPath('test_calendar', leaf) + '?x=1');
+          await expect(editorPage).toHaveURL(env.baseURL + calendarLeafPath('test_calendar', 'widget'));
+          await expect(settingsTitle(editorPage, 'Widget')).toBeVisible();
+        }
+
+        // The tree's Calendar group offers the editor Widget only
+        const calendarGroup = settingsGroup(settingsTree(editorPage), 'Calendar');
+        await expect(settingsRow(calendarGroup, 'Widget')).toBeVisible();
+        for (const ownerOnly of ['General', 'Editors', 'Reports', 'Import']) {
+          await expect(settingsRow(calendarGroup, ownerOnly)).toHaveCount(0);
+        }
+      }
+      finally {
+        await context.close();
+      }
+    });
+
     test('should remove an editor from the calendar', async ({ page }) => {
-      // Navigate to calendar management page as admin
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
-      await page.waitForTimeout(1000);
+      // Open the calendar's Editors page as admin
+      await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'editors'));
 
       // Find the editor card with the invitee's email
       const editorCard = page.locator('.editor-card:not(.editor-card--invitation)').filter({

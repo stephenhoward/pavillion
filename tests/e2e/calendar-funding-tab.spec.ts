@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { calendarLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Calendar Settings — Extended Features (Funding)
  *
- * Tests the funding workflow in the Settings tab's Extended Features section:
+ * Tests the funding workflow in the General page's Extended Features section:
  *   1. When the widget gate is shut, shows the shared funding upsell.
  *   2. Acting on the upsell opens the FundingSheet overlay.
  *   3. When the gate is open, shows the enabled badge with the disable option.
@@ -22,9 +23,8 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * reads its capability from there, never from `status`. A mock that omits it
  * leaves every gate `unknown` and the section renders nothing at all.
  *
- * Locators here are scoped to `#settings-panel`, because the shared upsell is
- * placed at more than one site and every tab panel is mounted at once — see
- * `settingsPanel()` below.
+ * Locators here are scoped to the General page's main landmark — see
+ * `generalLeaf()` below.
  */
 
 let env: TestEnvironment;
@@ -96,22 +96,16 @@ async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
 }
 
 /**
- * The settings tab panel — the surface every assertion in this file is about.
+ * The calendar's General page — the surface every assertion in this file is
+ * about.
  *
- * Calendar management mounts all of its tab panels at once and hides the
- * inactive ones with the `hidden` attribute rather than `v-if`, so the widget
- * tab's markup is in the DOM while the settings tab is showing. The funding
- * upsell is one shared, self-gating card used at both sites, which means a shut
- * widget-embedding gate puts two `.funding-upsell` blocks in the document at the
- * same time. That is the design working: `hidden` keeps the inactive one away
- * from sighted users and assistive tech alike, and exactly one is ever visible.
- *
- * Unscoped `.funding-upsell*` locators are therefore ambiguous by construction,
- * whether or not a given assertion happens to trip strict mode today. Naming the
- * panel keeps each assertion about the surface it means.
+ * The funding upsell is one shared, self-gating card placed on both the
+ * General and Widget pages. Each page is its own route, so only one of them is
+ * mounted at a time; scoping still keeps each assertion about the surface it
+ * means.
  */
-function settingsPanel(page: import('@playwright/test').Page) {
-  return page.locator('#settings-panel');
+function generalLeaf(page: import('@playwright/test').Page) {
+  return page.getByRole('main');
 }
 
 /**
@@ -126,16 +120,10 @@ function visibleUpsells(page: import('@playwright/test').Page) {
 }
 
 /**
- * Navigate to calendar settings tab.
+ * Open the test calendar's General page.
  */
-async function navigateToSettingsTab(page: import('@playwright/test').Page, baseURL: string) {
-  await page.goto(baseURL + '/settings/calendar/test_calendar');
-  await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
-
-  const settingsTab = page.locator('#settings-tab');
-  await settingsTab.click();
-
-  await expect(settingsPanel(page)).toBeVisible({ timeout: 10000 });
+async function navigateToGeneralLeaf(page: import('@playwright/test').Page, baseURL: string) {
+  await gotoSettings(page, baseURL, calendarLeaf('test_calendar', 'general'));
 }
 
 test.describe('Calendar Settings — Extended Features (Funding)', () => {
@@ -158,15 +146,14 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       widgetEmbedding: false,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
-    const upsellAction = settingsPanel(page).locator('.funding-upsell__action');
+    const upsellAction = generalLeaf(page).locator('.funding-upsell__action');
     await expect(upsellAction).toBeVisible({ timeout: 10000 });
 
-    // The widget tab's copy of the card is mounted and denied too, but hidden
-    // with its panel. One offer is on screen, and it is this one.
+    // One offer is on screen, and it is this page's.
     await expect(visibleUpsells(page)).toHaveCount(1);
-    await expect(settingsPanel(page).locator('.funding-upsell:visible')).toHaveCount(1);
+    await expect(generalLeaf(page).locator('.funding-upsell:visible')).toHaveCount(1);
   });
 
   test('acting on the upsell opens the funding sheet', async ({ page }) => {
@@ -176,17 +163,17 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       widgetEmbedding: false,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
-    const upsellAction = settingsPanel(page).locator('.funding-upsell__action');
+    const upsellAction = generalLeaf(page).locator('.funding-upsell__action');
     await expect(upsellAction).toBeVisible({ timeout: 10000 });
     await expect(visibleUpsells(page)).toHaveCount(1);
     await upsellAction.click();
 
     // FundingSheet dialog should appear (Sheet component uses .sheet-dialog).
-    // The card renders its sheet in place, so the settings tab's card is the one
-    // that must have opened it.
-    const fundingSheet = settingsPanel(page).locator('.sheet-dialog');
+    // The card renders its sheet in place, so the General page's card is the
+    // one that must have opened it.
+    const fundingSheet = generalLeaf(page).locator('.sheet-dialog');
     await expect(fundingSheet).toBeVisible({ timeout: 10000 });
   });
 
@@ -197,17 +184,17 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       widgetEmbedding: true,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
     // Should show enabled badge
-    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
+    const enabledBadge = generalLeaf(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
     // Should show disable button — a plan is the one source with something to cancel
-    const disableButton = settingsPanel(page).locator('.setting-disable-btn');
+    const disableButton = generalLeaf(page).locator('.setting-disable-btn');
     await expect(disableButton).toBeVisible();
 
-    // An open gate sells nothing, on this tab or any other.
+    // An open gate sells nothing anywhere on the page.
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
   });
 
@@ -221,13 +208,13 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       widgetEmbedding: true,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
-    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
+    const enabledBadge = generalLeaf(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
     // Deliberately page-wide: the claim is that nothing is offered for sale
-    // anywhere, including the widget tab mounted alongside this one.
+    // anywhere on the page.
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
   });
 
@@ -238,10 +225,10 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       widgetEmbedding: true,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
     // Should show enabled badge (admin-exempt uses same badge style)
-    const enabledBadge = settingsPanel(page).locator('.setting-badge--enabled');
+    const enabledBadge = generalLeaf(page).locator('.setting-badge--enabled');
     await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
@@ -255,14 +242,14 @@ test.describe('Calendar Settings — Extended Features (Funding)', () => {
       fundingUnreadable: true,
     });
 
-    await navigateToSettingsTab(page, env.baseURL);
+    await navigateToGeneralLeaf(page, env.baseURL);
 
-    const settingsContent = settingsPanel(page).locator('.settings-content');
+    const settingsContent = generalLeaf(page).locator('.settings-content');
     await expect(settingsContent).toBeVisible({ timeout: 10000 });
 
     // Page-wide again: an unreadable funding state must not produce an upsell on
-    // any surface, and the widget tab reads the same gate.
+    // any surface of the page.
     await expect(page.locator('.funding-upsell')).toHaveCount(0);
-    await expect(settingsPanel(page).locator('.setting-badge--enabled')).toHaveCount(0);
+    await expect(generalLeaf(page).locator('.setting-badge--enabled')).toHaveCount(0);
   });
 });

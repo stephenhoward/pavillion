@@ -41,7 +41,7 @@ import { NotificationRecipientEntity } from '@/server/notifications/entity/notif
  *     staleness is a feature, because it is what keeps a row renderable
  *     after the underlying object is deleted. `object_calendar_id` is a
  *     live routing key: its staleness would be a defect, because a wrong
- *     value routes a calendar owner to another calendar's reports tab.
+ *     value routes a calendar owner to another calendar's reports page.
  *
  *     What makes the copy safe is that a report's owning calendar is
  *     immutable — `ReportEntity.calendar_id` is written once at creation

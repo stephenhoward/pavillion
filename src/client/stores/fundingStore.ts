@@ -44,6 +44,11 @@ export interface CalendarFundingCache {
  */
 interface FundingState {
   calendars: Record<string, CalendarFundingCache>;
+  /**
+   * Whether this instance offers funding plans at all, or null until it has
+   * been loaded. Instance-wide, unlike everything in `calendars`.
+   */
+  instanceFundingEnabled: boolean | null;
 }
 
 /**
@@ -103,12 +108,16 @@ function cacheEntry(
 }
 
 /**
- * Pinia store caching what the client knows about calendar funding.
+ * Pinia store caching what the client knows about calendar funding, and
+ * whether the instance offers funding at all.
  *
  * Data cache only: it holds no loading state, performs no requests, and is
- * written by FundingService (reads) and by useFundingAccess (402 refusals and
- * failed reads).
- * Components reach it through useFundingAccess, never directly.
+ * written by FundingService (reads, including the instance flag, and the
+ * admin settings write that changes it) and by useFundingAccess (402
+ * refusals and failed reads).
+ * Calendar funding is reached through useFundingAccess, never directly. The
+ * instance flag is loaded through FundingService.ensureInstanceFundingLoaded
+ * and read from `instanceFundingEnabled`.
  *
  * In-memory only — no persistence plugin. A reload starts empty, and
  * logout.vue calls `$reset()` so one session's funding answers cannot describe
@@ -117,6 +126,7 @@ function cacheEntry(
 export const useFundingStore = defineStore('funding', {
   state: (): FundingState => ({
     calendars: prototypeFreeRecord<Record<string, CalendarFundingCache>>(),
+    instanceFundingEnabled: null,
   }),
 
   getters: {
@@ -195,6 +205,16 @@ export const useFundingStore = defineStore('funding', {
         features: prototypeFreeRecord(),
         loadFailed: true,
       };
+    },
+
+    /**
+     * Cache whether the instance offers funding plans, or forget it with null
+     * so the next FundingService.ensureInstanceFundingLoaded re-reads it.
+     *
+     * @param {boolean | null} enabled - The instance's funding-enabled flag, or null for unknown
+     */
+    setInstanceFundingEnabled(enabled: boolean | null) {
+      this.instanceFundingEnabled = enabled;
     },
 
     /**

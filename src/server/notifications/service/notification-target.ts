@@ -28,9 +28,9 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *
  * 1. **Report-notification recipients are authorized on the surface they are
  *    sent to.** The report audience is `getOwnersForCalendar(calendarId)` ∪
- *    `getInstanceAdmins()`; the calendar reports tab is owner-gated. Editors
+ *    `getInstanceAdmins()`; the calendar reports page is owner-gated. Editors
  *    never receive report notifications, so `owner_report` is never emitted
- *    to someone who would land on a blocked tab. If audience resolution ever
+ *    to someone who would land on a blocked page. If audience resolution ever
  *    adds editors, this breaks silently.
  *
  *    The guarantee is **exact for `Flag`**, whose audience and stored
@@ -44,7 +44,7 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *
  *    That outcome is accepted, not repaired, and is pinned by a test in
  *    `test/integration/read-path-targets.test.ts`. The resolution is "the
- *    destination enforces" (invariant 5): the reports tab checks
+ *    destination enforces" (invariant 5): the reports page checks
  *    `userCanReviewReports` server-side, `url_name` is public routing data,
  *    and the report id is already on the row as `object.id`.
  *
@@ -90,7 +90,7 @@ import type { NotificationVerb } from '@/server/notifications/types';
  *    trust boundary — an emitted target grants nothing.
  * 6. **A report's owning calendar is immutable after creation.** That is what
  *    makes reading the denormalized `object_calendar_id` safe: a stale value
- *    would route an owner to a *different* calendar's reports tab. Unlike
+ *    would route an owner to a *different* calendar's reports page. Unlike
  *    `object_label`, whose staleness is a feature, staleness here is a defect.
  *    Enforced by `ReportEntity.calendar_id` being write-once (documented on
  *    that column) plus the structural tripwire in

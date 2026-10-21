@@ -167,6 +167,16 @@ describe('Funding Plan UI Components', () => {
     expect(wrapper.find('.providers-card .card-header button').attributes('disabled')).toBeDefined();
   });
 
+  it('renders no h2 repeating the Funding Plan page title', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+
+    const wrapper = await mountAccount();
+
+    // The settings layout h1 already reads "Funding Plan"; the leaf must not repeat it.
+    expect(wrapper.findAll('h1, h2').map((h) => h.text())).not.toContain('Funding Plan');
+    expect(wrapper.find('section').attributes('aria-labelledby')).toBeUndefined();
+  });
+
   it('points an account with no plan at calendar management when funding is enabled', async () => {
     fundingStubs.getOptions.mockResolvedValue({ enabled: true });
 
@@ -207,16 +217,6 @@ describe('Funding Plan UI Components', () => {
     expect(fundingStubs.cancel).toHaveBeenCalledOnce();
     expect(wrapper.find('.success-message').text()).toBe('Your funding plan has been cancelled');
     expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
-  });
-
-  it('links back to the account settings page', () => {
-    const wrapper = mount(FundingPlanManagement, {
-      global: {
-        plugins: [router, [I18NextVue, { i18next }], createPinia()],
-      },
-    });
-
-    expect(wrapper.find('a.back-button').attributes('href')).toBe('/settings/account');
   });
 
 });

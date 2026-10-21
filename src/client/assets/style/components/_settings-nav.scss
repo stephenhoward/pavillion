@@ -1,0 +1,100 @@
+/**
+ * Settings list (settings/nav-list.vue)
+ * One list in two static modes: a drill-down page below md (--page) and a
+ * sidebar group at md+ (--sidebar). Rows are shell nav items in the list
+ * variant; their colours, hover, focus and active cue come from
+ * _shell-nav.scss and are not redeclared here; main.scss loads this file
+ * after it so in-context rules win ties. Placement and hiding at md belong
+ * to _settings.scss.
+ */
+@use '../mixins' as *;
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  /* text-align overrides the global narrow-viewport `nav a` centring in
+     _navigation.scss, which a page-mode list inside a <nav> would inherit */
+  .shell-nav-item--list {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-3);
+    text-align: start;
+    inline-size: 100%;
+    min-block-size: var(--pav-shell-nav-item-height);
+    padding-block: var(--pav-space-2_5);
+    padding-inline: var(--pav-space-3);
+
+    /* Labels wrap: es and fr run longer, and the base line-height of 1 would
+       clip a second line */
+    .shell-nav-item__label {
+      flex: 1;
+      white-space: normal;
+      line-height: var(--pav-line-height-snug);
+    }
+  }
+
+  /* The chevron has no base rule: Lucide draws with stroke only */
+  .shell-nav-item__chevron {
+    flex-shrink: 0;
+    inline-size: 1rem;
+    block-size: 1rem;
+    margin-inline-start: auto;
+    color: var(--pav-text-secondary);
+    fill: none;
+
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
+  }
+
+  /* Page mode: full-width rows divided by a subtle rule */
+  &--page {
+    gap: 0;
+
+    > li:not(.settings-nav__logout) {
+      border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
+    }
+  }
+
+  /* Sidebar mode: compact rows; the row itself marks where it leads */
+  &--sidebar .shell-nav-item__chevron {
+    display: none;
+  }
+
+  /* Log out sits apart from the links, in the error colour */
+  &__logout {
+    margin-block-start: var(--pav-space-4);
+  }
+
+  /* Button reset; the base row already sets the display font-family, so
+     font is not reset to inherit here */
+  button.shell-nav-item {
+    background: none;
+    border: 0;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  /* Holds through hover: this partial loads after _shell-nav.scss, so it
+     wins the specificity tie with the base hover rule */
+  .shell-nav-item--danger {
+    color: var(--pav-text-error);
+
+    .shell-nav-item__icon {
+      color: var(--pav-text-error);
+    }
+
+    &:hover {
+      color: var(--pav-text-error-hover);
+
+      .shell-nav-item__icon {
+        color: var(--pav-text-error-hover);
+      }
+    }
+  }
+}

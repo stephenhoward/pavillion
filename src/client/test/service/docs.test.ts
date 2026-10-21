@@ -55,6 +55,12 @@ describe('guidesForRoute', () => {
     );
   });
 
+  it('returns the ICS import guide for the calendar import leaf', () => {
+    expect(guidesForRoute('calendar_import')).toEqual([
+      { slug: 'guides/calendar-owners/ics-import', key: 'ics_import' },
+    ]);
+  });
+
   it('returns an empty array for an unknown route name', () => {
     expect(guidesForRoute('not_a_real_route')).toEqual([]);
   });
@@ -146,6 +152,10 @@ describe('ROUTE_GUIDES keys', () => {
       setupGuard: pass,
       authRouteGuard: pass,
       currentCalendarRedirect: () => pass,
+      settingsIndexRedirect: () => pass,
+      calendarLeafGate: pass,
+      legacyTabReportsRedirect: pass,
+      fundingEnabledRedirect: pass,
     }));
     for (const key of Object.keys(ROUTE_GUIDES)) {
       expect(names.has(key), `ROUTE_GUIDES has dead key ${key}`).toBe(true);

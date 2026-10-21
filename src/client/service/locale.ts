@@ -21,6 +21,7 @@ import enSeries from '@/client/locales/en/series.json';
 import enSetup from '@/client/locales/en/setup.json';
 import enFunding from '@/client/locales/en/funding.json';
 import enPolicy from '@/client/locales/en/policy.json';
+import enSettings from '@/client/locales/en/settings.json';
 
 // Import Spanish translation resources
 import esSystem from '@/client/locales/es/system.json';
@@ -38,6 +39,7 @@ import esSeries from '@/client/locales/es/series.json';
 import esSetup from '@/client/locales/es/setup.json';
 import esFunding from '@/client/locales/es/funding.json';
 import esPolicy from '@/client/locales/es/policy.json';
+import esSettings from '@/client/locales/es/settings.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
@@ -55,6 +57,7 @@ import frSeries from '@/client/locales/fr/series.json';
 import frSetup from '@/client/locales/fr/setup.json';
 import frFunding from '@/client/locales/fr/funding.json';
 import frPolicy from '@/client/locales/fr/policy.json';
+import frSettings from '@/client/locales/fr/settings.json';
 
 // Shared-component namespace owned by src/common/ui
 import { uiResources } from '@/common/ui/locales';
@@ -131,6 +134,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: enSetup,
         funding: enFunding,
         policy: enPolicy,
+        settings: enSettings,
         ...uiResources.en,
       },
       es: {
@@ -149,6 +153,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: esSetup,
         funding: esFunding,
         policy: esPolicy,
+        settings: esSettings,
         ...uiResources.es,
       },
       fr: {
@@ -167,6 +172,7 @@ export const initI18Next = (serverLanguage?: string) => {
         setup: frSetup,
         funding: frFunding,
         policy: frPolicy,
+        settings: frSettings,
         ...uiResources.fr,
       },
     },

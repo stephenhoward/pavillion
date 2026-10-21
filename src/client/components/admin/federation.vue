@@ -11,10 +11,7 @@ const { t } = useTranslation('admin', {
   <div class="federation-page">
     <!-- Page Header -->
     <div class="federation-header">
-      <div>
-        <h2>{{ t("title") }}</h2>
-        <p class="federation-subtitle">{{ t("subtitle") }}</p>
-      </div>
+      <p class="federation-subtitle">{{ t("subtitle") }}</p>
       <HelpButton />
     </div>
 
@@ -67,12 +64,10 @@ const { t } = useTranslation('admin', {
   max-width: 800px;
 
   .federation-header {
-    h2 {
-      margin: 0 0 var(--pav-space-1) 0;
-      font-size: var(--pav-font-size-2xl);
-      font-weight: var(--pav-font-weight-light);
-      color: var(--pav-color-text-primary);
-    }
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--pav-space-4);
 
     .federation-subtitle {
       margin: 0;

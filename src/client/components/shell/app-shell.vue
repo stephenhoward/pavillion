@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useTranslation } from 'i18next-vue';
 import Sidebar from './sidebar.vue';
 import BottomNav from './bottom-nav.vue';
 import type { NavigationItem, NavigationItemWithState } from './types';
@@ -10,6 +11,7 @@ const props = defineProps<{
 }>();
 
 const route = useRoute();
+const { t } = useTranslation('system');
 
 /**
  * Compute active state for each navigation item based on current route
@@ -22,6 +24,13 @@ const itemsWithActiveState = computed<NavigationItemWithState[]>(() =>
 );
 
 /**
+ * Rail mode: any matched record carrying meta.shellRail collapses the sidebar
+ * to an icon rail. Script decides only the class; the effect is gated to md+
+ * in _shell-nav.scss, so there is no viewport branch here.
+ */
+const isRail = computed(() => route.matched.some(r => r.meta.shellRail === true));
+
+/**
  * Check if a navigation item is active for the current route: the route's
  * path starts with the item's path.
  */
@@ -32,9 +41,9 @@ function isRouteActive(item: NavigationItem): boolean {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--rail': isRail }">
     <a href="#main" class="app-shell__skip-link sr-only">
-      Skip to main content
+      {{ t('navigation.skip_to_content') }}
     </a>
     <Sidebar :items="itemsWithActiveState" />
     <main id="main" class="app-shell__main">
@@ -77,8 +86,8 @@ function isRouteActive(item: NavigationItem): boolean {
 
     @include pav-media(md) {
       padding-block-end: 0;
-      margin-inline-start: var(--pav-shell-sidebar-width);
-      width: calc(100% - var(--pav-shell-sidebar-width));
+      margin-inline-start: var(--pav-shell-nav-width);
+      width: calc(100% - var(--pav-shell-nav-width));
     }
   }
 }

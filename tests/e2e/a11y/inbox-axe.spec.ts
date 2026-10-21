@@ -12,10 +12,11 @@ import {
   seedNotificationFixtures,
   type NotificationFixtures,
 } from '../helpers/notification-fixtures';
+import { calendarReportPath, reportRegion } from '../helpers/settings-nav';
 
 /**
- * Accessibility scans for the restructured inbox row and the reports panel
- * reached by the `?report=` deep link (pv-mvfk.7).
+ * Accessibility scans for the restructured inbox row and the report region
+ * reached by the `reports/:reportId` deep link.
  *
  * The unit-tier a11y assertions target the two violations this epic was
  * opened for — the 4.1.2 nesting of interactive controls inside an
@@ -32,7 +33,7 @@ import {
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 /**
- * `color-contrast` is excluded from the REPORTS PANEL scan alone, and this is a
+ * `color-contrast` is excluded from the REPORT REGION scan alone, and this is a
  * recorded exception rather than a convenience.
  *
  * The inbox row no longer needs it. `a.actor-link` / `a.object-link` used to
@@ -43,7 +44,7 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
  * `--pav-color-orange-300` on the dark surface at **8.99:1**. The inbox scan
  * below therefore runs with `color-contrast` ENABLED and gates it.
  *
- * What remains is the reports panel: the shared `.pill-button--primary`
+ * What remains is the report region: the shared `.pill-button--primary`
  * renders white on `#F97316` at **2.8:1**. That button is a design-system
  * component this epic never touched, on a surface this epic only deep-links
  * into — which is what makes the diagnosis unambiguously pre-existing.
@@ -119,25 +120,21 @@ test.describe('Inbox accessibility scans', () => {
     expect(results.violations.map(violation => violation.id)).toEqual([]);
   });
 
-  test('the reports tabpanel has no WCAG violations after the deep-link focus move', async ({ page }) => {
+  test('the report region has no WCAG violations after the deep-link focus move', async ({ page }) => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
 
-    await page.goto(
-      `${env.baseURL}/settings/calendar/${TESTUSER_CALENDAR_URL_NAME}`
-      + `?tab=reports&report=${fixtures.ownedReportId}`,
-    );
+    await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
 
-    // Scan only once the deep link has actually resolved: the tab activated,
-    // the report detail rendered, and focus landed on the panel. Scanning
-    // before that would measure the editors tab.
+    // Scan only once the deep link has actually resolved: the report detail
+    // rendered and focus landed on the report region. Scanning before that
+    // would measure the reports list.
     await expect(page.locator('.report-detail')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#reports-tab')).toHaveAttribute('aria-selected', 'true');
-    await expect
-      .poll(() => page.evaluate(() => document.activeElement?.id ?? null))
-      .toBe('reports-panel');
+    await expect(reportRegion(page)).toBeFocused();
 
+    // AxeBuilder.include takes CSS, not a role locator. The report region
+    // carries no id or class, and is the page's one labelled region.
     const results = await new AxeBuilder({ page })
-      .include('#reports-panel')
+      .include('[role="region"][aria-labelledby]')
       .withTags(WCAG_TAGS)
       .disableRules(KNOWN_DESIGN_TOKEN_VIOLATIONS)
       .analyze();

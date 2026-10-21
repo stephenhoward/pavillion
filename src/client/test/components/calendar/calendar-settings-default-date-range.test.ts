@@ -85,6 +85,21 @@ afterEach(() => {
 });
 
 describe('CalendarSettings — default date window', () => {
+  it('names the select with its card heading', async () => {
+    stubScreenLoads(createCalendar());
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    const labelId = wrapper.find('#defaultDateRange').attributes('aria-labelledby');
+    expect(labelId).toBeTruthy();
+    const label = wrapper.find(`#${labelId}`);
+    expect(label.element.tagName).toBe('H3');
+    expect(label.text()).not.toBe('');
+
+    wrapper.unmount();
+  });
+
   it('shows "Instance default" selected when the calendar has no window', async () => {
     stubScreenLoads(createCalendar());
 

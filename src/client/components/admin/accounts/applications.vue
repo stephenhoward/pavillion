@@ -46,7 +46,12 @@
 
     <div v-if="store.applications && store.applications.length > 0" class="applications-card">
       <!-- Desktop Table -->
-      <div class="applications-table-desktop">
+      <div
+        class="applications-table-desktop"
+        tabindex="0"
+        role="region"
+        aria-labelledby="applications-tab"
+      >
         <table class="applications-table">
           <thead>
             <tr>
@@ -213,6 +218,7 @@ const rejectApplication = async (application, silent) => {
 
 <style scoped lang="scss">
 @use '../../../assets/style/tokens/breakpoints' as *;
+@use '../../../assets/style/mixins/layout' as *;
 
 .applications-section {
   display: flex;
@@ -252,8 +258,9 @@ const rejectApplication = async (application, silent) => {
 
     .applications-table-desktop {
       display: none;
+      @include scroll-region;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: block;
       }
 
@@ -320,7 +327,7 @@ const rejectApplication = async (application, silent) => {
     .applications-mobile {
       display: block;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 

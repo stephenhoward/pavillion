@@ -39,7 +39,7 @@ Submit the form. You'll land on your new calendar's page. It's empty. We'll fix 
 
 The two things you just entered are the bare minimum to create the calendar. Before publishing an event, fill in the rest of the basics:
 
-1. Open **Settings** in the main navigation. The page opens on the **Editors** tab under your calendar's name; open the **Settings** tab in that row.
+1. Open **Settings → Calendar → General**. On a computer, **Settings** in the main navigation lands there; on a phone, it opens a list — tap **Calendar**, then **General**.
 2. Add a **description**. One or two sentences: who this calendar is for and what kinds of events it lists. Visitors to your public page will read this. So will other calendar owners deciding whether to follow your calendar.
 3. The **primary language** is set to your account's language by default. If you only plan to publish in one language — leave it as is. If you'll publish in more than one, add the additional languages here too. The title and description fields then grow a small row of language tabs above them — one tab per language you've added — and clicking a tab swaps the field below to that language's text. You edit one language at a time.
 
@@ -92,7 +92,7 @@ Open a new browser tab and go to `https://your-instance.example/your-handle`, re
 
 What you're looking at is what anyone on the internet sees. No login required. Your event should be there, with the place, the date, the description, and the category you chose. Click into the event to see its detail page — that's the URL you'd share for a single event.
 
-If you don't see it, the most likely reason is the date filter. The public page opens to a [default window](./identity#the-default-date-filter) — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from your calendar's **Settings** tab (open **Settings** in the main navigation) if two weeks isn't right for your community's rhythm.
+If you don't see it, the most likely reason is the date filter. The public page opens to a [default window](./identity#the-default-date-filter) — two weeks out by default — and an event further in the future is still there, just hidden until a visitor widens the range. The date control near the top of the page lets you (and visitors) jump forward. You can also change the calendar's default window from **Settings → Calendar → General** if two weeks isn't right for your community's rhythm.
 
 Paste your calendar's URL into a chat with a friend. Have them open it. Ask whether the event makes sense to them as someone who's never seen it before. That feedback — from a fresh pair of eyes who is the audience, not the organizer — is more useful than any checklist.
 

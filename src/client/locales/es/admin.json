@@ -7,19 +7,6 @@
     "invite_button": "Enviar invitación",
     "close_button": "Cancelar"
   },
-  "menu": {
-    "navigation_label": "Administración de la instancia",
-    "needs_attention": "Requiere atención",
-    "general_settings": "General",
-    "instance_name_title": "Nombre/Título de la instancia",
-    "registration_mode": "Modo de registro",
-    "accounts_link": "Cuentas",
-    "calendars_link": "Calendarios",
-    "federation_settings": "Federación",
-    "blocked_instances": "Lista de instancias bloqueadas",
-    "payment_details": "Financiación",
-    "moderation": "Moderación"
-  },
   "calendars": {
     "page_title": "Calendarios Locales",
     "page_subtitle": "Revisa los calendarios alojados en esta instancia",
@@ -414,7 +401,6 @@
     "instance_policy_help": "Se admite el formato Markdown. El contenido se almacena como Markdown y se convierte a HTML al mostrarse."
   },
   "federation": {
-    "title": "Federación",
     "subtitle": "Gestiona la federación con otras instancias de Pavillion",
     "blocked_instances_title": "Instancias bloqueadas",
     "info_text": "Las instancias bloqueadas no pueden enviar eventos a tu instancia ni recibirlos de ella. Los usuarios de instancias bloqueadas no podrán seguir calendarios en tu instancia.",

@@ -17,11 +17,18 @@ import AppViews from '@/client/components/logged_in/root.vue';
 import NoCalendarsView from '@/client/components/logged_in/calendar/NoCalendars.vue';
 import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
 import CalendarManagementView from '@/client/components/logged_in/calendar-management/root.vue';
+import CalendarGeneralView from '@/client/components/logged_in/calendar-management/settings.vue';
+import CalendarEditorsView from '@/client/components/logged_in/calendar-management/editors.vue';
+import CalendarReportsView from '@/client/components/logged_in/calendar-management/reports.vue';
+import CalendarImportView from '@/client/components/logged_in/calendar-management/import-sources/ImportSourcesSection.vue';
+import CalendarWidgetView from '@/client/components/logged_in/calendar-management/widget-tab.vue';
 import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
 import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
 import FeedView from '@/client/components/logged_in/feed/root.vue';
 import SettingsRootView from '@/client/components/logged_in/settings/root.vue';
-import ProfileView from '@/client/components/logged_in/settings/account.vue';
+import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
+import ProfileView from '@/client/components/logged_in/settings/profile.vue';
+import SecurityView from '@/client/components/logged_in/settings/security.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import FundingPlanView from '@/client/components/account/funding-plan.vue';
@@ -37,6 +44,17 @@ import ReportDetailView from '@/client/components/admin/report-detail.vue';
 import ModerationSettingsView from '@/client/components/admin/moderation-settings.vue';
 import BlockedInstancesView from '@/client/components/admin/blocked-instances.vue';
 
+import type { SettingsGroup } from '@/client/components/logged_in/settings/nav-items';
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    /** At md+ the main sidebar collapses to an icon-only rail on this subtree (applied by CSS). */
+    shellRail?: boolean;
+    /** The settings group whose index this record is, read by the list page. */
+    settingsGroup?: SettingsGroup;
+  }
+}
+
 /** The guards the route table needs; app.ts supplies them, tests pass stand-ins. */
 export interface ClientRouteDeps {
   mustBeLoggedIn: NavigationGuard;
@@ -45,6 +63,14 @@ export interface ClientRouteDeps {
   authRouteGuard: NavigationGuard;
   /** Guard for a bare route: redirect to the current calendar, or to `fallback`. */
   currentCalendarRedirect: (routeName: string, fallback: RouteLocationRaw | true) => NavigationGuard;
+  /** Settings index route: render the list page in page mode, else forward to the group's first visible leaf. */
+  settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
+  /** Calendar subtree entry: replace an owner-only leaf the viewer may not see, before commit. */
+  calendarLeafGate: NavigationGuard;
+  /** Temporary: maps the retired `?tab=reports[&report=]` calendar settings form onto the Reports leaf. */
+  legacyTabReportsRedirect: NavigationGuard;
+  /** Funding plan leaf: redirect to Profile when instance funding is disabled. */
+  fundingEnabledRedirect: NavigationGuard;
 }
 
 /** Placeholder component for routes whose guard always redirects. */
@@ -55,12 +81,16 @@ const RedirectOnly = { render: () => null };
  * in `src/common/routing/reserved-segments.ts` (DEC-018); a client route needs
  * only that reservation, never a `SERVER_OWNED_SEGMENTS` entry.
  *
- * Bare `/calendar`, `/feed` and `/settings` resolve to the current calendar.
+ * Bare `/calendar` and `/feed` resolve to the current calendar; bare `/settings`
+ * is the settings root list, forwarding to a leaf of it at md+.
  * Old paths (`/profile`, `/funding`, `/admin/*`, `/calendar/:calendar/manage`)
  * have no redirects.
  */
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
-  const { mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect } = deps;
+  const {
+    mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect,
+    settingsIndexRedirect, calendarLeafGate, legacyTabReportsRedirect, fundingEnabledRedirect,
+  } = deps;
 
   const routes: RouteRecordRaw[] = [
     { path: '/', component: AppViews, name: 'app', beforeEnter: mustBeLoggedIn,
@@ -81,16 +111,40 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
           props: true,
         },
         // Settings: calendar management, the account, and instance admin.
-        { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn,
+        { path: 'settings', component: SettingsRootView, beforeEnter: mustBeLoggedIn, meta: { shellRail: true },
           children: [
             // A parent's beforeEnter does not run between siblings, so each child guards itself.
-            { path: '', component: RedirectOnly, name: 'settings',
-              beforeEnter: [mustBeLoggedIn, currentCalendarRedirect('calendar_management', { name: 'profile' })] },
-            { path: 'calendar/:calendar', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
-            { path: 'account', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
-            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan', beforeEnter: mustBeLoggedIn },
-            { path: 'admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
+            // The root: the root list below md; at md+ the current calendar's first visible leaf
+            // (Profile with no calendars).
+            { path: '', component: SettingsListPage, name: 'settings', meta: { settingsGroup: 'root' },
+              beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('root')] },
+            // Calendar: the parent has no name. Its gate refuses an owner-only leaf on entry;
+            // root.vue resolves the calendar and gates moves within the subtree.
+            { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: [mustBeLoggedIn, calendarLeafGate],
               children: [
+                { path: '', component: SettingsListPage, name: 'calendar_management', meta: { settingsGroup: 'calendar' },
+                  beforeEnter: [mustBeLoggedIn, legacyTabReportsRedirect, settingsIndexRedirect('calendar')] },
+                { path: 'general', component: CalendarGeneralView, name: 'calendar_general', beforeEnter: mustBeLoggedIn },
+                { path: 'editors', component: CalendarEditorsView, name: 'calendar_editors', beforeEnter: mustBeLoggedIn },
+                { path: 'reports', component: CalendarReportsView, name: 'calendar_reports', beforeEnter: mustBeLoggedIn },
+                { path: 'reports/:reportId', component: CalendarReportsView, name: 'calendar_report_detail', beforeEnter: mustBeLoggedIn },
+                { path: 'import', component: CalendarImportView, name: 'calendar_import', beforeEnter: mustBeLoggedIn },
+                { path: 'widget', component: CalendarWidgetView, name: 'calendar_widget', beforeEnter: mustBeLoggedIn },
+              ],
+            },
+            // Account: the index is a list page below md and forwards to its first leaf at md+.
+            { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' },
+              beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('account')] },
+            { path: 'account/profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
+            { path: 'account/security', component: SecurityView, name: 'security', beforeEnter: mustBeLoggedIn },
+            { path: 'account/funding', component: FundingPlanView, name: 'funding_plan',
+              beforeEnter: [mustBeLoggedIn, fundingEnabledRedirect] },
+            // Admin: the parent has no name; its index child is the list page below md and
+            // forwards to the first admin leaf at md+.
+            { path: 'admin', component: AdminViews, beforeEnter: mustBeAdmin,
+              children: [
+                { path: '', component: SettingsListPage, name: 'admin', meta: { settingsGroup: 'admin' },
+                  beforeEnter: [mustBeAdmin, settingsIndexRedirect('admin')] },
                 { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
                 { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
                 { path: 'calendars', component: CalendarsDashboardView, name: 'admin_calendars', beforeEnter: mustBeAdmin },

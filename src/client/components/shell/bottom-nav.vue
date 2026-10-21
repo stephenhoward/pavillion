@@ -46,8 +46,16 @@ defineProps<{
     width: 100%;
     list-style: none;
     margin: 0;
-    padding: var(--pav-space-2) var(--pav-space-4);
+    padding: var(--pav-space-1) var(--pav-space-2);
     gap: var(--pav-space-1);
+
+    /* The list items are the flex children, so they take the equal share;
+       each tab then fills its item */
+    > li {
+      display: flex;
+      flex: 1 1 0;
+      min-inline-size: 0;
+    }
   }
 }
 </style>

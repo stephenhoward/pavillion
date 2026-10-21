@@ -455,6 +455,201 @@ describe('FundingService.loadFundingSummary', () => {
   });
 });
 
+describe('FundingService.ensureInstanceFundingLoaded', () => {
+  const optionsResponse = (enabled: boolean) => ({
+    data: {
+      enabled,
+      providers: [],
+      monthlyPrice: 0,
+      yearlyPrice: 0,
+      currency: 'USD',
+      payWhatYouCan: false,
+      payWhatYouCanYearlyDiscount: 0,
+    },
+  });
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Reset, not clear: an unconsumed mock*Once queue would leak into later describes.
+    vi.mocked(axios.get).mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('should resolve the instance flag and cache it in the funding store', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+
+    // Act
+    const enabled = await new FundingService().ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(enabled).toBe(true);
+    expect(axios.get).toHaveBeenCalledWith('/api/funding/v1/options');
+    expect(useFundingStore().instanceFundingEnabled).toBe(true);
+  });
+
+  it('should cache a disabled instance as false', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(false));
+
+    // Act
+    const enabled = await new FundingService().ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(enabled).toBe(false);
+    expect(useFundingStore().instanceFundingEnabled).toBe(false);
+  });
+
+  it('should request the options once across sequential calls', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    await service.ensureInstanceFundingLoaded();
+    const second = await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(second).toBe(true);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should share one request between concurrent callers', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    const results = await Promise.all([
+      service.ensureInstanceFundingLoaded(),
+      service.ensureInstanceFundingLoaded(),
+    ]);
+
+    // Assert
+    expect(results).toEqual([true, true]);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should share one request between separate service instances', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+
+    // Act
+    const results = await Promise.all([
+      new FundingService().ensureInstanceFundingLoaded(),
+      new FundingService().ensureInstanceFundingLoaded(),
+    ]);
+
+    // Assert
+    expect(results).toEqual([true, true]);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('should resolve false on failure and retry on the next call', async () => {
+    // Arrange
+    vi.mocked(axios.get)
+      .mockRejectedValueOnce(new Error('Server error'))
+      .mockResolvedValueOnce(optionsResponse(true));
+    const service = new FundingService();
+
+    // Act
+    const failed = await service.ensureInstanceFundingLoaded();
+
+    // Assert: failure reads as disabled but is not cached as an answer
+    expect(failed).toBe(false);
+    expect(useFundingStore().instanceFundingEnabled).toBeNull();
+
+    // Act: the next call asks again
+    const retried = await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(retried).toBe(true);
+    expect(axios.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('should fetch again after the store is reset at logout', async () => {
+    // Arrange
+    vi.mocked(axios.get).mockResolvedValue(optionsResponse(true));
+    const service = new FundingService();
+    await service.ensureInstanceFundingLoaded();
+
+    // Act
+    useFundingStore().$reset();
+    await service.ensureInstanceFundingLoaded();
+
+    // Assert
+    expect(axios.get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('FundingService.updateSettings', () => {
+  const settings = {
+    enabled: true,
+    monthlyPrice: 500000,
+    yearlyPrice: 5000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+    gracePeriodDays: 7,
+    payWhatYouCanYearlyDiscount: 0,
+  };
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(axios.post).mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('should write the saved enabled flag into the cached instance flag', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockResolvedValue({ status: 200, data: { success: true } });
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+
+    // Act
+    const success = await new FundingService().updateSettings({ ...settings, enabled: false });
+
+    // Assert
+    expect(success).toBe(true);
+    expect(store.instanceFundingEnabled).toBe(false);
+  });
+
+  it('should forget the cached instance flag when the payload omits enabled', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockResolvedValue({ status: 200, data: { success: true } });
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+    const { enabled: _enabled, ...withoutEnabled } = settings;
+
+    // Act
+    await new FundingService().updateSettings(withoutEnabled);
+
+    // Assert
+    expect(store.instanceFundingEnabled).toBeNull();
+  });
+
+  it('should leave the cached instance flag alone when the save fails', async () => {
+    // Arrange
+    vi.mocked(axios.post).mockRejectedValue(new Error('Server error'));
+    const store = useFundingStore();
+    store.setInstanceFundingEnabled(true);
+
+    // Act
+    const success = await new FundingService().updateSettings({ ...settings, enabled: false });
+
+    // Assert
+    expect(success).toBe(false);
+    expect(store.instanceFundingEnabled).toBe(true);
+  });
+});
+
 describe('fundingGateDenial', () => {
   it('should name the feature a 402 SubscriptionRequiredError refused', () => {
     const error = {

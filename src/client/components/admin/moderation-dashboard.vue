@@ -327,7 +327,12 @@ function goToSettings() {
 
         <div class="reports-card">
           <!-- Desktop Table -->
-          <div class="reports-table-desktop">
+          <div
+            class="reports-table-desktop"
+            tabindex="0"
+            role="region"
+            aria-labelledby="admin-reports-heading"
+          >
             <table class="reports-table" role="table" aria-label="Admin-initiated reports">
               <thead>
                 <tr>
@@ -442,7 +447,12 @@ function goToSettings() {
 
         <div class="reports-card">
           <!-- Desktop Table -->
-          <div class="reports-table-desktop">
+          <div
+            class="reports-table-desktop"
+            tabindex="0"
+            role="region"
+            aria-labelledby="escalated-reports-heading"
+          >
             <table class="reports-table" role="table" aria-label="Escalated reports">
               <thead>
                 <tr>
@@ -580,6 +590,7 @@ function goToSettings() {
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
+@use '../../assets/style/mixins/layout' as *;
 
 .moderation-dashboard {
   display: flex;
@@ -672,11 +683,11 @@ function goToSettings() {
       gap: var(--pav-space-4);
       grid-template-columns: 1fr;
 
-      @include pav-media(sm) {
+      @include pav-container(sm) {
         grid-template-columns: repeat(2, 1fr);
       }
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         grid-template-columns: repeat(3, 1fr);
       }
     }
@@ -764,8 +775,9 @@ function goToSettings() {
 
     .reports-table-desktop {
       display: none;
+      @include scroll-region;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: block;
       }
 
@@ -839,7 +851,7 @@ function goToSettings() {
     .reports-mobile {
       display: block;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 

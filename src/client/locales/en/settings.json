@@ -1,0 +1,40 @@
+{
+  "tree_label": "Settings",
+  "skip_to_content": "Skip to settings content",
+  "back_to": "Back to {{name}}",
+  "loading_calendar": "Loading calendar…",
+  "titles": {
+    "settings": "Settings",
+    "calendar": "Calendar",
+    "account": "Account",
+    "instance": "Instance"
+  },
+  "nav": {
+    "root": {
+      "calendar": "Calendar",
+      "account": "Account",
+      "instance": "Instance",
+      "log_out": "Log out"
+    },
+    "calendar": {
+      "general": "General",
+      "editors": "Editors",
+      "reports": "Reports",
+      "import": "Import",
+      "widget": "Widget"
+    },
+    "account": {
+      "profile": "Profile",
+      "security": "Security",
+      "funding_plan": "Funding Plan"
+    },
+    "admin": {
+      "general": "General",
+      "accounts": "Accounts",
+      "calendars": "Calendars",
+      "moderation": "Moderation",
+      "federation": "Federation",
+      "funding": "Funding"
+    }
+  }
+}

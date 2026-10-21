@@ -5,7 +5,7 @@ import CalendarSwitcherSheet from './CalendarSwitcherSheet.vue';
 import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-calendar-sheet.vue';
 
 defineProps<{
-  /** Text shown on the trigger: the calendar name, or the settings pane name. */
+  /** Text shown on the trigger: the calendar name, or a host's section label. */
   label: string;
   /** Named route the sheet navigates to with `{ calendar }` on pick, and a created calendar opens on. */
   routeName: string;
@@ -72,9 +72,7 @@ function closeCreate() {
     :current-url-name="currentUrlName"
     @close="closeSheet"
     @create="onCreate"
-  >
-    <slot />
-  </CalendarSwitcherSheet>
+  />
 
   <CreateCalendarSheet v-if="createOpen" :route-name="routeName" @close="closeCreate" />
 </template>

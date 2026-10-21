@@ -99,6 +99,10 @@ export default defineConfig({
             // reaches instance-policy.vue → renderPolicyMarkdown.
             'src/client/test/service/docs.test.ts',
             'src/client/test/routing/navigation-integration.test.ts',
+            'src/client/test/routing/settings-guards.test.ts',
+            'src/client/test/routing/calendar-settings-gate.test.ts',
+            'src/client/test/routing/settings-links-contract.test.ts',
+            'src/client/test/routing/settings-legacy-redirect.test.ts',
           ],
           env: { NODE_ENV: 'test' },
         },
@@ -154,6 +158,10 @@ export default defineConfig({
             // Tests that import the full client route table (src/client/routes.ts)
             'src/client/test/service/docs.test.ts',
             'src/client/test/routing/navigation-integration.test.ts',
+            'src/client/test/routing/settings-guards.test.ts',
+            'src/client/test/routing/calendar-settings-gate.test.ts',
+            'src/client/test/routing/settings-links-contract.test.ts',
+            'src/client/test/routing/settings-legacy-redirect.test.ts',
           ],
           setupFiles: ['./src/client/test/lib/local-storage-stub.ts'],
           env: { NODE_ENV: 'test' },

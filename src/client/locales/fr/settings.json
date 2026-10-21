@@ -1,0 +1,40 @@
+{
+  "tree_label": "Paramètres",
+  "skip_to_content": "Aller au contenu des paramètres",
+  "back_to": "Retour à {{name}}",
+  "loading_calendar": "Chargement du calendrier…",
+  "titles": {
+    "settings": "Paramètres",
+    "calendar": "Calendrier",
+    "account": "Compte",
+    "instance": "Instance"
+  },
+  "nav": {
+    "root": {
+      "calendar": "Calendrier",
+      "account": "Compte",
+      "instance": "Instance",
+      "log_out": "Se déconnecter"
+    },
+    "calendar": {
+      "general": "Général",
+      "editors": "Éditeurs",
+      "reports": "Signalements",
+      "import": "Importer",
+      "widget": "Widget"
+    },
+    "account": {
+      "profile": "Profil",
+      "security": "Sécurité",
+      "funding_plan": "Plan de financement"
+    },
+    "admin": {
+      "general": "Général",
+      "accounts": "Comptes",
+      "calendars": "Calendriers",
+      "moderation": "Modération",
+      "federation": "Fédération",
+      "funding": "Financement"
+    }
+  }
+}

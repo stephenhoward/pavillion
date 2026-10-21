@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { AddressInfo } from 'node:net';
 
 import { loginAsAdmin } from './helpers/auth';
+import { calendarLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -454,12 +455,8 @@ test.describe('ICS Import Sources (e2e)', () => {
     return { status: res.status(), body: res.status() === 200 ? await res.json() : null };
   }
 
-  async function openCalendarImportTab(page: Page): Promise<void> {
-    await page.goto(`${env.baseURL}/settings/calendar/${ADMIN_CALENDAR_URL_NAME}`);
-    // The calendar management root lazy-loads; wait for the Import tab button.
-    const importTab = page.locator('#import-tab');
-    await expect(importTab).toBeVisible({ timeout: 15000 });
-    await importTab.click();
+  async function openCalendarImportLeaf(page: Page): Promise<void> {
+    await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'import'));
     // Wait for the section heading to render.
     await expect(page.getByRole('heading', { name: 'Import Sources' })).toBeVisible();
   }
@@ -479,7 +476,7 @@ test.describe('ICS Import Sources (e2e)', () => {
       records: [`pavillion-verify=v1:${SERVER_DOMAIN}:${token}`],
     });
 
-    await openCalendarImportTab(page);
+    await openCalendarImportLeaf(page);
 
     // Find the row for this source and click Verify.
     const row = page.locator('.import-source-row', { hasText: sourceUrl });
@@ -622,7 +619,7 @@ test.describe('ICS Import Sources (e2e)', () => {
     // Verify via API then drive sync via UI to exercise the row behavior.
     expect(await apiVerify(page, sourceId)).toBe(200);
 
-    await openCalendarImportTab(page);
+    await openCalendarImportLeaf(page);
     const row = page.locator('.import-source-row', { hasText: sourceUrl });
     await expect(row).toBeVisible();
 
@@ -678,7 +675,7 @@ test.describe('ICS Import Sources (e2e)', () => {
       records: ['pavillion-verify=v1:localhost:3000:NOT-THE-CORRECT-TOKEN'],
     });
 
-    await openCalendarImportTab(page);
+    await openCalendarImportLeaf(page);
     const row = page.locator('.import-source-row', { hasText: sourceUrl });
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: /Verify ownership/i }).click();
@@ -773,7 +770,7 @@ test.describe('ICS Import Sources (e2e)', () => {
     // step graph rather than landing on rel-me directly.
     await apiIssueChallengeWithType(page, sourceId, 'dns-txt');
 
-    await openCalendarImportTab(page);
+    await openCalendarImportLeaf(page);
 
     const row = page.locator('.import-source-row', { hasText: sourceUrl });
     await expect(row).toBeVisible();
@@ -860,7 +857,7 @@ test.describe('ICS Import Sources (e2e)', () => {
     );
     const verificationPageUrl = `https://localtest.me:${mockHttps.port}/html/relme-missing`;
 
-    await openCalendarImportTab(page);
+    await openCalendarImportLeaf(page);
 
     const row = page.locator('.import-source-row', { hasText: sourceUrl });
     await expect(row).toBeVisible();

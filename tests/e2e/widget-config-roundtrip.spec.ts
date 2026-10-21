@@ -1,5 +1,6 @@
 import { test, expect, Browser, Page } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { calendarLeafPath } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import {
   Theme,
@@ -16,7 +17,7 @@ import {
  * E2E Tests: Widget Configuration Roundtrip
  *
  * End-to-end verification that a calendar editor can save widget configuration
- * (view mode, accent color, color mode) in the admin tab and that those changes
+ * (view mode, accent color, color mode) on the Widget page and that those changes
  * are reflected in the widget's rendered DOM on a subsequent load.
  *
  * Cross-origin is required for the widget-facing endpoint: `/api/widget/v1/...`
@@ -44,12 +45,8 @@ test('admin change to widget view mode is reflected in rendered widget', async (
   // Step 1: Log in as admin.
   await loginAsAdmin(page, env.baseURL);
 
-  // Step 2: Navigate directly to the calendar management page and open the widget tab.
-  await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-  await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
-
-  const widgetTabButton = page.locator('#widget-tab');
-  await widgetTabButton.click();
+  // Step 2: Open the calendar's Widget page directly.
+  await page.goto(env.baseURL + calendarLeafPath('test_calendar', 'widget'));
 
   // Wait for widget config section to render and complete its initial load.
   const widgetConfig = page.locator('.widget-config');
@@ -129,10 +126,9 @@ test('admin change to widget view mode is reflected in rendered widget', async (
 // ============================================================================
 
 /**
- * Save the widget config from the admin tab.
+ * Save the widget config from the Widget page.
  *
- * The caller must already be on the calendar management page with the Widget
- * tab visible. Waits for the PUT /widget/config response so the next reader
+ * The caller must already be on the calendar's Widget page. Waits for the PUT /widget/config response so the next reader
  * sees the persisted state. Returns the parsed save response body so the
  * caller can assert what was actually persisted.
  */
@@ -220,14 +216,12 @@ async function openWidgetEmbed(
 }
 
 /**
- * Open the admin Widget tab for the test calendar. Caller must already be
- * logged in as admin. Returns when the widget config form is visible and the
- * Save button is in its clean (disabled) state.
+ * Open the test calendar's Widget page. Caller must already be logged in as
+ * admin. Returns when the widget config form is visible and the Save button
+ * is in its clean (disabled) state.
  */
-async function openWidgetAdminTab(page: Page, baseURL: string): Promise<void> {
-  await page.goto(baseURL + '/settings/calendar/test_calendar');
-  await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
-  await page.locator('#widget-tab').click();
+async function openWidgetAdminLeaf(page: Page, baseURL: string): Promise<void> {
+  await page.goto(baseURL + calendarLeafPath('test_calendar', 'widget'));
   await expect(page.locator('.widget-config')).toBeVisible({ timeout: 15000 });
   // Save button disabled = initial GET completed and snapshot taken.
   await expect(page.locator('.widget-config button.save-button')).toBeDisabled({ timeout: 10000 });
@@ -239,7 +233,7 @@ async function openWidgetAdminTab(page: Page, baseURL: string): Promise<void> {
 
 test('admin-saved accent color is injected as CSS custom property in rendered widget', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
 
   // Pick a vivid accent that cannot collide with the SCSS-default value.
   const ACCENT = '#ff00ff';
@@ -284,7 +278,7 @@ test('admin-saved accent color is injected as CSS custom property in rendered wi
 // OS schemes, since each theme reads its own fixed-mode accent property.
 test('list view and event detail paint with the saved accent', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
 
   // The mitown-climate repro value: a green far from the default orange.
   const ACCENT = '#669c35';
@@ -378,7 +372,7 @@ test('list view and event detail paint with the saved accent', async ({ page, br
 
 test('color mode "light" overrides system dark preference', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
   const saved = await saveWidgetConfig(page, { colorMode: 'light' });
   expect(saved.colorMode).toBe('light');
 
@@ -404,7 +398,7 @@ test('color mode "light" overrides system dark preference', async ({ page, brows
 
 test('color mode "dark" overrides system light preference', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
   const saved = await saveWidgetConfig(page, { colorMode: 'dark' });
   expect(saved.colorMode).toBe('dark');
 
@@ -427,7 +421,7 @@ test('color mode "dark" overrides system light preference', async ({ page, brows
 
 test('color mode "auto" follows system preference and reacts to changes', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
   const saved = await saveWidgetConfig(page, { colorMode: 'auto' });
   expect(saved.colorMode).toBe('auto');
 
@@ -503,7 +497,7 @@ for (const { colorMode, osScheme } of FORCED_MODE_DIRECTIONS) {
     const ACCENT_RGB = 'rgb(102, 156, 53)';
 
     await loginAsAdmin(page, env.baseURL);
-    await openWidgetAdminTab(page, env.baseURL);
+    await openWidgetAdminLeaf(page, env.baseURL);
     const saved = await saveWidgetConfig(page, { colorMode, accentColor: ACCENT });
     expect(saved.colorMode).toBe(colorMode);
     expect(saved.accentColor).toBe(ACCENT);
@@ -686,7 +680,7 @@ async function recordFirstView(embedPage: Page): Promise<void> {
 
 test('month-configured widget opens on the month grid without painting the list first, and on the list when narrow', async ({ page, browser }) => {
   await loginAsAdmin(page, env.baseURL);
-  await openWidgetAdminTab(page, env.baseURL);
+  await openWidgetAdminLeaf(page, env.baseURL);
   const saved = await saveWidgetConfig(page, { view: 'Month View' });
   expect(saved.view).toBe('month');
 

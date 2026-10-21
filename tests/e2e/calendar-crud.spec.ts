@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, loginAsFreshUser } from './helpers/auth';
+import { calendarLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -117,20 +118,11 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should edit calendar title with auto-save on blur', async ({ page }) => {
-      // Navigate to the calendar's settings pane
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
+      // Open the calendar's General page (owner only)
+      await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'general'));
 
-      // Click the Settings tab (only visible to owner)
-      const settingsTab = page.locator('button[role="tab"]#settings-tab');
-      await expect(settingsTab).toBeVisible({ timeout: 5000 });
-      await settingsTab.click();
-
-      // Wait for settings panel to load
-      await page.waitForTimeout(1000);
-
-      // Find the title input within the settings panel
-      const titleInput = page.locator('#settings-panel input[id^="calendarTitle"]');
+      // Find the title input on the page
+      const titleInput = page.getByRole('main').locator('input[id^="calendarTitle"]');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
 
       // Clear and type a new title
@@ -142,7 +134,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await titleInput.blur();
 
       // Wait for success message
-      const successAlert = page.locator('#settings-panel .alert--success');
+      const successAlert = page.getByRole('main').locator('.alert--success');
       await expect(successAlert).toBeVisible({ timeout: 5000 });
 
       // Verify the input still holds the new value
@@ -150,20 +142,11 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should edit calendar description with auto-save on blur', async ({ page }) => {
-      // Navigate to manage page
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
-
-      // Click the Settings tab
-      const settingsTab = page.locator('button[role="tab"]#settings-tab');
-      await expect(settingsTab).toBeVisible({ timeout: 5000 });
-      await settingsTab.click();
-
-      // Wait for settings panel to load
-      await page.waitForTimeout(1000);
+      // Open the calendar's General page
+      await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'general'));
 
       // Find the description textarea
-      const descriptionTextarea = page.locator('#settings-panel textarea[id^="calendarDescription"]');
+      const descriptionTextarea = page.getByRole('main').locator('textarea[id^="calendarDescription"]');
       await expect(descriptionTextarea).toBeVisible({ timeout: 5000 });
 
       // Clear and type a new description
@@ -175,7 +158,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await descriptionTextarea.blur();
 
       // Wait for success message
-      const successAlert = page.locator('#settings-panel .alert--success');
+      const successAlert = page.getByRole('main').locator('.alert--success');
       await expect(successAlert).toBeVisible({ timeout: 5000 });
 
       // Verify the textarea still holds the new value
@@ -183,18 +166,12 @@ test.describe('Calendar CRUD Workflow', () => {
     });
 
     test('should persist edited title after page reload', async ({ page }) => {
-      // Navigate to manage page
-      await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-      await page.waitForTimeout(2000);
-
-      // Click the Settings tab
-      const settingsTab = page.locator('button[role="tab"]#settings-tab');
-      await expect(settingsTab).toBeVisible({ timeout: 5000 });
-      await settingsTab.click();
-      await page.waitForTimeout(1000);
+      // Open the calendar's General page
+      const general = calendarLeaf('test_calendar', 'general');
+      await gotoSettings(page, env.baseURL, general);
 
       // Update the title
-      const titleInput = page.locator('#settings-panel input[id^="calendarTitle"]');
+      const titleInput = page.getByRole('main').locator('input[id^="calendarTitle"]');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
 
       const persistedTitle = `Persisted Title ${Date.now()}`;
@@ -203,21 +180,15 @@ test.describe('Calendar CRUD Workflow', () => {
       await titleInput.blur();
 
       // Wait for save to complete
-      const successAlert = page.locator('#settings-panel .alert--success');
+      const successAlert = page.getByRole('main').locator('.alert--success');
       await expect(successAlert).toBeVisible({ timeout: 5000 });
 
-      // Reload the page
+      // Reload the page; the URL is still the General page
       await page.reload();
-      await page.waitForTimeout(2000);
-
-      // Navigate back to Settings tab
-      const settingsTabAfterReload = page.locator('button[role="tab"]#settings-tab');
-      await expect(settingsTabAfterReload).toBeVisible({ timeout: 5000 });
-      await settingsTabAfterReload.click();
-      await page.waitForTimeout(1000);
+      await expect(page).toHaveURL(env.baseURL + general.path);
 
       // Verify the title persisted
-      const titleInputAfterReload = page.locator('#settings-panel input[id^="calendarTitle"]');
+      const titleInputAfterReload = page.getByRole('main').locator('input[id^="calendarTitle"]');
       await expect(titleInputAfterReload).toBeVisible({ timeout: 5000 });
       await expect(titleInputAfterReload).toHaveValue(persistedTitle);
     });

@@ -1,10 +1,28 @@
 /**
  * Shell Navigation Component Styles
- * Styles for navigation items in sidebar and bottom nav
+ * Styles for navigation items in sidebar, bottom nav and settings list
+ * (the list variant's layout lives in _settings-nav.scss)
  *
  * Design: Stone palette with Orange accent for active states
  * Icons: Lucide icons with strokeWidth 2
  */
+@use '../mixins' as *;
+
+/**
+ * Shell navigation geometry
+ * The sidebar's width and the main column's offset both read
+ * --pav-shell-nav-width; the sidebar list's padding reads
+ * --pav-shell-nav-padding. Rail mode (app-shell--rail, set from route meta
+ * shellRail) swaps both at md+ only. This file sits in a cascade layer, and
+ * an unlayered scoped rule beats any layered one whatever its specificity, so
+ * the components read these properties rather than being overridden from
+ * here, and the base values live beside the swap rather than in a scoped
+ * block. Nothing transitions; the width and the main column snap.
+ */
+.app-shell {
+  --pav-shell-nav-width: var(--pav-shell-sidebar-width);
+  --pav-shell-nav-padding: var(--pav-space-4);
+}
 
 /**
  * Base navigation item styles
@@ -16,7 +34,7 @@
   text-decoration: none;
   color: var(--pav-nav-inactive-text);
   border-radius: var(--pav-border-radius-lg);
-  transition: all 0.15s ease-in-out;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
   position: relative;
   font-family: var(--pav-font-family-display);
 
@@ -72,8 +90,13 @@
   }
 
   /* Active/current state */
+  /* The current item is outlined on every variant; an inset shadow keeps the
+     item's size unchanged, and forced colours use the outline below instead.
+     The border takes the active text colour: it is the item's one non-colour
+     cue, so it must reach 3:1 against the surface in both themes */
   &--active {
     background-color: var(--pav-nav-active-bg);
+    box-shadow: inset 0 0 0 var(--pav-border-width-1) var(--pav-nav-active-text);
     color: var(--pav-nav-active-text);
 
     .shell-nav-item__icon {
@@ -83,6 +106,15 @@
     .shell-nav-item__label {
       color: var(--pav-nav-active-text);
       font-weight: var(--pav-font-weight-medium);
+    }
+  }
+
+  /* Forced colours discard the active colour, so an inset outline marks the
+     current item, stepping aside for the focus ring */
+  @media (forced-colors: active) {
+    &[aria-current='page']:not(:focus-visible) {
+      outline: var(--pav-border-width-2) solid Highlight;
+      outline-offset: calc(-1 * var(--pav-border-width-2));
     }
   }
 }
@@ -114,7 +146,7 @@
   flex: 1;
   text-align: center;
   background-color: transparent;
-  min-height: var(--pav-shell-bottom-nav-height);
+  min-block-size: 0;
 
   .shell-nav-item__icon {
     width: 1.5rem;
@@ -139,5 +171,46 @@
   /* Active state for bottom nav - no background, just color change */
   &.shell-nav-item--active {
     background-color: transparent;
+  }
+}
+
+/**
+ * Rail mode (md+)
+ * Icon-only sidebar: labels stay in the accessibility tree through the
+ * sr-only mixin (never display: none, which would strip the link's name),
+ * and the badge sits over the icon.
+ */
+.app-shell--rail {
+  @include pav-media(md) {
+    --pav-shell-nav-width: var(--pav-shell-rail-width);
+    --pav-shell-nav-padding: var(--pav-space-2);
+
+    .shell-nav-item--sidebar {
+      justify-content: center;
+      padding-inline: 0;
+
+      .shell-nav-item__label {
+        @include sr-only;
+      }
+
+      .shell-nav-item__badge {
+        /* Anchored from the item's centre so it overlaps the icon's
+           block-start, inline-end corner in either direction */
+        position: absolute;
+        inset-block-start: var(--pav-space-1);
+        inset-inline-start: 50%;
+        margin-inline-start: 0;
+        min-inline-size: 1rem;
+        block-size: 1rem;
+        padding: 0 var(--pav-space-0_5);
+        font-size: 0.625rem;
+
+        /* Forced colours drop the badge's background, so a border keeps
+           its digits apart from the icon beneath */
+        @media (forced-colors: active) {
+          border: var(--pav-border-width-1) solid CanvasText;
+        }
+      }
+    }
   }
 }

@@ -19,6 +19,8 @@ import PillButton from '@/client/components/common/pill-button.vue';
 const props = defineProps<{
   calendarId: string;
   reportId: string;
+  /** An id for the report heading, so a surrounding region can be named by it. */
+  headingId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -56,14 +58,23 @@ const state = reactive({
 });
 
 /**
+ * The store's current report, only when it is the one this view names: a
+ * failed fetch leaves the previous report in the store, which must not render
+ * under another report's id.
+ */
+const currentReport = computed(() => (
+  store.currentReport?.report.id === props.reportId ? store.currentReport : null
+));
+
+/**
  * The current report from the store.
  */
-const report = computed(() => store.currentReport?.report ?? null);
+const report = computed(() => currentReport.value?.report ?? null);
 
 /**
  * The escalation history from the store.
  */
-const escalationHistory = computed(() => store.currentReport?.escalationHistory ?? []);
+const escalationHistory = computed(() => currentReport.value?.escalationHistory ?? []);
 
 /**
  * Whether the report can be acted upon (not already resolved/dismissed).
@@ -218,8 +229,8 @@ onMounted(async () => {
     await store.fetchReport(props.calendarId, props.reportId);
 
     // Initialize owner notes from fetched report
-    if (store.currentReport?.report.ownerNotes) {
-      state.ownerNotes = store.currentReport.report.ownerNotes;
+    if (report.value?.ownerNotes) {
+      state.ownerNotes = report.value.ownerNotes;
     }
   }
   catch {
@@ -253,7 +264,7 @@ onMounted(async () => {
     <template v-else-if="report">
       <!-- Header -->
       <header class="report-detail__header">
-        <h2 class="report-detail__title">{{ t('detail.title') }}</h2>
+        <h2 :id="headingId" class="report-detail__title">{{ t('detail.title') }}</h2>
         <span
           class="status-badge"
           :class="statusBadgeClass(report.status)"
@@ -309,7 +320,8 @@ onMounted(async () => {
       </div>
 
       <!-- Report Information -->
-      <section class="report-detail__section" :aria-label="t('detail.title')">
+      <!-- Unnamed when a surrounding region is already named by the heading. -->
+      <section class="report-detail__section" :aria-label="headingId ? undefined : t('detail.title')">
         <div class="report-detail__info-grid">
           <div class="report-detail__info-item">
             <span class="report-detail__info-label">{{ t('dashboard.column_category') }}</span>
@@ -500,6 +512,7 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '../../assets/style/components/calendar-admin' as *;
+@use '../../assets/style/tokens/breakpoints' as *;
 
 .report-detail {
   display: flex;
@@ -650,12 +663,12 @@ onMounted(async () => {
 
   &__info-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: var(--pav-space-4);
     margin-bottom: var(--pav-space-4);
 
-    @media (max-width: 640px) {
-      grid-template-columns: 1fr;
+    @include pav-container(sm) {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 
@@ -670,7 +683,7 @@ onMounted(async () => {
     font-weight: var(--pav-font-weight-medium);
     text-transform: uppercase;
     letter-spacing: var(--pav-letter-spacing-wider);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
   }
 
   &__info-value {
@@ -761,7 +774,7 @@ onMounted(async () => {
   // Escalation timeline
   &__empty-history {
     font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
     font-style: italic;
   }
 
@@ -838,7 +851,7 @@ onMounted(async () => {
 
   &__timeline-date {
     font-size: var(--pav-font-size-caption);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
     white-space: nowrap;
   }
 
@@ -853,18 +866,14 @@ onMounted(async () => {
 
   &__timeline-notes {
     font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-style: italic;
     white-space: pre-wrap;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__timeline-reviewer {
     font-size: var(--pav-font-size-caption);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
   }
 }
 

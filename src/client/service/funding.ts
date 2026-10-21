@@ -221,6 +221,13 @@ export type CheckoutSessionStatus = {
 };
 
 /**
+ * In-flight instance-flag loads keyed by store instance, so every
+ * FundingService sharing a Pinia shares one request. The flag is
+ * instance-wide, so unlike calendar loads no account scoping is needed.
+ */
+const inFlightInstanceFundingLoads = new WeakMap<object, Promise<boolean>>();
+
+/**
  * Funding service for managing funding plan payments.
  * Provides methods to configure funding settings (admin) and
  * manage user funding plans.
@@ -288,18 +295,27 @@ export default class FundingService {
   /**
    * Update funding settings (admin only)
    *
+   * A successful save keeps the cached instance flag coherent: the response
+   * does not echo the settings, so the flag takes the submitted `enabled`,
+   * or is forgotten (re-read on next use) when the payload omits it.
+   *
    * @param {Partial<FundingSettings>} settings - Settings to update
    * @returns {Promise<boolean>} True if update was successful
    */
   async updateSettings(settings: Partial<FundingSettings>): Promise<boolean> {
+    let success: boolean;
     try {
       const response = await axios.post('/api/funding/v1/admin/settings', settings);
-      return response.status === 200;
+      success = response.status === 200;
     }
     catch (error) {
       console.error('Failed to update funding settings:', error);
       return false;
     }
+    if (success) {
+      this.store.setInstanceFundingEnabled(typeof settings.enabled === 'boolean' ? settings.enabled : null);
+    }
+    return success;
   }
 
   /**
@@ -622,6 +638,37 @@ export default class FundingService {
     const summary = await this.getFundingStatus(calendarId);
     this.store.setSummary(calendarId, summary);
     return summary;
+  }
+
+  /**
+   * Load whether this instance offers funding plans, once per session.
+   *
+   * Concurrent callers, including separate FundingService instances, share
+   * one request. A failed read resolves false — callers treat only true as
+   * enabled — but is not cached, so the store stays unknown and the next
+   * call asks again. getOptions already logs the failure.
+   *
+   * @returns {Promise<boolean>} Whether funding is enabled on this instance
+   */
+  async ensureInstanceFundingLoaded(): Promise<boolean> {
+    const store = this.store;
+    if (store.instanceFundingEnabled !== null) {
+      return store.instanceFundingEnabled;
+    }
+    const existing = inFlightInstanceFundingLoads.get(store);
+    if (existing) {
+      return existing;
+    }
+    const pending: Promise<boolean> = this.getOptions()
+      .then((options) => {
+        const enabled = options.enabled === true;
+        store.setInstanceFundingEnabled(enabled);
+        return enabled;
+      })
+      .catch(() => false)
+      .finally(() => inFlightInstanceFundingLoads.delete(store));
+    inFlightInstanceFundingLoads.set(store, pending);
+    return pending;
   }
 
   // ========================================

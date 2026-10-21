@@ -258,59 +258,66 @@ const hasActiveFilters = computed(() => {
       </div>
 
       <div v-else class="calendars-card">
-        <table class="calendars-table" role="table" :aria-label="t('table_aria_label')">
-          <thead>
-            <tr>
-              <th scope="col">{{ t('column_calendar') }}</th>
-              <th scope="col">{{ t('column_owner') }}</th>
-              <th scope="col">{{ t('column_event_count') }}</th>
-              <th scope="col">{{ t('column_last_activity') }}</th>
-              <th scope="col">{{ t('column_funding_status') }}</th>
-              <th scope="col">{{ t('column_open_reports') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="calendar in store.items"
-              :key="calendar.id"
-              class="calendar-row"
-              data-testid="calendar-row"
-            >
-              <td class="cell-calendar">
-                <div class="calendar-title">{{ calendar.title }}</div>
-                <div class="calendar-url">{{ calendar.urlName }}</div>
-              </td>
-              <td class="cell-owner">
-                {{ calendar.owner.displayName }}
-              </td>
-              <td class="cell-event-count">
-                {{ calendar.upcomingEventCount }}
-              </td>
-              <td class="cell-last-activity">
-                {{ formatLastActivity(calendar.lastActivityAt) }}
-              </td>
-              <td class="cell-funding">
-                <span :class="fundingBadgeClass(calendar.fundingStatus)">
-                  {{ fundingStatusLabel(calendar.fundingStatus) }}
-                </span>
-              </td>
-              <td class="cell-open-reports">
-                <button
-                  v-if="calendar.openReportCount > 0"
-                  type="button"
-                  class="open-reports-button"
-                  :aria-label="t('open_reports_aria', { count: calendar.openReportCount })"
-                  data-testid="open-reports-badge"
-                  @click="viewOpenReports(calendar.id)"
-                >
-                  <span class="badge badge--notification">
-                    {{ calendar.openReportCount }}
+        <div
+          class="calendars-table-scroll"
+          tabindex="0"
+          role="region"
+          :aria-label="t('table_aria_label')"
+        >
+          <table class="calendars-table" role="table" :aria-label="t('table_aria_label')">
+            <thead>
+              <tr>
+                <th scope="col">{{ t('column_calendar') }}</th>
+                <th scope="col">{{ t('column_owner') }}</th>
+                <th scope="col">{{ t('column_event_count') }}</th>
+                <th scope="col">{{ t('column_last_activity') }}</th>
+                <th scope="col">{{ t('column_funding_status') }}</th>
+                <th scope="col">{{ t('column_open_reports') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="calendar in store.items"
+                :key="calendar.id"
+                class="calendar-row"
+                data-testid="calendar-row"
+              >
+                <td class="cell-calendar">
+                  <div class="calendar-title">{{ calendar.title }}</div>
+                  <div class="calendar-url">{{ calendar.urlName }}</div>
+                </td>
+                <td class="cell-owner">
+                  {{ calendar.owner.displayName }}
+                </td>
+                <td class="cell-event-count">
+                  {{ calendar.upcomingEventCount }}
+                </td>
+                <td class="cell-last-activity">
+                  {{ formatLastActivity(calendar.lastActivityAt) }}
+                </td>
+                <td class="cell-funding">
+                  <span :class="fundingBadgeClass(calendar.fundingStatus)">
+                    {{ fundingStatusLabel(calendar.fundingStatus) }}
                   </span>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                </td>
+                <td class="cell-open-reports">
+                  <button
+                    v-if="calendar.openReportCount > 0"
+                    type="button"
+                    class="open-reports-button"
+                    :aria-label="t('open_reports_aria', { count: calendar.openReportCount })"
+                    data-testid="open-reports-badge"
+                    @click="viewOpenReports(calendar.id)"
+                  >
+                    <span class="badge badge--notification">
+                      {{ calendar.openReportCount }}
+                    </span>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Pagination -->
@@ -350,6 +357,7 @@ const hasActiveFilters = computed(() => {
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
+@use '../../assets/style/mixins/layout' as *;
 
 .calendars-dashboard {
   display: flex;
@@ -398,11 +406,11 @@ const hasActiveFilters = computed(() => {
       gap: var(--pav-space-4);
       grid-template-columns: 1fr;
 
-      @include pav-media(sm) {
+      @include pav-container(sm) {
         grid-template-columns: repeat(2, 1fr);
       }
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         grid-template-columns: repeat(4, 1fr);
       }
     }
@@ -503,6 +511,10 @@ const hasActiveFilters = computed(() => {
     border-radius: var(--pav-border-radius-xl);
     border: 1px solid var(--pav-border-primary);
     overflow: hidden;
+  }
+
+  .calendars-table-scroll {
+    @include scroll-region;
   }
 
   .calendars-table {

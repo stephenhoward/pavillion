@@ -1,361 +1,184 @@
 <script setup lang="ts">
-import { reactive, computed, onBeforeMount, ref, nextTick } from 'vue';
+/**
+ * Calendar management: the one gate in front of a calendar's settings index
+ * and every calendar leaf beneath it.
+ *
+ * - Resolves the route's calendar once, from the viewer's own loaded list.
+ *   The settings layout keys this pane by calendar, so switching calendars
+ *   remounts it. No child mounts until the calendar has resolved.
+ * - A leaf the viewer may not see (an owner-only leaf, for an editor) is
+ *   replaced with the group's first visible leaf, query dropped, and never
+ *   mounts: on entry by the parent record's calendarLeafGate, on a move
+ *   within the subtree by onBeforeRouteUpdate here, both before commit, and
+ *   in place when ownership is lost while mounted. One predicate,
+ *   calendarLeafRedirect in settings-guards.ts, decides all three.
+ *   Visibility is nav-items.ts's; hiding a leaf is a convenience, and the
+ *   server endpoints each leaf calls stay the enforcement point.
+ * - A nonexistent calendar and one the viewer is not a member of are the
+ *   same unresolved calendar: one empty state at the unchanged URL, for the
+ *   index and every leaf, and nothing renders the route param.
+ * - Leaves receive the calendar and ownership as props from the calendar
+ *   store entry; nothing is provided or injected.
+ */
+import { computed, inject, onBeforeMount, onMounted, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
-import { useTabNavigation } from '@/client/composables/useTabNavigation';
-import EditorsTab from './editors.vue';
-import SettingsTab from './settings.vue';
-import WidgetTab from './widget-tab.vue';
-import ImportSourcesSection from './import-sources/ImportSourcesSection.vue';
-import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
-import ReportDetail from '@/client/components/moderation/report-detail.vue';
-import CalendarService from '../../../service/calendar';
-import { useCalendarStore } from '@/client/stores/calendarStore';
-import ModerationService from '@/client/service/moderation';
+import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
+import CalendarService from '@/client/service/calendar';
+import FundingService from '@/client/service/funding';
 import Config from '@/client/service/config';
-import { CalendarInfo } from '@/common/model/calendar_info';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import {
+  buildSettingsNavContext,
+  calendarLeafRedirect,
+  findViewerCalendar,
+  historyPath,
+  readSettingsNavSources,
+  withHistoryMode,
+} from '@/client/service/settings-guards';
+import {
+  isVisibleLeaf,
+  SETTINGS_GROUP_INDEX_ROUTES,
+} from '@/client/components/logged_in/settings/nav-items';
 import HelpButton from '@/client/components/common/help-button.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 
-/**
- * Strict UUID v4 shape, kept identical to the server's path-parameter
- * validation so client and server agree on what counts as malformed.
- */
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 const route = useRoute();
-const calendarUrlName = Array.isArray(route.params.calendar)
-  ? route.params.calendar[0]
-  : route.params.calendar || '';
-
-const { t } = useTranslation('calendars', {
-  keyPrefix: 'management',
-});
-
-const calendarService = new CalendarService();
+const router = useRouter();
 const calendarStore = useCalendarStore();
-const moderationService = new ModerationService();
+const authn = inject<{ isAdmin?: () => boolean }>('authn');
+const isAdmin = () => authn?.isAdmin?.() ?? false;
 
-const state = reactive({
-  activeTab: 'editors',
-  calendarInfo: null as CalendarInfo | null,
-  loading: false,
-  error: null as string | null,
+const { t } = useTranslation('calendars', { keyPrefix: 'management' });
+const { t: tSettings } = useTranslation('settings');
+
+const loading = ref(true);
+const error = ref<string | null>(null);
+const settled = computed(() => !loading.value && !error.value);
+
+// The status region mounts empty and receives its text after mount: a live
+// region inserted with its text already present is not announced by many
+// screen readers.
+const mounted = ref(false);
+onMounted(() => {
+  mounted.value = true;
 });
+const statusText = computed(() => (mounted.value && loading.value ? tSettings('loading_calendar') : ''));
 
-// Reports sub-navigation state
-const selectedReportId = ref<string | null>(null);
-const reportsPanelRef = ref<HTMLElement | null>(null);
+// Both null until the load settles, and null for an unresolved calendar.
+const info = computed(() => (
+  settled.value ? findViewerCalendar(route.params.calendar, calendarStore.calendarInfos) : null
+));
+const navContext = computed(() => (
+  settled.value ? buildSettingsNavContext('calendar', route.params.calendar, readSettingsNavSources(isAdmin)) : null
+));
 
-const calendar = computed(() => state.calendarInfo?.calendar ?? null);
-const isOwner = computed(() => state.calendarInfo?.isOwner ?? false);
 const instanceHost = computed(() => new Config().settings()?.domain);
 
 /**
- * Opens the report named by a `?report=<uuid>` deep link, e.g. when arriving
- * from a notification.
- *
- * Gates before it resolves: ownership first (reusing the same `isOwner`
- * predicate the reports tab is gated on), then the UUID shape, and only then
- * the fetch. An absent, malformed, unauthorised or non-existent report all
- * fall through to the plain management view, so the deep link never discloses
- * whether a report exists.
+ * Whether a calendar route may render: the index always, a leaf when visible
+ * to the viewer. Deliberately separate from calendarLeafRedirect: an unknown or
+ * unresolved route renders nothing here but is never redirected.
  */
-const openReportFromQuery = async () => {
-  const requestedReport = route.query.report;
-
-  if (typeof requestedReport !== 'string') {
-    return;
+const leafAllowed = (name: unknown): boolean => {
+  const ctx = navContext.value;
+  if (!ctx || typeof name !== 'string') {
+    return false;
   }
+  return name === SETTINGS_GROUP_INDEX_ROUTES.calendar || isVisibleLeaf('calendar', name, ctx);
+};
 
-  if (!isOwner.value) {
-    return;
+/** The props each calendar route's component declares, so none falls through as a DOM attribute. */
+const leafProps = (name: unknown): Record<string, unknown> => {
+  const current = info.value;
+  if (!current) {
+    return {};
   }
-
-  if (!UUID_REGEX.test(requestedReport)) {
-    return;
-  }
-
-  const calendarId = calendar.value?.id;
-  if (!calendarId) {
-    return;
-  }
-
-  try {
-    await moderationService.getReport(calendarId, requestedReport);
-  }
-  catch {
-    // Non-existent and inaccessible reports both fall through to the plain
-    // management view. Silent in the UI: no banner, no toast, nothing that
-    // distinguishes the two. The service layer still logs the failure to the
-    // console, which other callers rely on.
-    return;
-  }
-
-  state.activeTab = 'reports';
-  selectedReportId.value = requestedReport;
-
-  try {
-    // The panel is `hidden` until the tab activation renders, and a hidden
-    // element cannot take focus, so the focus move waits for that render.
-    await nextTick();
-    reportsPanelRef.value?.focus();
-  }
-  catch {
-    // Focus is best-effort. This flush is the one that first renders
-    // ReportDetail, so a throw from any job in it must not escape into the
-    // caller and turn a rendered report into an error state.
+  const calendarId = current.calendar.id;
+  switch (name) {
+    case 'calendar_general':
+    case 'calendar_editors':
+    case 'calendar_reports':
+    case 'calendar_report_detail':
+      return { calendarId };
+    case 'calendar_import':
+      return { calendarId, instanceHost: instanceHost.value };
+    case 'calendar_widget':
+      return { calendarId, calendarUrlName: current.calendar.urlName };
+    default:
+      return {};
   }
 };
+
+// Entering the subtree is gated before commit by the parent record's
+// calendarLeafGate. This catches what reaches a mounted pane anyway:
+// ownership lost while mounted, or a gate that passed on a failed load.
+watch([() => route.name, navContext], ([name, ctx]) => {
+  const target = calendarLeafRedirect(name, ctx);
+  if (target) {
+    router.replace(target);
+  }
+}, { immediate: true });
+
+// An in-app move between leaves is gated before it commits, so a refused
+// leaf leaves no history entry behind. A move to another calendar is judged
+// against that calendar; one the viewer cannot resolve gets no context and
+// passes through to the remounted pane's empty state.
+onBeforeRouteUpdate((to) => {
+  if (!settled.value) {
+    return true;
+  }
+  const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(isAdmin));
+  const target = calendarLeafRedirect(to.name, ctx);
+  return target ? withHistoryMode(target, to, () => historyPath(router)) : true;
+});
 
 onBeforeMount(async () => {
-  state.loading = true;
   try {
-    await calendarService.ensureCalendarsLoaded();
-    state.calendarInfo = calendarStore.getCalendarInfoByUrlName(calendarUrlName);
-
-    // Restore tab from query param (e.g. after Stripe checkout redirect)
-    const requestedTab = route.query.tab as string | undefined;
-    if (requestedTab && visibleTabs.value.includes(requestedTab)) {
-      state.activeTab = requestedTab;
-    }
+    // The funding flag is part of the nav context every settings consumer builds.
+    await Promise.all([
+      new CalendarService().ensureCalendarsLoaded(),
+      new FundingService().ensureInstanceFundingLoaded(),
+    ]);
   }
-  catch (error) {
-    console.error('Failed to load calendar:', error);
-    state.error = t('error_loading_calendar');
+  catch (loadError) {
+    console.error('Failed to load calendar:', loadError);
+    error.value = t('error_loading_calendar');
   }
   finally {
-    state.loading = false;
+    loading.value = false;
   }
-
-  // Runs once the management view is rendering: the deep link focuses the
-  // reports panel, which does not exist in the DOM while loading.
-  await openReportFromQuery();
 });
-
-/**
- * Returns the ordered list of visible tabs based on ownership status.
- */
-const visibleTabs = computed(() => {
-  const tabs = ['editors'];
-  if (isOwner.value) {
-    tabs.push('reports', 'settings', 'import');
-  }
-  tabs.push('widget');
-  return tabs;
-});
-
-const activateTab = (tab: string) => {
-  // Prevent non-owners from activating owner-only tabs
-  if ((tab === 'settings' || tab === 'reports' || tab === 'import') && !isOwner.value) {
-    return;
-  }
-
-  state.activeTab = tab;
-
-  // Reset report detail view when switching to reports tab
-  if (tab === 'reports') {
-    selectedReportId.value = null;
-  }
-};
-
-const activeTabRef = computed(() => state.activeTab);
-const { handleTabKeydown } = useTabNavigation(visibleTabs, activeTabRef, activateTab);
-
-/**
- * Navigates to the report detail view within the reports tab.
- *
- * @param reportId - The ID of the report to view
- */
-const viewReport = (reportId: string) => {
-  selectedReportId.value = reportId;
-};
-
-/**
- * Returns to the reports dashboard from the report detail view.
- */
-const backToReports = () => {
-  selectedReportId.value = null;
-};
-
 </script>
 
 <template>
   <div class="calendar-management-root">
-    <div v-if="state.loading" class="loading-message">
-      {{ t('loading_calendar') }}
-    </div>
+    <div role="status" class="sr-only">{{ statusText }}</div>
 
-    <div v-else-if="state.error" class="error-message">
-      {{ state.error }}
-    </div>
+    <p
+      v-if="error"
+      class="calendar-management-root__error"
+      role="alert"
+      aria-live="polite"
+    >
+      {{ error }}
+    </p>
 
-    <template v-else-if="calendar">
-      <!-- Header with tabs -->
-      <header class="calendar-management-root__header">
-        <div class="calendar-management-root__header-content">
-          <div class="calendar-management-root__tab-row">
-            <nav
-              role="tablist"
-              :aria-label="t('tabs_label')"
-              class="calendar-management-root__tabs"
-              @keydown="handleTabKeydown"
-            >
-              <button
-                id="editors-tab"
-                type="button"
-                role="tab"
-                :aria-selected="state.activeTab === 'editors'"
-                aria-controls="editors-panel"
-                :tabindex="state.activeTab === 'editors' ? 0 : -1"
-                class="calendar-management-root__tab"
-                @click="activateTab('editors')"
-              >
-                {{ t('editors_tab') }}
-              </button>
-              <button
-                v-if="isOwner"
-                id="reports-tab"
-                type="button"
-                role="tab"
-                :aria-selected="state.activeTab === 'reports'"
-                aria-controls="reports-panel"
-                :tabindex="state.activeTab === 'reports' ? 0 : -1"
-                class="calendar-management-root__tab"
-                @click="activateTab('reports')"
-              >
-                {{ t('reports_tab') }}
-              </button>
-              <button
-                v-if="isOwner"
-                id="settings-tab"
-                type="button"
-                role="tab"
-                :aria-selected="state.activeTab === 'settings'"
-                aria-controls="settings-panel"
-                :tabindex="state.activeTab === 'settings' ? 0 : -1"
-                class="calendar-management-root__tab"
-                @click="activateTab('settings')"
-              >
-                {{ t('settings_tab') }}
-              </button>
-              <button
-                v-if="isOwner"
-                id="import-tab"
-                type="button"
-                role="tab"
-                :aria-selected="state.activeTab === 'import'"
-                aria-controls="import-panel"
-                :tabindex="state.activeTab === 'import' ? 0 : -1"
-                class="calendar-management-root__tab"
-                @click="activateTab('import')"
-              >
-                {{ t('import_tab') }}
-              </button>
-              <button
-                id="widget-tab"
-                type="button"
-                role="tab"
-                :aria-selected="state.activeTab === 'widget'"
-                aria-controls="widget-panel"
-                :tabindex="state.activeTab === 'widget' ? 0 : -1"
-                class="calendar-management-root__tab"
-                @click="activateTab('widget')"
-              >
-                {{ t('widget_tab') }}
-              </button>
-            </nav>
-            <HelpButton />
-          </div>
-        </div>
-      </header>
-
-      <!-- Main content area -->
-      <div class="calendar-management-root__main">
-        <div
-          id="editors-panel"
-          role="tabpanel"
-          aria-labelledby="editors-tab"
-          :aria-hidden="state.activeTab !== 'editors'"
-          :hidden="state.activeTab !== 'editors'"
-          class="calendar-management-root__panel"
-        >
-          <EditorsTab
-            :calendar-id="calendar.id"
-            :is-owner="isOwner"
-          />
-        </div>
-
-        <div
-          id="reports-panel"
-          ref="reportsPanelRef"
-          role="tabpanel"
-          aria-labelledby="reports-tab"
-          tabindex="-1"
-          :aria-hidden="state.activeTab !== 'reports' || !isOwner ? 'true' : 'false'"
-          :hidden="state.activeTab !== 'reports' || !isOwner"
-          class="calendar-management-root__panel"
-        >
-          <template v-if="isOwner">
-            <ReportDetail
-              v-if="selectedReportId"
-              :calendar-id="calendar.id"
-              :report-id="selectedReportId"
-              @back="backToReports"
-            />
-            <ReportsDashboard
-              v-else
-              :calendar-id="calendar.id"
-              @view-report="viewReport"
-            />
-          </template>
-        </div>
-
-        <div
-          id="settings-panel"
-          role="tabpanel"
-          aria-labelledby="settings-tab"
-          :aria-hidden="state.activeTab !== 'settings' || !isOwner ? 'true' : 'false'"
-          :hidden="state.activeTab !== 'settings' || !isOwner"
-          class="calendar-management-root__panel"
-        >
-          <SettingsTab v-if="isOwner" :calendar-id="calendar.id" />
-        </div>
-
-        <div
-          id="import-panel"
-          role="tabpanel"
-          aria-labelledby="import-tab"
-          :aria-hidden="state.activeTab !== 'import' || !isOwner ? 'true' : 'false'"
-          :hidden="state.activeTab !== 'import' || !isOwner"
-          class="calendar-management-root__panel"
-        >
-          <ImportSourcesSection
-            v-if="isOwner"
-            :calendar-id="calendar.id"
-            :instance-host="instanceHost"
-          />
-        </div>
-
-        <div
-          id="widget-panel"
-          role="tabpanel"
-          aria-labelledby="widget-tab"
-          :aria-hidden="state.activeTab !== 'widget'"
-          :hidden="state.activeTab !== 'widget'"
-          class="calendar-management-root__panel"
-        >
-          <WidgetTab
-            :calendar-id="calendar.id"
-            :calendar-url-name="calendar.urlName"
-          />
-        </div>
+    <template v-else-if="navContext">
+      <div class="calendar-management-root__help">
+        <HelpButton />
       </div>
+      <RouterView v-slot="{ Component, route: leafRoute }">
+        <component
+          :is="Component"
+          v-if="Component && leafAllowed(leafRoute.name)"
+          v-bind="leafProps(leafRoute.name)"
+        />
+      </RouterView>
     </template>
 
     <!-- One non-disclosing message: does not distinguish "doesn't exist" from "no relationship" -->
     <EmptyLayout
-      v-else
+      v-else-if="!loading"
       :title="t('calendar_not_available')"
       :description="t('calendar_not_available_description')"
     />
@@ -363,66 +186,16 @@ const backToReports = () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/style/components/calendar-admin' as *;
-@use '@/client/assets/style/mixins/tabs' as *;
-
 .calendar-management-root {
-  min-height: 100vh;
-  background: var(--pav-surface-secondary);
-  width: 100%;
   min-width: 0;
 
-  &__header {
-    background: var(--pav-surface-primary);
-    border-bottom: 1px solid var(--pav-border-primary);
-    overflow: hidden;
-  }
-
-  &__header-content {
-    max-width: 56rem; // max-w-4xl
-    margin: 0 auto;
-    padding: 0 var(--pav-space-4);
-    min-width: 0;
-  }
-
-  &__tab-row {
+  &__help {
     display: flex;
-    align-items: center;
-    gap: var(--pav-space-4);
-    border-bottom: 1px solid var(--pav-border-primary);
+    justify-content: flex-end;
   }
 
-  &__tabs {
-    @include tab-navigation;
-    flex: 1;
-    min-width: 0;
-    border-bottom: none;
-    margin-bottom: 0;
-  }
-
-  &__tab {
-    @include tab-button;
-  }
-
-  &__main {
-    max-width: 56rem; // max-w-4xl
-    margin: 0 auto;
-    padding: 0 var(--pav-space-4);
-    min-width: 0;
-  }
-
-  &__panel {
-    // Panel styles (individual tabs will style their content)
-  }
-
-  .loading-message,
-  .error-message {
-    padding: var(--pav-space-4);
-    text-align: center;
-    color: var(--pav-text-secondary);
-  }
-
-  .error-message {
+  &__error {
+    margin: 0;
     color: var(--pav-text-error);
   }
 }

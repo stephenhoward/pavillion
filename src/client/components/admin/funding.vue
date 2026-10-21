@@ -618,7 +618,12 @@ onMounted(async () => {
         <!-- Funding plans list -->
         <div v-else class="plans-card">
           <!-- Desktop Table -->
-          <div class="plans-table-desktop">
+          <div
+            class="plans-table-desktop"
+            tabindex="0"
+            role="region"
+            :aria-label="t('funding_plans_table_aria')"
+          >
             <table class="plans-table" role="table" :aria-label="t('funding_plans_table_aria')">
               <thead>
                 <tr>
@@ -1038,7 +1043,13 @@ onMounted(async () => {
                 </div>
 
                 <!-- Desktop Table -->
-                <div v-else class="grants-table-desktop">
+                <div
+                  v-else
+                  class="grants-table-desktop"
+                  tabindex="0"
+                  role="region"
+                  aria-labelledby="grants-list-heading"
+                >
                   <table class="grants-table" role="table" :aria-label="t('grants.tab_title')">
                     <thead>
                       <tr>
@@ -1166,6 +1177,7 @@ onMounted(async () => {
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
 @use '../../assets/style/mixins/tabs' as *;
+@use '../../assets/style/mixins/layout' as *;
 
 .funding-page {
   display: flex;
@@ -1407,8 +1419,9 @@ onMounted(async () => {
 
     .plans-table-desktop {
       display: none;
+      @include scroll-region;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: block;
       }
 
@@ -1485,7 +1498,7 @@ onMounted(async () => {
     .plans-mobile {
       display: block;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 
@@ -1776,7 +1789,7 @@ onMounted(async () => {
     grid-template-columns: 1fr;
     gap: var(--pav-space-4);
 
-    @include pav-media(sm) {
+    @include pav-container(sm) {
       grid-template-columns: repeat(3, 1fr);
     }
 
@@ -2031,8 +2044,9 @@ onMounted(async () => {
   /* Grants Table */
   .grants-table-desktop {
     display: none;
+    @include scroll-region;
 
-    @include pav-media(md) {
+    @include pav-container(md) {
       display: block;
     }
 
@@ -2114,7 +2128,7 @@ onMounted(async () => {
   .grants-mobile {
     display: block;
 
-    @include pav-media(md) {
+    @include pav-container(md) {
       display: none;
     }
 

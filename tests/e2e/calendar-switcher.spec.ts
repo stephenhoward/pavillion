@@ -2,21 +2,37 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { MULTI_CALENDAR_USER, loginAsAdmin, loginAsFreshUser, loginViaUi } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
+import {
+  DESKTOP,
+  PHONE,
+  WCAG_TAGS,
+  adminLeaf,
+  adminLeafPath,
+  backLink,
+  calendarLeaf,
+  calendarSwitcherTrigger,
+  gotoSettings,
+  settingsAdminIndex,
+  settingsList,
+  settingsPath,
+  settingsRow,
+  settingsTitle,
+  settingsTree,
+} from './helpers/settings-nav';
 
 /**
- * E2E Tests: calendar switcher and the settings root
+ * E2E Tests: calendar switcher, and its place in the settings layout
  *
  * Covers what the unit tier cannot: the bare-route guards resolving against
  * the real calendar list and persisted last-used calendar, the switcher sheet
- * navigating between real routes, and the settings shell's layout at real
- * viewport widths.
+ * navigating between real routes (in settings it sits in the page header of a
+ * calendar leaf and keeps the viewer on the same leaf), and the settings
+ * layout at real viewport widths.
  *
  * Tests run serially on one server. Order matters: the fresh user reaches
  * account settings from the nav only while they own no calendar, so that test
  * runs before the one that creates their first calendar.
  */
-
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 let env: TestEnvironment;
 
@@ -24,7 +40,7 @@ test.describe.configure({ mode: 'serial' });
 
 /** Open the calendar switcher and return the rows that link to another calendar. */
 async function openSwitcherLinkRows(page: Page) {
-  await page.getByRole('button', { name: /Switch calendar/ }).click();
+  await calendarSwitcherTrigger(page).click();
   const sheet = page.getByRole('dialog', { name: 'Switch calendar' });
   await expect(sheet).toBeVisible();
   const rows = sheet.getByTestId('switcher-row').filter({ has: page.getByRole('link') });
@@ -92,8 +108,11 @@ test.describe('Calendar switcher', () => {
 
     await page.getByRole('link', { name: 'Settings', exact: true }).filter({ visible: true }).click();
 
-    await expect(page).toHaveURL(/\/settings\/account$/);
-    await expect(page.getByRole('button', { name: /Switch settings/ })).toContainText('Account');
+    // At desktop width the settings root forwards a user with no calendar
+    // to the first Account leaf.
+    await expect(page).toHaveURL(/\/settings\/account\/profile$/);
+    await expect(settingsTitle(page, 'Profile')).toBeVisible();
+    await expect(settingsTree(page)).toBeVisible();
   });
 
   test('a fresh user creates a calendar from the empty state', async ({ page }) => {
@@ -110,43 +129,64 @@ test.describe('Calendar switcher', () => {
     await expect(page.getByRole('button', { name: /Switch calendar/ })).toContainText('Switcher Fresh');
   });
 
-  test('the settings switcher reaches Account and Instance administration', async ({ page }) => {
-    await loginAsAdmin(page, env.baseURL);
+  test('switching calendar on a settings leaf stays on the same leaf', async ({ page }) => {
+    // MultiCalendar owns multicalendar_calendar and edits testuser_calendar;
+    // Widget is visible to owner and editor alike.
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    await gotoSettings(page, env.baseURL, calendarLeaf('multicalendar_calendar', 'widget'));
 
-    await page.goto(env.baseURL + '/settings');
-    await expect(page).toHaveURL(/\/settings\/calendar\/test_calendar$/);
+    const rows = await openSwitcherLinkRows(page);
+    // The sheet lists calendars only: Account and Instance live in the tree.
+    await expect(page.getByTestId('switcher-account')).toHaveCount(0);
+    await expect(page.getByTestId('switcher-admin')).toHaveCount(0);
 
-    await page.getByRole('button', { name: /Switch settings/ }).click();
-    await page.getByTestId('switcher-account').getByRole('link').click();
-    await expect(page).toHaveURL(/\/settings\/account$/);
+    await rows.and(page.locator('[data-url-name="testuser_calendar"]')).getByRole('link').click();
 
-    await page.getByRole('button', { name: /Switch settings/ }).click();
-    await page.getByTestId('switcher-admin').getByRole('link').click();
-    await expect(page).toHaveURL(/\/settings\/admin\/settings$/);
-    await expect(page.getByRole('button', { name: /Switch settings/ })).toContainText('Instance administration');
+    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/widget$/);
+    await expect(settingsTitle(page, 'Widget')).toBeVisible();
   });
 
-  for (const viewport of [
-    { label: 'desktop', width: 1280, height: 800 },
-    { label: 'mobile', width: 390, height: 844 },
-  ]) {
-    test(`the admin navigation is usable at ${viewport.label} width inside one main landmark`, async ({ page }) => {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await loginAsAdmin(page, env.baseURL);
+  test('switching from an owner-only leaf to a calendar the viewer edits lands on its first visible leaf', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    await gotoSettings(page, env.baseURL, calendarLeaf('multicalendar_calendar', 'general'));
 
-      await page.goto(env.baseURL + '/settings/admin/settings');
-      await expect(page.getByRole('main')).toHaveCount(1);
+    const rows = await openSwitcherLinkRows(page);
+    await rows.and(page.locator('[data-url-name="testuser_calendar"]')).getByRole('link').click();
 
-      const adminNav = page.getByRole('navigation', { name: 'Instance administration' });
-      await expect(adminNav).toBeVisible();
-      const accountsLink = adminNav.getByRole('link', { name: 'Accounts' });
-      await expect(accountsLink).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/widget$/);
+    await expect(settingsTitle(page, 'Widget')).toBeVisible();
+  });
 
-      await accountsLink.click();
-      await expect(page).toHaveURL(/\/settings\/admin\/accounts$/);
-      await expect(accountsLink).toHaveAttribute('aria-current', 'page');
-    });
-  }
+  test('the instance settings are reachable at desktop width inside one main landmark', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+
+    await gotoSettings(page, env.baseURL, adminLeaf('settings'));
+    await expect(page.getByRole('main')).toHaveCount(1);
+
+    const accountsRow = settingsRow(settingsTree(page), 'Accounts');
+    await accountsRow.click();
+    await expect(page).toHaveURL(new RegExp(`${adminLeafPath('accounts')}$`));
+    await expect(accountsRow).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('the instance settings are reachable at mobile width inside one main landmark', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+
+    await gotoSettings(page, env.baseURL, adminLeaf('settings'));
+    await expect(page.getByRole('main')).toHaveCount(1);
+    await expect(settingsTree(page)).toBeHidden();
+
+    await backLink(page, settingsAdminIndex.title).click();
+    await expect(page).toHaveURL(new RegExp(`${settingsPath.admin}$`));
+    await expect(settingsTitle(page, settingsAdminIndex.title)).toBeVisible();
+
+    await settingsRow(settingsList(page), 'Accounts').click();
+    await expect(page).toHaveURL(new RegExp(`${adminLeafPath('accounts')}$`));
+    await expect(settingsTitle(page, 'Accounts')).toBeVisible();
+    await expect(page.getByRole('main')).toHaveCount(1);
+  });
 
   test('the open calendar switcher sheet has no axe violations', async ({ page }) => {
     // This user's sheet has a current row, a link row and an Editor badge.
@@ -155,24 +195,6 @@ test.describe('Calendar switcher', () => {
     await page.goto(env.baseURL + '/calendar');
     await openSwitcherLinkRows(page);
     await expect(page.getByTestId('switcher-row').getByText('Editor', { exact: true })).toBeVisible();
-
-    const results = await new AxeBuilder({ page })
-      .include('dialog.calendar-switcher-sheet')
-      .withTags(WCAG_TAGS)
-      .analyze();
-
-    expect(results.violations).toEqual([]);
-  });
-
-  test('the open settings switcher sheet has no axe violations', async ({ page }) => {
-    // The admin's settings sheet adds the slotted Account and Instance
-    // administration rows to the calendar rows.
-    await loginAsAdmin(page, env.baseURL);
-
-    await page.goto(env.baseURL + '/settings/account');
-    await page.getByRole('button', { name: /Switch settings/ }).click();
-    await expect(page.getByTestId('switcher-account')).toBeVisible();
-    await expect(page.getByTestId('switcher-admin')).toBeVisible();
 
     const results = await new AxeBuilder({ page })
       .include('dialog.calendar-switcher-sheet')

@@ -124,11 +124,6 @@ onMounted(async () => {
 
 <template>
   <div class="reports-dashboard">
-    <!-- Header -->
-    <header class="reports-dashboard__header">
-      <h2 class="reports-dashboard__title">{{ t('dashboard.title') }}</h2>
-    </header>
-
     <!-- Filters -->
     <div class="reports-dashboard__filters" role="search" :aria-label="t('dashboard.title')">
       <div class="reports-dashboard__filter-group">
@@ -286,25 +281,24 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '../../assets/style/components/calendar-admin' as *;
+@use '../../assets/style/tokens/breakpoints' as *;
 
 .reports-dashboard {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
 
-  &__header {
-    @include admin-section-header;
-  }
-
-  &__title {
-    @include admin-section-title;
-  }
-
   &__filters {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--pav-space-4);
-    align-items: flex-end;
+
+    // In a row the selects align on their bottom edge; stacked, they fill the column
+    @include pav-container(sm) {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
   }
 
   &__filter-group {
@@ -313,7 +307,10 @@ onMounted(async () => {
     gap: var(--pav-space-1);
     min-width: 10rem;
     flex: 1;
-    max-width: 14rem;
+
+    @include pav-container(sm) {
+      max-width: 14rem;
+    }
   }
 
   &__filter-label {
@@ -357,7 +354,7 @@ onMounted(async () => {
 
     thead {
       th {
-        padding: var(--pav-space-3) var(--pav-space-4);
+        padding: var(--pav-space-2) var(--pav-space-3);
         text-align: start;
         font-size: var(--pav-font-size-caption);
         font-weight: var(--pav-font-weight-medium);
@@ -371,11 +368,22 @@ onMounted(async () => {
 
     tbody {
       td {
-        padding: var(--pav-space-3) var(--pav-space-4);
-        font-size: var(--pav-font-size-small);
+        padding: var(--pav-space-2) var(--pav-space-3);
+        font-size: var(--pav-font-size-caption);
         color: var(--pav-text-primary);
         border-bottom: 1px solid var(--pav-border-primary);
         vertical-align: middle;
+      }
+    }
+
+    @include pav-container(sm) {
+      thead th,
+      tbody td {
+        padding: var(--pav-space-3) var(--pav-space-4);
+      }
+
+      tbody td {
+        font-size: var(--pav-font-size-small);
       }
     }
   }
@@ -478,27 +486,6 @@ onMounted(async () => {
 
   &--escalated {
     @include report-status-badge--escalated;
-  }
-}
-
-// Responsive adjustments
-@media (max-width: 640px) {
-  .reports-dashboard {
-    &__filters {
-      flex-direction: column;
-    }
-
-    &__filter-group {
-      max-width: none;
-    }
-
-    &__table {
-      thead th,
-      tbody td {
-        padding: var(--pav-space-2) var(--pav-space-3);
-        font-size: var(--pav-font-size-caption);
-      }
-    }
   }
 }
 </style>

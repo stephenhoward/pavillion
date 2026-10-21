@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
-import I18NextVue from 'i18next-vue';
-import i18next from 'i18next';
-import { initI18Next } from '@/client/service/locale';
 import { mountComponent } from '@/client/test/lib/vue';
 import Sheet from '@/client/components/logged_in/calendar-switcher/CalendarSwitcherSheet.vue';
 import CalendarService from '@/client/service/calendar';
@@ -102,32 +99,12 @@ describe('CalendarSwitcherSheet', () => {
     expect(wrapper.find('[aria-current="true"]').exists()).toBe(false);
   });
 
-  it('emits create from the create row and renders slot rows after it', async () => {
+  it('emits create, and not close, from the create row', async () => {
     seed();
-    initI18Next();
-    const wrapper = mount(Sheet, {
-      global: { plugins: [makeRouter(), pinia, [I18NextVue, { i18next }]] },
-      props: { routeName: 'feed', currentUrlName: null },
-      slots: { default: '<li data-testid="slot-row">Account</li>' },
-    });
+    const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
     await wrapper.find('[data-testid="switcher-create"]').trigger('click');
-    expect(wrapper.emitted('create')).toBeTruthy();
-    const items = wrapper.findAll('li');
-    expect(items[items.length - 1].attributes('data-testid')).toBe('slot-row');
-  });
-
-  it('emits close when a slotted link is picked', async () => {
-    seed();
-    initI18Next();
-    const wrapper = mount(Sheet, {
-      global: { plugins: [makeRouter(), pinia, [I18NextVue, { i18next }]] },
-      props: { routeName: 'feed', currentUrlName: null },
-      slots: { default: '<li data-testid="slot-row"><a href="#account"><span>Account</span></a></li><li data-testid="slot-text">Text</li>' },
-    });
-    await wrapper.find('[data-testid="slot-text"]').trigger('click');
-    expect(wrapper.emitted('close')).toBeFalsy();
-    await wrapper.find('[data-testid="slot-row"] span').trigger('click');
-    expect(wrapper.emitted('close')).toHaveLength(1);
+    expect(wrapper.emitted('create')).toHaveLength(1);
+    expect(wrapper.emitted('close')).toBeUndefined();
   });
 
   it('shows only the create row for an account with no calendars', () => {

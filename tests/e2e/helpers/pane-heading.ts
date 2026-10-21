@@ -1,12 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * The heading of the pane under the settings root. The settings switcher is
- * the page's only h1, so every pane (account, calendar management, each
- * instance-admin page) titles itself with an h2. Pass the exact en string.
+ * A settings leaf's own h2. The settings layout's h1 is the page title
+ * (settingsTitle in ./settings-nav), so wait on that for page load; use this
+ * only for a leaf heading whose text differs from that title. Pass the exact
+ * en string.
  *
  * @param page - Playwright page instance
- * @param name - The pane's heading text, e.g. "Moderation Dashboard"
+ * @param name - The leaf's heading text, e.g. "Moderation Dashboard"
  */
 export function paneHeading(page: Page, name: string): Locator {
   return page.getByRole('heading', { level: 2, name, exact: true });

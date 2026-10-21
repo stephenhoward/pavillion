@@ -5,21 +5,17 @@ import { mountComponent } from '@/client/test/lib/vue';
 import AdminRoot from '@/client/components/admin/root.vue';
 
 const App = { template: '<RouterView />' };
-const Pane = { template: '<div />' };
+const Index = { template: '<p data-pane="index" />' };
+const Pane = { template: '<p data-pane="leaf" />' };
 
 function makeRouter(): Router {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/settings/account', component: Pane, name: 'profile' },
-      { path: '/settings/admin', component: AdminRoot, name: 'admin', children: [
+      { path: '/settings/admin', component: AdminRoot, children: [
+        { path: '', component: Index, name: 'admin' },
         { path: 'settings', component: Pane, name: 'admin_settings' },
-        { path: 'accounts', component: Pane, name: 'accounts' },
-        { path: 'calendars', component: Pane, name: 'admin_calendars' },
-        { path: 'moderation', component: Pane, name: 'moderation' },
-        { path: 'moderation/settings', component: Pane, name: 'moderation_settings' },
         { path: 'federation', component: Pane, name: 'federation' },
-        { path: 'funding', component: Pane, name: 'funding' },
       ] },
     ],
   });
@@ -34,33 +30,20 @@ async function mountAt(path: string) {
 }
 
 describe('admin root', () => {
-  it('links its pages under /settings/admin and has no back link', async () => {
-    const wrapper = await mountAt('/settings/admin/settings');
-    expect(wrapper.find('.admin-back-link').exists()).toBe(false);
-    expect(wrapper.find('a[href="/settings/account"]').exists()).toBe(false);
-    const hrefs = wrapper.findAll('a').map((a) => a.attributes('href'));
-    expect(hrefs).toContain('/settings/admin/accounts');
-    expect(hrefs.some((href) => href?.startsWith('/admin/'))).toBe(false);
+  it.each([
+    ['/settings/admin', 'index'],
+    ['/settings/admin/federation', 'leaf'],
+  ])('renders the matched child of %s through its RouterView', async (path, pane) => {
+    const wrapper = await mountAt(path);
+    expect(wrapper.find('.admin-root').exists()).toBe(true);
+    expect(wrapper.find(`.admin-root > [data-pane="${pane}"]`).exists()).toBe(true);
   });
 
-  it('renders one labelled nav and leaves the main landmark to the app shell', async () => {
+  it('renders no nav, no current-page link and no main landmark of its own', async () => {
     const wrapper = await mountAt('/settings/admin/settings');
-    const navs = wrapper.findAll('nav');
-    expect(navs).toHaveLength(1);
-    expect(navs[0].attributes('aria-label')).toBe('Instance administration');
+    expect(wrapper.find('nav').exists()).toBe(false);
+    expect(wrapper.find('a').exists()).toBe(false);
+    expect(wrapper.find('[aria-current="page"]').exists()).toBe(false);
     expect(wrapper.find('main').exists()).toBe(false);
-    expect(wrapper.find('a[href="#main"]').exists()).toBe(false);
-  });
-
-  it('marks the nav item for the current page', async () => {
-    const wrapper = await mountAt('/settings/admin/federation');
-    const current = wrapper.findAll('a[aria-current="page"]');
-    expect(current.map((a) => a.attributes('href'))).toEqual(['/settings/admin/federation']);
-  });
-
-  it('marks Moderation current on its sub-pages', async () => {
-    const wrapper = await mountAt('/settings/admin/moderation/settings');
-    const current = wrapper.findAll('a[aria-current="page"]');
-    expect(current.map((a) => a.attributes('href'))).toEqual(['/settings/admin/moderation']);
   });
 });

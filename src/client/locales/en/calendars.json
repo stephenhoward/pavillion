@@ -26,10 +26,7 @@
     "create_calendar_button": "Create a new calendar",
     "editor_badge": "Editor",
     "aria_switch_calendar": "Switch calendar: {{name}}",
-    "aria_switch_settings": "Switch settings: {{name}}",
-    "no_calendars": "You have no calendars yet.",
-    "account_row": "Account",
-    "admin_row": "Instance administration"
+    "no_calendars": "You have no calendars yet."
   },
   "calendar": {
     "create_button": "Create Event",
@@ -129,13 +126,6 @@
     "error_resending_invitation": "Failed to resend invitation"
   },
   "management": {
-    "tabs_label": "Calendar management tabs",
-    "editors_tab": "Editors",
-    "settings_tab": "Settings",
-    "widget_tab": "Widget",
-    "reports_tab": "Reports",
-    "import_tab": "Import",
-    "loading_calendar": "Loading calendar...",
     "error_loading_calendar": "Unable to load calendar. Please try again later.",
     "calendar_not_available": "Calendar not available",
     "calendar_not_available_description": "This calendar doesn't exist or you don't have access to manage it.",

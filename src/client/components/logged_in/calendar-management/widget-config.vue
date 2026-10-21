@@ -428,6 +428,7 @@ defineExpose({
 
 <style scoped lang="scss">
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '../../../assets/style/tokens/breakpoints' as *;
 
 .widget-config {
   display: flex;
@@ -486,7 +487,7 @@ defineExpose({
       grid-template-columns: 1fr;
       gap: var(--pav-space-4);
 
-      @media (min-width: 640px) {
+      @include pav-container(sm) {
         grid-template-columns: repeat(3, 1fr);
       }
     }

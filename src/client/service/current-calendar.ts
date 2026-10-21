@@ -34,7 +34,7 @@ export function resolveCurrentCalendar(
 export type CalendarLoader = () => Promise<CalendarInfo[]>;
 
 /**
- * Guard for a bare route (`/calendar`, `/feed`, `/settings`): resolve the
+ * Guard for a bare route (`/calendar`, `/feed`): resolve the
  * current calendar and redirect to `routeName` with its url name. When no
  * calendar resolves, go to `fallback`, or render in place when `fallback`
  * is `true`. The guard persists the resolved ID itself, so a stale entry is

@@ -2,6 +2,7 @@
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
 import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
@@ -21,6 +22,9 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useTranslation('funding');
+
+const route = useRoute();
+const router = useRouter();
 
 const fundingService = new FundingService();
 
@@ -243,13 +247,22 @@ async function startStripeCheckout() {
   errorMessage.value = '';
 
   try {
-    // Build return URL with tab=settings so redirect lands on the correct tab
-    const returnUrlObj = new URL(window.location.href);
-    returnUrlObj.searchParams.set('tab', 'settings');
+    // Stripe returns to the calendar's General leaf, resolved by name so no
+    // query from the current page is inherited; the server pins the origin
+    // (validateReturnUrlOrigin). General is owner-only, which is safe because
+    // only an owner can create a session for a calendar: the server's
+    // verifyCalendarOwnership refuses anyone else, so the target is always
+    // reachable. No calendar in the route falls back to the account's funding
+    // plan page. A provider return URL must address a leaf, never an index:
+    // an index forwards on to a leaf and drops the query, session_id with it.
+    const calendar = route.params.calendar;
+    const returnPath = typeof calendar === 'string'
+      ? router.resolve({ name: 'calendar_general', params: { calendar } }).href
+      : router.resolve({ name: 'funding_plan' }).href;
 
     // Build checkout session params
     const params: Record<string, any> = {
-      returnUrl: returnUrlObj.toString(),
+      returnUrl: window.location.origin + returnPath,
     };
 
     if (isPwyc.value) {

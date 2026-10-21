@@ -5,7 +5,8 @@
     "new_event": "Nuevo Evento",
     "settings_button": "Configuración",
     "feed_button": "Noticias",
-    "inbox_badge_label": "{{count}} notificación sin leer"
+    "inbox_badge_label_one": "{{count}} notificación sin leer",
+    "inbox_badge_label_other": "{{count}} notificaciones sin leer"
   },
   "powered_by": "Desarrollado por Pavillion",
   "language_picker": {

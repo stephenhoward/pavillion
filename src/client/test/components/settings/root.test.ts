@@ -4,21 +4,42 @@ import { flushPromises, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, Router, useRoute } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
+import { installMatchMedia, type FakeMatchMedia } from '@/client/test/lib/match-media';
+import { resetShellLayoutForTesting } from '@/client/composables/useShellLayout';
 import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
-import CalendarManagementRoot from '@/client/components/logged_in/calendar-management/root.vue';
+import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
 import CalendarService from '@/client/service/calendar';
+import FundingService from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFundingStore } from '@/client/stores/fundingStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 
 const App = { template: '<RouterView />' };
 const Pane = { template: '<div data-testid="pane" />' };
-// Captures the calendar param once, at setup, as the management view does.
-const ManagementPane = {
+const Outlet = { template: '<RouterView />' };
+
+// Stands in for calendar-management/root.vue: it reads the calendar param
+// once, at setup, and counts its setups so a test can tell a remount from a
+// reused instance.
+let calendarParentSetups = 0;
+const CalendarParent = {
   setup() {
+    calendarParentSetups += 1;
     return { mountedFor: useRoute().params.calendar };
   },
-  template: '<div data-testid="pane">{{ mountedFor }}</div>',
+  template: '<div data-testid="calendar-parent" :data-mounted-for="mountedFor"><RouterView /></div>',
+};
+
+// Shared by leaves of more than one group, so the component alone never
+// forces a remount between them and only the pane key can.
+let leafSetups = 0;
+const CountingLeaf = {
+  setup() {
+    leafSetups += 1;
+    return {};
+  },
+  template: '<div data-testid="pane" />',
 };
 
 function calendar(id: string, urlName: string, name: string): Calendar {
@@ -27,211 +48,289 @@ function calendar(id: string, urlName: string, name: string): Calendar {
   return cal;
 }
 
-function makeRouter(management: object = ManagementPane): Router {
+// The settings subtree as it will stand once the calendar and admin indexes
+// exist, with stub leaves. The tree and list page resolve every leaf name, so
+// each one is registered.
+function makeRouter(): Router {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/calendar/:calendar', component: Pane, name: 'calendar' },
-      { path: '/settings', component: SettingsRoot, children: [
-        { path: 'calendar/:calendar', component: management, name: 'calendar_management' },
-        { path: 'account', component: Pane, name: 'profile' },
+      { path: '/settings', component: SettingsRoot, meta: { shellRail: true }, children: [
+        { path: '', component: SettingsListPage, name: 'settings', meta: { settingsGroup: 'root' } },
+        { path: 'calendar/:calendar', component: CalendarParent, children: [
+          { path: '', component: SettingsListPage, name: 'calendar_management', meta: { settingsGroup: 'calendar' } },
+          { path: 'general', component: Pane, name: 'calendar_general' },
+          { path: 'editors', component: Pane, name: 'calendar_editors' },
+          { path: 'reports', component: Pane, name: 'calendar_reports' },
+          { path: 'reports/:reportId', component: Pane, name: 'calendar_report_detail' },
+          { path: 'import', component: Pane, name: 'calendar_import' },
+          { path: 'widget', component: Pane, name: 'calendar_widget' },
+        ] },
+        { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' } },
+        { path: 'account/profile', component: CountingLeaf, name: 'profile' },
+        { path: 'account/security', component: CountingLeaf, name: 'security' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
-        { path: 'admin', component: { template: '<RouterView />' }, name: 'admin', children: [
-          { path: 'settings', component: Pane, name: 'admin_settings' },
+        // A two-hop guard chain ending on a leaf, and an index stub whose
+        // guard forwards the way the real index guards do at md+.
+        { path: 'forward-a', component: Pane, name: 'forward_a', beforeEnter: () => ({ name: 'forward_b', replace: true }) },
+        { path: 'forward-b', component: Pane, name: 'forward_b', beforeEnter: () => ({ name: 'profile', replace: true }) },
+        {
+          path: 'account-index',
+          component: SettingsListPage,
+          name: 'account_index_stub',
+          meta: { settingsGroup: 'account' },
+          beforeEnter: () => ({ name: 'profile', replace: true }),
+        },
+        { path: 'admin', component: Outlet, children: [
+          { path: '', component: SettingsListPage, name: 'admin', meta: { settingsGroup: 'admin' } },
+          { path: 'settings', component: CountingLeaf, name: 'admin_settings' },
+          { path: 'accounts', component: Pane, name: 'accounts' },
+          { path: 'calendars', component: Pane, name: 'admin_calendars' },
           { path: 'moderation', component: Pane, name: 'moderation' },
+          { path: 'moderation/reports/:reportId', component: Pane, name: 'moderation_report_detail' },
+          { path: 'federation', component: Pane, name: 'federation' },
+          { path: 'funding', component: Pane, name: 'funding' },
         ] },
       ] },
+      { path: '/policy', component: Pane, name: 'instance-policy' },
+      { path: '/auth/logout', component: Pane, name: 'logout' },
     ],
   });
 }
 
-describe('settings root', () => {
+describe('settings layout', () => {
   let pinia: Pinia;
   let router: Router;
   let sandbox: sinon.SinonSandbox;
   let wrapper: VueWrapper | null;
+  let media: FakeMatchMedia;
+  let host: HTMLElement;
 
   beforeEach(() => {
+    // The tree and list page read the shell layout; every mount gets the
+    // fake matchMedia, at md+.
+    resetShellLayoutForTesting();
+    media = installMatchMedia(true);
     pinia = createPinia();
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
     sandbox.stub(CalendarService.prototype, 'ensureCalendarsLoaded')
       .callsFake(async () => useCalendarStore().calendarInfos);
+    sandbox.stub(FundingService.prototype, 'ensureInstanceFundingLoaded')
+      .callsFake(async () => useFundingStore().instanceFundingEnabled === true);
     useCalendarStore().setCalendarInfos([
       new CalendarInfo(calendar('o1', 'riverside', 'Riverside Arts'), 'owner'),
-      new CalendarInfo(calendar('e1', 'shared', 'Shared Events'), 'editor'),
+      new CalendarInfo(calendar('o2', 'harbour', 'Harbour Hall'), 'owner'),
     ]);
     router = makeRouter();
+    calendarParentSetups = 0;
+    leafSetups = 0;
     wrapper = null;
+    // Attached so focus moves land on document.activeElement.
+    host = document.createElement('div');
+    document.body.appendChild(host);
   });
 
   afterEach(() => {
     wrapper?.unmount();
+    host.remove();
+    resetShellLayoutForTesting();
+    media.restore();
     sandbox.restore();
   });
 
-  async function mountAt(
-    path: string,
-    isAdmin: boolean,
-    options: { stubs?: Record<string, unknown>; attachTo?: Element } = {},
-  ): Promise<VueWrapper> {
+  async function mountAt(path: string, isAdmin = false): Promise<VueWrapper> {
     await router.push(path);
     wrapper = mountComponent(App, router, {
       pinia,
       provide: { authn: { isAdmin: () => isAdmin } },
-      ...options,
+      attachTo: host,
     });
     await flushPromises();
     return wrapper;
   }
 
-  const trigger = (w: VueWrapper) => w.find('header h1 button.calendar-switcher');
-
-  it('labels the trigger with the calendar name on a calendar pane', async () => {
-    const w = await mountAt('/settings/calendar/riverside', false);
-    expect(trigger(w).text()).toContain('Riverside Arts');
-    expect(trigger(w).attributes('aria-label')).toBe('Switch settings: Riverside Arts');
-    expect(w.find('[data-testid="pane"]').exists()).toBe(true);
-  });
-
-  it('renders the reduced management view for an edited calendar', async () => {
-    router = makeRouter(CalendarManagementRoot);
-    const w = await mountAt('/settings/calendar/shared', false, {
-      stubs: {
-        EditorsTab: true,
-        SettingsTab: true,
-        WidgetTab: true,
-        ReportsDashboard: true,
-        ReportDetail: true,
-        ImportSourcesSection: true,
-      },
-    });
-    expect(trigger(w).text()).toContain('Shared Events');
-    expect(w.find('#editors-tab').exists()).toBe(true);
-    expect(w.find('#widget-tab').exists()).toBe(true);
-    expect(w.find('#settings-tab').exists()).toBe(false);
-    expect(w.find('#reports-tab').exists()).toBe(false);
-    expect(w.find('.error-message').exists()).toBe(false);
-    expect(w.find('.empty-state').exists()).toBe(false);
-  });
-
-  it('labels the trigger Account on the account panes', async () => {
-    const w = await mountAt('/settings/account', false);
-    expect(trigger(w).text()).toContain('Account');
-    expect(trigger(w).attributes('aria-label')).toBe('Switch settings: Account');
-    await router.push('/settings/account/funding');
+  async function go(path: string): Promise<void> {
+    await router.push(path);
     await flushPromises();
-    expect(trigger(w).text()).toContain('Account');
+  }
+
+  it('renders the settings tree, one page header and the routed pane', async () => {
+    const w = await mountAt('/settings/account/profile');
+    expect(w.find('nav.settings-tree').attributes('aria-label')).toBe('Settings');
+    expect(w.findAll('h1')).toHaveLength(1);
+    expect(w.find('.settings-layout__content [data-testid="pane"]').exists()).toBe(true);
   });
 
-  it('labels the trigger Instance administration on every admin pane', async () => {
-    const w = await mountAt('/settings/admin/settings', true);
-    expect(trigger(w).text()).toContain('Instance administration');
-    await router.push('/settings/admin/moderation');
+  it.each([
+    ['/settings', 'Settings'],
+    ['/settings/account', 'Account'],
+    ['/settings/account/profile', 'Profile'],
+    ['/settings/calendar/riverside', 'Riverside Arts'],
+    ['/settings/calendar/riverside/editors', 'Editors'],
+    ['/settings/calendar/unknown', 'Calendar'],
+    ['/settings/admin', 'Instance'],
+  ])('renders exactly one h1 at %s', async (path, title) => {
+    const w = await mountAt(path, true);
+    const headings = w.findAll('h1');
+    expect(headings).toHaveLength(1);
+    expect(headings[0].text()).toBe(title);
+  });
+
+  it('keeps the same h1 element across an index to leaf change', async () => {
+    const w = await mountAt('/settings/account');
+    const before = w.find('h1').element;
+    await go('/settings/account/profile');
+    expect(w.find('h1').element).toBe(before);
+    expect(w.find('h1').text()).toBe('Profile');
+
+    await go('/settings/calendar/riverside');
+    const calendarIndex = w.find('h1').element;
+    expect(calendarIndex).toBe(before);
+    await go('/settings/calendar/riverside/general');
+    expect(w.find('h1').element).toBe(before);
+  });
+
+  it('remounts the calendar pane when another calendar is picked', async () => {
+    const w = await mountAt('/settings/calendar/riverside/general');
+    expect(w.find('[data-testid="calendar-parent"]').attributes('data-mounted-for')).toBe('riverside');
+    await go('/settings/calendar/harbour/general');
+    expect(w.find('[data-testid="calendar-parent"]').attributes('data-mounted-for')).toBe('harbour');
+    expect(calendarParentSetups).toBe(2);
+  });
+
+  it('keeps the calendar pane mounted between two leaves of one calendar', async () => {
+    await mountAt('/settings/calendar/riverside/general');
+    await go('/settings/calendar/riverside/editors');
+    await go('/settings/calendar/riverside');
+    expect(calendarParentSetups).toBe(1);
+  });
+
+  it('keeps the pane mounted between account leaves and remounts it for admin', async () => {
+    await mountAt('/settings/account/profile', true);
+    await go('/settings/account/security');
+    expect(leafSetups).toBe(1);
+    await go('/settings/admin/settings');
+    expect(leafSetups).toBe(2);
+  });
+
+  it('renders no Account or Instance rows in the calendar switcher', async () => {
+    const w = await mountAt('/settings/calendar/riverside/general', true);
+    await w.find('.settings-page-header button.calendar-switcher').trigger('click');
     await flushPromises();
-    expect(trigger(w).text()).toContain('Instance administration');
-  });
-
-  it('offers the Instance administration row only to admins', async () => {
-    let w = await mountAt('/settings/account', false);
-    await trigger(w).trigger('click');
-    expect(w.find('[data-testid="switcher-account"]').exists()).toBe(true);
-    expect(w.find('[data-testid="switcher-admin"]').exists()).toBe(false);
-    w.unmount();
-
-    w = await mountAt('/settings/account', true);
-    await trigger(w).trigger('click');
-    expect(w.find('[data-testid="switcher-admin"] a').attributes('href')).toBe('/settings/admin/settings');
-  });
-
-  it('marks the active settings row current and renders it inert', async () => {
-    const w = await mountAt('/settings/account', true);
-    await trigger(w).trigger('click');
-    const account = w.find('[data-testid="switcher-account"]');
-    expect(account.attributes('aria-current')).toBe('true');
-    expect(account.find('a').exists()).toBe(false);
-    expect(account.find('.sr-only').text()).toBe('Current');
-    expect(w.find('[data-testid="switcher-admin"]').attributes('aria-current')).toBeUndefined();
-    expect(w.find('[aria-current="true"][data-testid="switcher-row"]').exists()).toBe(false);
-  });
-
-  it('marks the Instance administration row current on an admin pane', async () => {
-    const w = await mountAt('/settings/admin/settings', true);
-    await trigger(w).trigger('click');
-    const admin = w.find('[data-testid="switcher-admin"]');
-    expect(admin.attributes('aria-current')).toBe('true');
-    expect(admin.find('a').exists()).toBe(false);
-    const account = w.find('[data-testid="switcher-account"]');
-    expect(account.attributes('aria-current')).toBeUndefined();
-    expect(account.find('a').attributes('href')).toBe('/settings/account');
-  });
-
-  it('marks the calendar row current on its management pane', async () => {
-    const w = await mountAt('/settings/calendar/riverside', true);
-    await trigger(w).trigger('click');
-    expect(w.find('[data-url-name="riverside"]').attributes('aria-current')).toBe('true');
-    expect(w.find('[data-testid="switcher-account"]').attributes('aria-current')).toBeUndefined();
-  });
-
-  it('opens a picked calendar in calendar management', async () => {
-    const w = await mountAt('/settings/account', false);
-    await trigger(w).trigger('click');
-    await w.find('[data-url-name="shared"] a').trigger('click');
-    await flushPromises();
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared');
-    expect(trigger(w).text()).toContain('Shared Events');
-  });
-
-  it('remounts the management pane when another calendar is picked', async () => {
-    const w = await mountAt('/settings/calendar/riverside', false);
-    expect(w.find('[data-testid="pane"]').text()).toBe('riverside');
-    await trigger(w).trigger('click');
-    await w.find('[data-url-name="shared"] a').trigger('click');
-    await flushPromises();
-    expect(w.find('[data-testid="pane"]').text()).toBe('shared');
-  });
-
-  it('closes the sheet when a settings row is picked', async () => {
-    const w = await mountAt('/settings/calendar/riverside', true);
-    await trigger(w).trigger('click');
-    await w.find('[data-testid="switcher-account"] a').trigger('click');
-    await flushPromises();
-    expect(router.currentRoute.value.fullPath).toBe('/settings/account');
+    expect(w.find('[data-url-name="harbour"]').exists()).toBe(true);
     expect(w.find('[data-testid="switcher-account"]').exists()).toBe(false);
-    expect(trigger(w).attributes('aria-expanded')).toBe('false');
+    expect(w.find('[data-testid="switcher-admin"]').exists()).toBe(false);
   });
 
-  describe('focus return', () => {
-    const { showModal, close } = HTMLDialogElement.prototype;
+  it('offers Log out in the tree footer at md+', async () => {
+    const w = await mountAt('/settings/account/profile');
+    const logOut = w.find('.settings-tree__footer button');
+    expect(logOut.text()).toBe('Log out');
+    await logOut.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe('logout');
+  });
 
-    beforeEach(() => {
-      // happy-dom does not implement showModal()/close(). Polyfill just enough
-      // for the real sheet's useDialog to open, so focus really leaves the
-      // trigger and the test proves it comes back.
-      HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
-      HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+  it('links the funding plan back to the account section', async () => {
+    useFundingStore().instanceFundingEnabled = true;
+    const w = await mountAt('/settings/account/funding');
+    expect(w.find('h1').text()).toBe('Funding Plan');
+    const back = w.find('.settings-page-header__back');
+    expect(back.text()).toBe('Back to Account');
+    expect(back.attributes('href')).toBe('/settings/account');
+  });
+
+  describe('focus rule', () => {
+    const heading = () => document.querySelector('h1');
+
+    it('moves focus to the h1 after a path change in page mode', async () => {
+      media.setMatches(false);
+      await mountAt('/settings');
+      await go('/settings/account');
+      expect(document.activeElement).toBe(heading());
+      expect(heading()?.textContent).toBe('Account');
     });
 
-    afterEach(() => {
-      HTMLDialogElement.prototype.showModal = showModal;
-      HTMLDialogElement.prototype.close = close;
+    it('moves nothing at md+', async () => {
+      await mountAt('/settings');
+      await go('/settings/account');
+      expect(document.activeElement).toBe(document.body);
     });
 
-    it('returns focus to the trigger after a settings row is picked', async () => {
-      const w = await mountAt('/settings/calendar/riverside', false, { attachTo: document.body });
-      const triggerEl = trigger(w).element as HTMLButtonElement;
-      triggerEl.focus();
-      await trigger(w).trigger('click');
-      await flushPromises();
-      // useDialog moves initial focus into the sheet on a zero-delay timer.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(document.activeElement).not.toBe(triggerEl);
+    it('moves nothing on initial load', async () => {
+      media.setMatches(false);
+      const focus = sandbox.spy(HTMLElement.prototype, 'focus');
+      await mountAt('/settings/account/profile');
+      expect(focus.called).toBe(false);
+      expect(document.activeElement).toBe(document.body);
+    });
 
-      await w.find('[data-testid="switcher-account"] a').trigger('click');
-      await flushPromises();
+    it('moves nothing on a query-only change', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/account/profile');
+      await go('/settings/account/profile?section=email');
+      expect(document.activeElement).toBe(document.body);
+    });
 
+    it('moves nothing when only the calendar changes', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/editors');
+      await go('/settings/calendar/harbour/editors');
+      expect(router.currentRoute.value.params.calendar).toBe('harbour');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves nothing when only the calendar changes on a calendar section', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside');
+      await go('/settings/calendar/harbour');
+      expect(router.currentRoute.value.name).toBe('calendar_management');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves focus when the calendar and the leaf both change', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/editors');
+      await go('/settings/calendar/harbour/widget');
+      expect(document.activeElement).toBe(heading());
+    });
+
+    it('leaves focus to the reports leaf for a destination with a reportId', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/calendar/riverside/reports');
+      await go('/settings/calendar/riverside/reports/9d4b2c1e-6f3a-4c8e-9b1d-2a7e5f0c3b64');
+      expect(router.currentRoute.value.name).toBe('calendar_report_detail');
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('moves focus onto the admin report detail, which manages no focus of its own', async () => {
+      media.setMatches(false);
+      await mountAt('/settings/admin/moderation', true);
+      await go('/settings/admin/moderation/reports/9d4b2c1e-6f3a-4c8e-9b1d-2a7e5f0c3b64');
+      expect(router.currentRoute.value.name).toBe('moderation_report_detail');
+      expect(document.activeElement).toBe(heading());
+    });
+
+    it('moves focus once for a redirect chain, on the final route', async () => {
+      media.setMatches(false);
+      await mountAt('/settings');
+      const focus = sandbox.spy(HTMLElement.prototype, 'focus');
+      await go('/settings/forward-a');
       expect(router.currentRoute.value.name).toBe('profile');
-      expect(document.activeElement).toBe(trigger(w).element);
+      expect(focus.callCount).toBe(1);
+      expect(focus.firstCall.thisValue).toBe(heading());
+      expect(document.activeElement).toBe(heading());
+      expect(heading()?.textContent).toBe('Profile');
+    });
+
+    it('adds no forward of its own after a guard forward at md+', async () => {
+      await mountAt('/settings/account/security');
+      const replace = sandbox.spy(router, 'replace');
+      await go('/settings/account-index');
+      expect(router.currentRoute.value.name).toBe('profile');
+      expect(replace.called).toBe(false);
+      expect(document.activeElement).toBe(document.body);
     });
   });
 });

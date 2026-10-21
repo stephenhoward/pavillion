@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { paneHeading } from './helpers/pane-heading';
+import { adminLeaf, adminLeafPath, gotoSettings, settingsRow, settingsTitle, settingsTree } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -37,11 +37,8 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should display federation settings page with header and info panel', async ({ page }) => {
-    await page.goto(env.baseURL + '/settings/admin/federation');
-
-    // Verify page header
-    const heading = paneHeading(page, 'Federation');
-    await expect(heading).toBeVisible({ timeout: 10000 });
+    // gotoSettings waits for the 'Federation' page title
+    await gotoSettings(page, env.baseURL, adminLeaf('federation'));
 
     // Verify subtitle
     const subtitle = page.locator('.federation-subtitle');
@@ -60,7 +57,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should navigate to blocked instances page via manage link', async ({ page }) => {
-    await page.goto(env.baseURL + '/settings/admin/federation');
+    await gotoSettings(page, env.baseURL, adminLeaf('federation'));
 
     // Click the manage blocked instances link
     const manageLink = page.locator('.federation-manage-link');
@@ -68,7 +65,11 @@ test.describe('Admin Federation Settings', () => {
     await manageLink.click();
 
     // Verify navigation to the blocked instances management page
-    await page.waitForURL('**/settings/admin/moderation/blocked-instances', { timeout: 10000 });
+    await page.waitForURL('**' + adminLeafPath('moderation/blocked-instances'), { timeout: 10000 });
+
+    // The sub-page takes its parent's title, and the tree keeps Moderation current
+    await expect(settingsTitle(page, adminLeaf('moderation/blocked-instances').title)).toBeVisible();
+    await expect(settingsRow(settingsTree(page), 'Moderation')).toHaveAttribute('aria-current', 'page');
   });
 });
 

@@ -38,8 +38,7 @@ onMounted(() => {
 
 /**
  * Any link in the list navigates away from what the sheet is showing, so a
- * click on one closes the sheet. Delegated from the list so the host's slot
- * rows close it too without wiring a handler of their own.
+ * click on one closes the sheet.
  */
 function onListClick(event: MouseEvent) {
   if ((event.target as HTMLElement | null)?.closest('a')) {
@@ -87,7 +86,6 @@ function onListClick(event: MouseEvent) {
           {{ t('create_calendar_button') }}
         </button>
       </li>
-      <slot />
     </ul>
   </Sheet>
 </template>
@@ -117,18 +115,8 @@ function onListClick(event: MouseEvent) {
     width: 100%;
     justify-content: flex-start;
   }
-}
-</style>
 
-<!--
-  Row rules, unscoped: a host's slot rows (the settings rows) carry the same
-  classes and are forwarded through CalendarSwitcher, so scoped rules cannot
-  reach them reliably. Every rule is namespaced under the sheet's own
-  .calendar-switcher-sheet dialog.
--->
-<style lang="scss">
-.calendar-switcher-sheet {
-  .calendar-switcher-sheet__row {
+  &__row {
     border-radius: var(--pav-border-radius-md);
 
     &[aria-current='true'] {
@@ -146,7 +134,7 @@ function onListClick(event: MouseEvent) {
 
   /* The link (or the current row's label) fills the row, so the whole padded
      row is the hit area. */
-  .calendar-switcher-sheet__target {
+  &__target {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -157,23 +145,23 @@ function onListClick(event: MouseEvent) {
     text-decoration: none;
   }
 
-  a.calendar-switcher-sheet__target {
-    &:hover {
-      background: var(--pav-interactive-hover);
+  &__name {
+    flex: 1;
+  }
+}
 
-      .calendar-switcher-sheet__name {
-        text-decoration: underline;
-      }
-    }
+a.calendar-switcher-sheet__target {
+  &:hover {
+    background: var(--pav-interactive-hover);
 
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: -2px;
+    .calendar-switcher-sheet__name {
+      text-decoration: underline;
     }
   }
 
-  .calendar-switcher-sheet__name {
-    flex: 1;
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: -2px;
   }
 }
 </style>

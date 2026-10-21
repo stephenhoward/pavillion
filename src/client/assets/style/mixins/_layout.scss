@@ -74,3 +74,16 @@
 @mixin overflow-scroll { overflow: scroll; }
 @mixin overflow-x-auto { overflow-x: auto; }
 @mixin overflow-y-auto { overflow-y: auto; }
+
+// Keyboard-reachable horizontal scroll region for a wide table. Pair with
+// tabindex="0", role="region" and an accessible name in the template. The
+// focus ring is inset because enclosing cards keep overflow: hidden for their
+// rounded corners and would clip an outset ring.
+@mixin scroll-region {
+  overflow-x: auto;
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-border-color-focus);
+    outline-offset: -2px;
+  }
+}

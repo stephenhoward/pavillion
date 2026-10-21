@@ -14,6 +14,9 @@ import CalendarService from '@/client/service/calendar';
 import { createCurrentCalendarRedirect, createCurrentCalendarSync } from '@/client/service/current-calendar';
 import { buildClientRoutes } from '@/client/routes';
 import { createRouteGuards } from '@/client/service/route-guards';
+import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
+import FundingService from '@/client/service/funding';
+import { useShellLayout } from '@/client/composables/useShellLayout';
 
 import AppVue from '@/client/components/app.vue';
 
@@ -51,6 +54,15 @@ checkSetupMode().then((setupRequired) => {
     const routes = buildClientRoutes({
       ...createRouteGuards(authentication, () => isSetupMode),
       currentCalendarRedirect: (routeName, fallback) => createCurrentCalendarRedirect(routeName, fallback, loadCalendars),
+      // Pinia is installed below, so every store and composable read stays inside a lambda.
+      ...createSettingsGuards({
+        loadCalendars,
+        isAdmin: () => authentication.isAdmin(),
+        loadInstanceFunding: () => new FundingService().ensureInstanceFundingLoaded(),
+        treeIsSidebar: () => useShellLayout().mainNavIsSidebar.value,
+        // Read only inside guard bodies, after the router below exists.
+        historyLocation: () => historyPath(router),
+      }),
     });
 
     const router = createRouter({

@@ -173,13 +173,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
+  <section class="settings funding-plan-management">
     <div class="settings-header">
-      <router-link :to="{ name: 'profile' }" class="back-button">{{ t("back_to_settings") }}</router-link>
-      <div class="settings-header__title-row">
-        <h2 id="funding-plan-heading">{{ t("title") }}</h2>
-        <HelpButton />
-      </div>
+      <HelpButton />
     </div>
 
     <div role="status" aria-live="polite">
@@ -295,31 +291,9 @@ onMounted(async () => {
 }
 
 .settings-header {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 2rem;
-
-  .back-button {
-    display: inline-block;
-    margin-bottom: 1rem;
-    color: var(--pav-color-interactive-primary);
-    text-decoration: none;
-    font-size: 0.875rem;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-
-  &__title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  h2 {
-    font-weight: 200;
-    font-size: 2rem;
-    margin: 0;
-  }
 }
 
 h2 {

@@ -201,6 +201,7 @@ const onVerify = () => {
 
 .import-source-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--pav-space-4);
   padding: var(--pav-space-4);
@@ -208,8 +209,10 @@ const onVerify = () => {
   border: 1px solid var(--pav-border-primary);
   border-radius: 0.75rem;
 
+  // The actions drop below the source once the URL would get narrower
+  // than its basis, instead of squeezing it to an ellipsis.
   &__main {
-    flex: 1;
+    flex: 1 1 16rem;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -272,11 +275,14 @@ const onVerify = () => {
     font-size: 0.875rem;
   }
 
+  // On a line of their own the actions may still be wider than the row
+  // (longer es/fr labels), so they wrap among themselves too.
   &__actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--pav-space-2);
     align-items: center;
-    flex-shrink: 0;
+    min-width: 0;
   }
 }
 

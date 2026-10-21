@@ -334,33 +334,40 @@ function formatDate(dateString: string): string {
           </div>
 
           <!-- Desktop Table View -->
-          <table class="blocked-table">
-            <thead>
-              <tr>
-                <th scope="col">{{ t('list.domain_column') }}</th>
-                <th scope="col">{{ t('list.reason_column') }}</th>
-                <th scope="col">{{ t('list.blocked_at_column') }}</th>
-                <th scope="col">{{ t('list.actions_column') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="instance in moderationStore.blockedInstances" :key="instance.domain">
-                <td class="domain-cell">{{ instance.domain }}</td>
-                <td class="reason-cell">{{ instance.reason }}</td>
-                <td class="date-cell">{{ formatDate(instance.blockedAt.toISOString()) }}</td>
-                <td class="actions-cell">
-                  <button
-                    class="unblock-button"
-                    :disabled="!!state.confirmUnblockDomain"
-                    @click="showUnblockConfirm(instance.domain)"
-                    :aria-label="t('list.unblock_aria', { domain: instance.domain })"
-                  >
-                    {{ t('list.unblock_button') }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div
+            class="blocked-table-wrapper"
+            tabindex="0"
+            role="region"
+            aria-labelledby="blocked-list-heading"
+          >
+            <table class="blocked-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ t('list.domain_column') }}</th>
+                  <th scope="col">{{ t('list.reason_column') }}</th>
+                  <th scope="col">{{ t('list.blocked_at_column') }}</th>
+                  <th scope="col">{{ t('list.actions_column') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="instance in moderationStore.blockedInstances" :key="instance.domain">
+                  <td class="domain-cell">{{ instance.domain }}</td>
+                  <td class="reason-cell">{{ instance.reason }}</td>
+                  <td class="date-cell">{{ formatDate(instance.blockedAt.toISOString()) }}</td>
+                  <td class="actions-cell">
+                    <button
+                      class="unblock-button"
+                      :disabled="!!state.confirmUnblockDomain"
+                      @click="showUnblockConfirm(instance.domain)"
+                      :aria-label="t('list.unblock_aria', { domain: instance.domain })"
+                    >
+                      {{ t('list.unblock_button') }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -389,6 +396,7 @@ function formatDate(dateString: string): string {
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
+@use '../../assets/style/mixins/layout' as *;
 
 .blocked-instances {
   display: flex;
@@ -615,7 +623,7 @@ function formatDate(dateString: string): string {
       gap: var(--pav-space-3);
       padding: var(--pav-space-4);
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 
@@ -651,14 +659,18 @@ function formatDate(dateString: string): string {
       }
     }
 
-    .blocked-table {
+    .blocked-table-wrapper {
       display: none;
+      @include scroll-region;
+
+      @include pav-container(md) {
+        display: block;
+      }
+    }
+
+    .blocked-table {
       width: 100%;
       border-collapse: collapse;
-
-      @include pav-media(md) {
-        display: table;
-      }
 
       thead {
         background: var(--pav-color-surface-secondary);

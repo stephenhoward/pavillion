@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { paneHeading } from './helpers/pane-heading';
+import { gotoSettings, settingsLeaf } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -44,12 +44,10 @@ test.describe('Settings Page Modals', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Log in as admin and navigate to settings
+    // Log in as admin and open the Security leaf, where Change Email and
+    // Change Password live
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/settings/account');
-
-    // Wait for settings page to load
-    await expect(paneHeading(page, 'Settings')).toBeVisible();
+    await gotoSettings(page, env.baseURL, settingsLeaf.security);
   });
 
   test.describe('Change Email Modal', () => {
@@ -214,11 +212,8 @@ test.describe('Settings Page Modals', () => {
       // Click Send Password Link button
       await modal.getByRole('button', { name: /send password link/i }).click();
 
-      // Wait for response
-      await page.waitForTimeout(1000);
-
       // Should have made an API call
-      expect(resetRequests.length).toBeGreaterThan(0);
+      await expect.poll(() => resetRequests.length).toBeGreaterThan(0);
 
       // Modal should close on success
       await expect(modal).not.toBeVisible({ timeout: 2000 });

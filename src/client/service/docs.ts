@@ -50,6 +50,25 @@ export const ROUTE_GUIDES: Record<string, GuideRef[]> = {
     { slug: 'guides/calendar-owners/federation-etiquette', key: 'federation_etiquette' },
     { slug: 'guides/calendar-owners/ics-import', key: 'ics_import' },
   ],
+  calendar_general: [
+    { slug: 'guides/calendar-owners/identity', key: 'identity' },
+    { slug: 'guides/calendar-owners/federation-etiquette', key: 'federation_etiquette' },
+  ],
+  calendar_editors: [
+    { slug: 'guides/calendar-owners/editors', key: 'editors' },
+  ],
+  calendar_reports: [
+    { slug: 'guides/calendar-owners/moderation', key: 'moderation_owner' },
+  ],
+  calendar_report_detail: [
+    { slug: 'guides/calendar-owners/moderation', key: 'moderation_owner' },
+  ],
+  calendar_import: [
+    { slug: 'guides/calendar-owners/ics-import', key: 'ics_import' },
+  ],
+  calendar_widget: [
+    { slug: 'guides/calendar-owners/embed', key: 'embed' },
+  ],
   event_new: [
     { slug: 'guides/calendar-owners/recurring-events', key: 'recurring' },
     { slug: 'guides/calendar-owners/categories', key: 'categories' },
@@ -79,6 +98,9 @@ export const ROUTE_GUIDES: Record<string, GuideRef[]> = {
     { slug: 'guides/calendar-owners/moderation', key: 'moderation_owner' },
   ],
   profile: [
+    { slug: 'guides/calendar-owners/account', key: 'account' },
+  ],
+  security: [
     { slug: 'guides/calendar-owners/account', key: 'account' },
   ],
 

@@ -7,19 +7,6 @@
     "invite_button": "Envoyer l’invitation",
     "close_button": "Annuler"
   },
-  "menu": {
-    "navigation_label": "Administration de l'instance",
-    "needs_attention": "Nécessite votre attention",
-    "general_settings": "Général",
-    "instance_name_title": "Nom/Titre de l’instance",
-    "registration_mode": "Mode d’inscription",
-    "accounts_link": "Comptes",
-    "calendars_link": "Calendriers",
-    "federation_settings": "Fédération",
-    "blocked_instances": "Liste des instances bloquées",
-    "payment_details": "Financement",
-    "moderation": "Modération"
-  },
   "calendars": {
     "page_title": "Calendriers locaux",
     "page_subtitle": "Consultez les calendriers hébergés sur cette instance",
@@ -414,7 +401,6 @@
     "instance_policy_help": "Le formatage Markdown est pris en charge. Le contenu est stocké au format Markdown et converti en HTML lors de l'affichage."
   },
   "federation": {
-    "title": "Fédération",
     "subtitle": "Gérez la fédération avec les autres instances Pavillion",
     "blocked_instances_title": "Instances bloquées",
     "info_text": "Les instances bloquées ne peuvent pas envoyer d’évènements à votre instance ni en recevoir. Les utilisateurs des instances bloquées ne pourront pas suivre les calendriers de votre instance.",

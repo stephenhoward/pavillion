@@ -47,7 +47,7 @@
     <!-- Active Invitations Card -->
     <div class="invitations-card">
       <div class="card-header">
-        <h3>{{ t('active_title') }}</h3>
+        <h3 id="invitations-active-heading">{{ t('active_title') }}</h3>
       </div>
 
       <div v-if="activeInvitations.length === 0" class="empty-state">
@@ -80,7 +80,12 @@
 
       <template v-else>
         <!-- Desktop Table -->
-        <div class="invitations-table-desktop">
+        <div
+          class="invitations-table-desktop"
+          tabindex="0"
+          role="region"
+          aria-labelledby="invitations-active-heading"
+        >
           <table class="invitations-table">
             <thead>
               <tr>
@@ -136,11 +141,16 @@
     <!-- Expired Invitations Card -->
     <div v-if="expiredInvitations.length > 0" class="invitations-card invitations-card--expired">
       <div class="card-header">
-        <h3>{{ t('expired_title') }}</h3>
+        <h3 id="invitations-expired-heading">{{ t('expired_title') }}</h3>
       </div>
 
       <!-- Desktop Table -->
-      <div class="invitations-table-desktop">
+      <div
+        class="invitations-table-desktop"
+        tabindex="0"
+        role="region"
+        aria-labelledby="invitations-expired-heading"
+      >
         <table class="invitations-table">
           <tbody>
             <tr v-for="invitation in expiredInvitations" :key="invitation.id">
@@ -294,6 +304,7 @@ const cancelInvitation = async (invitation) => {
 
 <style scoped lang="scss">
 @use '../../../assets/style/tokens/breakpoints' as *;
+@use '../../../assets/style/mixins/layout' as *;
 
 .invitations-section {
   display: flex;
@@ -383,8 +394,9 @@ const cancelInvitation = async (invitation) => {
 
     .invitations-table-desktop {
       display: none;
+      @include scroll-region;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: block;
       }
 
@@ -464,7 +476,7 @@ const cancelInvitation = async (invitation) => {
     .invitations-mobile {
       display: block;
 
-      @include pav-media(md) {
+      @include pav-container(md) {
         display: none;
       }
 

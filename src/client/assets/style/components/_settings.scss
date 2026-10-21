@@ -1,26 +1,292 @@
-.settings {
-  .form-group {
-    display: grid;
-    grid-template-columns: 1fr 3fr;
-    column-gap: var(--pav-space-4);
+@use '../mixins' as *;
+
+/* The small uppercase label above a group of settings: the tree's group
+   headings and the page header's eyebrow. */
+@mixin settings-group-label {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-xs);
+  font-weight: var(--pav-font-weight-medium);
+  letter-spacing: var(--pav-letter-spacing-wider);
+  text-transform: uppercase;
+}
+
+/* PolicyLink sets its own margin and size; in a settings footer it aligns
+   with the rows above it. The link sits inside a sentence, so it carries an
+   underline and the active-text colour rather than the reset's brand orange,
+   which reads at 2.8:1 on the surface and too close to the sentence's ink. */
+@mixin settings-footer-policy-link {
+  .policy-link {
+    padding-inline: var(--pav-space-3);
+    color: var(--pav-text-secondary);
+
+    a {
+      color: var(--pav-color-interactive-active-text);
+      text-decoration: underline;
+    }
+  }
+}
+
+/**
+ * Back link: the shared back-link row, a full-width row with a leading
+ * chevron and visible "Back to {parent}" text, rendered by the settings
+ * page header; also used by the instance policy page, whatever its back
+ * target. It carries no breakpoint rule of its own.
+ */
+.settings-back-link {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-2);
+  inline-size: 100%;
+  min-block-size: var(--pav-shell-nav-item-height);
+  color: var(--pav-text-primary);
+  text-decoration: none;
+
+  /* Lucide icons draw with stroke only; a fill would paint the chevron solid. */
+  svg {
+    flex-shrink: 0;
+    fill: none;
+
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
+  }
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: 2px;
+  }
+}
+
+/**
+ * Settings page header (settings/page-header.vue): back link and h1 below
+ * md; eyebrow and h1 at md+.
+ */
+.settings-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-2);
+  padding-block: var(--pav-space-6) var(--pav-space-4);
+
+  &__back {
+    @include pav-media(md) {
+      display: none;
+    }
+  }
+
+  &__eyebrow {
+    @include settings-group-label;
+
+    display: none;
+    margin: 0;
+
+    @include pav-media(md) {
+      display: block;
+    }
+  }
+
+  &__title-row {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    margin-bottom: var(--pav-space-4);
+    gap: var(--pav-space-3);
+  }
 
-    label {
-      background: none;
-      grid-column: 0 / 1;
+  /* The switcher trigger, in the eyebrow and beside the h1, takes the
+     shared pointer-target minimum, past WCAG 2.5.8's 24px. */
+  &__eyebrow,
+  &__title-row {
+    .calendar-switcher {
+      min-block-size: var(--pav-touch-target-min);
     }
+  }
 
-    input {
-      border: 1px solid var(--pav-border-color-light);
-      border-radius: var(--pav-border-radius-md);
-      background-color: var(--pav-color-surface-primary);
+  /* The calendar name is user-entered, so the eyebrow switcher keeps its
+     case rather than taking the eyebrow's uppercase. */
+  &__eyebrow .calendar-switcher__label {
+    text-transform: none;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: var(--pav-font-size-xl);
+    font-weight: var(--pav-font-weight-light);
+    color: var(--pav-text-primary);
+
+    @include pav-media(md) {
+      font-size: var(--pav-font-size-4xl);
+    }
+  }
+}
+
+/**
+ * Card of sections shared by the account leaves (settings/profile.vue,
+ * settings/security.vue). The settings layout owns the column, so the card
+ * sets no width, margin or outer padding of its own.
+ */
+.account-settings-card {
+  background: var(--pav-surface-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-secondary);
+  border-radius: var(--pav-border-radius-xl);
+  box-shadow: var(--pav-shadow-xs);
+  overflow: hidden;
+
+  &__section {
+    padding: var(--pav-space-6);
+    border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
+
+    &:last-child {
+      border-block-end: none;
+    }
+  }
+}
+
+/**
+ * Settings tree (settings/tree.vue): the persistent secondary sidebar at
+ * md+. Below md it is display: none, never only visually hidden, so its
+ * rows leave the accessibility tree while the list pages carry them. Row
+ * styles come from _settings-nav.scss.
+ *
+ * At md+ it sticks to the top of the viewport at most one viewport tall,
+ * and the grid stretches it to that cap. The groups take the free height
+ * and scroll on their own, so the Log out footer stays pinned to the
+ * bottom of the screen however short the window. The groups wrapper is the
+ * one scroll container and clips, so its padding must stay at or above the
+ * rows' 4px focus-ring reach (2px outline, 2px offset) on every side a row
+ * sits against: space-3 inline, space-6 block. The footer is outside it
+ * and nothing else clips.
+ *
+ * Its width is --pav-settings-tree-width, capped by the viewport so
+ * enlarged text cannot squeeze the content column at md; the row labels
+ * wrap.
+ */
+.settings-tree {
+  display: none;
+
+  @include pav-media(md) {
+    position: sticky;
+    inset-block-start: 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    inline-size: var(--pav-settings-tree-width);
+    max-block-size: 100vh;
+    max-block-size: 100dvh;
+    padding-block-end: var(--pav-space-6);
+    background: var(--pav-surface-primary);
+    border-inline-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
+    overflow-wrap: anywhere;
+  }
+
+  &__groups {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--pav-space-6);
+    min-block-size: 0;
+    overflow-y: auto;
+    padding: var(--pav-space-6) var(--pav-space-3);
+  }
+
+  /* Hidden, it drops the global 44px button floor so the 1px clip holds;
+     revealed, it takes the floor back */
+  &__skip {
+    @include sr-only;
+
+    min-inline-size: 0;
+    min-block-size: 0;
+
+    &:focus-visible {
+      @include not-sr-only;
+
+      min-inline-size: var(--pav-touch-target-min);
+      min-block-size: var(--pav-touch-target-min);
       padding: var(--pav-space-2) var(--pav-space-4);
+      background: var(--pav-surface-primary);
+      color: var(--pav-text-primary);
+      border: 0;
+      border-radius: var(--pav-border-radius-md);
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
+      text-align: start;
+      cursor: pointer;
+    }
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-2);
+  }
+
+  &__heading {
+    @include settings-group-label;
+
+    margin: 0;
+    padding-inline: var(--pav-space-3);
+  }
+
+  /* The rule above the footer is what sets Log out apart here, so the
+     list's own gap above it is not repeated */
+  &__footer {
+    flex: none;
+    margin-inline: var(--pav-space-3);
+    padding-block-start: var(--pav-space-4);
+    border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
+
+    .settings-nav__logout {
+      margin-block-start: 0;
     }
 
-    button {
-      padding: var(--pav-space-0) var(--pav-space-2);
-      font-size: var(--pav-font-size-xs);
+    @include settings-footer-policy-link;
+  }
+}
+
+/**
+ * Settings list page (settings/list-page.vue): an index route's rows below
+ * md. At md+ the index forwards to a leaf, and the page is display: none so
+ * no frame of it shows beside the tree. Row styles come from
+ * _settings-nav.scss.
+ */
+.settings-list-page {
+  @include pav-media(md) {
+    display: none;
+  }
+
+  &__footer {
+    @include settings-footer-policy-link;
+
+    margin-block-start: var(--pav-space-6);
+  }
+}
+
+/**
+ * Settings layout (settings/root.vue): a plain block below md; at md+ the
+ * tree, at its own --pav-settings-tree-width, beside the content column.
+ * The content column is an inline-size container, so a wide leaf adapts
+ * with @container rather than a second viewport breakpoint. Neither element
+ * clips overflow: the tree rows' focus ring extends past their edges.
+ * At md+ the layout fills the viewport and the grid stretches the tree to
+ * it, so the tree's footer sits at the bottom of the screen.
+ */
+.settings-layout {
+  @include pav-media(md) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-block-size: 100vh;
+    min-block-size: 100dvh;
+  }
+
+  &__content {
+    container-type: inline-size;
+    min-inline-size: 0;
+    padding-inline: var(--pav-space-4);
+
+    @include pav-media(md) {
+      padding-inline: var(--pav-space-8);
     }
   }
 }

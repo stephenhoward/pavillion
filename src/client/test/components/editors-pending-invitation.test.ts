@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import Editors from '@/client/components/logged_in/calendar-management/editors.vue';
 import CalendarService from '@/client/service/calendar';
-import AuthenticationService from '@/client/service/authn';
 
 // Mock i18next-vue so translation keys are returned as-is
 vi.mock('i18next-vue', () => ({
@@ -20,7 +19,6 @@ const createWrapper = () => {
   return mount(Editors, {
     props: {
       calendarId: 'test-calendar-id',
-      isOwner: true,
     },
     global: {
       plugins: [pinia],
@@ -55,11 +53,6 @@ const createWrapper = () => {
 };
 
 describe('Editors component — add editor pending invitation behaviour', () => {
-  beforeEach(() => {
-    // Stub userEmail to return null so canLeaveCalendar() is always false
-    vi.spyOn(AuthenticationService.prototype, 'userEmail').mockReturnValue(null);
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });

@@ -173,8 +173,8 @@ describe('ModerationEventHandlers getCalendarName urlName precedence', () => {
 });
 
 /**
- * The owner-facing report emails link to the reports tab of the calendar's
- * management view, which the client keys by url name, so the handlers must
+ * The owner-facing report emails link to the calendar's reports settings
+ * page, which the client keys by url name, so the handlers must
  * resolve the calendar before building the email.
  */
 describe('ModerationEventHandlers owner review link', () => {
@@ -228,19 +228,21 @@ describe('ModerationEventHandlers owner review link', () => {
     sandbox.restore();
   });
 
-  it('links the escalation reminder to the calendar reports tab by url name', async () => {
+  it('links the escalation reminder to the calendar reports page by url name', async () => {
     await (handlers as any).handleEscalationReminder({ report });
 
     expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub?tab=reports');
+    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub/reports');
+    expect(sentEmails[0].textMessage).not.toContain('?tab=');
     expect(sentEmails[0].textMessage).not.toContain('/calendar/cal-id/reports');
   });
 
-  it('links the admin report notification to the calendar reports tab by url name', async () => {
+  it('links the admin report notification to the calendar reports page by url name', async () => {
     await (handlers as any).sendAdminReportNotification(report);
 
     expect(sentEmails).toHaveLength(1);
-    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub?tab=reports');
+    expect(sentEmails[0].textMessage).toContain('/settings/calendar/community-hub/reports');
+    expect(sentEmails[0].textMessage).not.toContain('?tab=');
     expect(sentEmails[0].textMessage).not.toContain('/calendar/cal-id/reports');
   });
 

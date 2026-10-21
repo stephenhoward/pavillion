@@ -83,10 +83,12 @@
 
         <!-- Default Date Range -->
         <div class="setting-card">
-          <h3 class="setting-label">{{ t('default_date_range_label') }}</h3>
-          <p class="input-description">{{ t('default_date_range_help') }}</p>
+          <h3 id="defaultDateRange-label" class="setting-label">{{ t('default_date_range_label') }}</h3>
+          <p id="defaultDateRange-help" class="input-description">{{ t('default_date_range_help') }}</p>
           <select
             id="defaultDateRange"
+            aria-labelledby="defaultDateRange-label"
+            aria-describedby="defaultDateRange-help"
             class="setting-select"
             v-model="state.defaultDateRange"
             :disabled="state.isSaving"
@@ -840,6 +842,9 @@ onMounted(() => {
   color: var(--pav-text-error);
   font-size: 0.875rem;
   font-weight: 500;
+  text-align: start;
+  /* The global button style does not wrap; enlarged text in the md content column needs it to */
+  white-space: normal;
   cursor: pointer;
   transition: color 0.15s ease;
 

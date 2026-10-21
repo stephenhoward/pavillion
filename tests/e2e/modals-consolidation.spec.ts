@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { adminLeaf, calendarLeaf, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -46,7 +47,7 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     });
 
     await loginAsAdmin(page, env.baseURL);
-    await page.goto(env.baseURL + '/settings/admin/moderation/blocked-instances');
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/blocked-instances'));
     await page.waitForLoadState('networkidle');
 
     // Submit a dummy domain to trigger the unblock confirmation modal if
@@ -80,24 +81,13 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
 
     await loginAsAdmin(page, env.baseURL);
 
-    // Open the admin calendar's management pane, where the language picker
-    // lives on the pane's own Settings tab.
-    await page.goto(env.baseURL + '/settings/calendar/test_calendar');
-    await page.waitForLoadState('networkidle');
-
-    const settingsTab = page.locator('button[role="tab"]#settings-tab');
-    await expect(settingsTab).toBeVisible();
-    await settingsTab.click();
+    // Open the admin calendar's General page, where the language picker lives.
+    await gotoSettings(page, env.baseURL, calendarLeaf('test_calendar', 'general'));
     await page.waitForLoadState('networkidle');
 
     // Find and click a button that opens the language picker (add language)
     const addLangButton = page.getByRole('button', { name: /add language/i }).first();
-    if ((await addLangButton.count()) === 0) {
-      // Page structure differs for this user; treat as pass-through skip.
-      expect(consoleErrors.filter(e => !e.includes('favicon'))).toEqual([]);
-      return;
-    }
-
+    await expect(addLangButton).toBeVisible({ timeout: 5000 });
     await addLangButton.click();
 
     const dialog = page.locator('dialog[aria-modal="true"]');
@@ -126,13 +116,9 @@ test.describe('Modal/Sheet Consolidation Smoke Tests', () => {
     await page.goto(env.baseURL + '/event');
     await page.waitForLoadState('networkidle');
 
-    // Open the location picker if the button is available
+    // Open the location picker
     const addLocationButton = page.getByRole('button', { name: /add location|change location/i }).first();
-    if ((await addLocationButton.count()) === 0) {
-      expect(consoleErrors.filter(e => !e.includes('favicon'))).toEqual([]);
-      return;
-    }
-
+    await expect(addLocationButton).toBeVisible({ timeout: 5000 });
     await addLocationButton.click();
 
     const dialog = page.locator('dialog[aria-modal="true"]');
