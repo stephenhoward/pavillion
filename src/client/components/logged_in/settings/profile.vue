@@ -9,7 +9,7 @@ import { useTranslation } from 'i18next-vue';
 import type AuthenticationService from '@/client/service/authn';
 import AccountService from '@/client/service/account';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
-import { changeLanguage, applyAccountLanguage } from '@/client/service/locale';
+import { changeLanguage } from '@/client/service/locale';
 
 const authn = inject('authn') as AuthenticationService;
 const { t } = useTranslation('profile');
@@ -30,7 +30,8 @@ const saveStatus = ref('');
 const saveError = ref('');
 
 /**
- * Load the profile and apply the account's language to the UI.
+ * Load the profile into the form. The account's language is applied on login
+ * and app load (see applySavedAccountLanguage), not here.
  */
 async function loadProfile() {
   try {
@@ -39,8 +40,6 @@ async function loadProfile() {
     state.displayName = profile.displayName || '';
     state.username = profile.username || profile.email.split('@')[0];
     state.preferredLanguage = profile.language || 'en';
-
-    await applyAccountLanguage(profile.language);
   }
   catch (error) {
     console.error('Error loading profile:', error);

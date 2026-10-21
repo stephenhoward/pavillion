@@ -4,7 +4,7 @@ import { createPinia } from 'pinia';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 
-import { initI18Next } from '@/client/service/locale';
+import { initI18Next, applySavedAccountLanguage } from '@/client/service/locale';
 import '@/client/assets/style/main.scss';
 
 import Authentication from '@/client/service/authn';
@@ -85,6 +85,8 @@ checkSetupMode().then((setupRequired) => {
 
     const pinia = createPinia();
     initI18Next(config.settings().defaultLanguage);
+    // A restored session switches to the account's saved language.
+    void applySavedAccountLanguage(authentication);
     app.use(pinia);
     app.use(router);
     app.use(I18NextVue, { i18next });
