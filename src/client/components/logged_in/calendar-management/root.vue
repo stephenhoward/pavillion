@@ -103,7 +103,7 @@ const leafProps = (name: unknown): Record<string, unknown> => {
     case 'calendar_import':
       return { calendarId, instanceHost: instanceHost.value };
     case 'calendar_widget':
-      return { calendarId, calendarUrlName: current.calendar.urlName };
+      return { calendarId, calendarUrlName: current.calendar.urlName, isOwner: current.isOwner };
     default:
       return {};
   }
