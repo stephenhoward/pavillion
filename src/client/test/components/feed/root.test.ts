@@ -75,7 +75,7 @@ describe('Feed Root', () => {
     const wrapper = await mountAt('/feed/first');
     const trigger = wrapper.find('header h1 button[aria-haspopup="dialog"]');
     expect(trigger.text()).toContain('first');
-    expect(trigger.attributes('aria-label')).toBe('Switch calendar: first');
+    expect(trigger.attributes('aria-label')).toBeUndefined();
   });
 
   it('loads the feed for the route calendar', async () => {

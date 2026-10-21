@@ -54,7 +54,6 @@ import {
   shellSkipLink,
   settingsTitle,
   settingsTree,
-  switcherName,
   treeSkipControl,
   unresolvedCalendarIndex,
 } from './helpers/settings-nav';
@@ -152,8 +151,8 @@ test.describe('phone drill-down', () => {
     // Scoped to main: the bottom bar has its own "Calendar" link.
     await settingsRow(main, 'Calendar').click();
     await expect(page).toHaveURL(pathPattern(calendarIndexPath(ADMIN_CALENDAR_URL_NAME)));
-    await expect(settingsTitle(page, switcherName(ADMIN_CALENDAR_NAME))).toBeFocused();
-    await expect(calendarSwitcherTrigger(page)).toBeVisible();
+    await expect(settingsTitle(page, ADMIN_CALENDAR_NAME)).toBeFocused();
+    await expect(calendarSwitcherTrigger(page, ADMIN_CALENDAR_NAME)).toBeVisible();
     await expect(mobileNav(page)).toBeVisible();
 
     await settingsRow(main, 'Editors').click();
@@ -163,7 +162,7 @@ test.describe('phone drill-down', () => {
 
     await backLink(page, ADMIN_CALENDAR_NAME).click();
     await expect(page).toHaveURL(pathPattern(calendarIndexPath(ADMIN_CALENDAR_URL_NAME)));
-    await expect(settingsTitle(page, switcherName(ADMIN_CALENDAR_NAME))).toBeFocused();
+    await expect(settingsTitle(page, ADMIN_CALENDAR_NAME)).toBeFocused();
     await expect(mobileNav(page)).toBeVisible();
 
     await backLink(page, 'Settings').click();
@@ -598,7 +597,7 @@ for (const theme of ['light', 'dark'] as const satisfies readonly Theme[]) {
       await page.setViewportSize(PHONE);
       await loginAsAdmin(page, env.baseURL);
       await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, ADMIN_CALENDAR_NAME));
-      await expect(calendarSwitcherTrigger(page)).toBeVisible();
+      await expect(calendarSwitcherTrigger(page, ADMIN_CALENDAR_NAME)).toBeVisible();
 
       expect(await axeViolations(page)).toEqual([]);
     });
@@ -666,7 +665,7 @@ test.describe('axe, further leaves (light)', () => {
   test('calendar switcher sheet open on a settings leaf', async ({ page }) => {
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
     await gotoSettings(page, env.baseURL, calendarLeaf(MULTI_CALENDAR_URL_NAME, 'editors'));
-    await calendarSwitcherTrigger(page).click();
+    await calendarSwitcherTrigger(page, MULTI_CALENDAR_NAME).click();
     await expect(page.getByRole('dialog', { name: 'Switch calendar' })).toBeVisible();
 
     expect(await axeViolations(page, { include: 'dialog.calendar-switcher-sheet' })).toEqual([]);
@@ -808,7 +807,7 @@ test.describe('sub-route titles', () => {
     await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
 
     await expect(settingsTitle(page, 'Report Details')).toBeVisible();
-    await expect(calendarSwitcherTrigger(page)).toBeVisible();
+    await expect(calendarSwitcherTrigger(page, TESTUSER_CALENDAR_NAME)).toBeVisible();
     await parentLink(page, 'Reports').click();
     await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')));
     await expect(settingsTitle(page, 'Reports')).toBeFocused();

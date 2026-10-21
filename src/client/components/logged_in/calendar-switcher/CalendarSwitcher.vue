@@ -3,14 +3,20 @@
  * The calendar switcher: the current calendar's name followed by a chevron,
  * opening a sheet of the viewer's calendars. Every host (the calendar view,
  * the feed, the settings page header) renders this one control, so it takes
- * the calendar name rather than free text, and names itself
- * "Switch calendar: {name}".
+ * the calendar name rather than free text.
+ *
+ * Its accessible name is the calendar name alone, so a host h1 that holds it
+ * reads as the calendar. When the viewer has more than one calendar, a
+ * description says that it switches calendars. The description is a `hidden`
+ * element teleported to the body: aria-describedby still reads it, and it
+ * stays out of the text of a heading the switcher sits in.
  */
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { ChevronDown } from 'lucide-vue-next';
 import CalendarSwitcherSheet from './CalendarSwitcherSheet.vue';
 import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-calendar-sheet.vue';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 defineProps<{
   /** The current calendar's display name, shown on the trigger. */
@@ -22,6 +28,11 @@ defineProps<{
 }>();
 
 const { t } = useTranslation('calendars', { keyPrefix: 'switcher' });
+const store = useCalendarStore();
+
+const descriptionId = useId();
+// The same calendars the sheet lists.
+const hasOtherCalendars = computed(() => store.ownedCalendars.length + store.editedCalendars.length > 1);
 
 const triggerEl = ref<HTMLButtonElement | null>(null);
 const sheetOpen = ref(false);
@@ -67,12 +78,15 @@ function closeCreate() {
     class="calendar-switcher"
     aria-haspopup="dialog"
     :aria-expanded="sheetOpen ? 'true' : 'false'"
-    :aria-label="t('aria_switch_calendar', { name: calendarName })"
+    :aria-describedby="hasOtherCalendars ? descriptionId : undefined"
     @click="sheetOpen = true"
   >
     <span class="calendar-switcher__label">{{ calendarName }}</span>
     <ChevronDown :size="18" aria-hidden="true" />
   </button>
+  <Teleport to="body">
+    <span v-if="hasOtherCalendars" :id="descriptionId" hidden>{{ t('trigger_description') }}</span>
+  </Teleport>
 
   <CalendarSwitcherSheet
     v-if="sheetOpen"

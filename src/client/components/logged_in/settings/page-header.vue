@@ -16,8 +16,8 @@
  *   focus to the h1, because the link is gone once the leaf renders.
  * - On the calendar section the calendar name in the h1 is the switcher, the
  *   same control as on the calendar and feed views; on a calendar leaf it is
- *   the eyebrow at md+. Either way it is the name and a chevron, named
- *   "Switch calendar: {name}" by the switcher itself.
+ *   the eyebrow at md+. Either way it is the name and a chevron, named by
+ *   the calendar name alone; the switcher itself describes what it does.
  * - The help button ends the title row on every level whose route has
  *   guides, so no settings pane renders one of its own.
  * - A calendar the viewer cannot resolve (nonexistent, not a member, or not

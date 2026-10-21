@@ -12,7 +12,7 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
  * src/client/locales/en/system.json (`navigation.main_label`,
  * `navigation.mobile_label`, `navigation.skip_to_content`,
  * `moderation.detail.title`, `help.button_label`) and
- * src/client/locales/en/calendars.json (`switcher.aria_switch_calendar`,
+ * src/client/locales/en/calendars.json (`switcher.trigger_description`,
  * `account_list.*`, and `editors.leave_calendar_button` for the leave
  * confirmation).
  *
@@ -29,7 +29,6 @@ const REPORT_REGION_LABEL = 'Report Details';
 
 /** A report's own page title, on a calendar's Reports leaf and in instance moderation. */
 const REPORT_DETAIL_TITLE = 'Report Details';
-const SWITCH_CALENDAR_LABEL = /Switch calendar/;
 const LOG_OUT_LABEL = 'Log out';
 const BACK_TO_PREFIX = 'Back to';
 const MAIN_NAV_LABEL = 'Main navigation';
@@ -160,24 +159,20 @@ export function calendarLeafPath(calendar: string, leaf: CalendarLeaf): string {
 }
 
 /**
- * The accessible name of a calendar switcher, and so of an h1 whose content
- * is one: the calendar index's, the calendar view's and the feed's.
- *
- * @param displayName - The calendar's display name, e.g. "Test Calendar"
+ * The description a calendar switcher carries when the viewer has more than
+ * one calendar. With one calendar it has none.
  */
-export function switcherName(displayName: string): string {
-  return `Switch calendar: ${displayName}`;
-}
+export const SWITCHER_DESCRIPTION = 'Select to switch calendars';
 
 /**
  * A calendar's index page (below md only). Its h1 is the calendar switcher,
- * showing the calendar's name and named by the switcher.
+ * named by the calendar's name alone.
  *
  * @param calendar - The calendar's url name
  * @param displayName - The calendar's display name, e.g. "Test Calendar"
  */
 export function calendarIndex(calendar: string, displayName: string): SettingsPage {
-  return { path: calendarIndexPath(calendar), title: switcherName(displayName) };
+  return { path: calendarIndexPath(calendar), title: displayName };
 }
 
 /**
@@ -333,14 +328,22 @@ export function settingsContent(page: Page): Locator {
 }
 
 /**
- * The calendar switcher trigger, a button named "Switch calendar: {name}".
+ * The calendar switcher trigger, a button named by the calendar's name alone.
  * In settings it is the h1's content on a calendar index and the eyebrow
  * above the h1 on a calendar leaf at md+.
  *
+ * Pass the calendar's display name whenever the test knows it. Without one
+ * this matches any switcher, for a test that cannot know which calendar is
+ * showing (a last-used calendar) or asserts that no switcher renders.
+ *
  * @param scope - The page or a region within it
+ * @param displayName - The calendar's display name, e.g. "Test Calendar"
  */
-export function calendarSwitcherTrigger(scope: Page | Locator): Locator {
-  return scope.getByRole('button', { name: SWITCH_CALENDAR_LABEL });
+export function calendarSwitcherTrigger(scope: Page | Locator, displayName?: string): Locator {
+  if (displayName === undefined) {
+    return scope.locator('button.calendar-switcher');
+  }
+  return scope.getByRole('button', { name: displayName, exact: true });
 }
 
 /**

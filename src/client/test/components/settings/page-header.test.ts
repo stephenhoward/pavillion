@@ -182,8 +182,8 @@ describe('settings page header', () => {
       const trigger = heading(w).find('button.calendar-switcher');
       expect(trigger.exists()).toBe(true);
       expect(trigger.text()).toBe('Riverside Arts');
-      expect(trigger.attributes('aria-label')).toBe('Switch calendar: Riverside Arts');
-      expect(w.text()).not.toContain('Switch calendar');
+      expect(trigger.attributes('aria-label')).toBeUndefined();
+      expect(heading(w).text()).toBe('Riverside Arts');
       expect(switcher.props('routeName')).toBe('calendar_management');
       expect(switcher.props('calendarName')).toBe('Riverside Arts');
     });

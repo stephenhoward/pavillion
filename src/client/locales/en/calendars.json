@@ -25,7 +25,7 @@
     "current_label": "Current",
     "create_calendar_button": "Create a new calendar",
     "editor_badge": "Editor",
-    "aria_switch_calendar": "Switch calendar: {{name}}",
+    "trigger_description": "Select to switch calendars",
     "no_calendars": "You have no calendars yet."
   },
   "account_list": {
