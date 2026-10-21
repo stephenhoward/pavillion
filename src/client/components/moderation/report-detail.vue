@@ -851,7 +851,7 @@ onMounted(async () => {
 
   &__timeline-date {
     font-size: var(--pav-font-size-caption);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
     white-space: nowrap;
   }
 
@@ -866,18 +866,14 @@ onMounted(async () => {
 
   &__timeline-notes {
     font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
+    color: var(--pav-text-secondary);
     font-style: italic;
     white-space: pre-wrap;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
   }
 
   &__timeline-reviewer {
     font-size: var(--pav-font-size-caption);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
   }
 }
 
