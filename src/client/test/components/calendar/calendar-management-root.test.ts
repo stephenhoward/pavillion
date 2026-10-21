@@ -99,10 +99,6 @@ const makeCalendarInfo = (urlName: string, role: 'owner' | 'editor'): CalendarIn
   return new CalendarInfo(calendar, role);
 };
 
-// The empty state draws a random id for its heading; it says nothing about
-// the calendar, so markup comparisons ignore it.
-const normalizeIds = (html: string) => html.replace(/empty-title-[a-z0-9]+/g, 'empty-title-ID');
-
 describe('CalendarManagementRoot', () => {
   let pinia: Pinia;
   let media: FakeMatchMedia;
@@ -398,7 +394,7 @@ describe('CalendarManagementRoot', () => {
     async function capture(path: string) {
       const { wrapper: w, router } = await mountAt(path);
       const result = {
-        html: normalizeIds(w.html()),
+        html: w.html(),
         fullPath: router.currentRoute.value.fullPath,
         mounts: [...mounts],
         status: w.find('[role="status"]').text(),
