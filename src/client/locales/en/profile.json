@@ -1,6 +1,8 @@
 {
   "display_name_label": "Display Name",
   "display_name_placeholder": "Your display name",
+  "display_name_saved": "Display name saved",
+  "display_name_error": "Error saving display name",
   "username_label": "Username",
   "readonly_badge": "Read-only",
   "preferences_section": "PREFERENCES",
@@ -12,9 +14,11 @@
   "change_password_button": "Change Password",
   "change_email_form": {
     "title": "Change your email address",
+    "current_email_label": "Current email:",
     "email_placeholder": "new email address",
-    "email_help_text": "Enter your new email address",
+    "email_field_placeholder": "Enter your new email",
     "password_placeholder": "your password",
+    "password_field_placeholder": "Enter your current password",
     "password_help_text": "Enter your current password to confirm this change",
     "change_email_button": "Change Email",
     "close_button": "Cancel",
@@ -24,11 +28,10 @@
   },
   "change_password_form": {
     "title": "Change your password",
+    "reset_via_email_title": "Password reset via email",
     "send_password_link_button": "Send Password Link",
     "send_link_description": "Send a link to {{email}} to reset my password",
     "cancel_button": "Cancel",
-    "close_button": "Close",
-    "link_sent_message": "Password reset link sent to {{email}}",
-    "change_email_failed_message": "Failed to change email address"
+    "reset_failed_message": "Failed to send password reset email. Please try again."
   }
 }

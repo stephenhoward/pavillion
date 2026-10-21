@@ -176,8 +176,7 @@
     "event_count_one": "{{count}} evento",
     "event_count_other": "{{count}} eventos",
     "languages_count_one": "{{count}} idioma",
-    "languages_count_other": "{{count}} idiomas",
-    "places_tab": "Lugares"
+    "languages_count_other": "{{count}} idiomas"
   },
   "import": {
     "section_title": "Fuentes de importación",
@@ -565,6 +564,7 @@
       "color_mode_dark": "Modo oscuro (usar siempre el tema oscuro)",
       "preview_title": "Vista previa",
       "preview_description": "Mira cómo se verá tu widget con la configuración actual.",
+      "preview_iframe_title": "Vista previa del widget",
       "save_button": "Guardar configuración",
       "saving": "Guardando...",
       "save_success": "Configuración del widget guardada.",

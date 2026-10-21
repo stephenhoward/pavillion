@@ -1,6 +1,8 @@
 {
   "display_name_label": "Nombre Visible",
   "display_name_placeholder": "Tu nombre visible",
+  "display_name_saved": "Nombre visible guardado",
+  "display_name_error": "Error al guardar el nombre visible",
   "username_label": "Nombre de Usuario",
   "readonly_badge": "Solo lectura",
   "preferences_section": "PREFERENCIAS",
@@ -12,9 +14,11 @@
   "change_password_button": "Cambiar Contraseña",
   "change_email_form": {
     "title": "Cambia tu dirección de correo electrónico",
+    "current_email_label": "Correo actual:",
     "email_placeholder": "nueva dirección de correo electrónico",
-    "email_help_text": "Ingresa tu nueva dirección de correo electrónico",
+    "email_field_placeholder": "Ingresa tu nuevo correo electrónico",
     "password_placeholder": "tu contraseña",
+    "password_field_placeholder": "Ingresa tu contraseña actual",
     "password_help_text": "Ingresa tu contraseña actual para confirmar este cambio",
     "change_email_button": "Cambiar Correo",
     "close_button": "Cancelar",
@@ -24,11 +28,10 @@
   },
   "change_password_form": {
     "title": "Cambia tu contraseña",
+    "reset_via_email_title": "Restablecer contraseña por correo electrónico",
     "send_password_link_button": "Enviar Enlace de Contraseña",
     "send_link_description": "Enviar un enlace a {{email}} para restablecer mi contraseña",
     "cancel_button": "Cancelar",
-    "close_button": "Cerrar",
-    "link_sent_message": "Enlace de restablecimiento de contraseña enviado a {{email}}",
-    "change_email_failed_message": "No se pudo cambiar la dirección de correo electrónico"
+    "reset_failed_message": "No se pudo enviar el correo de restablecimiento de contraseña. Inténtalo de nuevo."
   }
 }
