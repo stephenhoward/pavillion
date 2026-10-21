@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adminModerationReportPath, calendarReportsPath } from '../../model/settings-links';
+import { adminAccountsPath, adminModerationReportPath, calendarReportsPath } from '@/server/common/helper/settings-links';
 
 /*
  * These paths are a contract with the client route table: each literal below
@@ -31,5 +31,15 @@ describe('adminModerationReportPath', () => {
 
   it('carries no query string', () => {
     expect(adminModerationReportPath('report-uuid-123')).not.toContain('?');
+  });
+});
+
+describe('adminAccountsPath', () => {
+  it('addresses the admin accounts settings leaf', () => {
+    expect(adminAccountsPath()).toBe('/settings/admin/accounts');
+  });
+
+  it('carries no query string', () => {
+    expect(adminAccountsPath()).not.toContain('?');
   });
 });

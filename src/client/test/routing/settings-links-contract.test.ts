@@ -4,7 +4,7 @@ import { buildClientRoutes } from '@/client/routes';
 
 /*
  * Server-built emails link to settings leaves by path. Each literal below is
- * the same one src/server/moderation/test/model/settings-links.test.ts pins
+ * the same one src/server/common/test/helper/settings-links.test.ts pins
  * for the matching settings-links.ts function; neither test imports across
  * the layer boundary, so the shared literal is the contract. Change both
  * together.
@@ -39,5 +39,11 @@ describe('settings links built outside the SPA', () => {
     const resolved = createTestRouter().resolve({ name: 'moderation_report_detail', params: { reportId: 'report-uuid-123' } });
 
     expect(resolved.href).toBe('/settings/admin/moderation/reports/report-uuid-123');
+  });
+
+  it('resolves accounts to the path adminAccountsPath() builds', () => {
+    const resolved = createTestRouter().resolve({ name: 'accounts' });
+
+    expect(resolved.href).toBe('/settings/admin/accounts');
   });
 });

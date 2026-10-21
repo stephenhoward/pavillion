@@ -2,6 +2,7 @@ import AccountApplication from '@/common/model/application';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicOrigin, publicUrl } from '@/server/common/helper/public-url';
+import { adminAccountsPath } from '@/server/common/helper/settings-links';
 
 const textTemplate = compileTemplate('src/server/accounts', 'admin_application_notification_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'admin_application_notification_email.html.hbs');
@@ -36,7 +37,7 @@ class AdminApplicationNotificationEmail extends EmailMessage {
    */
   buildMessage(language: string): MailData {
     const appUrl = publicOrigin();
-    const reviewUrl = publicUrl('/settings/admin/accounts');
+    const reviewUrl = publicUrl(adminAccountsPath());
 
     const templateData = {
       applicantEmail: this.application.email,

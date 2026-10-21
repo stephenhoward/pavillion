@@ -1,7 +1,7 @@
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
-import { adminModerationReportPath } from '@/server/moderation/model/settings-links';
+import { adminModerationReportPath } from '@/server/common/helper/settings-links';
 
 const textTemplate = compileTemplate('src/server/moderation', 'auto-escalation-notification.text.hbs');
 const htmlTemplate = compileTemplate('src/server/moderation', 'auto-escalation-notification.html.hbs');
