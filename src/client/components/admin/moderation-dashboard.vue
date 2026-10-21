@@ -158,8 +158,17 @@ const getEscalationBadge = (report: any) => {
   return null;
 };
 
+function reportDetailRoute(reportId: string) {
+  return { name: 'moderation_report_detail', params: { reportId } };
+}
+
+/**
+ * Pointer convenience for a click anywhere on a report row or card. The
+ * row's link is the one keyboard and assistive-technology path; it stops
+ * its own click so the two never both navigate.
+ */
 function viewReportDetail(reportId: string) {
-  router.push({ name: 'moderation_report_detail', params: { reportId } });
+  router.push(reportDetailRoute(reportId));
 }
 
 function openCreateModal() {
@@ -350,10 +359,6 @@ function goToSettings() {
                   :key="report.id"
                   class="report-row"
                   @click="viewReportDetail(report.id)"
-                  tabindex="0"
-                  role="button"
-                  @keydown.enter="viewReportDetail(report.id)"
-                  @keydown.space.prevent="viewReportDetail(report.id)"
                 >
                   <td class="cell-event">
                     <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
@@ -381,9 +386,9 @@ function goToSettings() {
                     <span class="status-badge">{{ t(`status.${report.status}`) }}</span>
                   </td>
                   <td class="cell-actions">
-                    <button type="button" class="action-link" @click.stop="viewReportDetail(report.id)">
+                    <router-link :to="reportDetailRoute(report.id)" class="action-link" @click.stop>
                       {{ t('view_details') }}
-                    </button>
+                    </router-link>
                   </td>
                 </tr>
               </tbody>
@@ -397,16 +402,12 @@ function goToSettings() {
               :key="report.id"
               class="report-card"
               @click="viewReportDetail(report.id)"
-              tabindex="0"
-              role="button"
-              @keydown.enter="viewReportDetail(report.id)"
-              @keydown.space.prevent="viewReportDetail(report.id)"
             >
               <div class="report-card-header">
                 <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
-                <button type="button" class="action-link-mobile" @click.stop="viewReportDetail(report.id)">
+                <router-link :to="reportDetailRoute(report.id)" class="action-link-mobile" @click.stop>
                   {{ t('view_details') }}
-                </button>
+                </router-link>
               </div>
               <div class="report-card-content">
                 <div class="report-card-badges">
@@ -470,10 +471,6 @@ function goToSettings() {
                   :key="report.id"
                   class="report-row"
                   @click="viewReportDetail(report.id)"
-                  tabindex="0"
-                  role="button"
-                  @keydown.enter="viewReportDetail(report.id)"
-                  @keydown.space.prevent="viewReportDetail(report.id)"
                 >
                   <td class="cell-event">
                     <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
@@ -496,9 +493,9 @@ function goToSettings() {
                     <span class="status-badge">{{ t(`status.${report.status}`) }}</span>
                   </td>
                   <td class="cell-actions">
-                    <button type="button" class="action-link" @click.stop="viewReportDetail(report.id)">
+                    <router-link :to="reportDetailRoute(report.id)" class="action-link" @click.stop>
                       {{ t('view_details') }}
-                    </button>
+                    </router-link>
                   </td>
                 </tr>
               </tbody>
@@ -512,16 +509,12 @@ function goToSettings() {
               :key="report.id"
               class="report-card"
               @click="viewReportDetail(report.id)"
-              tabindex="0"
-              role="button"
-              @keydown.enter="viewReportDetail(report.id)"
-              @keydown.space.prevent="viewReportDetail(report.id)"
             >
               <div class="report-card-header">
                 <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
-                <button type="button" class="action-link-mobile" @click.stop="viewReportDetail(report.id)">
+                <router-link :to="reportDetailRoute(report.id)" class="action-link-mobile" @click.stop>
                   {{ t('view_details') }}
-                </button>
+                </router-link>
               </div>
               <div class="report-card-content">
                 <div class="report-card-badges">
@@ -823,15 +816,11 @@ function goToSettings() {
             &:focus-within {
               background: var(--pav-color-stone-50);
             }
-
-            &:focus {
-              outline: 2px solid var(--pav-color-brand-primary);
-              outline-offset: -2px;
-            }
           }
 
           td {
             padding: var(--pav-space-4);
+            vertical-align: middle;
           }
 
           .cell-event,
@@ -869,9 +858,7 @@ function goToSettings() {
           background: var(--pav-color-stone-50);
         }
 
-        &:focus {
-          outline: 2px solid var(--pav-color-brand-primary);
-          outline-offset: -2px;
+        &:focus-within {
           background: var(--pav-color-stone-50);
         }
 
@@ -978,6 +965,10 @@ function goToSettings() {
 
   .action-link,
   .action-link-mobile {
+    // A link sized like the button it replaced: centred in its touch target
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--pav-color-orange-600);
@@ -1105,14 +1096,16 @@ function goToSettings() {
             background: rgba(41, 37, 36, 0.5);
           }
 
-          tbody .report-row:hover {
+          tbody .report-row:hover,
+          tbody .report-row:focus-within {
             background: rgba(41, 37, 36, 0.3);
           }
         }
       }
 
       .reports-mobile {
-        .report-card:hover {
+        .report-card:hover,
+        .report-card:focus-within {
           background: rgba(41, 37, 36, 0.3);
         }
       }

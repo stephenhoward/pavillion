@@ -90,7 +90,9 @@ const goToPage = async (page: number) => {
 };
 
 /**
- * Handles clicking on a report row to view its details.
+ * Opens a report from the event cell's button, or from a pointer click
+ * anywhere on its row. The button stops its own click so the two never
+ * both fire.
  *
  * @param reportId - The ID of the report to view
  */
@@ -208,7 +210,7 @@ onMounted(async () => {
 
     <!-- Reports Table -->
     <div v-else class="reports-dashboard__table-container">
-      <table class="reports-dashboard__table" role="grid" :aria-label="t('dashboard.table_label')">
+      <table class="reports-dashboard__table" :aria-label="t('dashboard.table_label')">
         <thead>
           <tr>
             <th scope="col">{{ t('dashboard.column_event') }}</th>
@@ -223,14 +225,16 @@ onMounted(async () => {
             v-for="report in store.reports"
             :key="report.id"
             class="reports-dashboard__row"
-            tabindex="0"
-            role="row"
             @click="viewReport(report.id)"
-            @keydown.enter="viewReport(report.id)"
-            @keydown.space.prevent="viewReport(report.id)"
           >
             <td>
-              <span class="reports-dashboard__event-id">{{ report.eventId.substring(0, 8) }}...</span>
+              <button
+                type="button"
+                class="reports-dashboard__event-id"
+                @click.stop="viewReport(report.id)"
+              >
+                {{ report.eventId.substring(0, 8) }}...
+              </button>
             </td>
             <td>{{ categoryLabel(report.category) }}</td>
             <td>{{ reporterTypeLabel(report.reporterType) }}</td>
@@ -392,22 +396,22 @@ onMounted(async () => {
     cursor: pointer;
     transition: background-color 0.15s ease;
 
-    &:hover {
+    &:hover,
+    &:focus-within {
       background-color: var(--pav-color-stone-50);
 
       @media (prefers-color-scheme: dark) {
         background-color: var(--pav-color-stone-800);
       }
     }
-
-    &:focus {
-      outline: 2px solid var(--pav-color-orange-500);
-      outline-offset: -2px;
-      border-radius: 0.25rem;
-    }
   }
 
   &__event-id {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: start;
     font-family: var(--pav-font-family-mono);
     font-size: var(--pav-font-size-caption);
     color: var(--pav-color-stone-600);
