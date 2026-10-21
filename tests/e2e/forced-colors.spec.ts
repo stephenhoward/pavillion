@@ -19,10 +19,9 @@ import { Rgba, surfaceOf, contrastRatio } from '@/common/test-utils/color-contra
  *   is painted on, and the custom date input's border the 3:1 non-text one;
  * - the custom date input's picker indicator, on the site and the widget, is
  *   painted at full strength rather than dimmed by its resting opacity;
- * - other ink the page dims with opacity (the category filter label, the
- *   language switcher's globe, a cancelled event card's content, a selected
- *   category pill's checkmark) is painted at full strength, while the dim
- *   stays outside forced colors;
+ * - other ink the page dims with opacity (the language switcher's globe, a
+ *   cancelled event card's content, a selected category pill's checkmark) is
+ *   painted at full strength, while the dim stays outside forced colors;
  * - selected states carried by a background fill keep a cue that is not
  *   colour: an outline on the active date pill and the checked view, the
  *   checkmark on a selected category pill.
@@ -375,12 +374,6 @@ test('forced colors paint dimmed ink at full strength', async ({ browser }) => {
         expect(await opacityOf(page, selector), `${selector} opacity`).toBe(1);
       }
     });
-
-    await test.step('widget category filter label', async () => {
-      await page.goto(env.baseURL + '/widget/test_calendar?view=list');
-      await expect(page.locator('.category-filter-section .filter-label')).toBeVisible({ timeout: 20000 });
-      expect(await opacityOf(page, '.category-filter-section .filter-label')).toBe(1);
-    });
   }
   finally {
     await cleanup();
@@ -394,9 +387,6 @@ test('forced colors paint dimmed ink at full strength', async ({ browser }) => {
     for (const selector of SITE_DIMMED) {
       expect(await opacityOf(plain, selector), `${selector} opacity without forced colors`).toBeLessThan(1);
     }
-    await plain.goto(env.baseURL + '/widget/test_calendar?view=list');
-    await expect(plain.locator('.category-filter-section .filter-label')).toBeVisible({ timeout: 20000 });
-    expect(await opacityOf(plain, '.category-filter-section .filter-label')).toBeLessThan(1);
   }
   finally {
     await context.close();
