@@ -20,7 +20,7 @@
  * - Leaves receive the calendar and ownership as props from the calendar
  *   store entry; nothing is provided or injected.
  */
-import { computed, inject, onBeforeMount, ref, watch } from 'vue';
+import { computed, inject, onBeforeMount, onMounted, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import CalendarService from '@/client/service/calendar';
@@ -54,6 +54,15 @@ const { t: tSettings } = useTranslation('settings');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const settled = computed(() => !loading.value && !error.value);
+
+// The status region mounts empty and receives its text after mount: a live
+// region inserted with its text already present is not announced by many
+// screen readers.
+const mounted = ref(false);
+onMounted(() => {
+  mounted.value = true;
+});
+const statusText = computed(() => (mounted.value && loading.value ? tSettings('loading_calendar') : ''));
 
 // Both null until the load settles, and null for an unresolved calendar.
 const info = computed(() => (
@@ -144,9 +153,16 @@ onBeforeMount(async () => {
 
 <template>
   <div class="calendar-management-root">
-    <div role="status" class="sr-only">{{ loading ? tSettings('loading_calendar') : '' }}</div>
+    <div role="status" class="sr-only">{{ statusText }}</div>
 
-    <p v-if="error" class="calendar-management-root__error">{{ error }}</p>
+    <p
+      v-if="error"
+      class="calendar-management-root__error"
+      role="alert"
+      aria-live="polite"
+    >
+      {{ error }}
+    </p>
 
     <template v-else-if="navContext">
       <div class="calendar-management-root__help">

@@ -150,6 +150,22 @@ describe('CalendarManagementRoot', () => {
       expect(status(wrapper).classes()).toContain('sr-only');
     });
 
+    it('mounts the status region empty and fills it after mount, so the text is announced', async () => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]).mockReturnValue(new Promise(() => {}));
+      const router = buildRouter();
+      await router.push('/settings/calendar/my-calendar/editors');
+      await router.isReady();
+
+      wrapper = mountComponent(App, router, { pinia });
+
+      expect(status(wrapper).exists()).toBe(true);
+      expect(status(wrapper).text()).toBe('');
+
+      await flushPromises();
+
+      expect(status(wrapper).text()).toBe('Loading calendar…');
+    });
+
     it('keeps the status region mounted and empties it once resolved', async () => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
 
@@ -166,7 +182,10 @@ describe('CalendarManagementRoot', () => {
 
       const { wrapper } = await mountAt('/settings/calendar/my-calendar/editors');
 
-      expect(wrapper.text()).toContain('Unable to load calendar. Please try again later.');
+      const alert = wrapper.find('[role="alert"]');
+      expect(alert.exists()).toBe(true);
+      expect(alert.attributes('aria-live')).toBe('polite');
+      expect(alert.text()).toBe('Unable to load calendar. Please try again later.');
       expect(mounts).toEqual([]);
     });
 
