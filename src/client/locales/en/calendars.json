@@ -176,8 +176,7 @@
     "event_count_one": "{{count}} event",
     "event_count_other": "{{count}} events",
     "languages_count_one": "{{count}} language",
-    "languages_count_other": "{{count}} languages",
-    "places_tab": "Places"
+    "languages_count_other": "{{count}} languages"
   },
   "import": {
     "section_title": "Import Sources",
@@ -565,6 +564,7 @@
       "color_mode_dark": "Dark Mode (always use dark theme)",
       "preview_title": "Preview",
       "preview_description": "See how your widget will look with the current settings.",
+      "preview_iframe_title": "Widget preview",
       "save_button": "Save Configuration",
       "saving": "Saving...",
       "save_success": "Widget configuration saved.",

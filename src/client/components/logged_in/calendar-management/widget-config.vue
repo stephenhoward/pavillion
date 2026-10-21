@@ -227,7 +227,7 @@
           ref="iframeRef"
           :src="previewUrl"
           class="widget-preview"
-          title="Widget Preview"
+          :title="t('preview_iframe_title')"
         />
       </div>
     </div>

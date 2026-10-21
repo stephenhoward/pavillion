@@ -52,7 +52,7 @@ const isValid = computed(() => state.email.length > 0 && state.email.includes('@
 
 <template>
   <Modal
-    :title="t('title', { defaultValue: 'Change Email Address' })"
+    :title="t('title')"
     @close="$emit('close', null)"
     modal-class="change-email-modal"
   >

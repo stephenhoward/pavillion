@@ -176,8 +176,7 @@
     "event_count_one": "{{count}} événement",
     "event_count_other": "{{count}} événements",
     "languages_count_one": "{{count}} langue",
-    "languages_count_other": "{{count}} langues",
-    "places_tab": "Lieux"
+    "languages_count_other": "{{count}} langues"
   },
   "import": {
     "section_title": "Sources d'importation",
@@ -565,6 +564,7 @@
       "color_mode_dark": "Mode sombre (toujours utiliser le thème sombre)",
       "preview_title": "Aperçu",
       "preview_description": "Découvrez à quoi ressemblera votre widget avec les paramètres actuels.",
+      "preview_iframe_title": "Aperçu du widget",
       "save_button": "Enregistrer la configuration",
       "saving": "Enregistrement...",
       "save_success": "Configuration du widget enregistrée.",
