@@ -12,7 +12,7 @@
  * opens that report. The detail view shows the report this check fetched, so
  * opening a report sends one request for it.
  */
-import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
@@ -30,7 +30,6 @@ const router = useRouter();
 const moderationService = new ModerationService();
 const { t } = useTranslation('system', { keyPrefix: 'moderation' });
 
-const headingId = useId();
 const selectedReportId = ref<string | null>(null);
 /** The selected report as the scoped check fetched it, handed to the detail view. */
 const selectedReport = ref<ReportDetailResponse | null>(null);
@@ -151,21 +150,19 @@ const viewReport = (reportId: string) => {
 </script>
 
 <template>
-  <!-- Named by the report heading, which renders with the region; the
-       aria-label is the fallback should the heading ever be missing. -->
+  <!-- Named like the page h1, which the settings header titles from this
+       route; the report itself renders no heading of its own. -->
   <div
     v-if="selectedReportId"
     ref="regionRef"
     tabindex="-1"
     role="region"
-    :aria-labelledby="headingId"
     :aria-label="t('detail.title')"
   >
     <ReportDetail
       :key="selectedReportId"
       :calendar-id="calendarId"
       :report-id="selectedReportId"
-      :heading-id="headingId"
       :fetched-report="selectedReport ?? undefined"
       @back="closeReport"
     />

@@ -84,7 +84,47 @@
     margin: 0;
 
     @include pav-media(md) {
-      display: block;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--pav-space-1);
+    }
+  }
+
+  /* Between the group (or the calendar switcher) and a sub-route's parent
+     leaf; it points along the reading direction. */
+  &__separator {
+    flex: none;
+    inline-size: 1em;
+    block-size: 1em;
+    fill: none;
+
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
+  }
+
+  /* A sub-route's parent leaf, linking back to it. The underline marks it as
+     a link within the label. Like an inline link it drops the base 44px
+     floor (base/_accessibility.scss), which would push the h1 down on every
+     sub-route; the padding brings the pointer target to 24px (WCAG 2.5.8)
+     and the negative margin keeps the eyebrow's line height. */
+  &__parent {
+    min-block-size: auto;
+    min-inline-size: auto;
+    padding-block: var(--pav-space-1);
+    margin-block: calc(-1 * var(--pav-space-1));
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:hover {
+      color: var(--pav-text-primary);
+    }
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
     }
   }
 

@@ -20,8 +20,6 @@ import PillButton from '@/client/components/common/pill-button.vue';
 const props = defineProps<{
   calendarId: string;
   reportId: string;
-  /** An id for the report heading, so a surrounding region can be named by it. */
-  headingId?: string;
   /**
    * The report, when the caller has already fetched it: it is shown as is,
    * with no request of its own. Without it, the report is fetched on mount.
@@ -238,7 +236,7 @@ const initOwnerNotes = () => {
 };
 
 // A report the caller supplies goes into the store before the first render,
-// so the heading is there as soon as the view mounts.
+// so the report is there as soon as the view mounts.
 if (props.fetchedReport) {
   store.setCurrentReport(props.fetchedReport);
   initOwnerNotes();
@@ -281,9 +279,8 @@ onMounted(async () => {
 
     <!-- Report Content -->
     <template v-else-if="report">
-      <!-- Header -->
+      <!-- The settings page header's h1 titles the report; this row carries its status. -->
       <header class="report-detail__header">
-        <h2 :id="headingId" class="report-detail__title">{{ t('detail.title') }}</h2>
         <span
           class="status-badge"
           :class="statusBadgeClass(report.status)"
@@ -339,8 +336,8 @@ onMounted(async () => {
       </div>
 
       <!-- Report Information -->
-      <!-- Unnamed when a surrounding region is already named by the heading. -->
-      <section class="report-detail__section" :aria-label="headingId ? undefined : t('detail.title')">
+      <!-- Unnamed: the surrounding region in calendar-management/reports.vue carries the name. -->
+      <section class="report-detail__section">
         <div class="report-detail__info-grid">
           <div class="report-detail__info-item">
             <span class="report-detail__info-label">{{ t('dashboard.column_category') }}</span>
@@ -365,14 +362,14 @@ onMounted(async () => {
 
         <!-- Description -->
         <div v-if="report.description" class="report-detail__description">
-          <h3 class="report-detail__section-title">{{ t('detail.description') }}</h3>
+          <h2 class="report-detail__section-title">{{ t('detail.description') }}</h2>
           <p class="report-detail__description-text">{{ report.description }}</p>
         </div>
       </section>
 
       <!-- Owner Notes Section -->
       <section class="report-detail__section" :aria-label="t('detail.owner_notes')">
-        <h3 class="report-detail__section-title">{{ t('detail.owner_notes') }}</h3>
+        <h2 class="report-detail__section-title">{{ t('detail.owner_notes') }}</h2>
 
         <div v-if="state.notesSuccess" class="report-detail__alert report-detail__alert--success" role="status">
           {{ state.notesSuccess }}
@@ -401,7 +398,7 @@ onMounted(async () => {
 
       <!-- Action Buttons -->
       <section v-if="canAct" class="report-detail__section" :aria-label="t('actions.section_label')">
-        <h3 class="report-detail__section-title">{{ t('actions.resolve_confirm') }}</h3>
+        <h2 class="report-detail__section-title">{{ t('actions.resolve_confirm') }}</h2>
 
         <!-- Action buttons when no form is open -->
         <div v-if="!state.showResolveForm && !state.showDismissForm" class="report-detail__action-buttons">
@@ -485,7 +482,7 @@ onMounted(async () => {
 
       <!-- Escalation History -->
       <section class="report-detail__section" :aria-label="t('detail.escalation_history')">
-        <h3 class="report-detail__section-title">{{ t('detail.escalation_history') }}</h3>
+        <h2 class="report-detail__section-title">{{ t('detail.escalation_history') }}</h2>
 
         <div v-if="escalationHistory.length === 0" class="report-detail__empty-history">
           {{ t('detail.no_escalation_history') }}
@@ -575,11 +572,6 @@ onMounted(async () => {
     align-items: center;
     justify-content: space-between;
     gap: var(--pav-space-4);
-  }
-
-  &__title {
-    @include admin-section-title;
-    margin: 0;
   }
 
   &__error {

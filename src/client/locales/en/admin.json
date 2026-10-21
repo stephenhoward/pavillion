@@ -58,7 +58,6 @@
     "create_report": "Create Report",
     "settings_button_label": "Moderation Settings",
     "settings": {
-      "title": "Moderation Settings",
       "subtitle": "Configure instance-wide moderation policies",
       "loading": "Loading settings...",
       "load_error": "Failed to load settings",
@@ -172,7 +171,6 @@
       "page_info": "Page {{current}} of {{total}}"
     },
     "detail": {
-      "title": "Report Details",
       "subtitle": "View full report information and take action",
       "back": "Back to Dashboard",
       "loading": "Loading report...",
@@ -632,7 +630,6 @@
     "price_required": "At least one price must be greater than $0"
   },
   "blocked_instances": {
-    "title": "Blocked Instances",
     "subtitle": "Manage blocked ActivityPub instances for federation control",
     "loading": "Loading blocked instances...",
     "load_error": "Failed to load blocked instances",

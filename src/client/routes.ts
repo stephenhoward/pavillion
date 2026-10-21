@@ -53,6 +53,12 @@ declare module 'vue-router' {
     shellRail?: boolean;
     /** The settings group whose index this record is, read by the list page. */
     settingsGroup?: SettingsGroup;
+    /**
+     * A settings sub-route's own title, a key in the `settings` namespace. A
+     * leaf takes its title from its tree row; a sub-route has no row, so the
+     * page header reads this instead.
+     */
+    settingsTitleKey?: string;
   }
 }
 
@@ -128,7 +134,8 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
                 { path: 'general', component: CalendarGeneralView, name: 'calendar_general', beforeEnter: mustBeLoggedIn },
                 { path: 'editors', component: CalendarEditorsView, name: 'calendar_editors', beforeEnter: mustBeLoggedIn },
                 { path: 'reports', component: CalendarReportsView, name: 'calendar_reports', beforeEnter: mustBeLoggedIn },
-                { path: 'reports/:reportId', component: CalendarReportsView, name: 'calendar_report_detail', beforeEnter: mustBeLoggedIn },
+                { path: 'reports/:reportId', component: CalendarReportsView, name: 'calendar_report_detail', beforeEnter: mustBeLoggedIn,
+                  meta: { settingsTitleKey: 'titles.report_detail' } },
                 { path: 'import', component: CalendarImportView, name: 'calendar_import', beforeEnter: mustBeLoggedIn },
                 { path: 'widget', component: CalendarWidgetView, name: 'calendar_widget', beforeEnter: mustBeLoggedIn },
               ],
@@ -151,9 +158,12 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
                 { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
                 { path: 'calendars', component: CalendarsDashboardView, name: 'admin_calendars', beforeEnter: mustBeAdmin },
                 { path: 'moderation', component: ModerationDashboardView, name: 'moderation', beforeEnter: mustBeAdmin },
-                { path: 'moderation/reports/:reportId', component: ReportDetailView, name: 'moderation_report_detail', beforeEnter: mustBeAdmin },
-                { path: 'moderation/settings', component: ModerationSettingsView, name: 'moderation_settings', beforeEnter: mustBeAdmin },
-                { path: 'moderation/blocked-instances', component: BlockedInstancesView, name: 'blocked_instances', beforeEnter: mustBeAdmin },
+                { path: 'moderation/reports/:reportId', component: ReportDetailView, name: 'moderation_report_detail', beforeEnter: mustBeAdmin,
+                  meta: { settingsTitleKey: 'titles.report_detail' } },
+                { path: 'moderation/settings', component: ModerationSettingsView, name: 'moderation_settings', beforeEnter: mustBeAdmin,
+                  meta: { settingsTitleKey: 'titles.moderation_settings' } },
+                { path: 'moderation/blocked-instances', component: BlockedInstancesView, name: 'blocked_instances', beforeEnter: mustBeAdmin,
+                  meta: { settingsTitleKey: 'titles.blocked_instances' } },
                 { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
                 { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
               ],

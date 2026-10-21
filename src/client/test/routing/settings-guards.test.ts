@@ -12,6 +12,7 @@ import PageHeader from '@/client/components/logged_in/settings/page-header.vue';
 import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
 import { buildClientRoutes } from '@/client/routes';
+import enSettings from '@/client/locales/en/settings.json';
 import { createRouteGuards } from '@/client/service/route-guards';
 import { createSettingsGuards, historyPath } from '@/client/service/settings-guards';
 import CalendarService from '@/client/service/calendar';
@@ -673,6 +674,28 @@ describe('settings routes on the real route table', () => {
       expect(outsideTree).toEqual([]);
     });
 
+    // A sub-route has no row of its own in the tree, so its h1 comes from its
+    // record's meta; a sub-route without one would repeat its parent's title.
+    it('gives every sub-route a title key of its own that resolves in the settings namespace', () => {
+      const router = createRouter({ history: createMemoryHistory(), routes: buildRoutes() });
+      const subRoutes = router.getRoutes().filter((record) => {
+        const leaf = typeof record.name === 'string' ? findLeafByRouteName(record.name) : null;
+        return leaf !== null && leaf.routeName !== record.name;
+      });
+
+      expect(subRoutes.map((record) => record.name)).toEqual(expect.arrayContaining([
+        'calendar_report_detail', 'moderation_report_detail', 'moderation_settings', 'blocked_instances',
+      ]));
+      for (const record of subRoutes) {
+        const key = record.meta.settingsTitleKey;
+        expect(key, String(record.name)).toBeTypeOf('string');
+        const title = key!.split('.').reduce<unknown>(
+          (node, part) => (node as Record<string, unknown> | undefined)?.[part], enSettings,
+        );
+        expect(title, `${String(record.name)}: ${key}`).toBeTypeOf('string');
+      }
+    });
+
     // nav-list.vue marks the current row by path, the page header titles by
     // route name through subRoutes; they agree only while a sub-route nests
     // beneath its leaf.
@@ -806,19 +829,33 @@ describe('settings routes on the real route table', () => {
       expect(back.text()).toBe('Back to Settings');
     });
 
+    it('titles a leaf as its leaf under an Instance eyebrow, back to Instance', async () => {
+      const { wrapper: w, router } = await headerAt('/settings/admin/federation');
+
+      expect(router.currentRoute.value.name).toBe('federation');
+      expect(w.findAll('h1')).toHaveLength(1);
+      expect(w.find('h1').text()).toBe('Federation');
+      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Instance');
+      const back = w.find('a.settings-page-header__back');
+      expect(back.attributes('href')).toBe('/settings/admin');
+      expect(back.text()).toBe('Back to Instance');
+    });
+
     it.each([
-      ['/settings/admin/federation', 'federation', 'Federation'],
-      ['/settings/admin/moderation/settings', 'moderation_settings', 'Moderation'],
-    ])('titles %s as its leaf under an Instance eyebrow, back to Instance', async (path, name, title) => {
+      ['/settings/admin/moderation/settings', 'moderation_settings', 'Moderation Settings'],
+      ['/settings/admin/moderation/blocked-instances', 'blocked_instances', 'Blocked Instances'],
+    ])('titles the sub-page %s as itself, with Moderation in the eyebrow and the back link', async (path, name, title) => {
       const { wrapper: w, router } = await headerAt(path);
 
       expect(router.currentRoute.value.name).toBe(name);
       expect(w.findAll('h1')).toHaveLength(1);
       expect(w.find('h1').text()).toBe(title);
-      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Instance');
+      const parent = w.find('.settings-page-header__eyebrow a');
+      expect(parent.attributes('href')).toBe('/settings/admin/moderation');
+      expect(parent.text()).toBe('Moderation');
       const back = w.find('a.settings-page-header__back');
-      expect(back.attributes('href')).toBe('/settings/admin');
-      expect(back.text()).toBe('Back to Instance');
+      expect(back.attributes('href')).toBe('/settings/admin/moderation');
+      expect(back.text()).toBe('Back to Moderation');
     });
   });
 

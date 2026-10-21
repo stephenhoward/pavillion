@@ -196,10 +196,8 @@ async function handleForward() {
           {{ t('back') }}
         </button>
       </div>
-      <div class="page-header-text">
-        <h2>{{ t('title') }}</h2>
-        <p class="page-subtitle">{{ t('subtitle') }}</p>
-      </div>
+      <!-- The settings page header carries the title, the parent link and the help button. -->
+      <p class="page-subtitle">{{ t('subtitle') }}</p>
     </div>
 
     <!-- Loading State -->
@@ -533,19 +531,10 @@ async function handleForward() {
       }
     }
 
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
+    .page-subtitle {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-muted);
     }
   }
 

@@ -782,6 +782,49 @@ test.describe('one page title and the header help button', () => {
   });
 });
 
+test.describe('sub-route titles', () => {
+  /** The eyebrow's link back to a sub-route's parent leaf (md+). */
+  const parentLink = (page: Page, name: string): Locator =>
+    page.locator('.settings-page-header__eyebrow').getByRole('link', { name, exact: true });
+
+  test('at md+ the eyebrow links a sub-route back to its parent leaf, and focus lands on the h1', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/blocked-instances'));
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.locator('.settings-page-header__eyebrow')).toHaveText(/^Instance\s*Moderation$/i);
+
+    await parentLink(page, 'Moderation').click();
+    await expect(page).toHaveURL(pathPattern(adminLeafPath('moderation')));
+    await expect(settingsTitle(page, 'Moderation')).toBeFocused();
+    await expect(parentLink(page, 'Moderation')).toHaveCount(0);
+  });
+
+  test('at md+ a calendar report puts the Reports link after the calendar switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
+    await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
+    await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
+
+    await expect(settingsTitle(page, 'Report Details')).toBeVisible();
+    await expect(calendarSwitcherTrigger(page)).toBeVisible();
+    await parentLink(page, 'Reports').click();
+    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')));
+    await expect(settingsTitle(page, 'Reports')).toBeFocused();
+  });
+
+  test('below md a sub-route\'s back link goes to its parent leaf', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
+
+    await backLink(page, 'Moderation').click();
+    await expect(page).toHaveURL(pathPattern(adminLeafPath('moderation')));
+    await expect(settingsTitle(page, 'Moderation')).toBeFocused();
+  });
+});
+
 test.describe('keyboard order', () => {
   test.use({ viewport: DESKTOP });
 

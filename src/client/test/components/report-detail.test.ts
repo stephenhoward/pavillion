@@ -58,7 +58,7 @@ describe('ReportDetail', () => {
   /**
    * Helper to mount component with mocked store state
    */
-  const mountWithReport = async (report: Report, extraProps: { headingId?: string } = {}) => {
+  const mountWithReport = async (report: Report) => {
     // Set store state before mounting
     store.currentReport = {
       report,
@@ -72,7 +72,6 @@ describe('ReportDetail', () => {
       props: {
         calendarId: 'calendar-789',
         reportId: 'report-123',
-        ...extraProps,
       },
       global: {
         plugins: [pinia],
@@ -91,29 +90,27 @@ describe('ReportDetail', () => {
     return wrapper;
   };
 
-  describe('Heading id', () => {
-    it('puts the given headingId on the report heading, so a region can be named by it', async () => {
-      wrapper = await mountWithReport(createMockReport(false), { headingId: 'report-heading-1' });
-
-      expect(wrapper.find('h2.report-detail__title').attributes('id')).toBe('report-heading-1');
-    });
-
-    it('renders the heading without an id when none is given', async () => {
+  describe('Headings', () => {
+    // The settings page header's h1 names the report, so the detail opens
+    // straight onto its sections, one level below that h1.
+    it('renders no title of its own, and its sections sit directly under the page h1', async () => {
       wrapper = await mountWithReport(createMockReport(false));
 
-      expect(wrapper.find('h2.report-detail__title').attributes('id')).toBeUndefined();
+      expect(wrapper.find('.report-detail__title').exists()).toBe(false);
+      expect(wrapper.findAll('h1, h3, h4')).toHaveLength(0);
+      expect(wrapper.findAll('h2.report-detail__section-title').length).toBeGreaterThan(0);
     });
 
-    it('leaves the report section unnamed when a surrounding region is named by the heading', async () => {
-      wrapper = await mountWithReport(createMockReport(false), { headingId: 'report-heading-1' });
+    it('leaves the report section unnamed, so the region around it is the one landmark', async () => {
+      wrapper = await mountWithReport(createMockReport(false));
 
       expect(wrapper.findAll('[aria-label="detail.title"]')).toHaveLength(0);
     });
 
-    it('names the report section itself when no headingId is given', async () => {
+    it('keeps the status badge', async () => {
       wrapper = await mountWithReport(createMockReport(false));
 
-      expect(wrapper.findAll('section[aria-label="detail.title"]')).toHaveLength(1);
+      expect(wrapper.find('.report-detail__header .status-badge').exists()).toBe(true);
     });
   });
 
@@ -133,8 +130,8 @@ describe('ReportDetail', () => {
 
       wrapper = mountDetail({ fetchedReport: { report, escalationHistory: [] } });
 
-      // The heading is there on the first render, before any promise settles.
-      expect(wrapper.find('h2.report-detail__title').exists()).toBe(true);
+      // The report is there on the first render, before any promise settles.
+      expect(wrapper.find('.report-detail__header').exists()).toBe(true);
       await flushPromises();
 
       expect(fetchReport.called).toBe(false);
@@ -152,7 +149,7 @@ describe('ReportDetail', () => {
       await flushPromises();
 
       expect(fetchReport.calledOnceWithExactly('calendar-789', 'report-123')).toBe(true);
-      expect(wrapper.find('h2.report-detail__title').exists()).toBe(true);
+      expect(wrapper.find('.report-detail__header').exists()).toBe(true);
     });
   });
 
@@ -176,7 +173,7 @@ describe('ReportDetail', () => {
       });
       await flushPromises();
 
-      expect(wrapper.find('.report-detail__title').exists()).toBe(false);
+      expect(wrapper.find('.report-detail__header').exists()).toBe(false);
       expect(wrapper.text()).not.toContain('Previous report text');
       expect(wrapper.find('.report-detail__error').exists()).toBe(true);
     });

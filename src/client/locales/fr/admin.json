@@ -58,7 +58,6 @@
     "create_report": "Créer un signalement",
     "settings_button_label": "Paramètres de modération",
     "settings": {
-      "title": "Paramètres de modération",
       "subtitle": "Configurez les politiques de modération de l’instance",
       "loading": "Chargement des paramètres...",
       "load_error": "Échec du chargement des paramètres",
@@ -172,7 +171,6 @@
       "page_info": "Page {{current}} sur {{total}}"
     },
     "detail": {
-      "title": "Détails du signalement",
       "subtitle": "Consultez l’ensemble des informations du signalement et agissez",
       "back": "Retour au tableau de bord",
       "loading": "Chargement du signalement...",
@@ -632,7 +630,6 @@
     "price_required": "Au moins un prix doit être supérieur à 0 $"
   },
   "blocked_instances": {
-    "title": "Instances bloquées",
     "subtitle": "Gérez les instances ActivityPub bloquées pour le contrôle de la fédération",
     "loading": "Chargement des instances bloquées...",
     "load_error": "Échec du chargement des instances bloquées",

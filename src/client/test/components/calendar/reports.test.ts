@@ -54,11 +54,10 @@ vi.mock('@/client/components/moderation/report-detail.vue', async (importOrigina
   const actual = await importOriginal<{ default: Component }>();
   const StandIn = defineComponent({
     name: 'ReportDetailStandIn',
-    props: ['calendarId', 'reportId', 'headingId'],
+    props: ['calendarId', 'reportId'],
     emits: ['back'],
     setup(props, { emit }) {
       return () => h('div', { 'data-report-detail': props.reportId }, [
-        h('h2', { id: props.headingId }, 'Report Details'),
         h('button', { class: 'back', onClick: () => emit('back') }, 'Back to reports'),
       ]);
     },
@@ -66,7 +65,7 @@ vi.mock('@/client/components/moderation/report-detail.vue', async (importOrigina
   return {
     default: defineComponent({
       name: 'ReportDetail',
-      props: ['calendarId', 'reportId', 'headingId', 'fetchedReport'],
+      props: ['calendarId', 'reportId', 'fetchedReport'],
       emits: ['back'],
       setup(props, { emit }) {
         return () => h(detail.real ? actual.default : StandIn, { ...props, onBack: () => emit('back') });
@@ -96,21 +95,8 @@ function buildRouter(): Router {
 }
 
 const App = {
-  template: '<div><h1 class="settings-page-header__title" tabindex="-1">Reports</h1><RouterView /></div>',
+  template: '<div><h1 class="settings-page-header__title" tabindex="-1">Report Details</h1><RouterView /></div>',
 };
-
-/**
- * A region's accessible name and its source, as accname computes it for these
- * two attributes: aria-labelledby when its id resolves, otherwise aria-label.
- */
-function regionName(region: Element): { from: 'labelledby' | 'label'; name: string; labelledBy: HTMLElement | null } {
-  const id = region.getAttribute('aria-labelledby');
-  const labelledBy = id ? document.getElementById(id) : null;
-  const text = labelledBy?.textContent?.trim();
-  return text
-    ? { from: 'labelledby', name: text, labelledBy }
-    : { from: 'label', name: region.getAttribute('aria-label') ?? '', labelledBy: null };
-}
 
 const calendarInfo = (id: string, urlName: string, role: 'owner' | 'editor') =>
   new CalendarInfo(new Calendar(id, urlName), role);
@@ -210,16 +196,15 @@ describe('Calendar reports leaf', () => {
       expect(fullPath()).toBe(detailPath(REPORT_ID));
     });
 
-    it('moves focus to a report region named by the report heading', async () => {
+    it('moves focus to a report region named like the page title', async () => {
       mockReportFound();
 
       const w = await mountAt(detailPath(REPORT_ID));
 
       const el = region(w);
       expect(el.attributes('tabindex')).toBe('-1');
-      const headingId = el.attributes('aria-labelledby');
-      expect(headingId).toBeTruthy();
-      expect(document.getElementById(headingId!)?.textContent).toBe('Report Details');
+      expect(el.attributes('aria-labelledby')).toBeUndefined();
+      expect(el.attributes('aria-label')).toBe('Report Details');
       expect(document.activeElement).toBe(el.element);
     });
 
@@ -297,15 +282,13 @@ describe('Calendar reports leaf', () => {
       expect(getReport).toHaveBeenCalledWith('cal-uuid-1', REPORT_ID);
       expect(w.text()).toContain('Misleading listing');
 
-      // The region is named by the real report heading as soon as it opens.
-      const named = regionName(region(w).element);
-      expect(named.from).toBe('labelledby');
-      expect(named.name).toBe('Report Detail');
-      expect(named.labelledBy?.tagName).toBe('H2');
-      expect(region(w).element.contains(named.labelledBy)).toBe(true);
+      // Named like the page h1 from the moment it opens; the page h1 titles
+      // the report, and the detail adds no heading of its own.
+      expect(region(w).attributes('aria-label')).toBe('Report Details');
+      expect(region(w).find('.report-detail__title').exists()).toBe(false);
       expect(document.activeElement).toBe(region(w).element);
       // The region is the one landmark carrying that name.
-      expect(w.findAll('[aria-label="Report Detail"]').map((el) => el.element)).toEqual([region(w).element]);
+      expect(w.findAll('[aria-label="Report Details"]').map((el) => el.element)).toEqual([region(w).element]);
     });
 
     it('issues no request on the list route', async () => {

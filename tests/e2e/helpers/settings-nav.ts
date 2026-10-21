@@ -25,7 +25,10 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
 const TREE_LABEL = 'Settings';
 const TREE_SKIP_LABEL = 'Skip to settings content';
 const SHELL_SKIP_LABEL = 'Skip to main content';
-const REPORT_REGION_LABEL = 'Report Detail';
+const REPORT_REGION_LABEL = 'Report Details';
+
+/** A report's own page title, on a calendar's Reports leaf and in instance moderation. */
+const REPORT_DETAIL_TITLE = 'Report Details';
 const SWITCH_CALENDAR_LABEL = /Switch calendar/;
 const LOG_OUT_LABEL = 'Log out';
 const BACK_TO_PREFIX = 'Back to';
@@ -124,14 +127,15 @@ const CALENDAR_LEAF_TITLES: Record<CalendarLeaf, string> = {
 
 // The instance group's 'settings' leaf is titled "General", the same title
 // as the calendar group's 'general' leaf, so a spec that opens either must
-// assert the URL too. Moderation's sub-routes take the parent's title.
+// assert the URL too. Moderation's sub-routes carry titles of their own, with
+// Moderation in the eyebrow and the back link.
 const ADMIN_LEAF_TITLES: Record<AdminLeaf, string> = {
   'settings': 'General',
   'accounts': 'Accounts',
   'calendars': 'Calendars',
   'moderation': 'Moderation',
-  'moderation/settings': 'Moderation',
-  'moderation/blocked-instances': 'Moderation',
+  'moderation/settings': 'Moderation Settings',
+  'moderation/blocked-instances': 'Blocked Instances',
   'federation': 'Federation',
   'funding': 'Funding',
 };
@@ -186,13 +190,13 @@ export function calendarReportPath(calendar: string, reportId: string): string {
 }
 
 /**
- * One report on a calendar's Reports leaf, titled with the parent leaf.
+ * One report on a calendar's Reports leaf, with its own title.
  *
  * @param calendar - The calendar's url name
  * @param reportId - The report's id
  */
 export function calendarReport(calendar: string, reportId: string): SettingsPage {
-  return { path: calendarReportPath(calendar, reportId), title: CALENDAR_LEAF_TITLES.reports };
+  return { path: calendarReportPath(calendar, reportId), title: REPORT_DETAIL_TITLE };
 }
 
 /**
@@ -223,12 +227,12 @@ export function adminReportPath(reportId: string): string {
 }
 
 /**
- * One report in instance moderation, titled with the parent Moderation leaf.
+ * One report in instance moderation, with its own title.
  *
  * @param reportId - The report's id
  */
 export function adminReport(reportId: string): SettingsPage {
-  return { path: adminReportPath(reportId), title: ADMIN_LEAF_TITLES.moderation };
+  return { path: adminReportPath(reportId), title: REPORT_DETAIL_TITLE };
 }
 
 /**

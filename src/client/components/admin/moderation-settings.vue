@@ -129,14 +129,8 @@ async function saveSettings() {
 
 <template>
   <div class="moderation-settings">
-    <!-- The sub-page's own title; the settings page header above carries the
-         Moderation leaf title and the help button. -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2>{{ t('title') }}</h2>
-        <p class="page-subtitle">{{ t('subtitle') }}</p>
-      </div>
-    </div>
+    <!-- The settings page header carries the title, the parent link and the help button. -->
+    <p class="page-subtitle">{{ t('subtitle') }}</p>
 
     <!-- Loading State -->
     <LoadingMessage
@@ -393,21 +387,10 @@ async function saveSettings() {
   gap: var(--pav-space-6);
   max-width: 800px;
 
-  .page-header {
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
-    }
+  .page-subtitle {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
   }
 
   .error-message {
