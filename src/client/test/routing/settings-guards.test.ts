@@ -575,6 +575,7 @@ describe('settings routes on the real route table', () => {
     it.each([
       ['/settings/account/profile', 'profile'],
       ['/settings/account/security', 'security'],
+      ['/settings/account/calendars', 'account_calendars'],
     ])('serves %s as %s', async (path, name) => {
       const router = routerAt(true);
       await router.push(path);

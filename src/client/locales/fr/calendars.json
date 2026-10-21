@@ -28,6 +28,17 @@
     "aria_switch_calendar": "Changer de calendrier : {{name}}",
     "no_calendars": "Vous n'avez encore aucun calendrier."
   },
+  "account_list": {
+    "owner_badge": "Propriétaire",
+    "editor_badge": "Éditeur",
+    "leave_button": "Quitter",
+    "leave_button_aria": "Quitter {{calendar}}",
+    "create_calendar_button": "Créer un calendrier",
+    "empty_title": "Pas encore de calendrier",
+    "empty_description": "Les calendriers dont vous êtes propriétaire ou éditeur apparaissent ici. Créez-en un, ou demandez au propriétaire d'un calendrier de vous inviter comme éditeur.",
+    "loading": "Chargement des calendriers…",
+    "error_loading": "Impossible de charger vos calendriers."
+  },
   "calendar": {
     "create_button": "Créer un événement",
     "update_button": "Mettre à jour l'événement",
@@ -114,6 +125,7 @@
     "confirm_leave_title": "Quitter le calendrier",
     "confirm_leave_message": "Êtes-vous sûr de vouloir quitter ce calendrier ? Vous n'aurez plus d'accès en édition et devrez être réinvité pour retrouver l'accès.",
     "error_leaving_calendar": "Échec de la sortie du calendrier",
+    "left_calendar_success": "Vous avez quitté {{calendar}}.",
     "resend_button": "Renvoyer",
     "resending": "Renvoi...",
     "canceling": "Annulation...",

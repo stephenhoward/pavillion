@@ -29,6 +29,7 @@ import SettingsRootView from '@/client/components/logged_in/settings/root.vue';
 import SettingsListPage from '@/client/components/logged_in/settings/list-page.vue';
 import ProfileView from '@/client/components/logged_in/settings/profile.vue';
 import SecurityView from '@/client/components/logged_in/settings/security.vue';
+import AccountCalendarsView from '@/client/components/logged_in/settings/account-calendars.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import FundingPlanView from '@/client/components/account/funding-plan.vue';
@@ -137,6 +138,7 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
               beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('account')] },
             { path: 'account/profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
             { path: 'account/security', component: SecurityView, name: 'security', beforeEnter: mustBeLoggedIn },
+            { path: 'account/calendars', component: AccountCalendarsView, name: 'account_calendars', beforeEnter: mustBeLoggedIn },
             { path: 'account/funding', component: FundingPlanView, name: 'funding_plan',
               beforeEnter: [mustBeLoggedIn, fundingEnabledRedirect] },
             // Admin: the parent has no name; its index child is the list page below md and

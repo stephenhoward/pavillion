@@ -51,35 +51,35 @@ describe('settings nav items', () => {
       { isOwner: true, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: true, fundingEnabled: false,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: true, isAdmin: false, fundingEnabled: true,
         root: ['calendar', 'account', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: false, fundingEnabled: false,
         root: ['calendar', 'account', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: false, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: false, isAdmin: true, fundingEnabled: false,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: false, isAdmin: false, fundingEnabled: true,
         root: ['calendar', 'account', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: false, isAdmin: false, fundingEnabled: false,
         root: ['calendar', 'account', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
     ])(
       'owner=$isOwner admin=$isAdmin funding=$fundingEnabled',
       ({ isOwner, isAdmin, fundingEnabled, root, calendar, account }) => {
@@ -131,7 +131,7 @@ describe('settings nav items', () => {
         'calendar_general', 'calendar_editors', 'calendar_reports', 'calendar_import', 'calendar_widget',
       ]);
       expect(accountItems(ctx()).map((item) => item.routeName)).toEqual([
-        'profile', 'security', 'funding_plan',
+        'profile', 'security', 'account_calendars', 'funding_plan',
       ]);
       expect(adminItems().map((item) => item.routeName)).toEqual([
         'admin_settings', 'accounts', 'admin_calendars', 'moderation', 'federation', 'funding',
@@ -151,7 +151,7 @@ describe('settings nav items', () => {
 
       expect(icons(rootItems(ctx({ isAdmin: true })))).toEqual([Calendar, User, Server, LogOut]);
       expect(icons(calendarItems(ctx()))).toEqual([Settings, Users, ShieldCheck, Download, LayoutTemplate]);
-      expect(icons(accountItems(ctx()))).toEqual([User, Shield, Sprout]);
+      expect(icons(accountItems(ctx()))).toEqual([User, Shield, Calendar, Sprout]);
       // The six icons of the admin pane's own navigation.
       expect(icons(adminItems())).toEqual([Settings, Users, Calendar, ShieldCheck, Globe, Sprout]);
     });
@@ -220,6 +220,11 @@ describe('settings nav items', () => {
       expect(isVisibleLeaf('account', 'funding_plan', ctx({ fundingEnabled: false }))).toBe(false);
     });
 
+    it('shows Calendars to every signed-in viewer, one with no calendar included', () => {
+      expect(isVisibleLeaf('account', 'account_calendars', ctx({ isOwner: false, isAdmin: false, fundingEnabled: false }))).toBe(true);
+      expect(isVisibleLeaf('account', 'account_calendars', ctx({ calendarUrlName: null }))).toBe(true);
+    });
+
     it('treats moderation sub-pages as part of Moderation, admin only', () => {
       expect(isVisibleLeaf('admin', 'moderation_settings', ctx({ isAdmin: true }))).toBe(true);
       expect(isVisibleLeaf('admin', 'moderation_settings', ctx({ isAdmin: false }))).toBe(false);
@@ -239,7 +244,7 @@ describe('settings nav items', () => {
 
     it.each([
       { group: 'calendar', context: ctx({ isOwner: false }), expected: ['widget'] },
-      { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security'] },
+      { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security', 'calendars'] },
       { group: 'admin', context: ctx({ isAdmin: true }),
         expected: ['general', 'accounts', 'calendars', 'moderation', 'federation', 'funding'] },
     ] as const)('gives the $group list its visible leaves', ({ group, context, expected }) => {
@@ -256,6 +261,7 @@ describe('settings nav items', () => {
       ['calendar_general', 'calendar', 'calendar_general', 'nav.calendar.general'],
       ['calendar_report_detail', 'calendar', 'calendar_reports', 'nav.calendar.reports'],
       ['funding_plan', 'account', 'funding_plan', 'nav.account.funding_plan'],
+      ['account_calendars', 'account', 'account_calendars', 'nav.account.calendars'],
       ['admin_settings', 'admin', 'admin_settings', 'nav.admin.general'],
       ['blocked_instances', 'admin', 'moderation', 'nav.admin.moderation'],
     ])('resolves %s to its leaf', (name, group, routeName, labelKey) => {

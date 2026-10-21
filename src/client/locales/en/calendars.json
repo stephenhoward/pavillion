@@ -28,6 +28,17 @@
     "aria_switch_calendar": "Switch calendar: {{name}}",
     "no_calendars": "You have no calendars yet."
   },
+  "account_list": {
+    "owner_badge": "Owner",
+    "editor_badge": "Editor",
+    "leave_button": "Leave",
+    "leave_button_aria": "Leave {{calendar}}",
+    "create_calendar_button": "Create a calendar",
+    "empty_title": "No calendars yet",
+    "empty_description": "Calendars you own or edit show up here. Create one, or ask a calendar's owner to invite you as an editor.",
+    "loading": "Loading calendars…",
+    "error_loading": "Your calendars could not be loaded."
+  },
   "calendar": {
     "create_button": "Create Event",
     "update_button": "Update Event",
@@ -114,6 +125,7 @@
     "confirm_leave_title": "Leave Calendar",
     "confirm_leave_message": "Are you sure you want to leave this calendar? You will no longer have edit access and will need to be re-invited to regain access.",
     "error_leaving_calendar": "Failed to leave calendar",
+    "left_calendar_success": "You left {{calendar}}.",
     "resend_button": "Resend",
     "resending": "Resending...",
     "canceling": "Canceling...",

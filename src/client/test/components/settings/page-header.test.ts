@@ -29,6 +29,7 @@ const routes: RouteRecordRaw[] = [
     { path: 'account', name: 'account', component: Pane, meta: { settingsGroup: 'account' } },
     { path: 'account/profile', name: 'profile', component: Pane },
     { path: 'account/security', name: 'security', component: Pane },
+    { path: 'account/calendars', name: 'account_calendars', component: Pane },
     { path: 'account/funding', name: 'funding_plan', component: Pane },
     { path: 'admin', component: Outlet, children: [
       { path: '', name: 'admin', component: Pane, meta: { settingsGroup: 'admin' } },

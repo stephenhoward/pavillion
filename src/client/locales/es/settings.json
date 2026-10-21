@@ -26,6 +26,7 @@
     "account": {
       "profile": "Perfil",
       "security": "Seguridad",
+      "calendars": "Calendarios",
       "funding_plan": "Plan de financiación"
     },
     "admin": {

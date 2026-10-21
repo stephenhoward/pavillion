@@ -100,6 +100,34 @@ describe('Editor Invitation Management Integration', () => {
     });
   });
 
+  describe('Leaving a calendar', () => {
+    const urlNames = async (authKey: string): Promise<string[]> => {
+      const response = await env.authGet(authKey, '/api/v1/calendars');
+      expect(response.status).toBe(200);
+      return response.body.map((item: { urlName: string }) => item.urlName);
+    };
+
+    it('lets an editor remove their own access by account id, without the owner-only editor list', async () => {
+      const leaving = await calendarInterface.createCalendar(ownerAccount, 'leavingcalendar');
+      const grant = await env.authPost(ownerAuthKey, `/api/v1/calendars/${leaving.id}/editors`, {
+        email: editorEmail,
+      });
+      expect(grant.status).toBe(201);
+      expect(await urlNames(editorAuthKey)).toContain('leavingcalendar');
+
+      const response = await env.authDelete(editorAuthKey, `/api/v1/calendars/${leaving.id}/editors/${editorAccount.id}`);
+
+      expect(response.status).toBe(204);
+      expect(await urlNames(editorAuthKey)).not.toContain('leavingcalendar');
+    });
+
+    it('refuses to let an owner leave their own calendar', async () => {
+      const response = await env.authDelete(ownerAuthKey, `/api/v1/calendars/${calendar.id}/editors/${ownerAccount.id}`);
+
+      expect(response.status).toBe(403);
+    });
+  });
+
   describe('Invitation Management Operations', () => {
     it('should handle invitation cancellation API endpoint', async () => {
       // Create invitation first
