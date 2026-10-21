@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ChevronRight } from 'lucide-vue-next';
+import { filledIconFor } from './filled-icons';
 import type { NavigationItemWithState, NavItemVariant } from './types';
 
 const props = withDefaults(defineProps<{
@@ -9,6 +10,9 @@ const props = withDefaults(defineProps<{
 }>(), {
   variant: 'sidebar',
 });
+
+/** The current item draws its icon filled; any other draws the outline. */
+const filledIcon = computed(() => (props.item.isActive ? filledIconFor(props.item.icon) : undefined));
 
 /*
  * In rail mode CSS reveals the label as a tooltip on hover and focus. WCAG
@@ -55,7 +59,14 @@ onBeforeUnmount(() => {
     @focus="restoreTooltip"
   >
     <component
+      :is="filledIcon"
+      v-if="filledIcon"
+      class="shell-nav-item__icon shell-nav-item__icon--filled"
+      aria-hidden="true"
+    />
+    <component
       :is="props.item.icon"
+      v-else
       class="shell-nav-item__icon"
       :stroke-width="2"
       aria-hidden="true"
