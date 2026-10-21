@@ -9,7 +9,6 @@
 import { reactive, onMounted, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { ArrowLeft } from 'lucide-vue-next';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import type { ReportDetailResponse } from '@/client/service/moderation';
 import { ReportStatus } from '@/common/model/report';
@@ -25,10 +24,6 @@ const props = defineProps<{
    * with no request of its own. Without it, the report is fetched on mount.
    */
   fetchedReport?: ReportDetailResponse;
-}>();
-
-const emit = defineEmits<{
-  (e: 'back'): void;
 }>();
 
 const { t } = useTranslation('system', {
@@ -99,13 +94,6 @@ const hasAbusePatterns = computed(() => {
     || report.value.hasInstancePattern;
 });
 
-
-/**
- * Navigates back to the reports dashboard.
- */
-const goBack = () => {
-  emit('back');
-};
 
 /**
  * Saves the owner notes for this report.
@@ -258,17 +246,6 @@ onMounted(async () => {
 
 <template>
   <div class="report-detail">
-    <!-- Back button -->
-    <button
-      type="button"
-      class="report-detail__back"
-      @click="goBack"
-      :aria-label="t('detail.back_to_reports')"
-    >
-      <ArrowLeft :size="18" />
-      {{ t('detail.back_to_reports') }}
-    </button>
-
     <!-- Loading -->
     <LoadingMessage v-if="store.loadingReport" :description="t('detail.loading')" />
 
@@ -534,38 +511,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
-
-  &__back {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--pav-space-2);
-    background: none;
-    border: none;
-    color: var(--pav-color-stone-600);
-    font-weight: var(--pav-font-weight-medium);
-    font-size: var(--pav-font-size-small);
-    cursor: pointer;
-    padding: var(--pav-space-2) 0;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--pav-color-orange-600);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--pav-color-orange-500);
-      outline-offset: 2px;
-      border-radius: 0.25rem;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-
-      &:hover {
-        color: var(--pav-color-orange-400);
-      }
-    }
-  }
 
   &__header {
     display: flex;

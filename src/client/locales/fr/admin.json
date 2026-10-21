@@ -172,7 +172,6 @@
     },
     "detail": {
       "subtitle": "Consultez l’ensemble des informations du signalement et agissez",
-      "back": "Retour au tableau de bord",
       "loading": "Chargement du signalement...",
       "error": "Échec du chargement du signalement",
       "report_information": "Informations du signalement",

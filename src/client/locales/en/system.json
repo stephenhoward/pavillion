@@ -251,7 +251,6 @@
     },
     "detail": {
       "title": "Report Details",
-      "back_to_reports": "Back to Reports",
       "description": "Description",
       "reporter_type": "Reporter Type",
       "reported_on": "Reported On",

@@ -55,20 +55,16 @@ vi.mock('@/client/components/moderation/report-detail.vue', async (importOrigina
   const StandIn = defineComponent({
     name: 'ReportDetailStandIn',
     props: ['calendarId', 'reportId'],
-    emits: ['back'],
-    setup(props, { emit }) {
-      return () => h('div', { 'data-report-detail': props.reportId }, [
-        h('button', { class: 'back', onClick: () => emit('back') }, 'Back to reports'),
-      ]);
+    setup(props) {
+      return () => h('div', { 'data-report-detail': props.reportId });
     },
   });
   return {
     default: defineComponent({
       name: 'ReportDetail',
       props: ['calendarId', 'reportId', 'fetchedReport'],
-      emits: ['back'],
-      setup(props, { emit }) {
-        return () => h(detail.real ? actual.default : StandIn, { ...props, onBack: () => emit('back') });
+      setup(props) {
+        return () => h(detail.real ? actual.default : StandIn, props);
       },
     }),
   };
@@ -249,18 +245,17 @@ describe('Calendar reports leaf', () => {
       expect(w.find('[data-dashboard]').exists()).toBe(true);
     });
 
-    it('closes to the list when the report emits back', async () => {
-      mockReportFound();
+    // The page header's back and eyebrow links are the way back; they move
+    // focus to the h1 themselves (page-header.test.ts, settings/root.test.ts).
+    it('closes the report when the route returns to the list', async () => {
+      const getReport = mockReportFound();
       const w = await mountAt(detailPath(REPORT_ID));
 
-      await w.find('.back').trigger('click');
-      await flushPromises();
+      await navigate(LIST_PATH);
 
-      expect(fullPath()).toBe(LIST_PATH);
+      expect(getReport).toHaveBeenCalledTimes(1);
       expect(w.find('[data-dashboard]').exists()).toBe(true);
       expect(region(w).exists()).toBe(false);
-      // Not stranded on the removed region: at md+ no layout rule moves it.
-      expect(document.activeElement).toBe(pageHeading());
     });
 
     it('fetches the report once: the leaf\'s scoped check supplies the detail view', async () => {

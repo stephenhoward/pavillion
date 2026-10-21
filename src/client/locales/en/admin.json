@@ -172,7 +172,6 @@
     },
     "detail": {
       "subtitle": "View full report information and take action",
-      "back": "Back to Dashboard",
       "loading": "Loading report...",
       "error": "Failed to load report",
       "report_information": "Report Information",

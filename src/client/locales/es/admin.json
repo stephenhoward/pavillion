@@ -172,7 +172,6 @@
     },
     "detail": {
       "subtitle": "Ver información completa del reporte y tomar medidas",
-      "back": "Volver al panel",
       "loading": "Cargando reporte...",
       "error": "Error al cargar el reporte",
       "report_information": "Información del reporte",

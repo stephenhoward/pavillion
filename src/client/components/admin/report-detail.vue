@@ -132,10 +132,6 @@ async function handleAction(action: 'override' | 'resolve' | 'dismiss') {
   }
 }
 
-function goBack() {
-  router.push({ name: 'moderation' });
-}
-
 /**
  * Opens the forward confirmation modal.
  */
@@ -180,23 +176,7 @@ async function handleForward() {
   <div class="admin-report-detail">
     <!-- Page Header -->
     <div class="page-header">
-      <div class="page-header-top">
-        <button type="button"
-                class="back-button"
-                @click="goBack"
-                :aria-label="t('back')">
-          <svg width="20"
-               height="20"
-               viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          {{ t('back') }}
-        </button>
-      </div>
-      <!-- The settings page header carries the title, the parent link and the help button. -->
+      <!-- The settings page header carries the title, the way back to Moderation and the help button. -->
       <p class="page-subtitle">{{ t('subtitle') }}</p>
     </div>
 
@@ -503,34 +483,6 @@ async function handleForward() {
   max-width: 900px;
 
   .page-header {
-    .page-header-top {
-      margin-bottom: var(--pav-space-4);
-
-      .back-button {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--pav-space-1);
-        padding: var(--pav-space-1) var(--pav-space-2);
-        background: none;
-        border: none;
-        color: var(--pav-color-text-secondary);
-        font-size: var(--pav-font-size-xs);
-        font-family: inherit;
-        cursor: pointer;
-        transition: color 0.2s ease;
-
-        &:hover {
-          color: var(--pav-color-text-primary);
-        }
-
-        &:focus-visible {
-          outline: 2px solid var(--pav-color-brand-primary);
-          outline-offset: 2px;
-          border-radius: var(--pav-border-radius-xs);
-        }
-      }
-    }
-
     .page-subtitle {
       margin: 0;
       font-size: var(--pav-font-size-xs);

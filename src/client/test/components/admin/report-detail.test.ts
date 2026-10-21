@@ -49,9 +49,10 @@ describe('ReportDetail - Forward to Admin Button', () => {
     vi.clearAllMocks();
   });
 
-  // The settings page header's h1 titles the report; the pane keeps its
-  // back button and description, and its sections sit directly under the h1.
-  it('renders its back button and description but no title of its own', async () => {
+  // The settings page header titles the report and owns the way back to
+  // Moderation; the pane keeps its description, and its sections sit
+  // directly under the h1.
+  it('renders its description but no title or back button of its own', async () => {
     moderationStore.currentAdminReport = {
       report: Report.fromObject({
         id: 'report-1',
@@ -72,7 +73,7 @@ describe('ReportDetail - Forward to Admin Button', () => {
     });
     await nextTick();
 
-    expect(wrapper.find('.back-button').exists()).toBe(true);
+    expect(wrapper.find('.back-button').exists()).toBe(false);
     expect(wrapper.find('.page-subtitle').exists()).toBe(true);
     const headings = wrapper.findAll('h1, h2');
     expect(headings.length).toBeGreaterThan(0);

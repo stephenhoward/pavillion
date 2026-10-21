@@ -101,6 +101,14 @@ describe('ReportDetail', () => {
       expect(wrapper.findAll('h2.report-detail__section-title').length).toBeGreaterThan(0);
     });
 
+    // The settings page header's back link (below md) and eyebrow link (md+)
+    // are the only way back to the list.
+    it('renders no way back of its own', async () => {
+      wrapper = await mountWithReport(createMockReport(false));
+
+      expect(wrapper.find('.report-detail__back').exists()).toBe(false);
+    });
+
     it('leaves the report section unnamed, so the region around it is the one landmark', async () => {
       wrapper = await mountWithReport(createMockReport(false));
 

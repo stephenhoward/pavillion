@@ -823,6 +823,18 @@ test.describe('sub-route titles', () => {
     await expect(page).toHaveURL(pathPattern(adminLeafPath('moderation')));
     await expect(settingsTitle(page, 'Moderation')).toBeFocused();
   });
+
+  test('below md a calendar report\'s only way back is the header link to Reports', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
+    await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
+    await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
+
+    await expect(reportRegion(page).getByRole('button', { name: /back/i })).toHaveCount(0);
+    await backLink(page, 'Reports').click();
+    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')));
+    await expect(settingsTitle(page, 'Reports')).toBeFocused();
+  });
 });
 
 test.describe('keyboard order', () => {

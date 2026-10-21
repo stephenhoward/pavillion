@@ -251,7 +251,6 @@
     },
     "detail": {
       "title": "Detalles del reporte",
-      "back_to_reports": "Volver a Reportes",
       "description": "Descripción",
       "reporter_type": "Tipo de Reportante",
       "reported_on": "Reportado el",

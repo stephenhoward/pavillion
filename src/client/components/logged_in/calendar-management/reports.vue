@@ -47,18 +47,19 @@ const reportsRoute = () => ({
 });
 
 /**
- * Leaves the report view for the list. When a report was showing, focus
- * goes to the page heading once the list renders, so it is not stranded on
- * the removed region. (In page mode the layout's focus rule targets the same
- * heading; focusing it twice is a no-op.)
+ * Replaces a report that failed to open with the list. When a report was
+ * showing, focus goes to the page heading once the list renders, so it is
+ * not stranded on the removed region. (In page mode the layout's focus rule
+ * targets the same heading; focusing it twice is a no-op.)
  *
- * @param navigate - The navigation to the list: a replace for a failed open, a push for closing
+ * Closing a report that did open is the page header's job: its back link
+ * (below md) and its eyebrow link to Reports (md+) both land on the h1.
  */
-const returnToList = async (navigate: () => Promise<unknown>) => {
+const returnToList = async () => {
   const wasShowing = selectedReportId.value !== null;
   selectedReportId.value = null;
   selectedReport.value = null;
-  await navigate();
+  await router.replace(reportsRoute());
   if (!wasShowing || !active) {
     return;
   }
@@ -82,7 +83,7 @@ const openReport = async (requested: unknown) => {
   }
 
   if (!isReportId(requested)) {
-    await returnToList(() => router.replace(reportsRoute()));
+    await returnToList();
     return;
   }
 
@@ -109,7 +110,7 @@ const openReport = async (requested: unknown) => {
   }
 
   if (!fetched) {
-    await returnToList(() => router.replace(reportsRoute()));
+    await returnToList();
     return;
   }
 
@@ -124,9 +125,6 @@ const openReport = async (requested: unknown) => {
     // from any job in it must not turn a rendered report into an error state.
   }
 };
-
-/** Closes the open report, back to the list. */
-const closeReport = () => returnToList(() => router.push(reportsRoute()));
 
 // Only this leaf's two routes are acted on: a navigation away (say, to the
 // admin moderation_report_detail) changes the param before this unmounts.
@@ -164,7 +162,6 @@ const viewReport = (reportId: string) => {
       :calendar-id="calendarId"
       :report-id="selectedReportId"
       :fetched-report="selectedReport ?? undefined"
-      @back="closeReport"
     />
   </div>
   <ReportsDashboard
