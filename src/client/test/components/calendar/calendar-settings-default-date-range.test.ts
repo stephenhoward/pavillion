@@ -94,7 +94,7 @@ describe('CalendarSettings — default date window', () => {
     const labelId = wrapper.find('#defaultDateRange').attributes('aria-labelledby');
     expect(labelId).toBeTruthy();
     const label = wrapper.find(`#${labelId}`);
-    expect(label.element.tagName).toBe('H3');
+    expect(label.element.tagName).toBe('H2');
     expect(label.text()).not.toBe('');
 
     wrapper.unmount();

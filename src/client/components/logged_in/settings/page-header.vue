@@ -10,6 +10,8 @@
  * - At md+ the back link is hidden by CSS and a leaf shows an eyebrow above
  *   its h1: the group name, or the calendar switcher on a calendar leaf.
  * - A calendar section puts the switcher beside the h1, never inside it.
+ * - The help button ends the title row on every level whose route has
+ *   guides, so no settings pane renders one of its own.
  * - A calendar the viewer cannot resolve (nonexistent, not a member, or not
  *   loaded) renders the same header at the index and every leaf, titled
  *   with the group, and never echoes the route param.
@@ -22,6 +24,7 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { calendarDisplayName } from '@/client/service/calendar-display';
 import { findViewerCalendar } from '@/client/service/settings-guards';
 import CalendarSwitcher from '@/client/components/logged_in/calendar-switcher/CalendarSwitcher.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 import {
   findLeafByRouteName,
   isSettingsLeafGroup,
@@ -159,6 +162,7 @@ onBeforeUnmount(() => {
         :current-url-name="calendarUrlName"
         :aria-label="switcherAriaLabel"
       />
+      <HelpButton v-if="!unresolved" />
     </div>
   </header>
 </template>

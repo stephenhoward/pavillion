@@ -39,6 +39,7 @@ import {
   emptyState,
   expectNoHorizontalScroll,
   gotoSettings,
+  helpButton,
   historyLength,
   logOutButton,
   mainNav,
@@ -713,6 +714,70 @@ test.describe('one h1 and one current item per list', () => {
       await expect(emptyState(page.getByRole('main'))).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     }
+  });
+});
+
+test.describe('one page title and the header help button', () => {
+  // Titles the leaves rendered under the h1 before the page header became
+  // their only title; none may come back.
+  const RETIRED_TITLES = [
+    'Calendar Settings',
+    'General Settings',
+    'Account Management',
+    'Local Calendars',
+    'Moderation Dashboard',
+    'Funding Settings',
+  ];
+
+  const leaves = [
+    calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'),
+    settingsLeaf.profile,
+    ...([
+      'settings',
+      'accounts',
+      'calendars',
+      'moderation',
+      'moderation/settings',
+      'moderation/blocked-instances',
+      'federation',
+      'funding',
+    ] as const).map(adminLeaf),
+  ];
+
+  for (const viewport of [PHONE, { width: SHELL_MD - 1, height: 900 }, DESKTOP]) {
+    test(`each leaf has one title and an icon-sized help button beside it at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await loginAsAdmin(page, env.baseURL);
+
+      for (const leaf of leaves) {
+        await gotoSettings(page, env.baseURL, leaf);
+        const title = settingsTitle(page, leaf.title);
+
+        await expect(page.getByRole('heading', { name: leaf.title, exact: true })).toHaveCount(1);
+        for (const retired of RETIRED_TITLES) {
+          await expect(page.getByRole('heading', { name: retired, exact: true })).toHaveCount(0);
+        }
+
+        // One help button, in the h1's row, at the icon-button size: a flex
+        // column once stretched it into a screen-wide circle on phones.
+        await expect(helpButton(page)).toHaveCount(1);
+        const help = helpButton(title.locator('xpath=..'));
+        await expect(help).toBeVisible();
+        const box = await help.boundingBox();
+        expect(box, leaf.path).not.toBeNull();
+        expect(box!.width, leaf.path).toBeLessThanOrEqual(48);
+        expect(Math.abs(box!.width - box!.height), leaf.path).toBeLessThan(1);
+      }
+    });
+  }
+
+  test('the header help button opens the help panel', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('accounts'));
+
+    await helpButton(page).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
   });
 });
 

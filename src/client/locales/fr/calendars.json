@@ -484,7 +484,6 @@
     "add_category_option": "+ Ajouter cette catégorie"
   },
   "settings": {
-    "title": "Paramètres du calendrier",
     "loading": "Chargement des paramètres...",
     "calendar_content_section": "Titre et description du calendrier",
     "calendar_title_label": "Titre du calendrier",

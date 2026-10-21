@@ -6,7 +6,6 @@ import { useModerationStore } from '@/client/stores/moderation-store';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import Modal from '@/client/components/common/modal.vue';
 import type { BlockedInstance } from '@/common/model/blocked_instance';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'blocked_instances',
@@ -143,13 +142,13 @@ function formatDate(dateString: string): string {
 
 <template>
   <div class="blocked-instances">
-    <!-- Page Header -->
+    <!-- The sub-page's own title; the settings page header above carries the
+         Moderation leaf title and the help button. -->
     <div class="page-header">
       <div class="page-header-text">
         <h2>{{ t('title') }}</h2>
         <p class="page-subtitle">{{ t('subtitle') }}</p>
       </div>
-      <HelpButton />
     </div>
 
     <!-- Loading State -->

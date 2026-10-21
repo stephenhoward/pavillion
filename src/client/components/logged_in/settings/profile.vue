@@ -10,7 +10,6 @@ import type AuthenticationService from '@/client/service/authn';
 import AccountService from '@/client/service/account';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { changeLanguage, applyAccountLanguage } from '@/client/service/locale';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const authn = inject('authn') as AuthenticationService;
 const { t } = useTranslation('profile');
@@ -103,10 +102,6 @@ onMounted(loadProfile);
 
 <template>
   <div class="profile-settings">
-    <div class="profile-settings__help">
-      <HelpButton />
-    </div>
-
     <div class="account-settings-card">
       <section class="account-settings-card__section">
         <div class="profile-settings__fields">
@@ -180,15 +175,6 @@ onMounted(loadProfile);
 </template>
 
 <style scoped lang="scss">
-.profile-settings__help {
-  display: flex;
-  justify-content: flex-end;
-
-  &:empty {
-    display: none;
-  }
-}
-
 .profile-settings__section-title {
   margin: 0 0 var(--pav-space-4) 0;
   font-size: 0.875rem;

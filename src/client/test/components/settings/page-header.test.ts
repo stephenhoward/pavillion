@@ -197,6 +197,34 @@ describe('settings page header', () => {
     });
   });
 
+  describe('help button', () => {
+    const HELP = 'button[aria-label="Help with this page"]';
+    const helpButton = (w: VueWrapper) => w.find(`.settings-page-header__title-row > ${HELP}`);
+
+    it.each([
+      ['a calendar leaf', '/settings/calendar/riverside/editors'],
+      ['the calendar section', '/settings/calendar/riverside'],
+      ['an account leaf', '/settings/account/security'],
+      ['an admin leaf', '/settings/admin/settings'],
+      ['a moderation sub-page', '/settings/admin/moderation/settings'],
+    ])('sits in the title row beside the h1 on %s', async (_case, path) => {
+      const w = await mountAt(path);
+      expect(helpButton(w).exists()).toBe(true);
+      expect(helpButton(w).attributes('aria-haspopup')).toBe('dialog');
+      expect(w.findAll(HELP)).toHaveLength(1);
+    });
+
+    it('is absent where the route has no guides', async () => {
+      const w = await mountAt('/settings/account');
+      expect(w.find(HELP).exists()).toBe(false);
+    });
+
+    it('is absent for an unresolved calendar', async () => {
+      const w = await mountAt('/settings/calendar/nope/general');
+      expect(w.find(HELP).exists()).toBe(false);
+    });
+  });
+
   describe('unresolved calendar', () => {
     it('renders identical header markup at the index and at a leaf', async () => {
       const w = await mountAt('/settings/calendar/nope');

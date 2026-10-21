@@ -484,7 +484,6 @@
     "add_category_option": "+ Añadir esta categoría"
   },
   "settings": {
-    "title": "Configuración del calendario",
     "loading": "Cargando configuración...",
     "calendar_content_section": "Título y descripción del calendario",
     "calendar_title_label": "Título del calendario",

@@ -11,9 +11,10 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
  * `back_to`, `nav.root.log_out`, `titles.*`, `nav.*`),
  * src/client/locales/en/system.json (`navigation.main_label`,
  * `navigation.mobile_label`, `navigation.skip_to_content`,
- * `moderation.detail.title`) and src/client/locales/en/calendars.json
- * (`switcher.aria_switch_calendar`, `account_list.*`, and
- * `editors.leave_calendar_button` for the leave confirmation).
+ * `moderation.detail.title`, `help.button_label`) and
+ * src/client/locales/en/calendars.json (`switcher.aria_switch_calendar`,
+ * `account_list.*`, and `editors.leave_calendar_button` for the leave
+ * confirmation).
  *
  * Page titles follow page-header.vue: a leaf is titled with its tree label,
  * a sub-route (a report, moderation settings, blocked instances) with its
@@ -33,6 +34,7 @@ const MOBILE_NAV_LABEL = 'Mobile navigation';
 const LOADING_CALENDAR_TEXT = 'Loading calendar…';
 const LEAVE_LABEL_PREFIX = 'Leave';
 const CONFIRM_LEAVE_LABEL = 'Leave Calendar';
+const HELP_BUTTON_LABEL = 'Help with this page';
 
 /** Phone viewport, matching calendar-switcher.spec.ts. */
 export const PHONE = { width: 390, height: 844 };
@@ -239,6 +241,16 @@ export function adminReport(reportId: string): SettingsPage {
  */
 export function settingsTitle(page: Page, name?: string): Locator {
   return page.getByRole('heading', { level: 1, name, exact: true });
+}
+
+/**
+ * The settings page's help button. The page header owns it, at the end of
+ * the h1's row; no pane renders one of its own.
+ *
+ * @param scope - The page, or a region to search within
+ */
+export function helpButton(scope: Page | Locator): Locator {
+  return scope.getByRole('button', { name: HELP_BUTTON_LABEL, exact: true });
 }
 
 /**

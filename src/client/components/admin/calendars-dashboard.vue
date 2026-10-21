@@ -7,7 +7,6 @@ import { DateTime } from 'luxon';
 import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
 import type { AdminCalendarRow } from '@/client/service/admin-calendar';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'calendars',
@@ -144,14 +143,8 @@ const hasActiveFilters = computed(() => {
 
 <template>
   <div class="calendars-dashboard">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2>{{ t('page_title') }}</h2>
-        <p class="page-subtitle">{{ t('page_subtitle') }}</p>
-      </div>
-      <HelpButton />
-    </div>
+    <!-- The settings page header carries the title and help button. -->
+    <p class="page-subtitle">{{ t('page_subtitle') }}</p>
 
     <!-- Filters Section -->
     <section class="filters-section" :aria-label="t('filters_section_aria_label')">
@@ -364,31 +357,10 @@ const hasActiveFilters = computed(() => {
   flex-direction: column;
   gap: var(--pav-space-6);
 
-  .page-header {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-4);
-
-    @include pav-media(md) {
-      flex-direction: row;
-      align-items: flex-start;
-      justify-content: space-between;
-    }
-
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-text-muted);
-      }
-    }
+  .page-subtitle {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-text-muted);
   }
 
   .filters-section {

@@ -93,6 +93,15 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--pav-space-3);
+
+    /* The help button (common/help-button.vue) ends the row at its own
+       size: flex: none and align-self keep any flex context from
+       stretching it, which aspect-ratio would turn into a giant circle. */
+    > .btn--icon {
+      flex: none;
+      align-self: center;
+      margin-inline-start: auto;
+    }
   }
 
   /* The switcher trigger, in the eyebrow and beside the h1, takes the

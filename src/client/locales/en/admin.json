@@ -8,7 +8,6 @@
     "close_button": "Cancel"
   },
   "calendars": {
-    "page_title": "Local Calendars",
     "page_subtitle": "Review calendars hosted on this instance",
     "loading": "Loading calendars...",
     "error": "Failed to load calendars",
@@ -47,7 +46,6 @@
     "pagination_page_info": "Page {{current}} of {{total}}"
   },
   "moderation": {
-    "title": "Moderation Dashboard",
     "subtitle": "Review escalated reports and admin-initiated moderation",
     "loading": "Loading reports...",
     "error": "Failed to load reports",
@@ -275,7 +273,6 @@
     "disk_usage_used": "used"
   },
   "accounts": {
-    "page_title": "Account Management",
     "page_subtitle": "Manage users, review applications, and send invitations",
     "applications_tab": "Applications",
     "invitations_tab": "Invitations",
@@ -362,7 +359,6 @@
     "unknown_expiration": "Unknown"
   },
   "settings": {
-    "general_settings": "General Settings",
     "instance_name": "Instance Name/Title",
     "site_title_description": "The name of your instance that appears in the browser title and other places.",
     "registration_mode": "Registration Mode",
@@ -408,7 +404,6 @@
     "manage_blocked_description": "View and manage blocked instances from the moderation settings."
   },
   "funding": {
-    "title": "Funding Settings",
     "loading": "Loading...",
     "load_settings_error": "Failed to load funding plan settings.",
     "settings_section_title": "Funding Plan Configuration",

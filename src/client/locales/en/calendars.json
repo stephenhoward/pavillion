@@ -484,7 +484,6 @@
     "add_category_option": "+ Add this category"
   },
   "settings": {
-    "title": "Calendar Settings",
     "loading": "Loading settings...",
     "calendar_content_section": "Calendar Title & Description",
     "calendar_title_label": "Calendar Title",

@@ -89,7 +89,7 @@ test.describe('Admin Moderation Dashboard', () => {
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
 
     // Wait for the moderation dashboard to load
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // Verify dashboard has filter controls
     const statusFilter = page.locator('select#status-filter').first();
@@ -102,7 +102,7 @@ test.describe('Admin Moderation Dashboard', () => {
   test('should filter reports by status', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // Find and use the status filter
     const statusFilter = page.locator('select#status-filter');
@@ -113,13 +113,13 @@ test.describe('Admin Moderation Dashboard', () => {
     await page.waitForTimeout(500);
 
     // Verify the page updated (doesn't cause errors)
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
   });
 
   test('should navigate to report detail', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     await openSeededReport(page);
 
@@ -138,7 +138,7 @@ test.describe('Admin Pattern Warning Indicators', () => {
   test('should support pattern warning display on reports', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     await expect(page.locator('select#status-filter')).toBeVisible();
 
@@ -151,7 +151,7 @@ test.describe('Admin Pattern Warning Indicators', () => {
   test('should display report details with metadata', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     await openSeededReport(page);
 
@@ -361,7 +361,7 @@ test.describe('Admin Create Report', () => {
   test('should open create report modal', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // Look for "Create Report" button
     const createButton = page.locator('button:has-text("Create Report")').first();
@@ -387,7 +387,7 @@ test.describe('Admin Moderation Integration', () => {
   test('should navigate between moderation dashboard and settings', async ({ page }) => {
     // Start at moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // The dashboard's gear button opens moderation settings
     await page.getByRole('button', { name: 'Moderation Settings' }).click();
@@ -401,31 +401,31 @@ test.describe('Admin Moderation Integration', () => {
     // The settings tree's Moderation row leads back to the dashboard
     await moderationRow.click();
     await expect(page).toHaveURL(new RegExp(adminLeafPath('moderation') + '$'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
   });
 
   test('should maintain admin context across navigation', async ({ page }) => {
     // Start at moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     const tree = settingsTree(page);
 
     // Navigate to admin accounts
     await settingsRow(tree, 'Accounts').click();
     await expect(page).toHaveURL(new RegExp(adminLeafPath('accounts') + '$'));
-    await expect(paneHeading(page, 'Account Management')).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('accounts').title)).toBeVisible();
 
     // Navigate back to moderation
     await settingsRow(tree, 'Moderation').click();
     await expect(page).toHaveURL(new RegExp(adminLeafPath('moderation') + '$'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
   });
 
   test('should apply and reset filters', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // Apply a filter
     const statusFilter = page.locator('select#status-filter');
@@ -454,7 +454,7 @@ test.describe('Admin Moderation Pagination', () => {
   test('should display pagination if many reports exist', async ({ page }) => {
     // Navigate to moderation dashboard
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
     // Look for pagination controls
     const pagination = page.locator('nav[aria-label*="pagination" i], .pagination').first();
@@ -463,7 +463,7 @@ test.describe('Admin Moderation Pagination', () => {
     const hasPagination = await pagination.isVisible().catch(() => false);
 
     // Just verify the page loaded successfully
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
 
     // If pagination exists, verify it's functional
     if (hasPagination) {

@@ -7,7 +7,7 @@ import type { Locator, Page } from '@playwright/test';
  * en string.
  *
  * @param page - Playwright page instance
- * @param name - The leaf's heading text, e.g. "Moderation Dashboard"
+ * @param name - The leaf's heading text, e.g. "Moderation Settings"
  */
 export function paneHeading(page: Page, name: string): Locator {
   return page.getByRole('heading', { level: 2, name, exact: true });

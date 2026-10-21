@@ -8,7 +8,6 @@
     "close_button": "Annuler"
   },
   "calendars": {
-    "page_title": "Calendriers locaux",
     "page_subtitle": "Consultez les calendriers hébergés sur cette instance",
     "loading": "Chargement des calendriers...",
     "error": "Échec du chargement des calendriers",
@@ -47,7 +46,6 @@
     "pagination_page_info": "Page {{current}} sur {{total}}"
   },
   "moderation": {
-    "title": "Tableau de bord de modération",
     "subtitle": "Examinez les signalements remontés et la modération initiée par les administrateurs",
     "loading": "Chargement des signalements...",
     "error": "Échec du chargement des signalements",
@@ -275,7 +273,6 @@
     "disk_usage_used": "utilisé"
   },
   "accounts": {
-    "page_title": "Gestion des comptes",
     "page_subtitle": "Gérez les utilisateurs, examinez les demandes et envoyez des invitations",
     "applications_tab": "Demandes",
     "invitations_tab": "Invitations",
@@ -362,7 +359,6 @@
     "unknown_expiration": "Inconnue"
   },
   "settings": {
-    "general_settings": "Paramètres généraux",
     "instance_name": "Nom/titre de l'instance",
     "site_title_description": "Le nom de votre instance qui apparaît dans le titre du navigateur et ailleurs.",
     "registration_mode": "Mode d'inscription",
@@ -408,7 +404,6 @@
     "manage_blocked_description": "Consultez et gérez les instances bloquées depuis les paramètres de modération."
   },
   "funding": {
-    "title": "Paramètres de financement",
     "loading": "Chargement...",
     "load_settings_error": "Échec du chargement des paramètres du plan de financement.",
     "settings_section_title": "Configuration du plan de financement",

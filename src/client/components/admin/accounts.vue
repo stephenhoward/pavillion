@@ -10,7 +10,6 @@ import { useApplicationStore } from '@/client/stores/applicationStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { DateTime } from 'luxon';
 import { useTabScroll } from '@/client/composables/useTabScroll';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'accounts',
@@ -91,14 +90,10 @@ const subTabs = computed(() => [
 </script>
 
 <template>
-  <section id="accounts" class="accounts-page" aria-labelledby="accounts-heading">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2 id="accounts-heading">{{ t('page_title') }}</h2>
-        <p class="page-subtitle">{{ t('page_subtitle') }}</p>
-      </div>
-      <HelpButton />
+  <section id="accounts" class="accounts-page">
+    <!-- The settings page header carries the title and help button. -->
+    <div class="page-intro">
+      <p class="page-subtitle">{{ t('page_subtitle') }}</p>
       <button
         v-if="state.activeTab === 'invitations'"
         type="button"
@@ -260,7 +255,7 @@ const subTabs = computed(() => [
   flex-direction: column;
   gap: var(--pav-space-6);
 
-  .page-header {
+  .page-intro {
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-4);
@@ -271,19 +266,10 @@ const subTabs = computed(() => [
       justify-content: space-between;
     }
 
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
+    .page-subtitle {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-muted);
     }
 
     .invite-button {

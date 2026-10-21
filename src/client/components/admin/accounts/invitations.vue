@@ -47,7 +47,7 @@
     <!-- Active Invitations Card -->
     <div class="invitations-card">
       <div class="card-header">
-        <h3 id="invitations-active-heading">{{ t('active_title') }}</h3>
+        <h2 id="invitations-active-heading">{{ t('active_title') }}</h2>
       </div>
 
       <div v-if="activeInvitations.length === 0" class="empty-state">
@@ -141,7 +141,7 @@
     <!-- Expired Invitations Card -->
     <div v-if="expiredInvitations.length > 0" class="invitations-card invitations-card--expired">
       <div class="card-header">
-        <h3 id="invitations-expired-heading">{{ t('expired_title') }}</h3>
+        <h2 id="invitations-expired-heading">{{ t('expired_title') }}</h2>
       </div>
 
       <!-- Desktop Table -->
@@ -350,7 +350,7 @@ const cancelInvitation = async (invitation) => {
       padding: var(--pav-space-4) var(--pav-space-6);
       border-bottom: 1px solid var(--pav-border-color-light);
 
-      h3 {
+      h2 {
         margin: 0;
         font-weight: var(--pav-font-weight-medium);
         color: var(--pav-color-text-primary);
@@ -663,7 +663,7 @@ const cancelInvitation = async (invitation) => {
     }
 
     .invitations-card {
-      .card-header h3 {
+      .card-header h2 {
         color: var(--pav-color-text-primary);
       }
 

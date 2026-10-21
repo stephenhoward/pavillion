@@ -28,7 +28,7 @@
 
       <!-- Active Editors Section -->
       <div v-if="state.editors.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('active_editors_title') }}</h3>
+        <h2 class="section-label">{{ t('active_editors_title') }}</h2>
         <div
           v-for="editor in state.editors"
           :key="editor.id"
@@ -57,7 +57,7 @@
 
       <!-- Pending Invitations Section -->
       <div v-if="state.pendingInvitations.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('pending_invitations_title') }}</h3>
+        <h2 class="section-label">{{ t('pending_invitations_title') }}</h2>
         <div
           v-for="invitation in state.pendingInvitations"
           :key="invitation.id"
