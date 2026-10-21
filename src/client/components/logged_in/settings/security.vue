@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * Account settings leaf: the email and password rows and the modals that
- * change them. The settings layout supplies the page heading and the column.
+ * change them, and the help button for its guide. The settings layout
+ * supplies the page heading and the column.
  */
 import { reactive, inject, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
@@ -9,6 +10,7 @@ import type AuthenticationService from '@/client/service/authn';
 import AccountService from '@/client/service/account';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
+import HelpButton from '@/client/components/common/help-button.vue';
 
 const authn = inject('authn') as AuthenticationService;
 const { t } = useTranslation('profile');
@@ -48,43 +50,58 @@ onMounted(loadEmail);
 </script>
 
 <template>
-  <div class="account-settings-card">
-    <div class="account-settings-card__section security-settings">
-      <div class="security-settings__row">
-        <div class="security-settings__info">
-          <p class="security-settings__label">{{ t("account_email_label", { defaultValue: "Email Address" }) }}</p>
-          <p class="security-settings__value">{{ state.email }}</p>
-        </div>
-        <button
-          type="button"
-          class="btn-text"
-          @click="state.changeEmail = true"
-        >
-          {{ t("change_email_button", { defaultValue: "Change Email" }) }}
-        </button>
-      </div>
-
-      <div class="security-settings__row">
-        <div class="security-settings__info">
-          <p class="security-settings__label">{{ t("account_password_label", { defaultValue: "Password" }) }}</p>
-          <p class="security-settings__value">{{ t("last_changed_unknown", { defaultValue: "Last changed: Unknown" }) }}</p>
-        </div>
-        <button
-          type="button"
-          class="btn-text"
-          @click="state.changePassword = true"
-        >
-          {{ t("change_password_button", { defaultValue: "Change Password" }) }}
-        </button>
-      </div>
+  <div>
+    <div class="security-settings__help">
+      <HelpButton />
     </div>
 
-    <EmailModal v-if="state.changeEmail" @close="closeEmailModal" />
-    <PasswordModal v-if="state.changePassword" @close="state.changePassword = false" />
+    <div class="account-settings-card">
+      <div class="account-settings-card__section security-settings">
+        <div class="security-settings__row">
+          <div class="security-settings__info">
+            <p class="security-settings__label">{{ t("account_email_label", { defaultValue: "Email Address" }) }}</p>
+            <p class="security-settings__value">{{ state.email }}</p>
+          </div>
+          <button
+            type="button"
+            class="btn-text"
+            @click="state.changeEmail = true"
+          >
+            {{ t("change_email_button", { defaultValue: "Change Email" }) }}
+          </button>
+        </div>
+
+        <div class="security-settings__row">
+          <div class="security-settings__info">
+            <p class="security-settings__label">{{ t("account_password_label", { defaultValue: "Password" }) }}</p>
+            <p class="security-settings__value">{{ t("last_changed_unknown", { defaultValue: "Last changed: Unknown" }) }}</p>
+          </div>
+          <button
+            type="button"
+            class="btn-text"
+            @click="state.changePassword = true"
+          >
+            {{ t("change_password_button", { defaultValue: "Change Password" }) }}
+          </button>
+        </div>
+      </div>
+
+      <EmailModal v-if="state.changeEmail" @close="closeEmailModal" />
+      <PasswordModal v-if="state.changePassword" @close="state.changePassword = false" />
+    </div>
   </div>
 </template>
 
 <style scoped lang="scss">
+.security-settings__help {
+  display: flex;
+  justify-content: flex-end;
+
+  &:empty {
+    display: none;
+  }
+}
+
 .security-settings {
   display: flex;
   flex-direction: column;

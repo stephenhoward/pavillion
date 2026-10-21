@@ -156,6 +156,20 @@ describe('Security settings leaf', () => {
 
     expect(wrapper.find('.funding-card').exists()).toBe(false);
     expect(wrapper.find('.logout-button').exists()).toBe(false);
-    expect(wrapper.find('svg').exists()).toBe(false);
+    expect(wrapper.find('.account-settings-card svg').exists()).toBe(false);
+  });
+
+  it('offers the account guide through the help button on its route', async () => {
+    const router: Router = createRouter({ history: createMemoryHistory(), routes });
+    await router.push('/settings/account/security');
+    const wrapper = mountComponent(SecuritySettings, router, {
+      provide: { authn: { isAdmin: () => false, userEmail: () => 'session@example.com' } },
+      stubs: { EmailModal: true, PasswordModal: true },
+    });
+    await flushPromises();
+
+    const help = wrapper.find('.security-settings__help button[aria-haspopup="dialog"]');
+    expect(help.exists()).toBe(true);
+    expect(help.attributes('aria-label')).toBe('Help with this page');
   });
 });
