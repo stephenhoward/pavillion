@@ -539,8 +539,8 @@ const KNOWN_COPY_BUTTON_CONTRAST = '.copy-button__label';
 /**
  * The Widget leaf's live preview: an iframe holding the public widget, a
  * separate app with its own document. Its colours follow the owner-configured
- * accent (event times in `#FF9131` at 2.24:1, pv-8l49) and the public filter
- * styles, not settings; this scan covers the settings page around it.
+ * accent (event times in `#FF9131` at 2.24:1, pv-8l49), not settings; this
+ * scan covers the settings page around it.
  */
 const WIDGET_PREVIEW_FRAME = 'iframe';
 
