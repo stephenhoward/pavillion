@@ -67,10 +67,10 @@ test.beforeAll(async () => {
 
 /**
  * Opens the seeded report from the moderation dashboard's View Details
- * button and waits for the report detail page.
+ * link and waits for the report detail page.
  */
 async function openSeededReport(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'View Details' }).first().click();
+  await page.getByRole('link', { name: 'View Details' }).first().click();
   await expect(page).toHaveURL(new RegExp(adminReportPath(seededReportId) + '$'));
   await expect(settingsTitle(page, adminReport(seededReportId).title)).toBeVisible({ timeout: 10000 });
 }

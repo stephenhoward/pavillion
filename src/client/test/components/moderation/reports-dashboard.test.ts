@@ -31,4 +31,53 @@ describe('ReportsDashboard.vue', () => {
     // The filters keep their accessible name.
     expect(wrapper.find('[role="search"]').attributes('aria-label')).toBe('Reports');
   });
+
+  describe('report rows', () => {
+    const REPORT_ID = 'report-1';
+
+    async function mountWithReport() {
+      const store = useModerationStore();
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }] });
+      const wrapper = mountComponent(ReportsDashboard, router, {
+        pinia,
+        props: { calendarId: 'cal-1' },
+      });
+      await flushPromises();
+      // onMounted resets the store, so the row is seeded after mount.
+      store.reports = [{
+        id: REPORT_ID,
+        eventId: 'aaaaaaaa-0000-0000-0000-000000000000',
+        category: 'spam',
+        reporterType: 'anonymous',
+        status: 'submitted',
+        createdAt: new Date('2026-10-01T12:00:00Z'),
+      }] as never;
+      await flushPromises();
+      return wrapper;
+    }
+
+    it('is a plain table whose rows are not tab stops', async () => {
+      const wrapper = await mountWithReport();
+      expect(wrapper.find('table').attributes('role')).toBeUndefined();
+      const row = wrapper.find('tbody tr');
+      expect(row.attributes('role')).toBeUndefined();
+      expect(row.attributes('tabindex')).toBeUndefined();
+    });
+
+    it('opens the report from a real button in the event cell', async () => {
+      const wrapper = await mountWithReport();
+      const buttons = wrapper.find('tbody tr').findAll('button');
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].attributes('type')).toBe('button');
+
+      await buttons[0].trigger('click');
+      expect(wrapper.emitted('view-report')).toEqual([[REPORT_ID]]);
+    });
+
+    it('still opens the report once when a pointer user clicks elsewhere on the row', async () => {
+      const wrapper = await mountWithReport();
+      await wrapper.findAll('tbody td')[1].trigger('click');
+      expect(wrapper.emitted('view-report')).toEqual([[REPORT_ID]]);
+    });
+  });
 });
