@@ -61,7 +61,9 @@
   /* Navigation Active States (Orange accent) */
   --pav-nav-active-bg: var(--pav-color-interactive-active-bg);
   --pav-nav-active-text: var(--pav-color-interactive-active-text);
-  --pav-nav-active-icon: var(--pav-color-interactive-active);
+  /* The current item's filled icon is its non-colour cue, so it takes the
+     text colour to reach 3:1 on the active tint (orange-500 is 2.64:1) */
+  --pav-nav-active-icon: var(--pav-color-interactive-active-text);
   --pav-nav-inactive-text: var(--pav-color-stone-500);
   --pav-nav-inactive-icon: var(--pav-color-stone-400);
 

@@ -63,6 +63,7 @@ import {
  *
  * The accessibility half: axe scans of the representative states in both
  * colour schemes, one h1 and one current item per list in every state, the
+ * current item's filled icon (and its outline in forced colours), the
  * keyboard order rail → tree → content with both skip controls, and reflow
  * (no sideways overflow at 320px, at 200% text at md+, in a short landscape
  * window, or on the widest leaves at 768 and 900px).
@@ -645,6 +646,61 @@ test.describe('one h1 and one current item per list', () => {
       await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, UNRESOLVED_CALENDAR_TITLE));
       await expect(emptyState(page.getByRole('main'))).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    }
+  });
+});
+
+test.describe('current-item cue', () => {
+  /** How a current link draws its cue: the filled icon, any ring, and the icon and link colours. */
+  async function currentCue(link: Locator) {
+    return link.evaluate((el) => {
+      const icon = el.querySelector('.shell-nav-item__icon');
+      const style = getComputedStyle(el);
+      return {
+        filled: icon?.classList.contains('shell-nav-item__icon--filled') ?? false,
+        boxShadow: style.boxShadow,
+        outlineStyle: style.outlineStyle,
+        linkColor: style.color,
+        iconColor: icon ? getComputedStyle(icon).color : '',
+      };
+    });
+  }
+
+  /** Icons drawn filled in a list; only its current item may draw one. */
+  function filledIcons(list: Locator): Locator {
+    return list.locator('.shell-nav-item__icon--filled');
+  }
+
+  test('the current item draws a filled icon and no ring, in the rail, the tree and the phone tabs', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'));
+
+    for (const list of [mainNav(page), settingsTree(page)]) {
+      await expect(filledIcons(list)).toHaveCount(1);
+      const cue = await currentCue(list.locator('[aria-current="page"]'));
+      expect(cue.filled).toBe(true);
+      expect(cue.boxShadow).toBe('none');
+      expect(cue.outlineStyle).toBe('none');
+    }
+
+    await page.setViewportSize(PHONE);
+    await expect(filledIcons(mobileNav(page))).toHaveCount(1);
+    expect((await currentCue(mobileNav(page).locator('[aria-current="page"]'))).filled).toBe(true);
+  });
+
+  test('forced colours outline the current item and paint its filled icon in the link colour', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await page.emulateMedia({ forcedColors: 'active' });
+    await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'));
+
+    for (const list of [mainNav(page), settingsTree(page)]) {
+      const cue = await currentCue(list.locator('[aria-current="page"]'));
+      expect(cue.filled).toBe(true);
+      expect(cue.outlineStyle).toBe('solid');
+      // An author colour on the SVG survives forced colours and could vanish on the user's Canvas
+      expect(cue.iconColor).toBe(cue.linkColor);
     }
   });
 });
