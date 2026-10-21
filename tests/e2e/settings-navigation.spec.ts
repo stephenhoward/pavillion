@@ -1,5 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { MULTI_CALENDAR_USER, loginAsAdmin, loginViaUi } from './helpers/auth';
+import type { Theme } from './helpers/color-mode';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import {
   ADMIN_CALENDAR_URL_NAME,
@@ -15,6 +17,8 @@ import {
   PHONE,
   SHELL_MD,
   UNRESOLVED_CALENDAR_TITLE,
+  WCAG_TAGS,
+  adminLeaf,
   adminLeafPath,
   backLink,
   calendarIndex,
@@ -25,6 +29,7 @@ import {
   calendarReportPath,
   calendarSwitcherTrigger,
   emptyState,
+  expectNoHorizontalScroll,
   gotoSettings,
   historyLength,
   logOutButton,
@@ -36,7 +41,9 @@ import {
   settingsPath,
   settingsRootList,
   settingsRow,
+  settingsRowChevron,
   settingsContent,
+  shellSkipLink,
   settingsTitle,
   settingsTree,
   treeSkipControl,
@@ -54,8 +61,11 @@ import {
  * `?tab=reports` link, and the unresolved-calendar index rendering the same
  * page for a non-member and a nonexistent calendar.
  *
- * Axe, heading and aria-current counts, keyboard order and reflow live in
- * the accessibility spec beside this one.
+ * The accessibility half: axe scans of the representative states in both
+ * colour schemes, one h1 and one current item per list in every state, the
+ * keyboard order rail → tree → content with both skip controls, and reflow
+ * (no sideways overflow at 320px, at 200% text at md+, in a short landscape
+ * window, or on the widest leaves at 768 and 900px).
  *
  * Seeded actors: the admin owns test_calendar ("Test Calendar"); the test
  * user owns testuser_calendar; the multi-calendar user edits
@@ -345,7 +355,7 @@ test.describe('tree layout', () => {
     expect(box!.width).toBeCloseTo(224, 0);
   });
 
-  for (const width of [SHELL_MD, 900]) {
+  for (const width of [SHELL_MD, 900, DESKTOP.width]) {
     test(`nothing overflows sideways at ${width}px with 200% text`, async ({ page }) => {
       await page.setViewportSize({ width, height: DESKTOP.height });
       await loginAsAdmin(page, env.baseURL);
@@ -427,3 +437,330 @@ for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as cons
     });
   });
 }
+
+/*
+ * Accessibility.
+ */
+
+/** The multi-calendar user's own calendar, whose leaf hosts the open-switcher scan. */
+const MULTI_CALENDAR_URL_NAME = 'multicalendar_calendar';
+
+/** A short landscape window at md+: the page and the sticky tree both scroll. */
+const SHORT_LANDSCAPE = { width: 800, height: 360 };
+
+/** The narrowest width WCAG 1.4.10 reflow is defined at. */
+const REFLOW_WIDTH = 320;
+
+/*
+ * Pre-existing design-system contrast failures, excluded by selector on the
+ * states that render them, never by disabling color-contrast for a page.
+ * Neither is a settings selector and this epic did not touch either; both are
+ * the brand-orange ramp failing AA, tracked as pv-jqa4 and recorded with the
+ * same reasoning as KNOWN_DESIGN_TOKEN_VIOLATIONS in a11y/inbox-axe.spec.ts.
+ * Drop each when pv-jqa4 lands; never widen one to a whole rule.
+ */
+
+/** The shared `.pill-button--primary`: white on `#F97316`, 2.8:1. On the report detail. */
+const KNOWN_PRIMARY_PILL_CONTRAST = '.pill-button--primary';
+
+/**
+ * A selected in-page tab drawn by the shared tab-button mixin (the language
+ * tabs on a multilingual form, the instance Accounts tabs): `#EA580C`
+ * (`--pav-color-brand-primary-dark`) on white, 3.55:1, which pv-jqa4 names as
+ * insufficient text. No settings navigation control is a tab.
+ */
+const KNOWN_SELECTED_TAB_CONTRAST = '[role="tab"][aria-selected="true"]';
+
+/** The instance Accounts table's row actions: `--pav-color-orange-600` (`#EA580C`) text, 3.55:1. */
+const KNOWN_ACCOUNT_ACTION_CONTRAST = '.action-link';
+
+/** The Widget leaf's copy button: white on `#F97316`, 2.8:1, the same fill as the primary pill. */
+const KNOWN_COPY_BUTTON_CONTRAST = '.copy-button__label';
+
+/**
+ * The Widget leaf's live preview: an iframe holding the public widget, a
+ * separate app with its own document. Its colours follow the owner-configured
+ * accent (event times in `#FF9131` at 2.24:1, pv-8l49) and the public filter
+ * styles, not settings; this scan covers the settings page around it.
+ */
+const WIDGET_PREVIEW_FRAME = 'iframe';
+
+/**
+ * Scan the page (or one region of it) with the pinned WCAG tag set and return
+ * each violation as "rule: targets", so a failure diff names the selector.
+ */
+async function axeViolations(page: Page, scope: { include?: string; exclude?: string[] } = {}): Promise<string[]> {
+  let builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
+  if (scope.include) {
+    builder = builder.include(scope.include);
+  }
+  for (const selector of scope.exclude ?? []) {
+    builder = builder.exclude(selector);
+  }
+  const results = await builder.analyze();
+  return results.violations.map(
+    (violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`,
+  );
+}
+
+/** Every list inside the scope marks at most one item as the current page. */
+async function expectAtMostOneCurrentPerList(scope: Locator): Promise<void> {
+  const lists = await scope.getByRole('list').all();
+  expect(lists.length, 'the scope has lists').toBeGreaterThan(0);
+  for (const list of lists) {
+    await expect(list.locator('[aria-current="page"]').count()).resolves.toBeLessThanOrEqual(1);
+  }
+}
+
+/** The document does not scroll sideways and nothing overflows the settings content column. */
+async function expectNoSidewaysOverflow(page: Page, where: string): Promise<void> {
+  const documentWidth = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(documentWidth.scrollWidth, `document overflows on ${where}`).toBeLessThanOrEqual(documentWidth.innerWidth);
+  await expectNoHorizontalScroll(page);
+}
+
+for (const theme of ['light', 'dark'] as const satisfies readonly Theme[]) {
+  test.describe(`axe, representative states (${theme})`, () => {
+    test.use({ colorScheme: theme });
+
+    test('phone root list', async ({ page }) => {
+      await page.setViewportSize(PHONE);
+      await loginAsAdmin(page, env.baseURL);
+      await gotoSettings(page, env.baseURL, settingsRootList);
+
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test('phone section list', async ({ page }) => {
+      await page.setViewportSize(PHONE);
+      await loginAsAdmin(page, env.baseURL);
+      await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, ADMIN_CALENDAR_NAME));
+      await expect(calendarSwitcherTrigger(page)).toBeVisible();
+
+      expect(await axeViolations(page)).toEqual([]);
+    });
+
+    test('desktop leaf with tree and rail', async ({ page }) => {
+      await page.setViewportSize(DESKTOP);
+      await loginAsAdmin(page, env.baseURL);
+      await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'));
+      await expect(settingsTree(page)).toBeVisible();
+      await expect(mainNav(page)).toBeVisible();
+
+      expect(await axeViolations(page, { exclude: [KNOWN_SELECTED_TAB_CONTRAST] })).toEqual([]);
+    });
+
+    test('reports detail', async ({ page }) => {
+      await page.setViewportSize(DESKTOP);
+      await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
+      await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
+      await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
+      await expect(reportRegion(page)).toBeFocused();
+
+      expect(await axeViolations(page, { exclude: [KNOWN_PRIMARY_PILL_CONTRAST] })).toEqual([]);
+    });
+  });
+}
+
+test.describe('axe, further leaves (light)', () => {
+  test.use({ colorScheme: 'light', viewport: DESKTOP });
+
+  test('instance accounts leaf', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('accounts'));
+
+    expect(await axeViolations(page, {
+      exclude: [KNOWN_SELECTED_TAB_CONTRAST, KNOWN_ACCOUNT_ACTION_CONTRAST],
+    })).toEqual([]);
+  });
+
+  test('profile and security leaves', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    for (const leaf of [settingsLeaf.profile, settingsLeaf.security]) {
+      await gotoSettings(page, env.baseURL, leaf);
+      expect(await axeViolations(page), leaf.path).toEqual([]);
+    }
+  });
+
+  test('calendar leaf as an editor', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    // Widget is the one calendar leaf an editor sees.
+    await gotoSettings(page, env.baseURL, calendarLeaf(TESTUSER_CALENDAR_URL_NAME, 'widget'));
+
+    expect(await axeViolations(page, {
+      exclude: [KNOWN_COPY_BUTTON_CONTRAST, WIDGET_PREVIEW_FRAME],
+    })).toEqual([]);
+  });
+
+  test('calendar switcher sheet open on a settings leaf', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    await gotoSettings(page, env.baseURL, calendarLeaf(MULTI_CALENDAR_URL_NAME, 'editors'));
+    await calendarSwitcherTrigger(page).click();
+    await expect(page.getByRole('dialog', { name: 'Switch calendar' })).toBeVisible();
+
+    expect(await axeViolations(page, { include: 'dialog.calendar-switcher-sheet' })).toEqual([]);
+  });
+});
+
+test.describe('one h1 and one current item per list', () => {
+  test('phone list pages and a phone leaf', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    const main = page.getByRole('main');
+
+    for (const list of [settingsRootList, calendarIndex(ADMIN_CALENDAR_URL_NAME, ADMIN_CALENDAR_NAME)]) {
+      await gotoSettings(page, env.baseURL, list);
+      // A display: none instance leaves the accessibility tree, so the count sees only the live one.
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+      // An index has no current leaf, so zero is as correct as one.
+      await expectAtMostOneCurrentPerList(main);
+    }
+
+    await gotoSettings(page, env.baseURL, settingsLeaf.security);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    // Below md the tree is display: none, not visually hidden: it is out of the accessibility tree.
+    await expect(settingsTree(page)).toHaveCount(0);
+  });
+
+  test('desktop leaf: one current row in the tree and one in the rail', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'));
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(settingsTree(page).locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(mainNav(page).locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(mainNav(page).getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expectAtMostOneCurrentPerList(settingsTree(page));
+  });
+
+  test('the non-member empty state has one h1 at either width', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+
+    for (const viewport of [PHONE, DESKTOP]) {
+      await page.setViewportSize(viewport);
+      await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, UNRESOLVED_CALENDAR_TITLE));
+      await expect(emptyState(page.getByRole('main'))).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    }
+  });
+});
+
+test.describe('keyboard order', () => {
+  test.use({ viewport: DESKTOP });
+
+  /** Which part of the page holds focus, checked innermost-first: the tree sits inside main. */
+  async function focusZone(page: Page): Promise<string> {
+    const zones = [
+      ['skip-main', shellSkipLink(page)],
+      ['rail', mainNav(page)],
+      ['tree', settingsTree(page)],
+      ['content', page.getByRole('main')],
+    ] as const;
+    for (const [zone, locator] of zones) {
+      if (await locator.evaluate((el) => el.contains(document.activeElement))) {
+        return zone;
+      }
+    }
+    return 'other';
+  }
+
+  test('Tab runs skip link → rail → tree → content', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    // Profile has no switcher in its eyebrow, so the first content stop is the page's own.
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
+
+    const sequence: string[] = [];
+    for (let press = 0; press < 40 && sequence.at(-1) !== 'content'; press++) {
+      await page.keyboard.press('Tab');
+      const zone = await focusZone(page);
+      if (sequence.at(-1) !== zone) {
+        sequence.push(zone);
+      }
+    }
+    expect(sequence).toEqual(['skip-main', 'rail', 'tree', 'content']);
+  });
+
+  test('the tree\'s first stop is its skip control, which moves focus to the h1', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, settingsLeaf.profile);
+
+    for (let press = 0; press < 40 && (await focusZone(page)) !== 'tree'; press++) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(treeSkipControl(page)).toBeFocused();
+
+    await page.keyboard.press('Enter');
+    await expect(settingsTitle(page, 'Profile')).toBeFocused();
+
+    // The next stop is the page's own first control, past the tree.
+    await page.keyboard.press('Tab');
+    expect(await focusZone(page)).toBe('content');
+  });
+});
+
+test.describe('reflow', () => {
+  test(`nothing overflows sideways at ${REFLOW_WIDTH}px`, async ({ page }) => {
+    await page.setViewportSize({ width: REFLOW_WIDTH, height: 800 });
+    await loginAsAdmin(page, env.baseURL);
+
+    for (const target of [
+      settingsRootList,
+      calendarIndex(ADMIN_CALENDAR_URL_NAME, ADMIN_CALENDAR_NAME),
+      settingsLeaf.security,
+    ]) {
+      await gotoSettings(page, env.baseURL, target);
+      await expectNoSidewaysOverflow(page, target.path);
+    }
+  });
+
+  test('nothing overflows sideways in a short landscape window at md+', async ({ page }) => {
+    await page.setViewportSize(SHORT_LANDSCAPE);
+    await loginAsAdmin(page, env.baseURL);
+
+    for (const leaf of [calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'), settingsLeaf.profile]) {
+      await gotoSettings(page, env.baseURL, leaf);
+      await expect(settingsTree(page)).toBeVisible();
+      await expectNoSidewaysOverflow(page, leaf.path);
+      // The sticky tree scrolls on its own here; it scrolls only vertically.
+      await expectNoHorizontalScroll(page, settingsTree(page));
+    }
+  });
+
+  // The widest leaves: tables and side-by-side forms that the content column must contain.
+  const widestLeaves = [
+    adminLeaf('accounts'),
+    adminLeaf('calendars'),
+    calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'widget'),
+    calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'import'),
+  ];
+  for (const width of [SHELL_MD, 900]) {
+    test(`the widest leaves fit the content column at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: DESKTOP.height });
+      await loginAsAdmin(page, env.baseURL);
+
+      for (const leaf of widestLeaves) {
+        await gotoSettings(page, env.baseURL, leaf);
+        await expect(page).toHaveURL(pathPattern(leaf.path));
+        await expectNoSidewaysOverflow(page, leaf.path);
+      }
+    });
+  }
+
+  test('row chevrons mirror in RTL', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, settingsRootList);
+    const chevron = settingsRowChevron(settingsRow(page.getByRole('main'), 'Account'));
+
+    await expect(chevron).toHaveCSS('transform', 'none');
+    await page.evaluate(() => {
+      document.documentElement.dir = 'rtl';
+    });
+    // scaleX(-1) computes to a matrix with a negative x scale.
+    await expect(chevron).toHaveCSS('transform', 'matrix(-1, 0, 0, 1, 0, 0)');
+  });
+});

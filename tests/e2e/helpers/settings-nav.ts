@@ -361,6 +361,16 @@ export function mainNavLinkLabel(link: Locator): Locator {
 }
 
 /**
+ * A settings row's trailing chevron (list page rows below md). A class
+ * selector because the icon is decorative and has no role.
+ *
+ * @param row - A row from settingsRow
+ */
+export function settingsRowChevron(row: Locator): Locator {
+  return row.locator('.shell-nav-item__chevron');
+}
+
+/**
  * The calendar settings loading announcement, which must be gone once the
  * page has settled.
  *
