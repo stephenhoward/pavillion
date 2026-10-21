@@ -1,51 +1,43 @@
 <script setup lang="ts">
 /**
- * The confirm step of an editor's Leave calendar row (nav-list.vue).
+ * The confirm step of an editor's Leave button on the Account → Calendars
+ * screen (account-calendars.vue).
  *
- * - Leaving revokes the viewer's own edit access, then drops the calendar
- *   from the calendar store and forgets it as the current calendar, so no
- *   list, switcher or forward still offers it.
- * - The store changes before the navigation: the settings root's forward at
- *   md+ reads the store, and must not land back on the calendar just left.
- *   The root replaces the page being left, whose calendar no longer
- *   resolves, so Back does not return to it.
- * - Dropping the calendar removes the row that mounted this dialog, so
- *   everything after the leave runs on the router and toast singletons, not
- *   on this component's state.
+ * Leaving revokes the viewer's own edit access; the service then drops the
+ * calendar from the calendar store and forgets it as the current calendar,
+ * so no list, switcher or forward still offers it. On success the dialog
+ * emits `left` and the screen decides where focus goes; on failure it stays
+ * open with an error toast.
  */
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
 import { calendarDisplayName } from '@/client/service/calendar-display';
-import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useToast } from '@/client/composables/useToast';
 import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
-import { focusSettingsHeading } from './heading-focus';
+import type { Calendar } from '@/common/model/calendar';
 
 const props = defineProps<{
-  calendarUrlName: string;
+  calendar: Calendar;
 }>();
 
 const emit = defineEmits<{
   close: [];
+  left: [];
 }>();
 
 const { t } = useTranslation('calendars', { keyPrefix: 'editors' });
-const router = useRouter();
 const toast = useToast();
-const calendarStore = useCalendarStore();
 
 const isLeaving = ref(false);
 
 async function leave() {
-  const calendar = calendarStore.getCalendarByUrlName(props.calendarUrlName);
-  if (!calendar || isLeaving.value) {
+  if (isLeaving.value) {
     return;
   }
   isLeaving.value = true;
   try {
-    await new CalendarService().leaveCalendar(calendar);
+    await new CalendarService().leaveCalendar(props.calendar);
   }
   catch (error) {
     console.error('Error leaving calendar:', error);
@@ -53,9 +45,8 @@ async function leave() {
     isLeaving.value = false;
     return;
   }
-  toast.success(t('left_calendar_success', { calendar: calendarDisplayName(calendar) }));
-  await router.replace({ name: 'settings' });
-  focusSettingsHeading();
+  toast.success(t('left_calendar_success', { calendar: calendarDisplayName(props.calendar) }));
+  emit('left');
 }
 </script>
 

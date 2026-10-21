@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import {
-  Calendar, DoorOpen, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
+  Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
 } from 'lucide-vue-next';
 import settingsEn from '@/client/locales/en/settings.json';
 import { Calendar as CalendarModel } from '@/common/model/calendar';
@@ -51,35 +51,35 @@ describe('settings nav items', () => {
       { isOwner: true, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: true, fundingEnabled: false,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: true, isAdmin: false, fundingEnabled: true,
         root: ['calendar', 'account', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: false, fundingEnabled: false,
         root: ['calendar', 'account', 'logout'],
         calendar: ['general', 'editors', 'reports', 'import', 'widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: false, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: false, isAdmin: true, fundingEnabled: false,
         root: ['calendar', 'account', 'instance', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
       { isOwner: false, isAdmin: false, fundingEnabled: true,
         root: ['calendar', 'account', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security', 'funding_plan'] },
+        account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: false, isAdmin: false, fundingEnabled: false,
         root: ['calendar', 'account', 'logout'],
         calendar: ['widget'],
-        account: ['profile', 'security'] },
+        account: ['profile', 'security', 'calendars'] },
     ])(
       'owner=$isOwner admin=$isAdmin funding=$fundingEnabled',
       ({ isOwner, isAdmin, fundingEnabled, root, calendar, account }) => {
@@ -131,7 +131,7 @@ describe('settings nav items', () => {
         'calendar_general', 'calendar_editors', 'calendar_reports', 'calendar_import', 'calendar_widget',
       ]);
       expect(accountItems(ctx()).map((item) => item.routeName)).toEqual([
-        'profile', 'security', 'funding_plan',
+        'profile', 'security', 'account_calendars', 'funding_plan',
       ]);
       expect(adminItems().map((item) => item.routeName)).toEqual([
         'admin_settings', 'accounts', 'admin_calendars', 'moderation', 'federation', 'funding',
@@ -151,20 +151,14 @@ describe('settings nav items', () => {
 
       expect(icons(rootItems(ctx({ isAdmin: true })))).toEqual([Calendar, User, Server, LogOut]);
       expect(icons(calendarItems(ctx()))).toEqual([Settings, Users, ShieldCheck, Download, LayoutTemplate]);
-      expect(icons(accountItems(ctx()))).toEqual([User, Shield, Sprout]);
+      expect(icons(accountItems(ctx()))).toEqual([User, Shield, Calendar, Sprout]);
       // The six icons of the admin pane's own navigation.
       expect(icons(adminItems())).toEqual([Settings, Users, Calendar, ShieldCheck, Globe, Sprout]);
     });
 
     it('gives every row a label key that resolves in the settings namespace', () => {
       const context = ctx({ isAdmin: true });
-      const items = [
-        ...rootItems(context),
-        ...calendarItems(context),
-        ...groupItems('calendar', ctx({ isOwner: false })),
-        ...accountItems(context),
-        ...adminItems(),
-      ];
+      const items = [...rootItems(context), ...calendarItems(context), ...accountItems(context), ...adminItems()];
       const resolve = (key: string): unknown => key
         .split('.')
         .reduce<unknown>((node, segment) => (node as Record<string, unknown> | undefined)?.[segment], settingsEn);
@@ -226,6 +220,11 @@ describe('settings nav items', () => {
       expect(isVisibleLeaf('account', 'funding_plan', ctx({ fundingEnabled: false }))).toBe(false);
     });
 
+    it('shows Calendars to every signed-in viewer, one with no calendar included', () => {
+      expect(isVisibleLeaf('account', 'account_calendars', ctx({ isOwner: false, isAdmin: false, fundingEnabled: false }))).toBe(true);
+      expect(isVisibleLeaf('account', 'account_calendars', ctx({ calendarUrlName: null }))).toBe(true);
+    });
+
     it('treats moderation sub-pages as part of Moderation, admin only', () => {
       expect(isVisibleLeaf('admin', 'moderation_settings', ctx({ isAdmin: true }))).toBe(true);
       expect(isVisibleLeaf('admin', 'moderation_settings', ctx({ isAdmin: false }))).toBe(false);
@@ -244,10 +243,8 @@ describe('settings nav items', () => {
     });
 
     it.each([
-      { group: 'calendar', context: ctx({ isOwner: true }),
-        expected: ['general', 'editors', 'reports', 'import', 'widget'] },
-      { group: 'calendar', context: ctx({ isOwner: false }), expected: ['widget', 'leave_calendar'] },
-      { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security'] },
+      { group: 'calendar', context: ctx({ isOwner: false }), expected: ['widget'] },
+      { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security', 'calendars'] },
       { group: 'admin', context: ctx({ isAdmin: true }),
         expected: ['general', 'accounts', 'calendars', 'moderation', 'federation', 'funding'] },
     ] as const)('gives the $group list its visible leaves', ({ group, context, expected }) => {
@@ -257,28 +254,6 @@ describe('settings nav items', () => {
     it('gates the admin group on isAdmin', () => {
       expect(groupItems('admin', ctx({ isAdmin: false }))).toEqual([]);
     });
-
-    it('ends an editor\'s calendar list with a Leave calendar danger action addressing that calendar', () => {
-      const items = groupItems('calendar', ctx({ isOwner: false }));
-      const last = items[items.length - 1];
-
-      expect(last).toMatchObject({
-        id: 'leave_calendar',
-        action: 'leave_calendar',
-        danger: true,
-        labelKey: 'nav.calendar.leave',
-        icon: DoorOpen,
-        calendarUrlName: 'riverside',
-      });
-      expect('to' in last).toBe(false);
-    });
-
-    it('never offers Leave calendar as a landing leaf or a visible leaf', () => {
-      const editor = ctx({ isOwner: false });
-
-      expect(ids(calendarItems(editor))).toEqual(['widget']);
-      expect(isVisibleLeaf('calendar', 'leave_calendar', editor)).toBe(false);
-    });
   });
 
   describe('findLeafByRouteName', () => {
@@ -286,6 +261,7 @@ describe('settings nav items', () => {
       ['calendar_general', 'calendar', 'calendar_general', 'nav.calendar.general'],
       ['calendar_report_detail', 'calendar', 'calendar_reports', 'nav.calendar.reports'],
       ['funding_plan', 'account', 'funding_plan', 'nav.account.funding_plan'],
+      ['account_calendars', 'account', 'account_calendars', 'nav.account.calendars'],
       ['admin_settings', 'admin', 'admin_settings', 'nav.admin.general'],
       ['blocked_instances', 'admin', 'moderation', 'nav.admin.moderation'],
     ])('resolves %s to its leaf', (name, group, routeName, labelKey) => {

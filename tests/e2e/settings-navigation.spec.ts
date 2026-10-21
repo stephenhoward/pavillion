@@ -1,20 +1,28 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import axios from 'axios';
 import { MULTI_CALENDAR_USER, loginAsAdmin, loginViaUi } from './helpers/auth';
 import type { Theme } from './helpers/color-mode';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 import {
+  ADMIN_CALENDAR_ID,
   ADMIN_CALENDAR_URL_NAME,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
   LOCAL_DOMAIN,
   TESTUSER_CALENDAR_URL_NAME,
   TESTUSER_EMAIL,
   TESTUSER_PASSWORD,
+  loginViaApi,
   seedNotificationFixtures,
   type NotificationFixtures,
 } from './helpers/notification-fixtures';
 import {
   DESKTOP,
   PHONE,
+  accountCalendarLeaveButton,
+  accountCalendarRow,
+  confirmLeaveButton,
   SHELL_MD,
   UNRESOLVED_CALENDAR_TITLE,
   WCAG_TAGS,
@@ -68,14 +76,19 @@ import {
  * window, or on the widest leaves at 768 and 900px).
  *
  * Seeded actors: the admin owns test_calendar ("Test Calendar"); the test
- * user owns testuser_calendar; the multi-calendar user edits
- * testuser_calendar and is not a member of test_calendar.
+ * user owns testuser_calendar; the multi-calendar user owns
+ * multicalendar_calendar, edits testuser_calendar and is not a member of
+ * test_calendar (the account-calendars case grants and then leaves it).
  */
 
 let env: TestEnvironment;
 let fixtures: NotificationFixtures;
 
 const ADMIN_CALENDAR_NAME = 'Test Calendar';
+/** The multi-calendar user's own calendar, whose leaf hosts the open-switcher scan. */
+const MULTI_CALENDAR_URL_NAME = 'multicalendar_calendar';
+const MULTI_CALENDAR_NAME = "MultiCalendar's Events";
+const TESTUSER_CALENDAR_NAME = "TestUser's Calendar";
 const NONEXISTENT_CALENDAR = 'no_such_calendar_e2e';
 
 /** Rail width is --pav-shell-rail-width (4rem, 64px at the default root size); 1px of slack for the border. */
@@ -220,6 +233,55 @@ test.describe('desktop forward', () => {
       title: 'Widget',
     });
     await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'widget')));
+  });
+});
+
+test.describe('account calendars', () => {
+  test.use({ viewport: DESKTOP });
+
+  test('an editor leaves a calendar from Account → Calendars; an owned calendar has no Leave', async ({ page }) => {
+    // Make the multi-calendar user an editor of test_calendar for this case
+    // alone: leaving it restores the seeded non-member state the
+    // unresolved-calendar cases rely on, and testuser_calendar stays edited.
+    const adminToken = await loginViaApi(env.baseURL, ADMIN_EMAIL, ADMIN_PASSWORD);
+    const grant = await axios.post(
+      `${env.baseURL}/api/v1/calendars/${ADMIN_CALENDAR_ID}/editors`,
+      { email: MULTI_CALENDAR_USER.email },
+      { headers: { Authorization: `Bearer ${adminToken}` }, validateStatus: () => true },
+    );
+    expect([201, 409], `unexpected editor-grant response: ${grant.status}`).toContain(grant.status);
+
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    await gotoSettings(page, env.baseURL, settingsLeaf.calendars);
+    const content = settingsContent(page);
+
+    const owned = accountCalendarRow(content, MULTI_CALENDAR_NAME);
+    await expect(owned).toContainText('Owner');
+    await expect(owned.getByRole('button')).toHaveCount(0);
+    await expect(owned.getByRole('link')).toHaveAttribute('href', calendarLeafPath(MULTI_CALENDAR_URL_NAME, 'general'));
+
+    const edited = accountCalendarRow(content, ADMIN_CALENDAR_NAME);
+    await expect(edited).toContainText('Editor');
+    await expect(edited.getByRole('link')).toHaveAttribute('href', calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'widget'));
+
+    await accountCalendarLeaveButton(content, ADMIN_CALENDAR_NAME).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await confirmLeaveButton(page).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(edited).toHaveCount(0);
+    await expect(page).toHaveURL(pathPattern(settingsPath.calendars));
+    await expect(accountCalendarRow(content, TESTUSER_CALENDAR_NAME)).toBeVisible();
+    // Focus lands on the next row's link or, when the left row was last, the h1.
+    const focusedOnRowOrHeading = await page.evaluate(() => {
+      const active = document.activeElement;
+      return !!active && (active.matches('.account-calendars__name') || active.matches('h1'));
+    });
+    expect(focusedOnRowOrHeading, 'focus moved to a row link or the h1').toBe(true);
+
+    // The calendar is gone from the switcher's store too: its settings no longer resolve.
+    await page.goto(env.baseURL + calendarIndexPath(ADMIN_CALENDAR_URL_NAME));
+    await expect(settingsTitle(page, UNRESOLVED_CALENDAR_TITLE)).toBeVisible();
   });
 });
 
@@ -442,9 +504,6 @@ for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as cons
  * Accessibility.
  */
 
-/** The multi-calendar user's own calendar, whose leaf hosts the open-switcher scan. */
-const MULTI_CALENDAR_URL_NAME = 'multicalendar_calendar';
-
 /** A short landscape window at md+: the page and the sticky tree both scroll. */
 const SHORT_LANDSCAPE = { width: 800, height: 360 };
 
@@ -583,6 +642,14 @@ test.describe('axe, further leaves (light)', () => {
       await gotoSettings(page, env.baseURL, leaf);
       expect(await axeViolations(page), leaf.path).toEqual([]);
     }
+  });
+
+  test('account calendars leaf with owned and edited calendars', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    await gotoSettings(page, env.baseURL, settingsLeaf.calendars);
+    await expect(accountCalendarRow(settingsContent(page), TESTUSER_CALENDAR_NAME)).toBeVisible();
+
+    expect(await axeViolations(page)).toEqual([]);
   });
 
   test('calendar leaf as an editor', async ({ page }) => {

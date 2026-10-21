@@ -21,12 +21,12 @@
       "editors": "Editors",
       "reports": "Reports",
       "import": "Import",
-      "widget": "Widget",
-      "leave": "Leave calendar"
+      "widget": "Widget"
     },
     "account": {
       "profile": "Profile",
       "security": "Security",
+      "calendars": "Calendars",
       "funding_plan": "Funding Plan"
     },
     "admin": {

@@ -31,6 +31,7 @@ const createTestRouter = (): Router => createRouter({
     { path: '/settings/account', name: 'account', component: Stub, meta: { settingsGroup: 'account' } },
     { path: '/settings/account/profile', name: 'profile', component: Stub },
     { path: '/settings/account/security', name: 'security', component: Stub },
+    { path: '/settings/account/calendars', name: 'account_calendars', component: Stub },
     { path: '/settings/account/funding', name: 'funding_plan', component: Stub },
     { path: '/settings/admin', name: 'admin', component: Stub, meta: { settingsGroup: 'admin' } },
     { path: '/settings/admin/settings', name: 'admin_settings', component: Stub },
@@ -319,7 +320,7 @@ describe('settings list page', () => {
     it('renders the root rows, a Log out button and the policy link', async () => {
       const w = await mountAt('/settings', { isAdmin: true });
       expect(rowLabels(w)).toEqual(['Calendar', 'Account', 'Instance', 'Log out']);
-      expect(w.find('.settings-nav__action button').text()).toBe('Log out');
+      expect(w.find('.settings-nav__logout button').text()).toBe('Log out');
       expect(w.find('.settings-list-page__footer .policy-link').exists()).toBe(true);
     });
 
@@ -328,22 +329,23 @@ describe('settings list page', () => {
       expect(w.find('.policy-link').exists()).toBe(false);
     });
 
-    it('lists the calendar leaves the viewer may see, then Leave calendar for an editor', async () => {
+    it('lists the calendar leaves the viewer may see', async () => {
       const w = await mountAt('/settings/calendar/shared', { calendars: [owned(), edited()] });
-      expect(rowLabels(w)).toEqual(['Widget', 'Leave calendar']);
+      expect(rowLabels(w)).toEqual(['Widget']);
     });
 
     it('omits Funding Plan from the account list when funding is off', async () => {
       const w = await mountAt('/settings/account', { fundingEnabled: false });
-      expect(rowLabels(w)).toEqual(['Profile', 'Security']);
+      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Calendars']);
     });
 
     it('links the account list to its own leaves only, even for an admin with funding on', async () => {
       const w = await mountAt('/settings/account', { fundingEnabled: true, isAdmin: true });
-      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Funding Plan']);
+      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Calendars', 'Funding Plan']);
       expect(w.findAll('li a').map((a) => a.attributes('href'))).toEqual([
         '/settings/account/profile',
         '/settings/account/security',
+        '/settings/account/calendars',
         '/settings/account/funding',
       ]);
     });
@@ -375,7 +377,7 @@ describe('settings list page', () => {
       expect(rowLabels(w)).toEqual(['Calendar', 'Account', 'Log out']);
       await router.push('/settings/account');
       await flushPromises();
-      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Funding Plan']);
+      expect(rowLabels(w)).toEqual(['Profile', 'Security', 'Calendars', 'Funding Plan']);
     });
   });
 });

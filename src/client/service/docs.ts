@@ -103,6 +103,10 @@ export const ROUTE_GUIDES: Record<string, GuideRef[]> = {
   security: [
     { slug: 'guides/calendar-owners/account', key: 'account' },
   ],
+  account_calendars: [
+    { slug: 'guides/calendar-owners/account', key: 'account' },
+    { slug: 'guides/calendar-owners/editors', key: 'editors' },
+  ],
 
   // Instance-administrator surfaces
   admin_settings: [

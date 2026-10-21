@@ -12,7 +12,8 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
  * src/client/locales/en/system.json (`navigation.main_label`,
  * `navigation.mobile_label`, `navigation.skip_to_content`,
  * `moderation.detail.title`) and src/client/locales/en/calendars.json
- * (`switcher.aria_switch_calendar`).
+ * (`switcher.aria_switch_calendar`, `account_list.*`, and
+ * `editors.leave_calendar_button` for the leave confirmation).
  *
  * Page titles follow page-header.vue: a leaf is titled with its tree label,
  * a sub-route (a report, moderation settings, blocked instances) with its
@@ -30,6 +31,8 @@ const BACK_TO_PREFIX = 'Back to';
 const MAIN_NAV_LABEL = 'Main navigation';
 const MOBILE_NAV_LABEL = 'Mobile navigation';
 const LOADING_CALENDAR_TEXT = 'Loading calendar…';
+const LEAVE_LABEL_PREFIX = 'Leave';
+const CONFIRM_LEAVE_LABEL = 'Leave Calendar';
 
 /** Phone viewport, matching calendar-switcher.spec.ts. */
 export const PHONE = { width: 390, height: 844 };
@@ -62,6 +65,7 @@ export const settingsPath = {
   account: '/settings/account',
   profile: '/settings/account/profile',
   security: '/settings/account/security',
+  calendars: '/settings/account/calendars',
   fundingPlan: '/settings/account/funding',
   admin: '/settings/admin',
 } as const;
@@ -81,6 +85,7 @@ export interface SettingsPage {
 export const settingsLeaf = {
   profile: { path: settingsPath.profile, title: 'Profile' },
   security: { path: settingsPath.security, title: 'Security' },
+  calendars: { path: settingsPath.calendars, title: 'Calendars' },
   fundingPlan: { path: settingsPath.fundingPlan, title: 'Funding Plan' },
 } as const satisfies Record<string, SettingsPage>;
 
@@ -465,3 +470,29 @@ export async function expectNoHorizontalScroll(page: Page, scope?: Locator): Pro
 
 /** The axe tag set every settings accessibility scan runs with. */
 export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+
+/**
+ * One calendar's row on the Account → Calendars screen, found by the
+ * calendar's display name, which is the row's link text.
+ */
+export function accountCalendarRow(scope: Page | Locator, name: string): Locator {
+  // A `has` locator is matched inside each candidate row, so it starts from
+  // the page rather than from the scope.
+  const page = 'page' in scope ? scope.page() : scope;
+  return scope.getByRole('listitem').filter({
+    has: page.getByRole('link', { name, exact: true }),
+  });
+}
+
+/**
+ * The Leave button of an edited calendar's row, by its accessible name
+ * ("Leave {calendar}"). An owned calendar's row has none.
+ */
+export function accountCalendarLeaveButton(scope: Page | Locator, name: string): Locator {
+  return scope.getByRole('button', { name: `${LEAVE_LABEL_PREFIX} ${name}`, exact: true });
+}
+
+/** The confirm button of the Leave Calendar dialog. */
+export function confirmLeaveButton(page: Page): Locator {
+  return page.getByRole('dialog').getByRole('button', { name: CONFIRM_LEAVE_LABEL, exact: true });
+}

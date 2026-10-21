@@ -27,6 +27,7 @@ const createTestRouter = (): Router => createRouter({
     { path: '/settings/calendar/:calendar/widget', name: 'calendar_widget', component: Stub },
     { path: '/settings/account/profile', name: 'profile', component: Stub },
     { path: '/settings/account/security', name: 'security', component: Stub },
+    { path: '/settings/account/calendars', name: 'account_calendars', component: Stub },
     { path: '/settings/account/funding', name: 'funding_plan', component: Stub },
     { path: '/settings/admin/settings', name: 'admin_settings', component: Stub },
     { path: '/settings/admin/accounts', name: 'accounts', component: Stub },
@@ -261,11 +262,11 @@ describe('settings tree', () => {
     });
   });
 
-  it('lists only the member-visible leaves, then Leave calendar, for an edited calendar', async () => {
+  it('lists only the member-visible leaves for an edited calendar', async () => {
     const w = await mountAt('/settings/account/profile', {
       calendars: [new CalendarInfo(calendar('e1', 'shared', 'Shared Events'), 'editor')],
     });
-    expect(rows(w, 'Calendar')).toEqual(['Widget', 'Leave calendar']);
+    expect(rows(w, 'Calendar')).toEqual(['Widget']);
   });
 
   it('omits the Calendar group when the viewer has no calendar', async () => {
@@ -275,12 +276,12 @@ describe('settings tree', () => {
 
   it('shows Funding Plan only when instance funding is enabled', async () => {
     const off = await mountAt('/settings/account/profile', { fundingEnabled: false });
-    expect(rows(off, 'Account')).toEqual(['Profile', 'Security']);
+    expect(rows(off, 'Account')).toEqual(['Profile', 'Security', 'Calendars']);
     off.unmount();
     wrapper = null;
 
     const on = await mountAt('/settings/account/profile', { fundingEnabled: true });
-    expect(rows(on, 'Account')).toEqual(['Profile', 'Security', 'Funding Plan']);
+    expect(rows(on, 'Account')).toEqual(['Profile', 'Security', 'Calendars', 'Funding Plan']);
   });
 
   it('shows the Instance group only to an admin', async () => {

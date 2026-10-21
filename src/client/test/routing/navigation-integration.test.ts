@@ -318,6 +318,7 @@ describe('Navigation Integration - Task Group 4', () => {
       [{ name: 'account' }, '/settings/account'],
       [{ name: 'profile' }, '/settings/account/profile'],
       [{ name: 'security' }, '/settings/account/security'],
+      [{ name: 'account_calendars' }, '/settings/account/calendars'],
       [{ name: 'funding_plan' }, '/settings/account/funding'],
       [{ name: 'admin' }, '/settings/admin'],
       [{ name: 'admin_settings' }, '/settings/admin/settings'],

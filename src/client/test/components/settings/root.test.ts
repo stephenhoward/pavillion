@@ -69,6 +69,7 @@ function makeRouter(): Router {
         { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' } },
         { path: 'account/profile', component: CountingLeaf, name: 'profile' },
         { path: 'account/security', component: CountingLeaf, name: 'security' },
+        { path: 'account/calendars', component: CountingLeaf, name: 'account_calendars' },
         { path: 'account/funding', component: Pane, name: 'funding_plan' },
         // A two-hop guard chain ending on a leaf, and an index stub whose
         // guard forwards the way the real index guards do at md+.

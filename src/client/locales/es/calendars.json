@@ -28,6 +28,17 @@
     "aria_switch_calendar": "Cambiar de calendario: {{name}}",
     "no_calendars": "Todavía no tienes calendarios."
   },
+  "account_list": {
+    "owner_badge": "Propietario",
+    "editor_badge": "Editor",
+    "leave_button": "Abandonar",
+    "leave_button_aria": "Abandonar {{calendar}}",
+    "create_calendar_button": "Crear un calendario",
+    "empty_title": "Todavía no tienes calendarios",
+    "empty_description": "Aquí aparecen los calendarios de los que eres propietario o editor. Crea uno, o pide al propietario de un calendario que te invite como editor.",
+    "loading": "Cargando calendarios…",
+    "error_loading": "No se pudieron cargar tus calendarios."
+  },
   "calendar": {
     "create_button": "Crear evento",
     "update_button": "Actualizar evento",

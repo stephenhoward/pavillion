@@ -31,7 +31,6 @@ import type { Component } from 'vue';
 import type { RouteLocationNamedRaw, RouteLocationNormalizedLoaded } from 'vue-router';
 import {
   Calendar,
-  DoorOpen,
   Download,
   Globe,
   LayoutTemplate,
@@ -104,23 +103,14 @@ export type SettingsNavLinkItem = {
   danger?: never;
 };
 
-type SettingsNavActionBase = {
+export type SettingsNavActionItem = {
   id: string;
   labelKey: string;
   icon: Component;
+  action: 'logout';
   /** A tag, not a setting: marks the destructive action row, which the list renders in the danger style. */
   danger: true;
 };
-
-/**
- * A row that acts rather than navigates. It is never a leaf: no index lands
- * on it and no guard reads it, so it stays out of firstVisibleLeaf and
- * isVisibleLeaf. Log out ends the root list; Leave calendar ends an editor's
- * calendar list.
- */
-export type SettingsNavActionItem =
-  | (SettingsNavActionBase & { action: 'logout' })
-  | (SettingsNavActionBase & { action: 'leave_calendar'; calendarUrlName: string });
 
 export type SettingsNavItem = SettingsNavLinkItem | SettingsNavActionItem;
 
@@ -187,6 +177,7 @@ const CALENDAR_LEAVES: readonly LeafDefinition[] = [
 const ACCOUNT_LEAVES: readonly LeafDefinition[] = [
   { id: 'profile', routeName: 'profile', labelKey: 'nav.account.profile', icon: User },
   { id: 'security', routeName: 'security', labelKey: 'nav.account.security', icon: Shield },
+  { id: 'calendars', routeName: 'account_calendars', labelKey: 'nav.account.calendars', icon: Calendar },
   { id: 'funding_plan', routeName: 'funding_plan', labelKey: 'nav.account.funding_plan', icon: Sprout, fundingOnly: true },
 ];
 
@@ -204,26 +195,6 @@ const ADMIN_LEAVES: readonly LeafDefinition[] = [
 
 function toLink(leaf: LeafDefinition, params?: Record<string, string>): SettingsNavLinkItem {
   return link(leaf.id, leaf.routeName, leaf.labelKey, leaf.icon, params, leaf.subRoutes);
-}
-
-/**
- * Leave calendar, for a calendar the viewer edits but does not own. An owner
- * cannot leave their own calendar, so the row is never offered to one.
- * Showing it is a convenience; the server decides whether the viewer may
- * remove their own edit access.
- */
-function leaveCalendarItem(ctx: SettingsNavContext): SettingsNavActionItem | null {
-  if (!ctx.calendarUrlName || ctx.isOwner) {
-    return null;
-  }
-  return {
-    id: 'leave_calendar',
-    labelKey: 'nav.calendar.leave',
-    icon: DoorOpen,
-    action: 'leave_calendar',
-    danger: true,
-    calendarUrlName: ctx.calendarUrlName,
-  };
 }
 
 export function calendarItems(ctx: SettingsNavContext): SettingsNavLinkItem[] {
@@ -294,23 +265,12 @@ function leavesOf(group: SettingsGroup, ctx: SettingsNavContext): SettingsNavLin
 
 /**
  * The rows a group's list shows: the root list's section rows and Log out,
- * or a group's visible leaves, with Leave calendar after an editor's calendar
- * leaves. The tree and the list page both build their rows here, so
- * visibility (the admin gate included) lives only in this module. Not the
- * root's landing candidates: those are {@link firstVisibleLeaf}'s.
+ * or a group's visible leaves. The tree and the list page both build their
+ * rows here, so visibility (the admin gate included) lives only in this
+ * module. Not the root's landing candidates: those are {@link firstVisibleLeaf}'s.
  */
 export function groupItems(group: SettingsGroup, ctx: SettingsNavContext): SettingsNavItem[] {
-  if (group === 'root') {
-    return rootItems(ctx);
-  }
-  const items: SettingsNavItem[] = leavesOf(group, ctx);
-  if (group === 'calendar') {
-    const leave = leaveCalendarItem(ctx);
-    if (leave) {
-      items.push(leave);
-    }
-  }
-  return items;
+  return group === 'root' ? rootItems(ctx) : leavesOf(group, ctx);
 }
 
 /**
