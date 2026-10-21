@@ -9,14 +9,15 @@
  * unknown, another calendar's, forbidden, or a failed request) replaces to
  * the plain list silently, so the URL never discloses whether a report
  * exists. The leaf watches the param, so a new reportId on the mounted leaf
- * opens that report.
+ * opens that report. The detail view shows the report this check fetched, so
+ * opening a report sends one request for it.
  */
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
-import ModerationService from '@/client/service/moderation';
+import ModerationService, { type ReportDetailResponse } from '@/client/service/moderation';
 import { isReportId } from '@/client/service/settings-guards';
 import { focusSettingsHeading } from '@/client/components/logged_in/settings/heading-focus';
 
@@ -31,6 +32,8 @@ const { t } = useTranslation('system', { keyPrefix: 'moderation' });
 
 const headingId = useId();
 const selectedReportId = ref<string | null>(null);
+/** The selected report as the scoped check fetched it, handed to the detail view. */
+const selectedReport = ref<ReportDetailResponse | null>(null);
 const regionRef = ref<HTMLElement | null>(null);
 
 // Cleared on unmount, so a request that settles afterwards changes nothing.
@@ -55,6 +58,7 @@ const reportsRoute = () => ({
 const returnToList = async (navigate: () => Promise<unknown>) => {
   const wasShowing = selectedReportId.value !== null;
   selectedReportId.value = null;
+  selectedReport.value = null;
   await navigate();
   if (!wasShowing || !active) {
     return;
@@ -74,6 +78,7 @@ const returnToList = async (navigate: () => Promise<unknown>) => {
 const openReport = async (requested: unknown) => {
   if (requested === undefined) {
     selectedReportId.value = null;
+    selectedReport.value = null;
     return;
   }
 
@@ -83,14 +88,13 @@ const openReport = async (requested: unknown) => {
   }
 
   const calendarId = props.calendarId;
-  let resolved = true;
+  let fetched: ReportDetailResponse | null = null;
   try {
-    await moderationService.getReport(calendarId, requested);
+    fetched = await moderationService.getReport(calendarId, requested);
   }
   catch {
     // Unknown and inaccessible reports are indistinguishable: no banner, no
     // toast. The service still logs the failure to the console.
-    resolved = false;
   }
 
   // The viewer moved on while the request was in flight (another report,
@@ -105,11 +109,12 @@ const openReport = async (requested: unknown) => {
     return;
   }
 
-  if (!resolved) {
+  if (!fetched) {
     await returnToList(() => router.replace(reportsRoute()));
     return;
   }
 
+  selectedReport.value = fetched;
   selectedReportId.value = requested;
   try {
     await nextTick();
@@ -146,8 +151,8 @@ const viewReport = (reportId: string) => {
 </script>
 
 <template>
-  <!-- Named by the report heading once it renders; aria-label names the
-       region until then, and if the report fails to load. -->
+  <!-- Named by the report heading, which renders with the region; the
+       aria-label is the fallback should the heading ever be missing. -->
   <div
     v-if="selectedReportId"
     ref="regionRef"
@@ -161,6 +166,7 @@ const viewReport = (reportId: string) => {
       :calendar-id="calendarId"
       :report-id="selectedReportId"
       :heading-id="headingId"
+      :fetched-report="selectedReport ?? undefined"
       @back="closeReport"
     />
   </div>

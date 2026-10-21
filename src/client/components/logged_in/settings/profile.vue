@@ -24,8 +24,11 @@ const state = reactive({
   isSaving: false,
 });
 
-const saveMessage = ref<string | null>(null);
-const saveIsError = ref(false);
+// The save outcome is split across two live regions that stay rendered while
+// empty: a status for success and an alert for errors. Screen readers can
+// miss text inserted in the same render that creates or reveals a region.
+const saveStatus = ref('');
+const saveError = ref('');
 
 /**
  * Load the profile and apply the account's language to the UI.
@@ -72,23 +75,22 @@ async function handleDisplayNameChange() {
 
   try {
     state.isSaving = true;
-    saveMessage.value = null;
-    saveIsError.value = false;
+    saveStatus.value = '';
+    saveError.value = '';
 
     const updatedProfile = await accountService.updateProfile(state.displayName);
     state.displayName = updatedProfile.displayName || '';
 
-    saveMessage.value = t('display_name_saved', { defaultValue: 'Display name saved' });
+    saveStatus.value = t('display_name_saved', { defaultValue: 'Display name saved' });
     setTimeout(() => {
-      saveMessage.value = null;
+      saveStatus.value = '';
     }, 3000);
   }
   catch (error) {
     console.error('Error saving display name:', error);
-    saveMessage.value = t('display_name_error', { defaultValue: 'Error saving display name' });
-    saveIsError.value = true;
+    saveError.value = t('display_name_error', { defaultValue: 'Error saving display name' });
     setTimeout(() => {
-      saveMessage.value = null;
+      saveError.value = '';
     }, 5000);
   }
   finally {
@@ -121,13 +123,19 @@ onMounted(loadProfile);
               class="profile-settings__input"
               @blur="handleDisplayNameChange"
             />
-            <span
-              class="save-feedback"
-              :class="{ 'is-error': saveMessage && saveIsError, 'is-visible': saveMessage }"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >{{ saveMessage ?? '' }}</span>
+            <div class="save-feedback">
+              <span
+                class="save-feedback__status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >{{ saveStatus }}</span>
+              <span
+                class="save-feedback__error"
+                role="alert"
+                aria-atomic="true"
+              >{{ saveError }}</span>
+            </div>
           </div>
 
           <div class="profile-settings__field">
@@ -135,7 +143,7 @@ onMounted(loadProfile);
               {{ t("username_label", { defaultValue: "Username" }) }}
             </p>
             <div class="profile-settings__readonly" role="group" aria-labelledby="username-label">
-              <span class="profile-settings__at">@</span>
+              <span class="profile-settings__at" aria-hidden="true">@</span>
               <span class="profile-settings__username">{{ state.username }}</span>
               <span class="profile-settings__badge">{{ t("readonly_badge", { defaultValue: "Read-only" }) }}</span>
             </div>
@@ -224,6 +232,12 @@ onMounted(loadProfile);
     outline: none;
     box-shadow: 0 0 0 2px var(--pav-color-orange-500);
     border-color: transparent;
+
+    /* Forced colours drop box-shadow, which is the only focus indicator
+       here, so a system Highlight outline takes its place */
+    @media (forced-colors: active) {
+      outline: var(--pav-border-width-2) solid Highlight;
+    }
   }
 
   &:disabled {
@@ -239,6 +253,12 @@ onMounted(loadProfile);
     background-size: 1.5em 1.5em;
     cursor: pointer;
     appearance: none;
+
+    /* background-position has no logical keyword, so the chevron follows
+       the padding to the inline end in right-to-left text */
+    &:dir(rtl) {
+      background-position: left 0.75rem center;
+    }
   }
 }
 
@@ -247,17 +267,14 @@ onMounted(loadProfile);
   font-weight: 500;
   color: var(--pav-color-success);
 
-  &:not(.is-visible) {
-    visibility: hidden;
-  }
-
-  &.is-error {
+  &__error {
     color: var(--pav-color-error);
   }
 }
 
 .profile-settings__readonly {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 1rem;
@@ -271,7 +288,9 @@ onMounted(loadProfile);
 }
 
 .profile-settings__username {
+  min-inline-size: 0;
   color: var(--pav-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .profile-settings__badge {

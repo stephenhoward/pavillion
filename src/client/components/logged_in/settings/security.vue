@@ -65,6 +65,7 @@ onMounted(loadEmail);
           <button
             type="button"
             class="btn-text"
+            aria-haspopup="dialog"
             @click="state.changeEmail = true"
           >
             {{ t("change_email_button", { defaultValue: "Change Email" }) }}
@@ -79,6 +80,7 @@ onMounted(loadEmail);
           <button
             type="button"
             class="btn-text"
+            aria-haspopup="dialog"
             @click="state.changePassword = true"
           >
             {{ t("change_password_button", { defaultValue: "Change Password" }) }}

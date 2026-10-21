@@ -38,14 +38,14 @@ A separate per-editor toggle exists to let a specific editor review reports file
 
 ## Invite an editor
 
-Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the page title, on a phone at the top of the **Calendar** list. The first time you visit, the list is empty.
+Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title, on a phone at the top of the **Calendar** list. The first time you visit, the list is empty.
 
 Click <Btn>Add Editor</Btn>, enter the email address of the person you want to add, and submit.
 
 What happens next depends on whether that email already has a Pavillion account:
 
 - **They already have an account on this instance.** They become an editor immediately. The email field accepts the address they signed up with. They get a notification email letting them know, and the calendar shows up in their calendar switcher — the calendar name at the top of the page — next time they log in.
-- **They don't have an account yet.** Pavillion sends them an invitation email with a link to sign up. The link is good for seven days. When they accept and create their account, they become an editor on the calendar automatically — no second step required from you. While the invitation is outstanding, it shows up on the Editors page under **Pending Invitations**, where you can resend it (handy if it landed in their spam folder) or cancel it (if you sent it to the wrong address).
+- **They don't have an account yet.** Pavillion sends them an invitation email with a link to sign up. The link is good for seven days. When they accept and create their account, they become an editor on the calendar automatically — no second step required from you. While the invitation is outstanding, it shows up on the Editors screen under **Pending Invitations**, where you can resend it (handy if it landed in their spam folder) or cancel it (if you sent it to the wrong address).
 - **The email belongs to someone on a different Pavillion instance.** Use the federated form `casey@calendar.coffee` — their username and their instance's domain — instead of a plain email. Pavillion looks them up across the federation, adds them as a remote editor, and notifies their instance. Their editing actions on your calendar then flow through ActivityPub the same way any other federated activity does.
 
 ::: tip <Lightbulb /> A note on the invitation message.
@@ -58,13 +58,13 @@ When someone steps back from the role — they've left the organization, taken a
 
 What happens to the events they created or edited: nothing. Events belong to the *calendar*, not to the editor who created them. The events stay published, the categories they tagged stay attached, the places they added to the venue list stay there. Removing an editor removes the person's ability to make further changes; it doesn't unwind their past contributions.
 
-What happens to a pending invitation if you change your mind before the person accepts: open the **Pending Invitations** section of the same page and click <Btn>Cancel</Btn> on the row. The invitation link stops working immediately, and the invited person — if they hadn't yet acted on the email — will see "this invitation is no longer valid" if they click it later.
+What happens to a pending invitation if you change your mind before the person accepts: open the **Pending Invitations** section of the same screen and click <Btn>Cancel</Btn> on the row. The invitation link stops working immediately, and the invited person — if they hadn't yet acted on the email — will see "this invitation is no longer valid" if they click it later.
 
-If an editor wants to remove *themselves* from a calendar — they're stepping back, the project ended, the calendar is no longer something they want to be associated with — they can, without asking you. **Leave calendar** is the last row of their **Settings → Calendar** list. It asks once; once they confirm, their edit access ends and the calendar drops out of their calendar switcher. Coming back takes a fresh invitation from you. This is a small but important property: editor membership isn't something the owner can compel; people get to opt out.
+If an editor wants to step back from a calendar — the project ended, the calendar is no longer something they want to be associated with — they ask you to remove them, and you follow the steps above. The Editors screen is yours alone as the owner; editors don't see it.
 
 ## Patterns for small teams
 
-The most common shape — one owner, one or two editors — barely needs a system. The owner created the calendar; the editors handle a slice of the events that the owner doesn't have time for. Everyone knows everyone, the working pattern is "whoever sees it first picks it up," and the Editors page gets touched maybe twice a year.
+The most common shape — one owner, one or two editors — barely needs a system. The owner created the calendar; the editors handle a slice of the events that the owner doesn't have time for. Everyone knows everyone, the working pattern is "whoever sees it first picks it up," and the Editors screen gets touched maybe twice a year.
 
 A few practical notes for this size:
 
@@ -84,7 +84,7 @@ Pick before scaling the editor list. Onboarding eight editors into a calendar th
 
 **Onboarding becomes a thing.** A new editor on a small team learns the ropes by sitting next to the existing owner; a new editor on a larger team needs to be told what they're doing. Plan a short orientation: walk them through the calendar, point them at the calendar-owner guides relevant to their work, agree on the categories and places they should and shouldn't add. Five minutes of orientation prevents weeks of "wait, why is there a *Concerts*, *Concert*, and *Live Music* category?"
 
-**Offboarding becomes a thing too.** People rotate out. Set a rough cadence — once a quarter, once a year, whatever fits — to look at the Editors page and ask "is this list still right?" Editors who are no longer involved should come off the list, not because they've done anything wrong but because the list represents *who can change the calendar today*, and a stale list is a security and consistency risk. The removed person can always be re-invited later.
+**Offboarding becomes a thing too.** People rotate out. Set a rough cadence — once a quarter, once a year, whatever fits — to look at the Editors screen and ask "is this list still right?" Editors who are no longer involved should come off the list, not because they've done anything wrong but because the list represents *who can change the calendar today*, and a stale list is a security and consistency risk. The removed person can always be re-invited later.
 
 ## Shared accounts vs. individual accounts
 
@@ -104,4 +104,4 @@ The short version: every person who edits the calendar should have their own Pav
 
 - If you're inviting an editor for a specific job — moderating reports, running ICS imports, managing categories — the relevant per-task guide goes deeper on what they'll be doing day to day.
 - If your team is bigger than this guide assumes, consider whether you actually want one calendar with many editors, or several calendars with the right editors on each one. The [When to create a calendar](./when-to-create-a-calendar) guide covers that decision.
-- If you're stepping back from a calendar you edit, the **Leave calendar** row covered above is the right tool. If *you're the owner* and need to hand the calendar off entirely — owner transfer is not yet supported in v1, so reach out to your instance administrator for help.
+- If you're stepping back from a calendar yourself, the **Leave Calendar** button covered above is the right tool. If *you're the owner* and need to hand the calendar off entirely — owner transfer is not yet supported in v1, so reach out to your instance administrator for help.

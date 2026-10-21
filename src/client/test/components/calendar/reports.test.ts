@@ -66,7 +66,7 @@ vi.mock('@/client/components/moderation/report-detail.vue', async (importOrigina
   return {
     default: defineComponent({
       name: 'ReportDetail',
-      props: ['calendarId', 'reportId', 'headingId'],
+      props: ['calendarId', 'reportId', 'headingId', 'fetchedReport'],
       emits: ['back'],
       setup(props, { emit }) {
         return () => h(detail.real ? actual.default : StandIn, { ...props, onBack: () => emit('back') });
@@ -278,37 +278,32 @@ describe('Calendar reports leaf', () => {
       expect(document.activeElement).toBe(pageHeading());
     });
 
-    it('names the region with the fallback while the real report loads, then by its heading', async () => {
+    it('fetches the report once: the leaf\'s scoped check supplies the detail view', async () => {
       detail.real = true;
-      mockReportFound();
-      const store = useModerationStore(pinia);
-      let finishLoad!: () => void;
-      vi.spyOn(store, 'fetchReport').mockImplementation(() => new Promise<void>((resolve) => {
-        finishLoad = () => {
-          const report = new Report(REPORT_ID);
-          report.calendarId = 'cal-uuid-1';
-          report.category = ReportCategory.INAPPROPRIATE;
-          report.status = ReportStatus.SUBMITTED;
-          report.reporterType = 'anonymous';
-          store.currentReport = { report, escalationHistory: [] };
-          resolve();
-        };
-      }));
+      const report = new Report(REPORT_ID);
+      report.calendarId = 'cal-uuid-1';
+      report.category = ReportCategory.INAPPROPRIATE;
+      report.status = ReportStatus.SUBMITTED;
+      report.reporterType = 'anonymous';
+      report.description = 'Misleading listing';
+      // The store's fetchReport goes through the same service method, so this
+      // spy counts every GET for the report, whichever layer sends it.
+      const getReport = vi.spyOn(ModerationService.prototype, 'getReport')
+        .mockResolvedValue({ report, escalationHistory: [] });
 
       const w = await mountAt(detailPath(REPORT_ID));
 
-      const loading = regionName(region(w).element);
-      expect(loading).toMatchObject({ from: 'label', name: 'Report Detail' });
+      expect(getReport).toHaveBeenCalledTimes(1);
+      expect(getReport).toHaveBeenCalledWith('cal-uuid-1', REPORT_ID);
+      expect(w.text()).toContain('Misleading listing');
+
+      // The region is named by the real report heading as soon as it opens.
+      const named = regionName(region(w).element);
+      expect(named.from).toBe('labelledby');
+      expect(named.name).toBe('Report Detail');
+      expect(named.labelledBy?.tagName).toBe('H2');
+      expect(region(w).element.contains(named.labelledBy)).toBe(true);
       expect(document.activeElement).toBe(region(w).element);
-
-      finishLoad();
-      await flushPromises();
-
-      const loaded = regionName(region(w).element);
-      expect(loaded.from).toBe('labelledby');
-      expect(loaded.name).toBe('Report Detail');
-      expect(loaded.labelledBy?.tagName).toBe('H2');
-      expect(region(w).element.contains(loaded.labelledBy)).toBe(true);
       // The region is the one landmark carrying that name.
       expect(w.findAll('[aria-label="Report Detail"]').map((el) => el.element)).toEqual([region(w).element]);
     });

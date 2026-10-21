@@ -88,25 +88,60 @@ describe('Profile settings leaf', () => {
       await flushPromises();
 
       expect(save).toHaveBeenCalledWith('New Name');
-      const feedback = wrapper.find('.save-feedback');
-      expect(feedback.attributes('role')).toBe('status');
-      expect(feedback.classes()).toContain('is-visible');
+      expect(wrapper.find('[role="status"]').text()).toBe('Display name saved');
+      expect(wrapper.find('[role="alert"]').text()).toBe('');
     });
 
-    it('styles the display-name feedback as an error only when the save fails', async () => {
-      const save = vi.spyOn(AccountService.prototype, 'updateProfile').mockResolvedValue(buildProfile('en'));
+    it('announces a failed save through the alert region, not the status region', async () => {
+      vi.spyOn(AccountService.prototype, 'updateProfile').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { wrapper } = mountProfile();
+      await flushPromises();
+
+      await wrapper.find('input#display-name').trigger('blur');
+      await flushPromises();
+
+      expect(wrapper.find('[role="alert"]').text()).toBe('Error saving display name');
+      expect(wrapper.find('[role="status"]').text()).toBe('');
+    });
+
+    it('clears a previous error from the alert region when a later save succeeds', async () => {
+      const save = vi.spyOn(AccountService.prototype, 'updateProfile').mockRejectedValue(new Error('network'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const { wrapper } = mountProfile();
       await flushPromises();
 
       const input = wrapper.find('input#display-name');
       await input.trigger('blur');
       await flushPromises();
-      expect(wrapper.find('.save-feedback').classes()).not.toContain('is-error');
 
-      save.mockRejectedValue(new Error('network'));
+      save.mockResolvedValue(buildProfile('en'));
       await input.trigger('blur');
       await flushPromises();
-      expect(wrapper.find('.save-feedback').classes()).toContain('is-error');
+
+      expect(wrapper.find('[role="alert"]').text()).toBe('');
+      expect(wrapper.find('[role="status"]').text()).toBe('Display name saved');
+    });
+
+    it('keeps both live regions in the accessibility tree before anything is announced', async () => {
+      const { wrapper } = mountProfile();
+      await flushPromises();
+
+      for (const role of ['status', 'alert']) {
+        const region = wrapper.find(`[role="${role}"]`);
+        expect(region.exists()).toBe(true);
+        expect(region.text()).toBe('');
+        expect(region.attributes('aria-hidden')).toBeUndefined();
+      }
+    });
+
+    it('hides the decorative @ before the username from assistive technology', async () => {
+      const { wrapper } = mountProfile();
+      await flushPromises();
+
+      const group = wrapper.find('[role="group"][aria-labelledby="username-label"]');
+      const at = group.findAll('span').find(s => s.text() === '@');
+      expect(at?.attributes('aria-hidden')).toBe('true');
     });
   });
 

@@ -52,23 +52,16 @@
     }
   }
 
-  /* Page mode: full-width rows divided by a subtle rule */
-  &--page {
-    gap: 0;
-
-    > li:not(.settings-nav__action) {
-      border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
-    }
-  }
+  /* Page mode needs no rule of its own: full-width rows are kept apart by
+     the list gap and the rows' block padding alone, with no divider */
 
   /* Sidebar mode: compact rows; the row itself marks where it leads */
   &--sidebar .shell-nav-item__chevron {
     display: none;
   }
 
-  /* An action row (Log out, Leave calendar) sits apart from the links, in
-     the error colour */
-  &__action {
+  /* Log out sits apart from the links, in the error colour */
+  &__logout {
     margin-block-start: var(--pav-space-4);
   }
 

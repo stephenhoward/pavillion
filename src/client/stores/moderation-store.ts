@@ -183,6 +183,19 @@ export const useModerationStore = defineStore('moderation', {
     },
 
     /**
+     * Makes a report its caller has already fetched the current report.
+     *
+     * @param detail - The report with its escalation history
+     */
+    setCurrentReport(detail: ReportDetail) {
+      this.error = null;
+      this.currentReport = {
+        report: detail.report,
+        escalationHistory: detail.escalationHistory,
+      };
+    },
+
+    /**
      * Fetches a single report with its escalation history.
      *
      * @param calendarId - The calendar UUID
