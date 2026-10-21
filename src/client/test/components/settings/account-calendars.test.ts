@@ -119,7 +119,7 @@ describe('Account calendars screen', () => {
     ]);
 
     expect(rows(list).map((row) => row.find('a').text())).toEqual(['Riverside Arts', 'Food Co-op']);
-    expect(rows(list).map((row) => row.find('.badge').text())).toEqual(['Owner', 'Editor']);
+    expect(rows(list).map((row) => row.find('.account-calendars__role').text())).toEqual(['Owner', 'Editor']);
   });
 
   it('shows the url name for a calendar with no name', async () => {

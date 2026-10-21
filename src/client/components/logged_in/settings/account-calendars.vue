@@ -135,12 +135,14 @@ async function onLeft() {
           data-testid="account-calendar-row"
           :data-url-name="info.calendar.urlName"
         >
-          <RouterLink :to="settingsTarget(info)" class="account-calendars__name">
-            {{ calendarDisplayName(info.calendar) }}
-          </RouterLink>
-          <span class="badge badge--sm account-calendars__role">
-            {{ info.isOwner ? t('owner_badge') : t('editor_badge') }}
-          </span>
+          <div class="account-calendars__info">
+            <RouterLink :to="settingsTarget(info)" class="account-calendars__name">
+              {{ calendarDisplayName(info.calendar) }}
+            </RouterLink>
+            <span class="account-calendars__role">
+              {{ info.isOwner ? t('owner_badge') : t('editor_badge') }}
+            </span>
+          </div>
           <button
             v-if="!info.isOwner"
             type="button"
@@ -206,9 +208,8 @@ async function onLeft() {
 
   &__row {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--pav-space-2) var(--pav-space-3);
+    gap: var(--pav-space-3);
     padding: var(--pav-space-4) var(--pav-space-6);
 
     & + & {
@@ -216,9 +217,17 @@ async function onLeft() {
     }
   }
 
-  &__name {
-    flex: 1 1 12rem;
+  &__info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--pav-space-1);
     min-width: 0;
+  }
+
+  &__name {
+    max-width: 100%;
     overflow-wrap: anywhere;
     font-weight: var(--pav-font-weight-medium);
     color: var(--pav-text-primary);
@@ -235,6 +244,15 @@ async function onLeft() {
       outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
       outline-offset: 2px;
     }
+  }
+
+  &__role {
+    font-size: var(--pav-font-size-sm);
+    color: var(--pav-text-secondary);
+  }
+
+  &__leave {
+    flex-shrink: 0;
   }
 
   &__actions {
