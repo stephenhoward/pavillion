@@ -4,6 +4,8 @@
  * Built on the existing spacing token system and flexbox patterns
  */
 
+@use '../tokens/breakpoint-mixins' as *;
+
 @mixin stack {
   display: flex;
   gap: var(--pav-space-md);
@@ -133,7 +135,7 @@
   .stack--wrap-reverse { flex-wrap: wrap-reverse; }
 
   /* Responsive Stack Utilities */
-  @media (width <= 768px) {
+  @include pav-media-down(md) {
     .hstack--responsive {
       flex-direction: column;
       align-items: stretch;

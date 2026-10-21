@@ -342,7 +342,7 @@ div.feed-root {
       @include tab-button;
     }
 
-    @media (max-width: 768px) {
+    @include pav-media-down(md) {
       button.tab {
         flex: 1 1 0;
         padding: var(--pav-space-3) var(--pav-space-4);

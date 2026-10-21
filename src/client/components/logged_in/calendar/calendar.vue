@@ -371,6 +371,7 @@ const handleLoadEvents = async (filters) => {
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins/tabs' as *;
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 /* Message and recovery link stacked; the link takes the alert's text colour
    and an underline so it reads as a link without relying on colour. */
@@ -475,7 +476,7 @@ const handleLoadEvents = async (filters) => {
     @include tab-button;
   }
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     .header-title-section {
       align-items: flex-start;
 

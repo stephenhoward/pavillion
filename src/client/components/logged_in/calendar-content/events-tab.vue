@@ -758,6 +758,7 @@ initializeFiltersFromURL();
 
 <style scoped lang="scss">
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 /* Screen reader only class for accessibility */
 .sr-only {
@@ -897,7 +898,7 @@ initializeFiltersFromURL();
         opacity: 0;
         transition: opacity 0.2s ease;
 
-        @media (max-width: 768px) {
+        @include pav-media-down(md) {
           opacity: 1;
         }
       }
