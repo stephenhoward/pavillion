@@ -177,6 +177,7 @@ const CALENDAR_LEAVES: readonly LeafDefinition[] = [
 const ACCOUNT_LEAVES: readonly LeafDefinition[] = [
   { id: 'profile', routeName: 'profile', labelKey: 'nav.account.profile', icon: User },
   { id: 'security', routeName: 'security', labelKey: 'nav.account.security', icon: Shield },
+  { id: 'calendars', routeName: 'account_calendars', labelKey: 'nav.account.calendars', icon: Calendar },
   { id: 'funding_plan', routeName: 'funding_plan', labelKey: 'nav.account.funding_plan', icon: Sprout, fundingOnly: true },
 ];
 

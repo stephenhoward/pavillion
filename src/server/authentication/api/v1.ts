@@ -8,6 +8,7 @@ import { Account } from '@/common/model/account';
 import AuthenticationRoutes from '@/server/authentication/api/v1/auth';
 import AccountsInterface from '@/server/accounts/interface';
 import AuthenticationInterface from '@/server/authentication/interface';
+import { JWT_ALGORITHM } from '@/server/common/helper/express';
 
 const jwtSecret = config.get<string>('jwt.secret');
 
@@ -35,6 +36,7 @@ export default class AuthenticationAPI {
     passport.use(new passportJWT.Strategy({
       jwtFromRequest: passportJWT.ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: jwtSecret,
+      algorithms: [JWT_ALGORITHM],
     }, async (jwtPayload, done) => {
 
       const account = await accountAPI.getAccountById(jwtPayload.id);

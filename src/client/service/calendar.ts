@@ -278,6 +278,27 @@ export default class CalendarService {
   }
 
   /**
+   * Leave a calendar the signed-in account edits: revoke the account's own
+   * edit access, then drop the calendar from the store and, if it was the
+   * current calendar, forget that selection. Needs only the account's own ID,
+   * not the editor list, which the server shows to the owner alone. The
+   * store is changed only after the server has agreed.
+   * @param calendar The calendar to leave
+   * @returns Promise<void>
+   */
+  async leaveCalendar(calendar: Calendar): Promise<void> {
+    const accountId = currentAccountId();
+    if (!accountId) {
+      throw new EmptyValueError('no signed-in account');
+    }
+    await this.revokeEditAccess(calendar.id, accountId);
+    this.store.removeCalendar(calendar);
+    if (this.store.selectedCalendarId === calendar.id) {
+      this.store.setSelectedCalendar(null);
+    }
+  }
+
+  /**
    * Cancel a pending invitation for a calendar
    * @param calendarId The ID of the calendar
    * @param invitationId The ID of the invitation to cancel

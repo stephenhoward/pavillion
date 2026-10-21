@@ -8,7 +8,6 @@
     "close_button": "Cancel"
   },
   "calendars": {
-    "page_title": "Local Calendars",
     "page_subtitle": "Review calendars hosted on this instance",
     "loading": "Loading calendars...",
     "error": "Failed to load calendars",
@@ -47,7 +46,6 @@
     "pagination_page_info": "Page {{current}} of {{total}}"
   },
   "moderation": {
-    "title": "Moderation Dashboard",
     "subtitle": "Review escalated reports and admin-initiated moderation",
     "loading": "Loading reports...",
     "error": "Failed to load reports",
@@ -60,7 +58,6 @@
     "create_report": "Create Report",
     "settings_button_label": "Moderation Settings",
     "settings": {
-      "title": "Moderation Settings",
       "subtitle": "Configure instance-wide moderation policies",
       "loading": "Loading settings...",
       "load_error": "Failed to load settings",
@@ -174,9 +171,7 @@
       "page_info": "Page {{current}} of {{total}}"
     },
     "detail": {
-      "title": "Report Details",
       "subtitle": "View full report information and take action",
-      "back": "Back to Dashboard",
       "loading": "Loading report...",
       "error": "Failed to load report",
       "report_information": "Report Information",
@@ -275,7 +270,6 @@
     "disk_usage_used": "used"
   },
   "accounts": {
-    "page_title": "Account Management",
     "page_subtitle": "Manage users, review applications, and send invitations",
     "applications_tab": "Applications",
     "invitations_tab": "Invitations",
@@ -362,7 +356,6 @@
     "unknown_expiration": "Unknown"
   },
   "settings": {
-    "general_settings": "General Settings",
     "instance_name": "Instance Name/Title",
     "site_title_description": "The name of your instance that appears in the browser title and other places.",
     "registration_mode": "Registration Mode",
@@ -408,9 +401,9 @@
     "manage_blocked_description": "View and manage blocked instances from the moderation settings."
   },
   "funding": {
-    "title": "Funding Settings",
     "loading": "Loading...",
     "load_settings_error": "Failed to load funding plan settings.",
+    "page_subtitle": "Review the funding plans that support this instance, set pricing and payment providers, and grant calendars complimentary access",
     "settings_section_title": "Funding Plan Configuration",
     "subtab_nav_label": "Funding sections",
     "enabled_label": "Enable Funding Plans",
@@ -636,7 +629,6 @@
     "price_required": "At least one price must be greater than $0"
   },
   "blocked_instances": {
-    "title": "Blocked Instances",
     "subtitle": "Manage blocked ActivityPub instances for federation control",
     "loading": "Loading blocked instances...",
     "load_error": "Failed to load blocked instances",

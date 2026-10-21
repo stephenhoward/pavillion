@@ -67,6 +67,18 @@ describe('ModerationSettings.vue', () => {
     });
   }
 
+  // The settings page header's h1 titles the sub-page; the pane keeps its description.
+  it('renders its description and no title of its own', async () => {
+    moderationStore.moderationSettings = { ...defaultSettings };
+
+    wrapper = mountComponent();
+    await nextTick();
+
+    expect(wrapper.find('.page-subtitle').text()).toBe(adminTranslations.moderation.settings.subtitle);
+    const headings = wrapper.findAll('h1, h2').map((heading) => heading.text());
+    expect(headings).not.toContain('Moderation Settings');
+  });
+
   describe('Auto-Escalation Threshold Field', () => {
     it('should render auto-escalation threshold input field', async () => {
       moderationStore.moderationSettings = { ...defaultSettings, autoEscalationThreshold: 3 };

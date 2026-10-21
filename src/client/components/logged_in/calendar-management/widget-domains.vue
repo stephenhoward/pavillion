@@ -10,16 +10,28 @@
     </div>
 
     <!--
-      Funding gate. The card decides for itself whether the widget-embedding
-      gate is known to be closed, so nothing here branches on funding state.
-      Once a plan is started the domain the gate refused is re-issued, so the
-      reader does not have to type it again.
+      Funding gate, owner only. The card decides for itself whether the
+      widget-embedding gate is known to be closed, so nothing here branches on
+      funding state. Once a plan is started the domain the gate refused is
+      re-issued, so the reader does not have to type it again.
+
+      Only an owner can start a plan for a calendar, so an editor is never
+      offered one: the card is not mounted for them (its funding read is
+      owner-only on the server anyway), and a refusal is answered with a notice
+      that the owner can enable the feature instead.
     -->
     <FundingUpsellCard
+      v-if="props.isOwner"
       :calendarId="props.calendarId"
       :feature="WIDGET_FEATURE"
       @plan-started="retryRefusedDomain"
     />
+    <p
+      v-else-if="state.ownerMustEnable"
+      class="alert alert--info widget-domains__owner-notice"
+      role="status">
+      {{ t('owner_can_enable') }}
+    </p>
 
     <!-- Success Display -->
     <div
@@ -69,12 +81,15 @@ import PillButton from '@/client/components/common/pill-button.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
+import { fundingGateDenial } from '@/client/service/funding';
 import { validateAndEncodeId } from '@/client/service/utils';
 import type { FundingGatedFeature } from '@/common/model/funding-plan';
 
 // Props
 const props = defineProps<{
   calendarId: string;
+  /** Whether the viewer owns the calendar, and so can start a funding plan for it. */
+  isOwner: boolean;
 }>();
 
 /**
@@ -102,6 +117,7 @@ const state = reactive<{
   success: string;
   newDomain: string;
   currentDomain: string | null;
+  ownerMustEnable: boolean;
 }>({
   isLoading: false,
   isAdding: false,
@@ -110,6 +126,7 @@ const state = reactive<{
   success: '',
   newDomain: '',
   currentDomain: null, // Changed from domains array to single domain
+  ownerMustEnable: false, // An editor's write was refused by the funding gate
 });
 
 // Whether the last write was refused by the funding gate. The typed domain is
@@ -210,6 +227,7 @@ const addDomain = async () => {
     state.currentDomain = response.data.domain;
     state.newDomain = '';
     domainRefused = false;
+    state.ownerMustEnable = false;
     state.success = t('add_success');
     clearMessages();
   }
@@ -224,8 +242,15 @@ const addDomain = async () => {
     // Nothing checks for an admin: recognition is the composable's, and the
     // gate itself already exempts admins server-side, so a client-side second
     // guess can only disagree with the server about what just happened.
-    if (recordAccessDenial(error)) {
+    //
+    // An editor's refusal is not recorded: the cache would only feed an upsell
+    // the editor cannot act on. They are told the owner can enable it instead.
+    if (props.isOwner && recordAccessDenial(error)) {
       domainRefused = true;
+      return;
+    }
+    if (!props.isOwner && fundingGateDenial(error)) {
+      state.ownerMustEnable = true;
       return;
     }
 

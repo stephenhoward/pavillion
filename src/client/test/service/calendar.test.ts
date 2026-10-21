@@ -9,6 +9,8 @@ import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { createPinia, setActivePinia } from 'pinia';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 // Mock axios
 vi.mock('axios');
@@ -601,6 +603,81 @@ describe('revokeEditAccess', () => {
     // Act & Assert
     await expect(service.revokeEditAccess(calendarId, editorId))
       .rejects.toThrow(CalendarEditorPermissionError);
+  });
+});
+
+describe('leaveCalendar', () => {
+  const art = new Calendar('cal-art', 'art');
+  const river = new Calendar('cal-river', 'river');
+  let store: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  function signInAs(id: string) {
+    localStorage.setItem('jw_token', JSON.stringify({
+      id, email: `${id}@example.com`, isAdmin: false, exp: Math.floor(Date.now() / 1000) + 3600,
+    }));
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+    store = useCalendarStore();
+    store.setCalendarInfos([new CalendarInfo(art, 'editor'), new CalendarInfo(river, 'owner')], 'acct-1');
+    service = new CalendarService(store);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('revokes the signed-in account\'s own edit access, without listing editors', async () => {
+    signInAs('acct-1');
+    vi.mocked(axios.delete).mockResolvedValue({});
+
+    await service.leaveCalendar(art);
+
+    expect(axios.delete).toHaveBeenCalledWith('/api/v1/calendars/cal-art/editors/acct-1');
+    expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  it('drops the calendar from the store and forgets it as the current calendar', async () => {
+    signInAs('acct-1');
+    store.setSelectedCalendar('cal-art');
+    vi.mocked(axios.delete).mockResolvedValue({});
+
+    await service.leaveCalendar(art);
+
+    expect(store.calendarInfos.map((info) => info.calendar.id)).toEqual(['cal-river']);
+    expect(store.selectedCalendarId).toBeNull();
+  });
+
+  it('keeps another current calendar selected', async () => {
+    signInAs('acct-1');
+    store.setSelectedCalendar('cal-river');
+    vi.mocked(axios.delete).mockResolvedValue({});
+
+    await service.leaveCalendar(art);
+
+    expect(store.selectedCalendarId).toBe('cal-river');
+  });
+
+  it('leaves the store untouched when the server refuses', async () => {
+    signInAs('acct-1');
+    store.setSelectedCalendar('cal-art');
+    vi.mocked(axios.delete).mockRejectedValue({
+      response: { data: { errorName: 'CalendarEditorPermissionError' } },
+    });
+
+    await expect(service.leaveCalendar(art)).rejects.toThrow(CalendarEditorPermissionError);
+    expect(store.calendarInfos).toHaveLength(2);
+    expect(store.selectedCalendarId).toBe('cal-art');
+  });
+
+  it('sends nothing when no account is signed in', async () => {
+    await expect(service.leaveCalendar(art)).rejects.toThrow(EmptyValueError);
+    expect(axios.delete).not.toHaveBeenCalled();
+    expect(store.calendarInfos).toHaveLength(2);
   });
 });
 

@@ -1018,6 +1018,37 @@ describe('Payment Provider Adapters', () => {
         expect(mockStripe.prices.create.called).toBe(false);
       });
 
+      describe('return URL session placeholder', () => {
+        const returnUrlFor = async (returnUrl: string): Promise<string> => {
+          mockStripe.checkout.sessions.create.resolves({ id: 'cs_test_123', client_secret: 'cs_secret_abc' });
+          await stripeAdapter.createCheckoutSession({
+            priceId: 'price_existing_123',
+            currency: 'USD',
+            interval: 'month',
+            accountId: 'acc_123',
+            returnUrl,
+          });
+          return mockStripe.checkout.sessions.create.firstCall.args[0].return_url;
+        };
+
+        // Stripe substitutes only the literal template; a percent-encoded
+        // %7BCHECKOUT_SESSION_ID%7D would come back to us unreplaced.
+        it('appends the literal {CHECKOUT_SESSION_ID} template, braces unencoded', async () => {
+          expect(await returnUrlFor('https://example.com/return'))
+            .toBe('https://example.com/return?session_id={CHECKOUT_SESSION_ID}');
+        });
+
+        it('keeps existing query params and replaces a stale session_id', async () => {
+          expect(await returnUrlFor('https://example.com/settings/account/funding?view=plan&session_id=cs_old'))
+            .toBe('https://example.com/settings/account/funding?view=plan&session_id={CHECKOUT_SESSION_ID}');
+        });
+
+        it('places the template in the query, ahead of any fragment', async () => {
+          expect(await returnUrlFor('https://example.com/return#done'))
+            .toBe('https://example.com/return?session_id={CHECKOUT_SESSION_ID}#done');
+        });
+      });
+
       it('should create checkout session with PWYC (amount, no priceId)', async () => {
         // Mock price creation for PWYC
         mockStripe.prices.create.resolves({

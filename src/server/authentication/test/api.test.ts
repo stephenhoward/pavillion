@@ -3,6 +3,8 @@ import sinon from 'sinon';
 import request from 'supertest';
 import express, { Router } from 'express';
 import passport from 'passport';
+import jwt from 'jsonwebtoken';
+import config from 'config';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
@@ -237,4 +239,72 @@ describe('login', () => {
 
   });
 
+});
+
+describe('JWT strategy', () => {
+  const secret = config.get<string>('jwt.secret');
+  let app: express.Application;
+
+  /**
+   * Encode a JSON value as an unpadded base64url JWT segment.
+   */
+  function segment(value: object): string {
+    return Buffer.from(JSON.stringify(value)).toString('base64url');
+  }
+
+  /**
+   * The claims a token from generateJWT carries, expiring in five minutes.
+   */
+  function claims() {
+    return {
+      exp: Math.floor(Date.now() / 1000) + 300,
+      id: 'id',
+      email: 'testme',
+      isAdmin: false,
+    };
+  }
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
+    const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    sinon.stub(accountsDomain.interface, 'getAccountById').resolves(new Account('id', 'testme', 'testme'));
+
+    app = express();
+    AuthenticationAPI.install(app, authenticationDomain.interface, accountsDomain.interface);
+    app.get('/protected', passport.authenticate('jwt', { session: false }), (req, res) => {
+      res.json({ id: req.user?.id });
+    });
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it('accepts a token from generateJWT', async () => {
+    const token = ExpressHelper.generateJWT(new Account('id', 'testme', 'testme'));
+
+    const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe('id');
+  });
+
+  it('rejects a token signed with the right secret but another HMAC algorithm', async () => {
+    const token = jwt.sign(claims(), secret, { algorithm: 'HS512' });
+
+    const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects an unsigned alg=none token', async () => {
+    const token = `${segment({ alg: 'none', typ: 'JWT' })}.${segment(claims())}.`;
+
+    const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(401);
+  });
 });

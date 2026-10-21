@@ -15,12 +15,10 @@
 
     <!-- Settings Form -->
     <div v-else class="settings-content">
-      <h2 class="settings-title">{{ t('title') }}</h2>
-
       <div class="settings-container">
         <!-- Calendar Title & Description (Translatable) -->
         <div class="setting-card">
-          <h3 class="setting-label">{{ t('calendar_content_section') }}</h3>
+          <h2 class="setting-label">{{ t('calendar_content_section') }}</h2>
           <p class="input-description">{{ t('calendar_title_help') }}</p>
 
           <LanguageTabSelector
@@ -83,7 +81,7 @@
 
         <!-- Default Date Range -->
         <div class="setting-card">
-          <h3 id="defaultDateRange-label" class="setting-label">{{ t('default_date_range_label') }}</h3>
+          <h2 id="defaultDateRange-label" class="setting-label">{{ t('default_date_range_label') }}</h2>
           <p id="defaultDateRange-help" class="input-description">{{ t('default_date_range_help') }}</p>
           <select
             id="defaultDateRange"
@@ -105,7 +103,7 @@
 
         <!-- Default Event Image -->
         <div class="setting-card">
-          <h3 class="setting-label">{{ t('default_event_image_label') }}</h3>
+          <h2 class="setting-label">{{ t('default_event_image_label') }}</h2>
           <p class="input-description">{{ t('default_event_image_help') }}</p>
 
           <!-- Existing image preview -->
@@ -180,7 +178,7 @@
           and the third renders nothing.
         -->
         <div v-if="extendedFeaturesAccess !== 'unknown'" class="setting-card">
-          <h3 class="setting-label">{{ t('extended_features_label') }}</h3>
+          <h2 class="setting-label">{{ t('extended_features_label') }}</h2>
 
           <!--
             No standing "these features need funding" line under the heading.
@@ -277,6 +275,7 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
+import { useCheckoutReturn } from '@/client/composables/useCheckoutReturn';
 
 // Props
 const props = defineProps<{
@@ -696,6 +695,18 @@ const onPlanStarted = () => {
   clearMessages();
 };
 
+// This leaf is the Stripe return URL. A redirect-based payment method lands
+// here with ?session_id= and the funding sheet closed, so confirm it here.
+useCheckoutReturn(async (outcome) => {
+  if (outcome === 'success') {
+    await refreshFundingAccess();
+    onPlanStarted();
+    return;
+  }
+  state.error = t('extended_features_checkout_error');
+  clearMessages();
+});
+
 // Load settings and funding status when component mounts. The instance name
 // the upsell needs is the card's own business, not this screen's.
 onMounted(() => {
@@ -719,13 +730,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
-}
-
-.settings-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--pav-text-primary);
-  margin: 0 0 var(--pav-space-6) 0;
 }
 
 .settings-container {

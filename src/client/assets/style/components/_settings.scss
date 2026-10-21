@@ -84,7 +84,47 @@
     margin: 0;
 
     @include pav-media(md) {
-      display: block;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--pav-space-1);
+    }
+  }
+
+  /* Between the group (or the calendar switcher) and a sub-route's parent
+     leaf; it points along the reading direction. */
+  &__separator {
+    flex: none;
+    inline-size: 1em;
+    block-size: 1em;
+    fill: none;
+
+    @include rtl-only {
+      transform: scaleX(-1);
+    }
+  }
+
+  /* A sub-route's parent leaf, linking back to it. The underline marks it as
+     a link within the label. Like an inline link it drops the base 44px
+     floor (base/_accessibility.scss), which would push the h1 down on every
+     sub-route; the padding brings the pointer target to 24px (WCAG 2.5.8)
+     and the negative margin keeps the eyebrow's line height. */
+  &__parent {
+    min-block-size: auto;
+    min-inline-size: auto;
+    padding-block: var(--pav-space-1);
+    margin-block: calc(-1 * var(--pav-space-1));
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+
+    &:hover {
+      color: var(--pav-text-primary);
+    }
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
     }
   }
 
@@ -93,10 +133,19 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--pav-space-3);
+
+    /* The help button (common/help-button.vue) ends the row at its own
+       size: flex: none and align-self keep any flex context from
+       stretching it, which aspect-ratio would turn into a giant circle. */
+    > .btn--icon {
+      flex: none;
+      align-self: center;
+      margin-inline-start: auto;
+    }
   }
 
-  /* The switcher trigger, in the eyebrow and beside the h1, takes the
-     shared pointer-target minimum, past WCAG 2.5.8's 24px. */
+  /* The switcher trigger, in the eyebrow and in the calendar section's h1,
+     takes the shared pointer-target minimum, past WCAG 2.5.8's 24px. */
   &__eyebrow,
   &__title-row {
     .calendar-switcher {
@@ -104,9 +153,11 @@
     }
   }
 
-  /* The calendar name is user-entered, so the eyebrow switcher keeps its
-     case rather than taking the eyebrow's uppercase. */
+  /* The calendar name is user-entered, so the eyebrow switcher shows it as
+     typed, as every other switcher does, rather than in the eyebrow's
+     uppercase and tracking. */
   &__eyebrow .calendar-switcher__label {
+    letter-spacing: normal;
     text-transform: none;
   }
 

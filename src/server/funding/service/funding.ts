@@ -13,6 +13,7 @@ import {
   CalendarFundingSummary,
   FUNDING_GATED_FEATURES,
   FundingGatedFeature,
+  CHECKOUT_SESSION_ID_PATTERN,
 } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -61,9 +62,6 @@ const logger = createLogger('funding');
 
 // Maximum number of calendar IDs allowed in a single coverage-change call
 export const MAX_CALENDAR_IDS = 50;
-
-// Checkout session ID format: cs_test_ or cs_live_ prefix, then 1-190 alphanumeric/underscore chars
-const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
 
 // PWYC amount bounds in millicents
 export const MIN_PWYC_AMOUNT = 100000; // $1.00
@@ -1272,7 +1270,7 @@ export default class FundingService {
       throw new InvalidSessionIdError('Session ID must not exceed 200 characters');
     }
 
-    if (!CHECKOUT_SESSION_ID_REGEX.test(sessionId)) {
+    if (!CHECKOUT_SESSION_ID_PATTERN.test(sessionId)) {
       throw new InvalidSessionIdError('Invalid session ID format');
     }
 
@@ -1458,6 +1456,10 @@ export default class FundingService {
     if (!returnUrl) {
       throw new MissingRequiredFieldError('returnUrl');
     }
+
+    // The portal sends the supporter back to this URL, so pin it to this
+    // instance as checkout does (defense in depth against an open redirect)
+    this.validateReturnUrlOrigin(returnUrl);
 
     const fundingPlan = await this.getStatus(accountId);
     if (!fundingPlan) {

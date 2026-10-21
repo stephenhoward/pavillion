@@ -140,6 +140,21 @@ describe('Funding Provider UI Components', () => {
     });
   };
 
+  it('introduces the screen with a description, not a tab name', async () => {
+    wrapper = mountFunding();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const intro = wrapper.find('.page-intro .page-subtitle').text();
+    expect(intro).toBe(adminTranslations.funding.page_subtitle);
+
+    const tabNames = wrapper.findAll('[role="tab"]').map(tab => tab.text());
+    expect(tabNames.length).toBeGreaterThan(0);
+    for (const name of tabNames) {
+      expect(name).not.toContain(intro);
+    }
+  });
+
   /**
    * Test 1: Provider connection status display (only configured providers shown)
    */

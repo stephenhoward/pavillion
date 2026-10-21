@@ -9,14 +9,15 @@
  * unknown, another calendar's, forbidden, or a failed request) replaces to
  * the plain list silently, so the URL never discloses whether a report
  * exists. The leaf watches the param, so a new reportId on the mounted leaf
- * opens that report.
+ * opens that report. The detail view shows the report this check fetched, so
+ * opening a report sends one request for it.
  */
-import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
-import ModerationService from '@/client/service/moderation';
+import ModerationService, { type ReportDetailResponse } from '@/client/service/moderation';
 import { isReportId } from '@/client/service/settings-guards';
 import { focusSettingsHeading } from '@/client/components/logged_in/settings/heading-focus';
 
@@ -29,8 +30,9 @@ const router = useRouter();
 const moderationService = new ModerationService();
 const { t } = useTranslation('system', { keyPrefix: 'moderation' });
 
-const headingId = useId();
 const selectedReportId = ref<string | null>(null);
+/** The selected report as the scoped check fetched it, handed to the detail view. */
+const selectedReport = ref<ReportDetailResponse | null>(null);
 const regionRef = ref<HTMLElement | null>(null);
 
 // Cleared on unmount, so a request that settles afterwards changes nothing.
@@ -45,17 +47,19 @@ const reportsRoute = () => ({
 });
 
 /**
- * Leaves the report view for the list. When a report was showing, focus
- * goes to the page heading once the list renders, so it is not stranded on
- * the removed region. (In page mode the layout's focus rule targets the same
- * heading; focusing it twice is a no-op.)
+ * Replaces a report that failed to open with the list. When a report was
+ * showing, focus goes to the page heading once the list renders, so it is
+ * not stranded on the removed region. (In page mode the layout's focus rule
+ * targets the same heading; focusing it twice is a no-op.)
  *
- * @param navigate - The navigation to the list: a replace for a failed open, a push for closing
+ * Closing a report that did open is the page header's job: its back link
+ * (below md) and its eyebrow link to Reports (md+) both land on the h1.
  */
-const returnToList = async (navigate: () => Promise<unknown>) => {
+const returnToList = async () => {
   const wasShowing = selectedReportId.value !== null;
   selectedReportId.value = null;
-  await navigate();
+  selectedReport.value = null;
+  await router.replace(reportsRoute());
   if (!wasShowing || !active) {
     return;
   }
@@ -74,23 +78,23 @@ const returnToList = async (navigate: () => Promise<unknown>) => {
 const openReport = async (requested: unknown) => {
   if (requested === undefined) {
     selectedReportId.value = null;
+    selectedReport.value = null;
     return;
   }
 
   if (!isReportId(requested)) {
-    await returnToList(() => router.replace(reportsRoute()));
+    await returnToList();
     return;
   }
 
   const calendarId = props.calendarId;
-  let resolved = true;
+  let fetched: ReportDetailResponse | null = null;
   try {
-    await moderationService.getReport(calendarId, requested);
+    fetched = await moderationService.getReport(calendarId, requested);
   }
   catch {
     // Unknown and inaccessible reports are indistinguishable: no banner, no
     // toast. The service still logs the failure to the console.
-    resolved = false;
   }
 
   // The viewer moved on while the request was in flight (another report,
@@ -105,11 +109,12 @@ const openReport = async (requested: unknown) => {
     return;
   }
 
-  if (!resolved) {
-    await returnToList(() => router.replace(reportsRoute()));
+  if (!fetched) {
+    await returnToList();
     return;
   }
 
+  selectedReport.value = fetched;
   selectedReportId.value = requested;
   try {
     await nextTick();
@@ -120,9 +125,6 @@ const openReport = async (requested: unknown) => {
     // from any job in it must not turn a rendered report into an error state.
   }
 };
-
-/** Closes the open report, back to the list. */
-const closeReport = () => returnToList(() => router.push(reportsRoute()));
 
 // Only this leaf's two routes are acted on: a navigation away (say, to the
 // admin moderation_report_detail) changes the param before this unmounts.
@@ -146,22 +148,20 @@ const viewReport = (reportId: string) => {
 </script>
 
 <template>
-  <!-- Named by the report heading once it renders; aria-label names the
-       region until then, and if the report fails to load. -->
+  <!-- Named like the page h1, which the settings header titles from this
+       route; the report itself renders no heading of its own. -->
   <div
     v-if="selectedReportId"
     ref="regionRef"
     tabindex="-1"
     role="region"
-    :aria-labelledby="headingId"
     :aria-label="t('detail.title')"
   >
     <ReportDetail
       :key="selectedReportId"
       :calendar-id="calendarId"
       :report-id="selectedReportId"
-      :heading-id="headingId"
-      @back="closeReport"
+      :fetched-report="selectedReport ?? undefined"
     />
   </div>
   <ReportsDashboard

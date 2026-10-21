@@ -8,6 +8,7 @@ import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
+import { MissingRequiredFieldError } from '@/common/exceptions/funding';
 
 describe('User Funding Plan API Routes', () => {
   let router: express.Router;
@@ -479,6 +480,23 @@ describe('User Funding Plan API Routes', () => {
         'test-account-id',
         'https://example.com/account',
       )).toBe(true);
+    });
+
+    it('passes no return URL to the service when returnUrl is repeated', async () => {
+      const getBillingPortalUrlStub = sandbox.stub(service, 'getBillingPortalUrl')
+        .rejects(new MissingRequiredFieldError('returnUrl'));
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, fundingPlanHandlers.getPortal.bind(fundingPlanHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler?returnUrl=https://example.com/a&returnUrl=https://evil.com/b')
+        .expect(400);
+
+      expect(getBillingPortalUrlStub.firstCall.args[1]).toBe('');
+      expect(response.body.errorName).toBe('MissingRequiredFieldError');
     });
   });
 

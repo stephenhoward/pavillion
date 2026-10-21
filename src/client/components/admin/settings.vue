@@ -9,7 +9,6 @@ import { DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 import HousekeepingStatus from './housekeeping-status.vue';
 import LanguageSettings from './language-settings.vue';
 import LanguageTabSelector from '../common/language-tab-selector.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const site_config = inject('site_config');
 const { t } = useTranslation('admin', {
@@ -111,14 +110,8 @@ async function updateSettings() {
 
 <template>
   <div class="settings-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header__title-row">
-        <h2>{{ t("general_settings") }}</h2>
-        <HelpButton />
-      </div>
-      <p class="page-subtitle">{{ t("settings_subtitle", "Monitor system health and configure instance settings") }}</p>
-    </div>
+    <!-- The settings page header carries the title and help button. -->
+    <p class="page-subtitle">{{ t("settings_subtitle", "Monitor system health and configure instance settings") }}</p>
 
     <!-- System Status Widget -->
     <HousekeepingStatus />
@@ -285,25 +278,10 @@ async function updateSettings() {
   gap: var(--pav-space-6);
   max-width: 800px;
 
-  .page-header {
-    &__title-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    h2 {
-      margin: 0 0 var(--pav-space-1) 0;
-      font-size: var(--pav-font-size-2xl);
-      font-weight: var(--pav-font-weight-light);
-      color: var(--pav-color-text-primary);
-    }
-
-    .page-subtitle {
-      margin: 0;
-      font-size: var(--pav-font-size-xs);
-      color: var(--pav-color-text-muted);
-    }
+  .page-subtitle {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
   }
 
   .settings-card {

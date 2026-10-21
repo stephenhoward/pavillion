@@ -3,7 +3,6 @@ import { onMounted, reactive } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'moderation.settings',
@@ -130,14 +129,8 @@ async function saveSettings() {
 
 <template>
   <div class="moderation-settings">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2>{{ t('title') }}</h2>
-        <p class="page-subtitle">{{ t('subtitle') }}</p>
-      </div>
-      <HelpButton />
-    </div>
+    <!-- The settings page header carries the title, the parent link and the help button. -->
+    <p class="page-subtitle">{{ t('subtitle') }}</p>
 
     <!-- Loading State -->
     <LoadingMessage
@@ -394,21 +387,10 @@ async function saveSettings() {
   gap: var(--pav-space-6);
   max-width: 800px;
 
-  .page-header {
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
-    }
+  .page-subtitle {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
   }
 
   .error-message {

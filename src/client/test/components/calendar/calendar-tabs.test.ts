@@ -207,7 +207,7 @@ describe('Calendar View Tabs', () => {
       const trigger = wrapper.find('h1 button[aria-haspopup="dialog"]');
       expect(trigger.exists()).toBe(true);
       expect(trigger.text()).toContain('Test Calendar');
-      expect(trigger.attributes('aria-label')).toBe('Switch calendar: Test Calendar');
+      expect(trigger.attributes('aria-label')).toBeUndefined();
     });
 
     it('should keep Documentation and Manage calendar in the actions menu, without Create calendar', async () => {

@@ -250,8 +250,7 @@
       "administrator": "Administrateur"
     },
     "detail": {
-      "title": "Détail du signalement",
-      "back_to_reports": "Retour aux signalements",
+      "title": "Détails du signalement",
       "description": "Description",
       "reporter_type": "Type d'auteur",
       "reported_on": "Signalé le",

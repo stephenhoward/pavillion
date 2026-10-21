@@ -143,7 +143,8 @@ export default class FundingPlanRoutes {
         return;
       }
 
-      const returnUrl = req.query.returnUrl as string;
+      // A repeated query key arrives as an array; treat it as absent
+      const returnUrl = typeof req.query.returnUrl === 'string' ? req.query.returnUrl : '';
 
       const portalUrl = await this.service.getBillingPortalUrl(account.id, returnUrl);
 

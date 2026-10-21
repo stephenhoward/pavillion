@@ -2220,6 +2220,59 @@ describe('FundingService', () => {
     });
   });
 
+  describe('getBillingPortalUrl', () => {
+    const accountId = uuidv4();
+    const providerConfigId = uuidv4();
+
+    beforeEach(() => {
+      // Pin the configured domain so origin validation does not depend on the
+      // developer's local.yaml.
+      sandbox.stub(config, 'get').withArgs('domain').returns('pavillion.dev');
+    });
+
+    function stubPlanAndAdapter() {
+      const plan = new FundingPlan(uuidv4());
+      plan.accountId = accountId;
+      plan.providerConfigId = providerConfigId;
+      plan.providerCustomerId = 'cus_123';
+      sandbox.stub(service, 'getStatus').resolves(plan);
+      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves({ id: providerConfigId } as any);
+      const adapter = {
+        getBillingPortalUrl: sandbox.stub().resolves('https://billing.stripe.com/p/session/test'),
+      };
+      const getAdapter = sandbox.stub(ProviderFactory, 'getAdapter').returns(adapter as any);
+      return { adapter, getAdapter };
+    }
+
+    it('returns the portal URL for a return URL on this instance', async () => {
+      const { adapter } = stubPlanAndAdapter();
+      const returnUrl = 'https://pavillion.dev/settings/account/funding';
+
+      const portalUrl = await service.getBillingPortalUrl(accountId, returnUrl);
+
+      expect(portalUrl).toBe('https://billing.stripe.com/p/session/test');
+      expect(adapter.getBillingPortalUrl.firstCall.args[0]).toBe('cus_123');
+      expect(adapter.getBillingPortalUrl.firstCall.args[1]).toBe(returnUrl);
+    });
+
+    it('rejects a return URL on a foreign origin before reaching the provider', async () => {
+      const { getAdapter } = stubPlanAndAdapter();
+
+      await expect(
+        service.getBillingPortalUrl(accountId, 'https://evil.com/phish'),
+      ).rejects.toThrow(ValidationError);
+      expect(getAdapter.called).toBe(false);
+    });
+
+    it('rejects a return URL with a non-http scheme', async () => {
+      stubPlanAndAdapter();
+
+      await expect(
+        service.getBillingPortalUrl(accountId, 'javascript:alert(1)'),
+      ).rejects.toThrow(ValidationError);
+    });
+  });
+
   describe('getCheckoutSessionStatus', () => {
     const accountId = uuidv4();
     const providerConfigId = uuidv4();

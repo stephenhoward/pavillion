@@ -29,14 +29,43 @@ describe('CalendarSwitcher', () => {
     setActivePinia(pinia);
   });
 
-  const props = { label: 'Riverside', routeName: 'calendar', currentUrlName: 'riverside', ariaLabel: 'Switch calendar: Riverside' };
+  const props = { calendarName: 'Riverside', routeName: 'calendar', currentUrlName: 'riverside' };
 
-  it('renders the label with the accessible name and dialog popup semantics', () => {
+  const info = (id: string, name: string) => new CalendarInfo(new Calendar(id, name), 'owner');
+
+  // Every host shows the same control: the calendar's name and a chevron.
+  // The name alone is its accessible name, so a host h1 reads as the calendar.
+  it('shows the calendar name and a chevron, named by the calendar alone, with dialog popup semantics', () => {
     const wrapper = mountComponent(Switcher, router(), { pinia, props });
     const trigger = wrapper.find('button');
-    expect(trigger.text()).toContain('Riverside');
-    expect(trigger.attributes('aria-label')).toBe('Switch calendar: Riverside');
+    expect(trigger.find('.calendar-switcher__label').text()).toBe('Riverside');
+    expect(trigger.find('svg').attributes('aria-hidden')).toBe('true');
+    expect(trigger.attributes('aria-label')).toBeUndefined();
+    expect(trigger.text()).toBe('Riverside');
     expect(trigger.attributes('aria-haspopup')).toBe('dialog');
+    wrapper.unmount();
+  });
+
+  it('describes itself as a calendar switcher when the viewer has more than one calendar', () => {
+    useCalendarStore().setCalendarInfos([info('c1', 'riverside'), info('c2', 'harbour')]);
+    const wrapper = mountComponent(Switcher, router(), { pinia, props, attachTo: document.body });
+    const describedBy = wrapper.find('button').attributes('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    const description = document.getElementById(describedBy!);
+    expect(description?.textContent).toBe('Select to switch calendars');
+    // Hidden and outside the switcher's own markup, so a heading that holds
+    // the switcher keeps the calendar name as its only text.
+    expect(description?.hidden).toBe(true);
+    expect(wrapper.text()).toBe('Riverside');
+    wrapper.unmount();
+  });
+
+  it('carries no description when the viewer has one calendar', () => {
+    useCalendarStore().setCalendarInfos([info('c1', 'riverside')]);
+    const wrapper = mountComponent(Switcher, router(), { pinia, props });
+    expect(wrapper.find('button').attributes('aria-describedby')).toBeUndefined();
+    expect(wrapper.text()).toBe('Riverside');
+    wrapper.unmount();
   });
 
   it('toggles aria-expanded and opens the sheet', async () => {
@@ -51,6 +80,7 @@ describe('CalendarSwitcher', () => {
     await trigger.trigger('click');
     expect(trigger.attributes('aria-expanded')).toBe('true');
     expect(wrapper.find('[data-testid="sheet"]').exists()).toBe(true);
+    wrapper.unmount();
   });
 
   it('closes the sheet when it emits close', async () => {
@@ -63,6 +93,7 @@ describe('CalendarSwitcher', () => {
     await wrapper.find('[data-testid="emit-close"]').trigger('click');
     expect(wrapper.find('[data-testid="emit-close"]').exists()).toBe(false);
     expect(wrapper.find('button').attributes('aria-expanded')).toBe('false');
+    wrapper.unmount();
   });
 
   it('opens the create sheet when the sheet emits create', async () => {
@@ -79,6 +110,9 @@ describe('CalendarSwitcher', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="create-sheet"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="emit-create"]').exists()).toBe(false);
+    // Unmounted so a later mount's locale re-render cannot reach this tree
+    // after its stubs are gone.
+    wrapper.unmount();
   });
 
   describe('with the real sheets', () => {

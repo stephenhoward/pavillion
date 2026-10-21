@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin, loginAsFreshUser } from './helpers/auth';
-import { calendarLeaf, gotoSettings } from './helpers/settings-nav';
+import { calendarLeaf, calendarSwitcherTrigger, gotoSettings } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -81,7 +81,7 @@ test.describe('Calendar CRUD Workflow', () => {
     test('should create a calendar with a custom name', async ({ page }) => {
       // The user now owns the calendar created above, so a second one is
       // created from the calendar switcher's sheet
-      await page.getByRole('button', { name: /Switch calendar/ }).click();
+      await calendarSwitcherTrigger(page, 'My Test Calendar').click();
       await page.getByRole('button', { name: 'Create a new calendar' }).click();
 
       const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });

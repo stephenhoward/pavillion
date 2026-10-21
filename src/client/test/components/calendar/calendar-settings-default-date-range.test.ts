@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia } from 'pinia';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 import CalendarSettings from '@/client/components/logged_in/calendar-management/settings.vue';
@@ -39,6 +40,8 @@ const mountSettings = () => {
   return mount(CalendarSettings, {
     global: {
       plugins: [
+        // The screen is a routed leaf: it reads the route on mount.
+        createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }] }),
         [I18NextVue, { i18next }],
         createPinia(),
       ],
@@ -94,7 +97,7 @@ describe('CalendarSettings — default date window', () => {
     const labelId = wrapper.find('#defaultDateRange').attributes('aria-labelledby');
     expect(labelId).toBeTruthy();
     const label = wrapper.find(`#${labelId}`);
-    expect(label.element.tagName).toBe('H3');
+    expect(label.element.tagName).toBe('H2');
     expect(label.text()).not.toBe('');
 
     wrapper.unmount();

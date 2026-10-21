@@ -729,11 +729,13 @@ export default class FundingService {
   /**
    * Get billing portal URL for managing payment method
    *
+   * @param {string} returnUrl - Absolute URL the portal sends the supporter back
+   *   to; the server rejects one whose origin is not this instance
    * @returns {Promise<string>} Billing portal URL
    */
-  async getPortalUrl(): Promise<string> {
+  async getPortalUrl(returnUrl: string): Promise<string> {
     try {
-      const response = await axios.get('/api/funding/v1/portal');
+      const response = await axios.get('/api/funding/v1/portal', { params: { returnUrl } });
       return response.data.portalUrl;
     }
     catch (error) {
