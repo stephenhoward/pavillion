@@ -44,6 +44,20 @@ describe('EmptyState', () => {
     expect(wrapper.findComponent(DocLink).exists()).toBe(false);
   });
 
+  it('labels the section by its heading with an id that is stable across mounts', async () => {
+    const first = await mountEmpty({ title: 'Nothing here' });
+    const firstId = first.find('h2').attributes('id');
+    first.unmount();
+
+    const wrapper = await mountEmpty({ title: 'Nothing here' });
+    currentWrapper = wrapper;
+    const id = wrapper.find('h2').attributes('id');
+
+    expect(id).toBeTruthy();
+    expect(wrapper.find('section').attributes('aria-labelledby')).toBe(id);
+    expect(id).toBe(firstId);
+  });
+
   it('renders a DocLink for the guide and never an external doc anchor', async () => {
     const wrapper = await mountEmpty({ title: 'Empty', guide: GUIDE });
     currentWrapper = wrapper;
