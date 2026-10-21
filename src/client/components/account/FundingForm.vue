@@ -8,6 +8,7 @@ import type { FundingOptions, FundingProvider } from '@/client/service/funding';
 import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
 import { loadStripe } from '@/client/service/stripe-loader';
 import type { StripeEmbeddedCheckout } from '@stripe/stripe-js';
+import { verifyCheckoutSession } from '@/client/composables/useCheckoutReturn';
 
 type FormState = 'configure' | 'checkout' | 'result';
 
@@ -198,7 +199,8 @@ function destroyCheckout() {
 
 /**
  * Handle checkout completion callback from Stripe embedded checkout.
- * Verifies the session status via our API before transitioning state.
+ * Verifies the session status via our API before transitioning state: the
+ * callback fires when the form finishes, not when payment is verified.
  */
 async function handleCheckoutComplete(sessionId: string) {
   // If user already navigated away from checkout, ignore the callback
@@ -206,27 +208,10 @@ async function handleCheckoutComplete(sessionId: string) {
     return;
   }
 
-  try {
-    const status = await fundingService.getCheckoutSessionStatus(sessionId);
-
-    if (status.status === 'complete') {
-      destroyCheckout();
-      resultStatus.value = 'success';
-      formState.value = 'result';
-      return;
-    }
-
-    if (status.status === 'expired') {
-      destroyCheckout();
-      resultStatus.value = 'error';
-      formState.value = 'result';
-      return;
-    }
-  }
-  catch {
-    // If verification fails, show error — the onComplete callback fires when the form finishes, not when payment is verified
+  const outcome = await verifyCheckoutSession(fundingService, sessionId);
+  if (outcome) {
     destroyCheckout();
-    resultStatus.value = 'error';
+    resultStatus.value = outcome;
     formState.value = 'result';
   }
 }
@@ -364,25 +349,10 @@ function acknowledgeResult() {
   emit('plan-started');
 }
 
-onMounted(async () => {
-  const url = new URL(window.location.href);
-  const sessionId = url.searchParams.get('session_id');
-
-  if (sessionId) {
-    // Clean URL so session_id doesn't persist on refresh
-    url.searchParams.delete('session_id');
-    window.history.replaceState({}, '', url.toString());
-
-    // Set state so handleCheckoutComplete's guard passes
-    formState.value = 'checkout';
-    await handleCheckoutComplete(sessionId);
-
-    if (formState.value === 'result') {
-      loading.value = false;
-      return;
-    }
-  }
-
+// A checkout that leaves the page by redirect comes back to the return URL
+// with the sheet closed, so the calendar's General leaf confirms it
+// (useCheckoutReturn), not this form.
+onMounted(() => {
   loadOptions();
 });
 

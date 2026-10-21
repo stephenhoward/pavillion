@@ -34,6 +34,16 @@ export type ProviderType = 'stripe' | 'paypal';
 export const SUPPORTED_PROVIDER_TYPES: readonly ProviderType[] = ['stripe'];
 
 /**
+ * The shape of a Stripe Checkout Session id: `cs_test_` or `cs_live_`, then
+ * 1-190 alphanumeric or underscore characters.
+ *
+ * The server refuses a status lookup for anything else, and the client uses
+ * the same test to drop a `session_id` that Stripe did not substitute (the
+ * literal `{CHECKOUT_SESSION_ID}` template, encoded or not) without a request.
+ */
+export const CHECKOUT_SESSION_ID_PATTERN = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
+
+/**
  * How a single calendar is currently covered.
  *
  * This is the one vocabulary for a single calendar's coverage, shared verbatim

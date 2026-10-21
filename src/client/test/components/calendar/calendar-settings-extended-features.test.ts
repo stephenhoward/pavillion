@@ -59,9 +59,9 @@ function createCalendar(): Calendar {
   return calendar;
 }
 
-const mountSettings = async (pinia: Pinia) => {
+const mountSettings = async (pinia: Pinia, startPath = '/') => {
   const router: Router = createRouter({ history: createMemoryHistory(), routes });
-  await router.push('/');
+  await router.push(startPath);
   await router.isReady();
 
   const wrapper = mountComponent(CalendarSettings, router, {
@@ -86,7 +86,7 @@ const mountSettings = async (pinia: Pinia) => {
   });
 
   await flushPromises();
-  return wrapper;
+  return { wrapper, router };
 };
 
 describe('CalendarSettings — extended features section', () => {
@@ -117,7 +117,7 @@ describe('CalendarSettings — extended features section', () => {
       // money. Neither half of the section may appear.
       mockRequests(new Error('funding read failed'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.text()).not.toContain('Extended Features');
       expect(wrapper.find('.setting-badge--enabled').exists()).toBe(false);
@@ -130,7 +130,7 @@ describe('CalendarSettings — extended features section', () => {
     it('offers funding and claims no entitlement', async () => {
       mockRequests(summaryResponse(false, 'not_covered'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.text()).toContain('Extended Features');
       expect(wrapper.find('.funding-upsell').exists()).toBe(true);
@@ -143,7 +143,7 @@ describe('CalendarSettings — extended features section', () => {
     it('shows the enabled badge and the disable control for a funding plan', async () => {
       mockRequests(summaryResponse(true, 'covered'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       const badge = wrapper.find('.setting-badge--enabled');
       expect(badge.exists()).toBe(true);
@@ -156,7 +156,7 @@ describe('CalendarSettings — extended features section', () => {
     it('names an admin exemption in the badge and offers nothing to cancel', async () => {
       mockRequests(summaryResponse(true, 'admin_exempt'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.find('.setting-badge--enabled').text()).toBe('Included with admin account');
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
@@ -166,7 +166,7 @@ describe('CalendarSettings — extended features section', () => {
     it('names a complimentary grant in the badge and offers nothing to cancel', async () => {
       mockRequests(summaryResponse(true, 'grant'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.find('.setting-badge--enabled').text()).toBe('Complimentary grant');
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
@@ -180,7 +180,7 @@ describe('CalendarSettings — extended features section', () => {
       // The gate decides capability; the status only ever names a badge.
       mockRequests(summaryResponse(false, 'covered'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.find('.funding-upsell').exists()).toBe(true);
       expect(wrapper.find('.setting-badge--enabled').exists()).toBe(false);
@@ -192,12 +192,75 @@ describe('CalendarSettings — extended features section', () => {
       // relationship to report, every gate open, and nothing to sell.
       mockRequests(summaryResponse(true, 'not_covered'));
 
-      wrapper = await mountSettings(pinia);
+      ({ wrapper } = await mountSettings(pinia));
 
       expect(wrapper.find('.setting-badge--enabled').text()).toBe('Enabled');
       expect(wrapper.find('.funding-upsell').exists()).toBe(false);
       // Nothing to cancel: 'not_covered' names no plan, whatever opened the gate.
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
+    });
+  });
+
+  describe('when a redirect-based checkout returns to this page', () => {
+    const SESSION_ID = 'cs_test_returned123';
+    const STATUS_URL = `/api/funding/v1/checkout-sessions/${SESSION_ID}/status`;
+
+    /**
+     * The funding summary flips to covered once the session has been
+     * verified, as it does on the server, which records the plan when it
+     * sees a complete session.
+     */
+    function mockReturn(sessionStatus: string) {
+      let verified = false;
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url === STATUS_URL) {
+          verified = sessionStatus === 'complete';
+          return Promise.resolve({ data: { status: sessionStatus } });
+        }
+        if (url === FUNDING_URL) {
+          return Promise.resolve(verified
+            ? summaryResponse(true, 'covered')
+            : summaryResponse(false, 'not_covered'));
+        }
+        if (url === SITE_CONFIG_URL) {
+          return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
+        }
+        return Promise.reject(new Error(`unexpected request: ${url}`));
+      });
+    }
+
+    it('confirms the plan, switches the section to granted and drops session_id', async () => {
+      mockReturn('complete');
+
+      let router: Router;
+      ({ wrapper, router } = await mountSettings(pinia, `/?session_id=${SESSION_ID}`));
+
+      expect(axios.get).toHaveBeenCalledWith(STATUS_URL);
+      expect(wrapper.find('.alert--success').text()).toBe('Extended features enabled for this calendar.');
+      expect(wrapper.find('.setting-badge--enabled').exists()).toBe(true);
+      expect(wrapper.find('.funding-upsell').exists()).toBe(false);
+      expect(router.currentRoute.value.query).toEqual({});
+    });
+
+    it('says the plan could not be confirmed when the session expired', async () => {
+      mockReturn('expired');
+
+      ({ wrapper } = await mountSettings(pinia, `/?session_id=${SESSION_ID}`));
+
+      expect(wrapper.find('.alert--error').text()).toContain('couldn\'t confirm your funding plan');
+      expect(wrapper.find('.alert--success').exists()).toBe(false);
+    });
+
+    it('ignores an unsubstituted session id placeholder', async () => {
+      mockReturn('complete');
+
+      let router: Router;
+      ({ wrapper, router } = await mountSettings(pinia, '/?session_id={CHECKOUT_SESSION_ID}'));
+
+      expect(axios.get).not.toHaveBeenCalledWith(expect.stringContaining('/checkout-sessions/'));
+      expect(wrapper.find('.alert--success').exists()).toBe(false);
+      expect(wrapper.find('.alert--error').exists()).toBe(false);
+      expect(router.currentRoute.value.query).toEqual({});
     });
   });
 });
