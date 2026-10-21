@@ -319,7 +319,7 @@ describe('settings list page', () => {
     it('renders the root rows, a Log out button and the policy link', async () => {
       const w = await mountAt('/settings', { isAdmin: true });
       expect(rowLabels(w)).toEqual(['Calendar', 'Account', 'Instance', 'Log out']);
-      expect(w.find('.settings-nav__logout button').text()).toBe('Log out');
+      expect(w.find('.settings-nav__action button').text()).toBe('Log out');
       expect(w.find('.settings-list-page__footer .policy-link').exists()).toBe(true);
     });
 
@@ -328,9 +328,9 @@ describe('settings list page', () => {
       expect(w.find('.policy-link').exists()).toBe(false);
     });
 
-    it('lists the calendar leaves the viewer may see', async () => {
+    it('lists the calendar leaves the viewer may see, then Leave calendar for an editor', async () => {
       const w = await mountAt('/settings/calendar/shared', { calendars: [owned(), edited()] });
-      expect(rowLabels(w)).toEqual(['Widget']);
+      expect(rowLabels(w)).toEqual(['Widget', 'Leave calendar']);
     });
 
     it('omits Funding Plan from the account list when funding is off', async () => {

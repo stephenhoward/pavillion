@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import {
-  Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
+  Calendar, DoorOpen, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
 } from 'lucide-vue-next';
 import settingsEn from '@/client/locales/en/settings.json';
 import { Calendar as CalendarModel } from '@/common/model/calendar';
@@ -158,7 +158,13 @@ describe('settings nav items', () => {
 
     it('gives every row a label key that resolves in the settings namespace', () => {
       const context = ctx({ isAdmin: true });
-      const items = [...rootItems(context), ...calendarItems(context), ...accountItems(context), ...adminItems()];
+      const items = [
+        ...rootItems(context),
+        ...calendarItems(context),
+        ...groupItems('calendar', ctx({ isOwner: false })),
+        ...accountItems(context),
+        ...adminItems(),
+      ];
       const resolve = (key: string): unknown => key
         .split('.')
         .reduce<unknown>((node, segment) => (node as Record<string, unknown> | undefined)?.[segment], settingsEn);
@@ -238,7 +244,9 @@ describe('settings nav items', () => {
     });
 
     it.each([
-      { group: 'calendar', context: ctx({ isOwner: false }), expected: ['widget'] },
+      { group: 'calendar', context: ctx({ isOwner: true }),
+        expected: ['general', 'editors', 'reports', 'import', 'widget'] },
+      { group: 'calendar', context: ctx({ isOwner: false }), expected: ['widget', 'leave_calendar'] },
       { group: 'account', context: ctx({ fundingEnabled: false }), expected: ['profile', 'security'] },
       { group: 'admin', context: ctx({ isAdmin: true }),
         expected: ['general', 'accounts', 'calendars', 'moderation', 'federation', 'funding'] },
@@ -248,6 +256,28 @@ describe('settings nav items', () => {
 
     it('gates the admin group on isAdmin', () => {
       expect(groupItems('admin', ctx({ isAdmin: false }))).toEqual([]);
+    });
+
+    it('ends an editor\'s calendar list with a Leave calendar danger action addressing that calendar', () => {
+      const items = groupItems('calendar', ctx({ isOwner: false }));
+      const last = items[items.length - 1];
+
+      expect(last).toMatchObject({
+        id: 'leave_calendar',
+        action: 'leave_calendar',
+        danger: true,
+        labelKey: 'nav.calendar.leave',
+        icon: DoorOpen,
+        calendarUrlName: 'riverside',
+      });
+      expect('to' in last).toBe(false);
+    });
+
+    it('never offers Leave calendar as a landing leaf or a visible leaf', () => {
+      const editor = ctx({ isOwner: false });
+
+      expect(ids(calendarItems(editor))).toEqual(['widget']);
+      expect(isVisibleLeaf('calendar', 'leave_calendar', editor)).toBe(false);
     });
   });
 

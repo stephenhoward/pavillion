@@ -114,6 +114,7 @@
     "confirm_leave_title": "Abandonar calendario",
     "confirm_leave_message": "¿Estás seguro de que quieres abandonar este calendario? Ya no tendrás acceso de edición y necesitarás ser invitado de nuevo para recuperar el acceso.",
     "error_leaving_calendar": "Error al abandonar el calendario",
+    "left_calendar_success": "Abandonaste {{calendar}}.",
     "resend_button": "Reenviar",
     "resending": "Reenviando...",
     "canceling": "Cancelando...",

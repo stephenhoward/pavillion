@@ -10,11 +10,16 @@
  * must stay current on every calendar leaf, and none of those leaves shares
  * its route name. The same rule keeps Reports current on report detail and
  * Moderation current on its sub-pages.
+ *
+ * Action rows (Log out, an editor's Leave calendar) are buttons after the
+ * links, in the danger style, and never current. Leave calendar confirms in
+ * a dialog first; Log out goes straight to its route.
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import NavItem from '@/client/components/shell/nav-item.vue';
+import LeaveCalendarDialog from './leave-calendar-dialog.vue';
 import type { NavigationItemWithState } from '@/client/components/shell/types';
 import type {
   SettingsNavActionItem,
@@ -35,9 +40,12 @@ const links = computed(() => props.items.filter(
   (item): item is SettingsNavLinkItem => !item.action,
 ));
 
-const logoutItem = computed(() => props.items.find(
-  (item): item is SettingsNavActionItem => item.action === 'logout',
+const actions = computed(() => props.items.filter(
+  (item): item is SettingsNavActionItem => !!item.action,
 ));
+
+/** The calendar whose Leave confirmation is open, or null. */
+const leaving = ref<string | null>(null);
 
 /**
  * A row is current when the route is its path or lies beneath it at a
@@ -63,8 +71,13 @@ const linkStates = computed<NavigationItemWithState[]>(() => {
   }));
 });
 
-function logOut() {
-  router.push({ name: 'logout' });
+function runAction(item: SettingsNavActionItem) {
+  if (item.action === 'logout') {
+    router.push({ name: 'logout' });
+  }
+  else {
+    leaving.value = item.calendarUrlName;
+  }
 }
 </script>
 
@@ -73,20 +86,26 @@ function logOut() {
     <li v-for="item in linkStates" :key="item.id">
       <NavItem :item="item" variant="list" />
     </li>
-    <li v-if="logoutItem" class="settings-nav__logout">
+    <li v-for="item in actions" :key="item.id" class="settings-nav__action">
       <button
         type="button"
-        :class="['shell-nav-item', 'shell-nav-item--list', { 'shell-nav-item--danger': logoutItem.danger }]"
-        @click="logOut"
+        :class="['shell-nav-item', 'shell-nav-item--list', { 'shell-nav-item--danger': item.danger }]"
+        :aria-haspopup="item.action === 'leave_calendar' ? 'dialog' : undefined"
+        @click="runAction(item)"
       >
         <component
-          :is="logoutItem.icon"
+          :is="item.icon"
           class="shell-nav-item__icon"
           :stroke-width="2"
           aria-hidden="true"
         />
-        <span class="shell-nav-item__label">{{ t(logoutItem.labelKey) }}</span>
+        <span class="shell-nav-item__label">{{ t(item.labelKey) }}</span>
       </button>
+      <LeaveCalendarDialog
+        v-if="item.action === 'leave_calendar' && leaving === item.calendarUrlName"
+        :calendar-url-name="item.calendarUrlName"
+        @close="leaving = null"
+      />
     </li>
   </ul>
 </template>

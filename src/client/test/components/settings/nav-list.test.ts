@@ -1,11 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import sinon from 'sinon';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { Calendar, ShieldCheck } from 'lucide-vue-next';
 import { mountComponent } from '@/client/test/lib/vue';
 import NavList from '@/client/components/logged_in/settings/nav-list.vue';
+import CalendarService from '@/client/service/calendar';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useToast, resetToastState } from '@/client/composables/useToast';
+import { Calendar as CalendarModel } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import {
   calendarItems,
+  groupItems,
   rootItems,
   type SettingsNavContext,
   type SettingsNavItem,
@@ -16,6 +25,7 @@ const Stub = { template: '<div />' };
 const createTestRouter = (): Router => createRouter({
   history: createMemoryHistory(),
   routes: [
+    { path: '/settings', name: 'settings', component: Stub },
     { path: '/settings/calendar/:calendar', name: 'calendar_management', component: Stub },
     { path: '/settings/calendar/:calendar/general', name: 'calendar_general', component: Stub },
     { path: '/settings/calendar/:calendar/editors', name: 'calendar_editors', component: Stub },
@@ -42,11 +52,16 @@ function ctx(overrides: Partial<SettingsNavContext> = {}): SettingsNavContext {
   };
 }
 
-async function mountAt(path: string, items: SettingsNavItem[], mode: 'page' | 'sidebar' = 'page') {
+async function mountAt(
+  path: string,
+  items: SettingsNavItem[],
+  mode: 'page' | 'sidebar' = 'page',
+  pinia?: Pinia,
+) {
   const router = createTestRouter();
   await router.push(path);
   await router.isReady();
-  const wrapper = mountComponent(NavList, router, { props: { items, mode } });
+  const wrapper = mountComponent(NavList, router, { props: { items, mode }, pinia });
   return { wrapper, router };
 }
 
@@ -150,5 +165,110 @@ describe('settings nav-list', () => {
     const { wrapper } = await mountAt('/settings/calendar/art/general', rootItems(ctx()));
 
     expect(wrapper.findAll('[id]')).toHaveLength(0);
+  });
+
+  describe('Leave calendar', () => {
+    const { showModal, close } = HTMLDialogElement.prototype;
+    const art = new CalendarModel('cal-art', 'art');
+    let sandbox: sinon.SinonSandbox;
+    let pinia: Pinia;
+    let wrapper: VueWrapper | null = null;
+
+    beforeEach(() => {
+      // happy-dom does not implement showModal()/close().
+      HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+      HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+      sandbox = sinon.createSandbox();
+      pinia = createPinia();
+      setActivePinia(pinia);
+      useCalendarStore().setCalendarInfos([new CalendarInfo(art, 'editor')]);
+      resetToastState();
+    });
+
+    afterEach(() => {
+      wrapper?.unmount();
+      wrapper = null;
+      sandbox.restore();
+      HTMLDialogElement.prototype.showModal = showModal;
+      HTMLDialogElement.prototype.close = close;
+    });
+
+    async function mountEditorList() {
+      const mounted = await mountAt(
+        '/settings/calendar/art/widget',
+        groupItems('calendar', ctx({ isOwner: false })),
+        'page',
+        pinia,
+      );
+      wrapper = mounted.wrapper;
+      return mounted;
+    }
+
+    it('renders as the last row of an editor\'s calendar list, a danger button that opens a dialog', async () => {
+      const { wrapper: list } = await mountEditorList();
+
+      const rows = list.findAll('li');
+      const button = rows[rows.length - 1].find('button');
+      expect(rows[rows.length - 1].classes()).toContain('settings-nav__action');
+      expect(button.text()).toBe('Leave calendar');
+      expect(button.attributes('type')).toBe('button');
+      expect(button.attributes('aria-haspopup')).toBe('dialog');
+      expect(button.classes()).toContain('shell-nav-item--danger');
+      expect(list.find('dialog').exists()).toBe(false);
+    });
+
+    it('asks for confirmation before leaving', async () => {
+      const leave = sandbox.stub(CalendarService.prototype, 'leaveCalendar').resolves();
+      const { wrapper: list } = await mountEditorList();
+
+      await list.find('li:last-child button').trigger('click');
+
+      const dialog = list.find('dialog');
+      expect(dialog.exists()).toBe(true);
+      expect(dialog.text()).toContain('Are you sure you want to leave this calendar?');
+      expect(leave.called).toBe(false);
+    });
+
+    it('closes the dialog without leaving when cancelled', async () => {
+      const leave = sandbox.stub(CalendarService.prototype, 'leaveCalendar').resolves();
+      const { wrapper: list } = await mountEditorList();
+
+      await list.find('li:last-child button').trigger('click');
+      await list.find('dialog .btn-ghost').trigger('click');
+
+      expect(list.find('dialog').exists()).toBe(false);
+      expect(leave.called).toBe(false);
+    });
+
+    it('leaves the calendar and replaces the page with the settings root', async () => {
+      const leave = sandbox.stub(CalendarService.prototype, 'leaveCalendar').callsFake(async (calendar) => {
+        useCalendarStore().removeCalendar(calendar);
+      });
+      const { wrapper: list, router } = await mountEditorList();
+      const replace = sandbox.spy(router, 'replace');
+
+      await list.find('li:last-child button').trigger('click');
+      await list.find('dialog .pill-button').trigger('click');
+      await flushPromises();
+
+      expect(leave.calledOnce).toBe(true);
+      expect(leave.firstCall.args[0].id).toBe('cal-art');
+      expect(replace.calledWith({ name: 'settings' })).toBe(true);
+      expect(router.currentRoute.value.name).toBe('settings');
+      expect(useToast().toasts.value.map((toast) => toast.type)).toEqual(['success']);
+    });
+
+    it('stays put and reports the failure when the server refuses', async () => {
+      sandbox.stub(console, 'error');
+      sandbox.stub(CalendarService.prototype, 'leaveCalendar').rejects(new CalendarEditorPermissionError());
+      const { wrapper: list, router } = await mountEditorList();
+
+      await list.find('li:last-child button').trigger('click');
+      await list.find('dialog .pill-button').trigger('click');
+      await flushPromises();
+
+      expect(router.currentRoute.value.name).toBe('calendar_widget');
+      expect(useToast().toasts.value.map((toast) => toast.message)).toEqual(['Failed to leave calendar']);
+    });
   });
 });

@@ -261,11 +261,11 @@ describe('settings tree', () => {
     });
   });
 
-  it('lists only the member-visible leaves for an edited calendar', async () => {
+  it('lists only the member-visible leaves, then Leave calendar, for an edited calendar', async () => {
     const w = await mountAt('/settings/account/profile', {
       calendars: [new CalendarInfo(calendar('e1', 'shared', 'Shared Events'), 'editor')],
     });
-    expect(rows(w, 'Calendar')).toEqual(['Widget']);
+    expect(rows(w, 'Calendar')).toEqual(['Widget', 'Leave calendar']);
   });
 
   it('omits the Calendar group when the viewer has no calendar', async () => {

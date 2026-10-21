@@ -56,7 +56,7 @@
   &--page {
     gap: 0;
 
-    > li:not(.settings-nav__logout) {
+    > li:not(.settings-nav__action) {
       border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
     }
   }
@@ -66,8 +66,9 @@
     display: none;
   }
 
-  /* Log out sits apart from the links, in the error colour */
-  &__logout {
+  /* An action row (Log out, Leave calendar) sits apart from the links, in
+     the error colour */
+  &__action {
     margin-block-start: var(--pav-space-4);
   }
 
