@@ -6,7 +6,6 @@ import { useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { CoveredCalendarInfo } from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('funding');
 
@@ -181,10 +180,6 @@ onMounted(async () => {
 
 <template>
   <section class="settings funding-plan-management">
-    <div class="settings-header">
-      <HelpButton />
-    </div>
-
     <div role="status" aria-live="polite">
       <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
       <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
@@ -295,12 +290,6 @@ onMounted(async () => {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
-}
-
-.settings-header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 2rem;
 }
 
 h2 {

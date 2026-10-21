@@ -24,7 +24,6 @@ import {
   accountCalendarRow,
   confirmLeaveButton,
   SHELL_MD,
-  UNRESOLVED_CALENDAR_TITLE,
   WCAG_TAGS,
   adminLeaf,
   adminLeafPath,
@@ -39,6 +38,7 @@ import {
   emptyState,
   expectNoHorizontalScroll,
   gotoSettings,
+  helpButton,
   historyLength,
   logOutButton,
   mainNav,
@@ -55,6 +55,7 @@ import {
   settingsTitle,
   settingsTree,
   treeSkipControl,
+  unresolvedCalendarIndex,
 } from './helpers/settings-nav';
 
 /**
@@ -151,7 +152,7 @@ test.describe('phone drill-down', () => {
     await settingsRow(main, 'Calendar').click();
     await expect(page).toHaveURL(pathPattern(calendarIndexPath(ADMIN_CALENDAR_URL_NAME)));
     await expect(settingsTitle(page, ADMIN_CALENDAR_NAME)).toBeFocused();
-    await expect(calendarSwitcherTrigger(page)).toBeVisible();
+    await expect(calendarSwitcherTrigger(page, ADMIN_CALENDAR_NAME)).toBeVisible();
     await expect(mobileNav(page)).toBeVisible();
 
     await settingsRow(main, 'Editors').click();
@@ -280,8 +281,7 @@ test.describe('account calendars', () => {
     expect(focusedOnRowOrHeading, 'focus moved to a row link or the h1').toBe(true);
 
     // The calendar is gone from the switcher's store too: its settings no longer resolve.
-    await page.goto(env.baseURL + calendarIndexPath(ADMIN_CALENDAR_URL_NAME));
-    await expect(settingsTitle(page, UNRESOLVED_CALENDAR_TITLE)).toBeVisible();
+    await gotoSettings(page, env.baseURL, unresolvedCalendarIndex(ADMIN_CALENDAR_URL_NAME));
   });
 });
 
@@ -479,7 +479,7 @@ for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as cons
 
       const snapshots: string[] = [];
       for (const calendar of [ADMIN_CALENDAR_URL_NAME, NONEXISTENT_CALENDAR]) {
-        const index = calendarIndex(calendar, UNRESOLVED_CALENDAR_TITLE);
+        const index = unresolvedCalendarIndex(calendar);
         await gotoSettings(page, env.baseURL, index);
         await expect(emptyState(main)).toBeVisible();
         await expect(page).toHaveURL(pathPattern(index.path));
@@ -597,7 +597,7 @@ for (const theme of ['light', 'dark'] as const satisfies readonly Theme[]) {
       await page.setViewportSize(PHONE);
       await loginAsAdmin(page, env.baseURL);
       await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, ADMIN_CALENDAR_NAME));
-      await expect(calendarSwitcherTrigger(page)).toBeVisible();
+      await expect(calendarSwitcherTrigger(page, ADMIN_CALENDAR_NAME)).toBeVisible();
 
       expect(await axeViolations(page)).toEqual([]);
     });
@@ -665,7 +665,7 @@ test.describe('axe, further leaves (light)', () => {
   test('calendar switcher sheet open on a settings leaf', async ({ page }) => {
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
     await gotoSettings(page, env.baseURL, calendarLeaf(MULTI_CALENDAR_URL_NAME, 'editors'));
-    await calendarSwitcherTrigger(page).click();
+    await calendarSwitcherTrigger(page, MULTI_CALENDAR_NAME).click();
     await expect(page.getByRole('dialog', { name: 'Switch calendar' })).toBeVisible();
 
     expect(await axeViolations(page, { include: 'dialog.calendar-switcher-sheet' })).toEqual([]);
@@ -709,10 +709,130 @@ test.describe('one h1 and one current item per list', () => {
 
     for (const viewport of [PHONE, DESKTOP]) {
       await page.setViewportSize(viewport);
-      await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, UNRESOLVED_CALENDAR_TITLE));
+      await gotoSettings(page, env.baseURL, unresolvedCalendarIndex(ADMIN_CALENDAR_URL_NAME));
       await expect(emptyState(page.getByRole('main'))).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     }
+  });
+});
+
+test.describe('one page title and the header help button', () => {
+  // Titles the leaves rendered under the h1 before the page header became
+  // their only title; none may come back.
+  const RETIRED_TITLES = [
+    'Calendar Settings',
+    'General Settings',
+    'Account Management',
+    'Local Calendars',
+    'Moderation Dashboard',
+    'Funding Settings',
+  ];
+
+  const leaves = [
+    calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'),
+    settingsLeaf.profile,
+    settingsLeaf.calendars,
+    ...([
+      'settings',
+      'accounts',
+      'calendars',
+      'moderation',
+      'moderation/settings',
+      'moderation/blocked-instances',
+      'federation',
+      'funding',
+    ] as const).map(adminLeaf),
+  ];
+
+  for (const viewport of [PHONE, { width: SHELL_MD - 1, height: 900 }, DESKTOP]) {
+    test(`each leaf has one title and an icon-sized help button beside it at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await loginAsAdmin(page, env.baseURL);
+
+      for (const leaf of leaves) {
+        await gotoSettings(page, env.baseURL, leaf);
+        const title = settingsTitle(page, leaf.title);
+
+        await expect(page.getByRole('heading', { name: leaf.title, exact: true })).toHaveCount(1);
+        for (const retired of RETIRED_TITLES) {
+          await expect(page.getByRole('heading', { name: retired, exact: true })).toHaveCount(0);
+        }
+
+        // One help button, in the h1's row, at the icon-button size: a flex
+        // column once stretched it into a screen-wide circle on phones.
+        await expect(helpButton(page)).toHaveCount(1);
+        const help = helpButton(title.locator('xpath=..'));
+        await expect(help).toBeVisible();
+        const box = await help.boundingBox();
+        expect(box, leaf.path).not.toBeNull();
+        expect(box!.width, leaf.path).toBeLessThanOrEqual(48);
+        expect(Math.abs(box!.width - box!.height), leaf.path).toBeLessThan(1);
+      }
+    });
+  }
+
+  test('the header help button opens the help panel', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('accounts'));
+
+    await helpButton(page).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+});
+
+test.describe('sub-route titles', () => {
+  /** The eyebrow's link back to a sub-route's parent leaf (md+). */
+  const parentLink = (page: Page, name: string): Locator =>
+    page.locator('.settings-page-header__eyebrow').getByRole('link', { name, exact: true });
+
+  test('at md+ the eyebrow links a sub-route back to its parent leaf, and focus lands on the h1', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/blocked-instances'));
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.locator('.settings-page-header__eyebrow')).toHaveText(/^Instance\s*Moderation$/i);
+
+    await parentLink(page, 'Moderation').click();
+    await expect(page).toHaveURL(pathPattern(adminLeafPath('moderation')));
+    await expect(settingsTitle(page, 'Moderation')).toBeFocused();
+    await expect(parentLink(page, 'Moderation')).toHaveCount(0);
+  });
+
+  test('at md+ a calendar report puts the Reports link after the calendar switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
+    await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
+    await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
+
+    await expect(settingsTitle(page, 'Report Details')).toBeVisible();
+    await expect(calendarSwitcherTrigger(page, TESTUSER_CALENDAR_NAME)).toBeVisible();
+    await parentLink(page, 'Reports').click();
+    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')));
+    await expect(settingsTitle(page, 'Reports')).toBeFocused();
+  });
+
+  test('below md a sub-route\'s back link goes to its parent leaf', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsAdmin(page, env.baseURL);
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
+
+    await backLink(page, 'Moderation').click();
+    await expect(page).toHaveURL(pathPattern(adminLeafPath('moderation')));
+    await expect(settingsTitle(page, 'Moderation')).toBeFocused();
+  });
+
+  test('below md a calendar report\'s only way back is the header link to Reports', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
+    await page.goto(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
+    await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
+
+    await expect(reportRegion(page).getByRole('button', { name: /back/i })).toHaveCount(0);
+    await backLink(page, 'Reports').click();
+    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports')));
+    await expect(settingsTitle(page, 'Reports')).toBeFocused();
   });
 });
 

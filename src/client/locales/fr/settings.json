@@ -7,7 +7,10 @@
     "settings": "Paramètres",
     "calendar": "Calendrier",
     "account": "Compte",
-    "instance": "Instance"
+    "instance": "Instance",
+    "report_detail": "Détails du signalement",
+    "moderation_settings": "Paramètres de modération",
+    "blocked_instances": "Instances bloquées"
   },
   "nav": {
     "root": {

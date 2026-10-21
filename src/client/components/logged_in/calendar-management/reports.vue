@@ -12,7 +12,7 @@
  * opens that report. The detail view shows the report this check fetched, so
  * opening a report sends one request for it.
  */
-import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
@@ -30,7 +30,6 @@ const router = useRouter();
 const moderationService = new ModerationService();
 const { t } = useTranslation('system', { keyPrefix: 'moderation' });
 
-const headingId = useId();
 const selectedReportId = ref<string | null>(null);
 /** The selected report as the scoped check fetched it, handed to the detail view. */
 const selectedReport = ref<ReportDetailResponse | null>(null);
@@ -48,18 +47,19 @@ const reportsRoute = () => ({
 });
 
 /**
- * Leaves the report view for the list. When a report was showing, focus
- * goes to the page heading once the list renders, so it is not stranded on
- * the removed region. (In page mode the layout's focus rule targets the same
- * heading; focusing it twice is a no-op.)
+ * Replaces a report that failed to open with the list. When a report was
+ * showing, focus goes to the page heading once the list renders, so it is
+ * not stranded on the removed region. (In page mode the layout's focus rule
+ * targets the same heading; focusing it twice is a no-op.)
  *
- * @param navigate - The navigation to the list: a replace for a failed open, a push for closing
+ * Closing a report that did open is the page header's job: its back link
+ * (below md) and its eyebrow link to Reports (md+) both land on the h1.
  */
-const returnToList = async (navigate: () => Promise<unknown>) => {
+const returnToList = async () => {
   const wasShowing = selectedReportId.value !== null;
   selectedReportId.value = null;
   selectedReport.value = null;
-  await navigate();
+  await router.replace(reportsRoute());
   if (!wasShowing || !active) {
     return;
   }
@@ -83,7 +83,7 @@ const openReport = async (requested: unknown) => {
   }
 
   if (!isReportId(requested)) {
-    await returnToList(() => router.replace(reportsRoute()));
+    await returnToList();
     return;
   }
 
@@ -110,7 +110,7 @@ const openReport = async (requested: unknown) => {
   }
 
   if (!fetched) {
-    await returnToList(() => router.replace(reportsRoute()));
+    await returnToList();
     return;
   }
 
@@ -125,9 +125,6 @@ const openReport = async (requested: unknown) => {
     // from any job in it must not turn a rendered report into an error state.
   }
 };
-
-/** Closes the open report, back to the list. */
-const closeReport = () => returnToList(() => router.push(reportsRoute()));
 
 // Only this leaf's two routes are acted on: a navigation away (say, to the
 // admin moderation_report_detail) changes the param before this unmounts.
@@ -151,23 +148,20 @@ const viewReport = (reportId: string) => {
 </script>
 
 <template>
-  <!-- Named by the report heading, which renders with the region; the
-       aria-label is the fallback should the heading ever be missing. -->
+  <!-- Named like the page h1, which the settings header titles from this
+       route; the report itself renders no heading of its own. -->
   <div
     v-if="selectedReportId"
     ref="regionRef"
     tabindex="-1"
     role="region"
-    :aria-labelledby="headingId"
     :aria-label="t('detail.title')"
   >
     <ReportDetail
       :key="selectedReportId"
       :calendar-id="calendarId"
       :report-id="selectedReportId"
-      :heading-id="headingId"
       :fetched-report="selectedReport ?? undefined"
-      @back="closeReport"
     />
   </div>
   <ReportsDashboard

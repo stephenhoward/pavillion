@@ -25,7 +25,7 @@
     "current_label": "Current",
     "create_calendar_button": "Create a new calendar",
     "editor_badge": "Editor",
-    "aria_switch_calendar": "Switch calendar: {{name}}",
+    "trigger_description": "Select to switch calendars",
     "no_calendars": "You have no calendars yet."
   },
   "account_list": {
@@ -484,7 +484,6 @@
     "add_category_option": "+ Add this category"
   },
   "settings": {
-    "title": "Calendar Settings",
     "loading": "Loading settings...",
     "calendar_content_section": "Calendar Title & Description",
     "calendar_title_label": "Calendar Title",

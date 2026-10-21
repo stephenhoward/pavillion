@@ -23,7 +23,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'general', name: 'calendar_general', component: Pane },
       { path: 'editors', name: 'calendar_editors', component: Pane },
       { path: 'reports', name: 'calendar_reports', component: Pane },
-      { path: 'reports/:reportId', name: 'calendar_report_detail', component: Pane },
+      { path: 'reports/:reportId', name: 'calendar_report_detail', component: Pane,
+        meta: { settingsTitleKey: 'titles.report_detail' } },
       { path: 'widget', name: 'calendar_widget', component: Pane },
     ] },
     { path: 'account', name: 'account', component: Pane, meta: { settingsGroup: 'account' } },
@@ -34,7 +35,11 @@ const routes: RouteRecordRaw[] = [
     { path: 'admin', component: Outlet, children: [
       { path: '', name: 'admin', component: Pane, meta: { settingsGroup: 'admin' } },
       { path: 'settings', name: 'admin_settings', component: Pane },
-      { path: 'moderation/settings', name: 'moderation_settings', component: Pane },
+      { path: 'moderation', name: 'moderation', component: Pane },
+      { path: 'moderation/settings', name: 'moderation_settings', component: Pane,
+        meta: { settingsTitleKey: 'titles.moderation_settings' } },
+      { path: 'moderation/blocked-instances', name: 'blocked_instances', component: Pane,
+        meta: { settingsTitleKey: 'titles.blocked_instances' } },
     ] },
   ] },
 ];
@@ -89,8 +94,8 @@ describe('settings page header', () => {
       ['a calendar leaf', '/settings/calendar/riverside/editors', '/settings/calendar/riverside', 'Back to Riverside Arts'],
       ['an account leaf', '/settings/account/security', '/settings/account', 'Back to Account'],
       ['an admin leaf', '/settings/admin/settings', '/settings/admin', 'Back to Instance'],
-      ['report detail', '/settings/calendar/riverside/reports/abc', '/settings/calendar/riverside', 'Back to Riverside Arts'],
-      ['a moderation sub-page', '/settings/admin/moderation/settings', '/settings/admin', 'Back to Instance'],
+      ['report detail', '/settings/calendar/riverside/reports/abc', '/settings/calendar/riverside/reports', 'Back to Reports'],
+      ['a moderation sub-page', '/settings/admin/moderation/settings', '/settings/admin/moderation', 'Back to Moderation'],
     ])('on %s targets its parent', async (_case, path, href, text) => {
       const w = await mountAt(path);
       expect(backLink(w).attributes('href')).toBe(href);
@@ -130,8 +135,9 @@ describe('settings page header', () => {
       ['/settings/calendar/riverside', 'Riverside Arts'],
       ['/settings/calendar/riverside/general', 'General'],
       ['/settings/account/funding', 'Funding Plan'],
-      ['/settings/calendar/riverside/reports/abc', 'Reports'],
-      ['/settings/admin/moderation/settings', 'Moderation'],
+      ['/settings/calendar/riverside/reports/abc', 'Report Details'],
+      ['/settings/admin/moderation/settings', 'Moderation Settings'],
+      ['/settings/admin/moderation/blocked-instances', 'Blocked Instances'],
     ])('titles %s as "%s"', async (path, title) => {
       const w = await mountAt(path);
       expect(w.findAll('h1')).toHaveLength(1);
@@ -158,8 +164,7 @@ describe('settings page header', () => {
       expect(heading(w).find('button').exists()).toBe(false);
       expect(switcher.props('routeName')).toBe('calendar_editors');
       expect(switcher.props('currentUrlName')).toBe('riverside');
-      expect(switcher.props('label')).toBe('Riverside Arts');
-      expect(switcher.props('ariaLabel')).toBe('Switch calendar: Riverside Arts');
+      expect(switcher.props('calendarName')).toBe('Riverside Arts');
     });
 
     it('hands the switcher the parent leaf on report detail, so switching drops the report', async () => {
@@ -167,26 +172,78 @@ describe('settings page header', () => {
       expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_reports');
     });
 
-    it('places the switcher beside the h1 on the calendar section', async () => {
+    // The same control as the calendar and feed views: the name, with its
+    // chevron, is the switcher, inside the h1.
+    it('makes the calendar name in the h1 the switcher on the calendar section', async () => {
       const w = await mountAt('/settings/calendar/riverside');
       const switcher = w.findComponent(CalendarSwitcher);
       expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
-      expect(heading(w).find('button').exists()).toBe(false);
-      expect(heading(w).element.parentElement?.querySelector(':scope > button.calendar-switcher')).not.toBeNull();
+      expect(w.findAll('button.calendar-switcher')).toHaveLength(1);
+      const trigger = heading(w).find('button.calendar-switcher');
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toBe('Riverside Arts');
+      expect(trigger.attributes('aria-label')).toBeUndefined();
+      expect(heading(w).text()).toBe('Riverside Arts');
       expect(switcher.props('routeName')).toBe('calendar_management');
-      expect(switcher.props('label')).toBe('Switch calendar');
-      expect(switcher.props('ariaLabel')).toBe('Switch calendar: Riverside Arts');
+      expect(switcher.props('calendarName')).toBe('Riverside Arts');
+    });
+
+    it('keeps the section h1 programmatically focusable around the switcher', async () => {
+      const w = await mountAt('/settings/calendar/riverside', { attachTo: document.body });
+      expect(heading(w).attributes('tabindex')).toBe('-1');
+      focusSettingsHeading();
+      expect(document.activeElement).toBe(heading(w).element);
+      expect(document.title).toBe('Riverside Arts');
     });
 
     it('shows the group name as text on an account leaf, with no switcher', async () => {
       const w = await mountAt('/settings/account/security');
-      expect(w.find('p.settings-page-header__eyebrow').text()).toBe('Account');
+      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Account');
       expect(w.findComponent(CalendarSwitcher).exists()).toBe(false);
     });
 
     it('shows the group name as text on an admin leaf', async () => {
       const w = await mountAt('/settings/admin/settings');
-      expect(w.find('p.settings-page-header__eyebrow').text()).toBe('Instance');
+      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Instance');
+    });
+
+    it('names the parent leaf in the eyebrow on an admin sub-page, as a link back to it', async () => {
+      const w = await mountAt('/settings/admin/moderation/blocked-instances');
+      const eyebrow = w.find('.settings-page-header__eyebrow');
+      expect(eyebrow.text()).toMatch(/^Instance\s*Moderation$/);
+      const parent = eyebrow.find('a');
+      expect(parent.attributes('href')).toBe('/settings/admin/moderation');
+      expect(parent.text()).toBe('Moderation');
+      expect(eyebrow.find('svg').attributes('aria-hidden')).toBe('true');
+      expect(heading(w).find('a').exists()).toBe(false);
+    });
+
+    it('follows the switcher with a link to the parent leaf on report detail', async () => {
+      const w = await mountAt('/settings/calendar/riverside/reports/abc');
+      const eyebrow = w.find('.settings-page-header__eyebrow');
+      const switcher = eyebrow.find('button.calendar-switcher');
+      const parent = eyebrow.find('a');
+      expect(switcher.exists()).toBe(true);
+      expect(parent.attributes('href')).toBe('/settings/calendar/riverside/reports');
+      expect(parent.text()).toBe('Reports');
+      expect(switcher.element.compareDocumentPosition(parent.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('links no parent on a leaf itself', async () => {
+      const w = await mountAt('/settings/admin/moderation');
+      expect(w.find('.settings-page-header__eyebrow').text()).toBe('Instance');
+      expect(w.find('.settings-page-header__eyebrow a').exists()).toBe(false);
+    });
+
+    it('moves focus to the new h1 after the parent link navigates, since the link is gone', async () => {
+      const w = await mountAt('/settings/admin/moderation/settings', { attachTo: document.body });
+      const parent = w.find<HTMLAnchorElement>('.settings-page-header__eyebrow a');
+      parent.element.focus();
+      await parent.trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('moderation');
+      expect(heading(w).text()).toBe('Moderation');
+      expect(document.activeElement).toBe(heading(w).element);
     });
 
     it('renders no eyebrow on a section or the root', async () => {
@@ -194,6 +251,35 @@ describe('settings page header', () => {
       expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
       await navigate('/settings');
       expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
+    });
+  });
+
+  describe('help button', () => {
+    const HELP = 'button[aria-label="Help with this page"]';
+    const helpButton = (w: VueWrapper) => w.find(`.settings-page-header__title-row > ${HELP}`);
+
+    it.each([
+      ['a calendar leaf', '/settings/calendar/riverside/editors'],
+      ['the calendar section', '/settings/calendar/riverside'],
+      ['an account leaf', '/settings/account/security'],
+      ['the account calendars leaf', '/settings/account/calendars'],
+      ['an admin leaf', '/settings/admin/settings'],
+      ['a moderation sub-page', '/settings/admin/moderation/settings'],
+    ])('sits in the title row beside the h1 on %s', async (_case, path) => {
+      const w = await mountAt(path);
+      expect(helpButton(w).exists()).toBe(true);
+      expect(helpButton(w).attributes('aria-haspopup')).toBe('dialog');
+      expect(w.findAll(HELP)).toHaveLength(1);
+    });
+
+    it('is absent where the route has no guides', async () => {
+      const w = await mountAt('/settings/account');
+      expect(w.find(HELP).exists()).toBe(false);
+    });
+
+    it('is absent for an unresolved calendar', async () => {
+      const w = await mountAt('/settings/calendar/nope/general');
+      expect(w.find(HELP).exists()).toBe(false);
     });
   });
 
@@ -222,6 +308,7 @@ describe('settings page header', () => {
       ['/settings', 'Settings'],
       ['/settings/calendar/riverside', 'Riverside Arts'],
       ['/settings/calendar/riverside/widget', 'Widget'],
+      ['/settings/admin/moderation/settings', 'Moderation Settings'],
     ])('matches the h1 at %s', async (path, title) => {
       const w = await mountAt(path);
       expect(document.title).toBe(title);

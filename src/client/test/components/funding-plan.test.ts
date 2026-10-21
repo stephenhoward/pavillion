@@ -51,7 +51,6 @@ describe('Funding Plan UI Components', () => {
         en: {
           admin: {
             funding: {
-              title: 'Funding Settings',
               enabled_label: 'Enable Funding',
               monthly_price_label: 'Monthly Price',
               yearly_price_label: 'Yearly Price',

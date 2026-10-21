@@ -22,10 +22,6 @@ const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
 });
 
-const { t: tSwitcher } = useTranslation('calendars', {
-  keyPrefix: 'switcher',
-});
-
 const eventService = new EventService();
 
 const route = useRoute();
@@ -181,10 +177,9 @@ const handleLoadEvents = async (filters) => {
               <h1>
                 <CalendarSwitcher
                   v-if="state.calendar"
-                  :label="calendarName"
+                  :calendar-name="calendarName"
                   route-name="calendar"
                   :current-url-name="state.calendar.urlName"
-                  :aria-label="tSwitcher('aria_switch_calendar', { name: calendarName })"
                 />
                 <span v-else>{{ calendarUrlName }}</span>
               </h1>

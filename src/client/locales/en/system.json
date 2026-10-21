@@ -250,8 +250,7 @@
       "administrator": "Administrator"
     },
     "detail": {
-      "title": "Report Detail",
-      "back_to_reports": "Back to Reports",
+      "title": "Report Details",
       "description": "Description",
       "reporter_type": "Reporter Type",
       "reported_on": "Reported On",

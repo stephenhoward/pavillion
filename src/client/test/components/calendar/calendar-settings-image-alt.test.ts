@@ -24,7 +24,6 @@ import { Media } from '@/common/model/media';
 
 // Minimal translations required by the settings component
 const SETTINGS_TRANSLATIONS = {
-  'settings.title': 'Calendar Settings',
   'settings.loading': 'Loading settings...',
   'settings.calendar_content_section': 'Calendar Title & Description',
   'settings.calendar_title_help': 'The display name for your calendar.',

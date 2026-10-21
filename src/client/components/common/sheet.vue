@@ -93,10 +93,17 @@ defineExpose({ open, close });
     border: var(--pav-border-width-1) solid var(--pav-border-primary);
     box-shadow: var(--pav-shadow-modal);
 
-    /* Reset alignment so the modal is context-independent: the native
-       <dialog> renders inline in the DOM, so a triggering ancestor like
-       .empty-state (text-align: center) would otherwise leak into it. */
+    /* Reset alignment and type so the sheet is context-independent: the
+       native <dialog> renders inline in the DOM, so a triggering ancestor
+       would otherwise leak into it, like .empty-state's text-align: center,
+       or the h1 and the settings eyebrow that hold a calendar switcher
+       (their size and weight, the eyebrow's uppercase and tracking). */
     text-align: start;
+    font-size: var(--pav-font-size-body);
+    font-weight: var(--pav-font-weight-regular);
+    line-height: var(--pav-line-height-body);
+    letter-spacing: normal;
+    text-transform: none;
 
     /* Mobile: rounded top corners */
     border-radius: var(--pav-border-radius-modal) var(--pav-border-radius-modal) 0 0;

@@ -18,7 +18,6 @@ import AddCalendarModal from './add_calendar_modal.vue';
 
 const { t } = useTranslation('feed');
 const { t: tCalendar } = useTranslation('calendars', { keyPrefix: 'calendar' });
-const { t: tSwitcher } = useTranslation('calendars', { keyPrefix: 'switcher' });
 const route = useRoute();
 const feedStore = useFeedStore();
 const calendarStore = useCalendarStore();
@@ -160,10 +159,9 @@ watch(calendarUrlName, async (next, prev) => {
       <h1>
         <CalendarSwitcher
           v-if="calendar"
-          :label="calendarName"
+          :calendar-name="calendarName"
           route-name="feed"
           :current-url-name="calendarUrlName"
-          :aria-label="tSwitcher('aria_switch_calendar', { name: calendarName })"
         />
         <span v-else>{{ calendarUrlName }}</span>
       </h1>

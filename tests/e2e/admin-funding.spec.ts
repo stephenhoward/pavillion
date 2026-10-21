@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
-import { adminLeaf, gotoSettings } from './helpers/settings-nav';
+import { adminLeaf, gotoSettings, settingsTitle } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -41,8 +41,7 @@ test.describe('Admin Funding Management', () => {
     await page.waitForSelector('.funding-page', { timeout: 10000 });
 
     // Verify page heading
-    const heading = page.locator('#funding-heading');
-    await expect(heading).toBeVisible();
+    await expect(settingsTitle(page, adminLeaf('funding').title)).toBeVisible();
 
     // Verify tab navigation exists
     const tablist = page.locator('nav[role="tablist"][aria-label="Funding sections"]');

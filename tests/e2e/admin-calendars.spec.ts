@@ -2,8 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import axios from 'axios';
 
 import { loginAsAdmin } from './helpers/auth';
-import { paneHeading } from './helpers/pane-heading';
-import { adminLeaf, gotoSettings } from './helpers/settings-nav';
+import { adminLeaf, gotoSettings, settingsTitle } from './helpers/settings-nav';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -69,7 +68,7 @@ test.afterAll(async () => {
  */
 async function gotoAdminCalendars(page: Page): Promise<void> {
   await gotoSettings(page, env.baseURL, adminLeaf('calendars'));
-  await expect(paneHeading(page, 'Local Calendars')).toBeVisible({ timeout: 10000 });
+  await expect(settingsTitle(page, adminLeaf('calendars').title)).toBeVisible({ timeout: 10000 });
   await page.waitForSelector('input#search-filter', { timeout: 10000 });
   // Wait for the initial load to settle (either rows or empty state).
   await page.waitForFunction(
@@ -89,8 +88,8 @@ test.describe('Admin Calendars Listing behavior', () => {
   test('should show seeded calendars with event counts and last-activity dates', async ({ page }) => {
     await gotoAdminCalendars(page);
 
-    // Page heading reflects the calendars dashboard translation.
-    await expect(paneHeading(page, 'Local Calendars')).toBeVisible();
+    // The page is titled with its tree label.
+    await expect(settingsTitle(page, adminLeaf('calendars').title)).toBeVisible();
 
     // Seeded calendars are visible in the table.
     const rows = page.locator('[data-testid="calendar-row"]');
@@ -246,6 +245,6 @@ test.describe('Admin Calendars Badge navigation', () => {
     expect(url.searchParams.get('calendar_id')).toBe(TEST_CALENDAR_ID);
 
     // The moderation dashboard should render successfully under that URL.
-    await expect(paneHeading(page, 'Moderation Dashboard')).toBeVisible({ timeout: 10000 });
+    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
   });
 });

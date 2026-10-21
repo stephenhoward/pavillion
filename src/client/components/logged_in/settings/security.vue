@@ -10,7 +10,6 @@ import type AuthenticationService from '@/client/service/authn';
 import AccountService from '@/client/service/account';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const authn = inject('authn') as AuthenticationService;
 const { t } = useTranslation('profile');
@@ -51,10 +50,6 @@ onMounted(loadEmail);
 
 <template>
   <div>
-    <div class="security-settings__help">
-      <HelpButton />
-    </div>
-
     <div class="account-settings-card">
       <div class="account-settings-card__section security-settings">
         <div class="security-settings__row">
@@ -95,15 +90,6 @@ onMounted(loadEmail);
 </template>
 
 <style scoped lang="scss">
-.security-settings__help {
-  display: flex;
-  justify-content: flex-end;
-
-  &:empty {
-    display: none;
-  }
-}
-
 .security-settings {
   display: flex;
   flex-direction: column;
