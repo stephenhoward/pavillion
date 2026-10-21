@@ -3,7 +3,7 @@
   "load_error": "Échec du chargement des informations de financement. Veuillez réessayer.",
 
   "no_funding_plan": "Aucun plan de financement actif",
-  "no_plan_redirect": "Pour démarrer un plan de financement et soutenir cette instance, ouvrez l'onglet Financement sur un calendrier dont vous êtes propriétaire.",
+  "no_plan_redirect": "Pour démarrer un plan de financement et soutenir cette instance, ouvrez la page Général d'un calendrier dont vous êtes propriétaire.",
   "monthly_option": "Mensuel",
   "yearly_option": "Annuel",
 

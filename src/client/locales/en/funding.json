@@ -3,7 +3,7 @@
   "load_error": "Failed to load funding information. Please try again.",
 
   "no_funding_plan": "No Active Funding Plan",
-  "no_plan_redirect": "To start a funding plan and support this instance, open the Funding tab on any calendar you own.",
+  "no_plan_redirect": "To start a funding plan and support this instance, open the General page of any calendar you own.",
   "monthly_option": "Monthly",
   "yearly_option": "Yearly",
 
