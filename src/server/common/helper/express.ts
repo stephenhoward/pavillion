@@ -23,6 +23,13 @@ declare module 'express-serve-static-core' {
 const jwtSecret = config.get<string>('jwt.secret');
 const expirationMinutes = 5;
 
+/**
+ * The one algorithm session tokens are signed with, and the only one the
+ * passport JWT strategy accepts. Pinning both sides keeps a library or
+ * configuration change from widening what a verifier will take.
+ */
+export const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
+
 export default {
   /**
    * Validates if a value is a valid UUID v4
@@ -105,7 +112,7 @@ export default {
       email: account.email,
       isAdmin: account.hasRole('admin'),
     };
-    let token = jwt.sign(payload, jwtSecret);
+    let token = jwt.sign(payload, jwtSecret, { algorithm: JWT_ALGORITHM });
     return token;
   },
 };
