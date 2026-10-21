@@ -49,6 +49,40 @@ describe('ReportDetail - Forward to Admin Button', () => {
     vi.clearAllMocks();
   });
 
+  // The settings page header titles the report and owns the way back to
+  // Moderation; the pane keeps its description, and its sections sit
+  // directly under the h1.
+  it('renders its description but no title or back button of its own', async () => {
+    moderationStore.currentAdminReport = {
+      report: Report.fromObject({
+        id: 'report-1',
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Test report',
+        status: ReportStatus.ESCALATED,
+        reporterType: 'anonymous',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      escalationHistory: [],
+    };
+
+    const wrapper = mount(ReportDetail, {
+      global: { plugins: [pinia], stubs: { LoadingMessage: true } },
+    });
+    await nextTick();
+
+    expect(wrapper.find('.back-button').exists()).toBe(false);
+    expect(wrapper.find('.page-subtitle').exists()).toBe(true);
+    const headings = wrapper.findAll('h1, h2');
+    expect(headings.length).toBeGreaterThan(0);
+    for (const heading of headings) {
+      expect(heading.element.tagName).toBe('H2');
+      expect(heading.classes()).toContain('section-heading');
+    }
+  });
+
   describe('Button Visibility', () => {
     it('should show forward button for remote events', async () => {
       // Create a remote event report (calendarId is null for remote events)

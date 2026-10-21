@@ -70,9 +70,9 @@ describe('WidgetDomains', () => {
     vi.restoreAllMocks();
   });
 
-  const createWrapper = async () => {
+  const createWrapper = async ({ isOwner = true }: { isOwner?: boolean } = {}) => {
     const mounted = mount(WidgetDomains, {
-      props: { calendarId: CALENDAR_ID },
+      props: { calendarId: CALENDAR_ID, isOwner },
       global: {
         plugins: [pinia],
         provide: { authn: {} },
@@ -198,6 +198,85 @@ describe('WidgetDomains', () => {
       expect(wrapper.vm.state.error).toBe('error_adding');
       expect(wrapper.find('.funding-upsell').exists()).toBe(false);
       expect(useFundingStore().featureAccess(CALENDAR_ID, 'widget_embedding')).toBe(true);
+    });
+  });
+
+  describe('funding refusals for an editor', () => {
+    it('never mounts the upsell or reads the owner-only funding summary', async () => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (url === FUNDING_URL) {
+          return Promise.resolve(summaryResponse(false));
+        }
+        if (url === DOMAIN_URL) {
+          return Promise.resolve({ data: { domain: null } });
+        }
+        return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
+      });
+
+      wrapper = await createWrapper({ isOwner: false });
+
+      expect(wrapper.findComponent(FundingUpsellCard).exists()).toBe(false);
+      expect(axios.get).not.toHaveBeenCalledWith(FUNDING_URL);
+      expect(wrapper.find('.widget-domains__owner-notice').exists()).toBe(false);
+    });
+
+    it('answers a 402 with the owner notice, not an upsell or a start-plan button', async () => {
+      wrapper = await createWrapper({ isOwner: false });
+
+      vi.mocked(axios.put).mockRejectedValue(
+        apiError(402, { errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' }),
+      );
+
+      wrapper.vm.state.newDomain = 'example.com';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      const notice = wrapper.find('.widget-domains__owner-notice');
+      expect(notice.exists()).toBe(true);
+      expect(notice.text()).toBe('owner_can_enable');
+      expect(notice.attributes('role')).toBe('status');
+
+      // The editor cannot act on a plan, so nothing offers one.
+      expect(wrapper.findComponent(FundingUpsellCard).exists()).toBe(false);
+      expect(wrapper.find('.funding-upsell').exists()).toBe(false);
+      expect(wrapper.find('.funding-sheet-stub').exists()).toBe(false);
+
+      // The refusal is not folded into the shared funding cache, and no
+      // timed error alert duplicates the notice.
+      expect(useFundingStore().featureAccess(CALENDAR_ID, 'widget_embedding')).toBeNull();
+      expect(wrapper.find('.alert--error').exists()).toBe(false);
+    });
+
+    it('clears the owner notice once a later write succeeds', async () => {
+      wrapper = await createWrapper({ isOwner: false });
+
+      vi.mocked(axios.put).mockRejectedValueOnce(
+        apiError(402, { errorName: 'SubscriptionRequiredError', feature: 'widget_embedding' }),
+      );
+      wrapper.vm.state.newDomain = 'example.com';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+      expect(wrapper.find('.widget-domains__owner-notice').exists()).toBe(true);
+
+      vi.mocked(axios.put).mockResolvedValueOnce({ data: { domain: 'example.com' } });
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      expect(wrapper.find('.widget-domains__owner-notice').exists()).toBe(false);
+      expect(wrapper.vm.state.currentDomain).toBe('example.com');
+    });
+
+    it('treats a non-funding failure as an ordinary error', async () => {
+      wrapper = await createWrapper({ isOwner: false });
+
+      vi.mocked(axios.put).mockRejectedValue(apiError(500, { errorName: 'InternalServerError' }));
+
+      wrapper.vm.state.newDomain = 'example.com';
+      await wrapper.vm.addDomain();
+      await flushPromises();
+
+      expect(wrapper.vm.state.error).toBe('error_adding');
+      expect(wrapper.find('.widget-domains__owner-notice').exists()).toBe(false);
     });
   });
 

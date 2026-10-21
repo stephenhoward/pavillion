@@ -51,7 +51,6 @@ describe('Funding Plan UI Components', () => {
         en: {
           admin: {
             funding: {
-              title: 'Funding Settings',
               enabled_label: 'Enable Funding',
               monthly_price_label: 'Monthly Price',
               yearly_price_label: 'Yearly Price',
@@ -217,6 +216,24 @@ describe('Funding Plan UI Components', () => {
     expect(fundingStubs.cancel).toHaveBeenCalledOnce();
     expect(wrapper.find('.success-message').text()).toBe('Your funding plan has been cancelled');
     expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
+  });
+
+  it('sends the billing portal back to the funding plan page on this origin', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+    fundingStubs.getStatus.mockResolvedValue(activePlan);
+    const getPortalUrl = vi.spyOn(FundingService.prototype, 'getPortalUrl')
+      .mockResolvedValue('https://billing.stripe.com/p/session/test');
+    // The handler navigates away; give it a location object it can assign to.
+    vi.stubGlobal('location', { origin: window.location.origin, href: '' });
+
+    // Mount from a query-bearing URL so a resolved return URL cannot inherit it
+    await router.push('/settings/account/funding?from=elsewhere');
+    const wrapper = await mountAccount();
+    await wrapper.find('.funding-plan-actions button.btn--secondary').trigger('click');
+    await flushPromises();
+
+    expect(getPortalUrl).toHaveBeenCalledWith(`${window.location.origin}/settings/account/funding`);
+    expect(window.location.href).toBe('https://billing.stripe.com/p/session/test');
   });
 
 });

@@ -7,7 +7,10 @@
     "settings": "Settings",
     "calendar": "Calendar",
     "account": "Account",
-    "instance": "Instance"
+    "instance": "Instance",
+    "report_detail": "Report Details",
+    "moderation_settings": "Moderation Settings",
+    "blocked_instances": "Blocked Instances"
   },
   "nav": {
     "root": {
@@ -26,6 +29,7 @@
     "account": {
       "profile": "Profile",
       "security": "Security",
+      "calendars": "Calendars",
       "funding_plan": "Funding Plan"
     },
     "admin": {

@@ -5,7 +5,7 @@
       <section class="widget-section">
         <h2>{{ t('domains_section_title') }}</h2>
         <p class="section-intro">{{ t('domains_section_intro') }}</p>
-        <WidgetDomains :calendar-id="calendarId" />
+        <WidgetDomains :calendar-id="calendarId" :is-owner="isOwner" />
       </section>
 
       <!-- Widget Configuration Section -->
@@ -42,6 +42,10 @@ defineProps({
   },
   calendarUrlName: {
     type: String,
+    required: true,
+  },
+  isOwner: {
+    type: Boolean,
     required: true,
   },
 });

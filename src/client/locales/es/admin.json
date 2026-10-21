@@ -8,7 +8,6 @@
     "close_button": "Cancelar"
   },
   "calendars": {
-    "page_title": "Calendarios Locales",
     "page_subtitle": "Revisa los calendarios alojados en esta instancia",
     "loading": "Cargando calendarios...",
     "error": "Error al cargar los calendarios",
@@ -47,7 +46,6 @@
     "pagination_page_info": "Página {{current}} de {{total}}"
   },
   "moderation": {
-    "title": "Panel de moderación",
     "subtitle": "Revisa los reportes escalados y la moderación iniciada por administradores",
     "loading": "Cargando reportes...",
     "error": "Error al cargar los reportes",
@@ -60,7 +58,6 @@
     "create_report": "Crear reporte",
     "settings_button_label": "Configuración de moderación",
     "settings": {
-      "title": "Configuración de moderación",
       "subtitle": "Configura las políticas de moderación a nivel de instancia",
       "loading": "Cargando configuración...",
       "load_error": "Error al cargar la configuración",
@@ -174,9 +171,7 @@
       "page_info": "Página {{current}} de {{total}}"
     },
     "detail": {
-      "title": "Detalles del reporte",
       "subtitle": "Ver información completa del reporte y tomar medidas",
-      "back": "Volver al panel",
       "loading": "Cargando reporte...",
       "error": "Error al cargar el reporte",
       "report_information": "Información del reporte",
@@ -275,7 +270,6 @@
     "disk_usage_used": "usado"
   },
   "accounts": {
-    "page_title": "Gestión de cuentas",
     "page_subtitle": "Gestiona usuarios, revisa solicitudes y envía invitaciones",
     "applications_tab": "Solicitudes",
     "invitations_tab": "Invitaciones",
@@ -362,7 +356,6 @@
     "unknown_expiration": "Desconocida"
   },
   "settings": {
-    "general_settings": "Configuración General",
     "instance_name": "Nombre/Título de la Instancia",
     "site_title_description": "El nombre de tu instancia que aparece en el título del navegador y en otros lugares.",
     "registration_mode": "Modo de Registro",
@@ -408,9 +401,9 @@
     "manage_blocked_description": "Visualiza y gestiona las instancias bloqueadas desde la configuración de moderación."
   },
   "funding": {
-    "title": "Configuración de financiación",
     "loading": "Cargando...",
     "load_settings_error": "Error al cargar la configuración del plan de financiación.",
+    "page_subtitle": "Revisa los planes de financiación que apoyan esta instancia, configura los precios y los proveedores de pago, y concede acceso de cortesía a calendarios",
     "settings_section_title": "Configuración del plan de financiación",
     "subtab_nav_label": "Secciones de financiación",
     "enabled_label": "Habilitar planes de financiación",
@@ -636,7 +629,6 @@
     "price_required": "Al menos un precio debe ser mayor que $0"
   },
   "blocked_instances": {
-    "title": "Instancias bloqueadas",
     "subtitle": "Gestiona las instancias de ActivityPub bloqueadas para el control de la federación",
     "loading": "Cargando instancias bloqueadas...",
     "load_error": "Error al cargar las instancias bloqueadas",

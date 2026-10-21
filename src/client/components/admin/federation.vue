@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'federation',
@@ -9,11 +8,8 @@ const { t } = useTranslation('admin', {
 
 <template>
   <div class="federation-page">
-    <!-- Page Header -->
-    <div class="federation-header">
-      <p class="federation-subtitle">{{ t("subtitle") }}</p>
-      <HelpButton />
-    </div>
+    <!-- The settings page header carries the title and help button. -->
+    <p class="federation-subtitle">{{ t("subtitle") }}</p>
 
     <!-- Info Panel -->
     <div class="federation-info-panel" role="note">
@@ -63,17 +59,10 @@ const { t } = useTranslation('admin', {
   gap: var(--pav-space-6);
   max-width: 800px;
 
-  .federation-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--pav-space-4);
-
-    .federation-subtitle {
-      margin: 0;
-      font-size: var(--pav-font-size-xs);
-      color: var(--pav-color-text-muted);
-    }
+  .federation-subtitle {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
   }
 
   .federation-info-panel {

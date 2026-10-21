@@ -677,9 +677,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
       brandingSettings.button_color = '#F97316'; // Orange 500
     }
 
-    // Build return URL with session ID placeholder for redirect-based payments
+    // Build return URL with session ID placeholder for redirect-based payments.
+    // Stripe substitutes only the literal {CHECKOUT_SESSION_ID} template, and
+    // URLSearchParams would percent-encode its braces, so the template is
+    // appended as text once the rest of the URL is built.
     const returnUrl = new URL(params.returnUrl);
-    returnUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+    returnUrl.searchParams.delete('session_id');
+    const fragment = returnUrl.hash;
+    returnUrl.hash = '';
+    const separator = returnUrl.search ? '&' : '?';
+    const returnUrlWithSession = `${returnUrl.toString()}${separator}session_id={CHECKOUT_SESSION_ID}${fragment}`;
 
     // Create the embedded checkout session
     const session = await this.stripe.checkout.sessions.create({
@@ -693,7 +700,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         },
       ],
       metadata,
-      return_url: returnUrl.toString(),
+      return_url: returnUrlWithSession,
       ...(Object.keys(brandingSettings).length > 0 && { branding_settings: brandingSettings }),
     }, this.requestOptions(options, 'checkout-session'));
 

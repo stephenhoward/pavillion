@@ -11,8 +11,10 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
  * `back_to`, `nav.root.log_out`, `titles.*`, `nav.*`),
  * src/client/locales/en/system.json (`navigation.main_label`,
  * `navigation.mobile_label`, `navigation.skip_to_content`,
- * `moderation.detail.title`) and src/client/locales/en/calendars.json
- * (`switcher.aria_switch_calendar`).
+ * `moderation.detail.title`, `help.button_label`) and
+ * src/client/locales/en/calendars.json (`switcher.trigger_description`,
+ * `account_list.*`, and `editors.leave_calendar_button` for the leave
+ * confirmation).
  *
  * Page titles follow page-header.vue: a leaf is titled with its tree label,
  * a sub-route (a report, moderation settings, blocked instances) with its
@@ -23,13 +25,18 @@ import { SHELL_SIDEBAR_UP_PX } from '@/client/assets/breakpoints';
 const TREE_LABEL = 'Settings';
 const TREE_SKIP_LABEL = 'Skip to settings content';
 const SHELL_SKIP_LABEL = 'Skip to main content';
-const REPORT_REGION_LABEL = 'Report Detail';
-const SWITCH_CALENDAR_LABEL = /Switch calendar/;
+const REPORT_REGION_LABEL = 'Report Details';
+
+/** A report's own page title, on a calendar's Reports leaf and in instance moderation. */
+const REPORT_DETAIL_TITLE = 'Report Details';
 const LOG_OUT_LABEL = 'Log out';
 const BACK_TO_PREFIX = 'Back to';
 const MAIN_NAV_LABEL = 'Main navigation';
 const MOBILE_NAV_LABEL = 'Mobile navigation';
 const LOADING_CALENDAR_TEXT = 'Loading calendar…';
+const LEAVE_LABEL_PREFIX = 'Leave';
+const CONFIRM_LEAVE_LABEL = 'Leave Calendar';
+const HELP_BUTTON_LABEL = 'Help with this page';
 
 /** Phone viewport, matching calendar-switcher.spec.ts. */
 export const PHONE = { width: 390, height: 844 };
@@ -62,6 +69,7 @@ export const settingsPath = {
   account: '/settings/account',
   profile: '/settings/account/profile',
   security: '/settings/account/security',
+  calendars: '/settings/account/calendars',
   fundingPlan: '/settings/account/funding',
   admin: '/settings/admin',
 } as const;
@@ -81,6 +89,7 @@ export interface SettingsPage {
 export const settingsLeaf = {
   profile: { path: settingsPath.profile, title: 'Profile' },
   security: { path: settingsPath.security, title: 'Security' },
+  calendars: { path: settingsPath.calendars, title: 'Calendars' },
   fundingPlan: { path: settingsPath.fundingPlan, title: 'Funding Plan' },
 } as const satisfies Record<string, SettingsPage>;
 
@@ -117,14 +126,15 @@ const CALENDAR_LEAF_TITLES: Record<CalendarLeaf, string> = {
 
 // The instance group's 'settings' leaf is titled "General", the same title
 // as the calendar group's 'general' leaf, so a spec that opens either must
-// assert the URL too. Moderation's sub-routes take the parent's title.
+// assert the URL too. Moderation's sub-routes carry titles of their own, with
+// Moderation in the eyebrow and the back link.
 const ADMIN_LEAF_TITLES: Record<AdminLeaf, string> = {
   'settings': 'General',
   'accounts': 'Accounts',
   'calendars': 'Calendars',
   'moderation': 'Moderation',
-  'moderation/settings': 'Moderation',
-  'moderation/blocked-instances': 'Moderation',
+  'moderation/settings': 'Moderation Settings',
+  'moderation/blocked-instances': 'Blocked Instances',
   'federation': 'Federation',
   'funding': 'Funding',
 };
@@ -149,13 +159,30 @@ export function calendarLeafPath(calendar: string, leaf: CalendarLeaf): string {
 }
 
 /**
- * A calendar's index page (below md only), titled with the calendar's name.
+ * The description a calendar switcher carries when the viewer has more than
+ * one calendar. With one calendar it has none.
+ */
+export const SWITCHER_DESCRIPTION = 'Select to switch calendars';
+
+/**
+ * A calendar's index page (below md only). Its h1 is the calendar switcher,
+ * named by the calendar's name alone.
  *
  * @param calendar - The calendar's url name
  * @param displayName - The calendar's display name, e.g. "Test Calendar"
  */
 export function calendarIndex(calendar: string, displayName: string): SettingsPage {
   return { path: calendarIndexPath(calendar), title: displayName };
+}
+
+/**
+ * The index of a calendar the viewer cannot resolve (nonexistent, not a
+ * member), titled with the group and carrying no switcher.
+ *
+ * @param calendar - The calendar's url name
+ */
+export function unresolvedCalendarIndex(calendar: string): SettingsPage {
+  return { path: calendarIndexPath(calendar), title: UNRESOLVED_CALENDAR_TITLE };
 }
 
 /**
@@ -179,13 +206,13 @@ export function calendarReportPath(calendar: string, reportId: string): string {
 }
 
 /**
- * One report on a calendar's Reports leaf, titled with the parent leaf.
+ * One report on a calendar's Reports leaf, with its own title.
  *
  * @param calendar - The calendar's url name
  * @param reportId - The report's id
  */
 export function calendarReport(calendar: string, reportId: string): SettingsPage {
-  return { path: calendarReportPath(calendar, reportId), title: CALENDAR_LEAF_TITLES.reports };
+  return { path: calendarReportPath(calendar, reportId), title: REPORT_DETAIL_TITLE };
 }
 
 /**
@@ -216,12 +243,12 @@ export function adminReportPath(reportId: string): string {
 }
 
 /**
- * One report in instance moderation, titled with the parent Moderation leaf.
+ * One report in instance moderation, with its own title.
  *
  * @param reportId - The report's id
  */
 export function adminReport(reportId: string): SettingsPage {
-  return { path: adminReportPath(reportId), title: ADMIN_LEAF_TITLES.moderation };
+  return { path: adminReportPath(reportId), title: REPORT_DETAIL_TITLE };
 }
 
 /**
@@ -234,6 +261,16 @@ export function adminReport(reportId: string): SettingsPage {
  */
 export function settingsTitle(page: Page, name?: string): Locator {
   return page.getByRole('heading', { level: 1, name, exact: true });
+}
+
+/**
+ * The settings page's help button. The page header owns it, at the end of
+ * the h1's row; no pane renders one of its own.
+ *
+ * @param scope - The page, or a region to search within
+ */
+export function helpButton(scope: Page | Locator): Locator {
+  return scope.getByRole('button', { name: HELP_BUTTON_LABEL, exact: true });
 }
 
 /**
@@ -291,14 +328,22 @@ export function settingsContent(page: Page): Locator {
 }
 
 /**
- * The calendar switcher trigger, a button named "Switch calendar: {name}".
- * In settings it sits beside the h1 on a calendar index and above it on a
- * calendar leaf.
+ * The calendar switcher trigger, a button named by the calendar's name alone.
+ * In settings it is the h1's content on a calendar index and the eyebrow
+ * above the h1 on a calendar leaf at md+.
+ *
+ * Pass the calendar's display name whenever the test knows it. Without one
+ * this matches any switcher, for a test that cannot know which calendar is
+ * showing (a last-used calendar) or asserts that no switcher renders.
  *
  * @param scope - The page or a region within it
+ * @param displayName - The calendar's display name, e.g. "Test Calendar"
  */
-export function calendarSwitcherTrigger(scope: Page | Locator): Locator {
-  return scope.getByRole('button', { name: SWITCH_CALENDAR_LABEL });
+export function calendarSwitcherTrigger(scope: Page | Locator, displayName?: string): Locator {
+  if (displayName === undefined) {
+    return scope.locator('button.calendar-switcher');
+  }
+  return scope.getByRole('button', { name: displayName, exact: true });
 }
 
 /**
@@ -465,3 +510,29 @@ export async function expectNoHorizontalScroll(page: Page, scope?: Locator): Pro
 
 /** The axe tag set every settings accessibility scan runs with. */
 export const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+
+/**
+ * One calendar's row on the Account → Calendars screen, found by the
+ * calendar's display name, which is the row's link text.
+ */
+export function accountCalendarRow(scope: Page | Locator, name: string): Locator {
+  // A `has` locator is matched inside each candidate row, so it starts from
+  // the page rather than from the scope.
+  const page = 'page' in scope ? scope.page() : scope;
+  return scope.getByRole('listitem').filter({
+    has: page.getByRole('link', { name, exact: true }),
+  });
+}
+
+/**
+ * The Leave button of an edited calendar's row, by its accessible name
+ * ("Leave {calendar}"). An owned calendar's row has none.
+ */
+export function accountCalendarLeaveButton(scope: Page | Locator, name: string): Locator {
+  return scope.getByRole('button', { name: `${LEAVE_LABEL_PREFIX} ${name}`, exact: true });
+}
+
+/** The confirm button of the Leave Calendar dialog. */
+export function confirmLeaveButton(page: Page): Locator {
+  return page.getByRole('dialog').getByRole('button', { name: CONFIRM_LEAVE_LABEL, exact: true });
+}

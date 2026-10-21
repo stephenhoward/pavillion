@@ -67,7 +67,7 @@ test.describe('Admin Federation Settings', () => {
     // Verify navigation to the blocked instances management page
     await page.waitForURL('**' + adminLeafPath('moderation/blocked-instances'), { timeout: 10000 });
 
-    // The sub-page takes its parent's title, and the tree keeps Moderation current
+    // The sub-page carries its own title, and the tree keeps Moderation current
     await expect(settingsTitle(page, adminLeaf('moderation/blocked-instances').title)).toBeVisible();
     await expect(settingsRow(settingsTree(page), 'Moderation')).toHaveAttribute('aria-current', 'page');
   });

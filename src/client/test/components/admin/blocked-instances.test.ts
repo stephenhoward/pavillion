@@ -65,9 +65,10 @@ describe('BlockedInstances', () => {
     sandbox.restore();
   });
 
-  it('should render the page title and subtitle', () => {
-    expect(wrapper.find('.page-header h2').text()).toBe('blocked_instances.title');
+  // The settings page header's h1 titles the sub-page; the pane keeps its description.
+  it('renders its description and no title of its own', () => {
     expect(wrapper.find('.page-subtitle').text()).toBe('blocked_instances.subtitle');
+    expect(wrapper.findAll('h1, h2').map((heading) => heading.text())).not.toContain('blocked_instances.title');
   });
 
   it('should show loading state when fetching blocked instances', async () => {

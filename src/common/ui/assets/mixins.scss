@@ -579,6 +579,10 @@ $public-transition-normal: all $public-duration-normal $public-ease-out;
   min-width: 200px;
 }
 
+// The label's ink is `--pav-text-secondary` at full strength, which clears the
+// 4.5:1 text floor on the page surface in both themes. It reads quieter than
+// the values below it through size and case, so a consumer never dims it with
+// opacity or a fainter text token: either takes it under the floor.
 @mixin public-filter-label {
   display: block;
   font-size: $public-font-size-xs;

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia } from 'pinia';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 import CalendarSettings from '@/client/components/logged_in/calendar-management/settings.vue';
@@ -23,7 +24,6 @@ import { Media } from '@/common/model/media';
 
 // Minimal translations required by the settings component
 const SETTINGS_TRANSLATIONS = {
-  'settings.title': 'Calendar Settings',
   'settings.loading': 'Loading settings...',
   'settings.calendar_content_section': 'Calendar Title & Description',
   'settings.calendar_title_help': 'The display name for your calendar.',
@@ -90,6 +90,8 @@ const mountSettings = () => {
   return mount(CalendarSettings, {
     global: {
       plugins: [
+        // The screen is a routed leaf: it reads the route on mount.
+        createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }] }),
         [I18NextVue, { i18next }],
         createPinia(),
       ],

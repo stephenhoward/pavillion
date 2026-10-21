@@ -10,7 +10,6 @@ import AddProviderWizard from './add-provider-wizard.vue';
 import GrantForm from './grant-form.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding',
@@ -508,14 +507,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="funding-page" aria-labelledby="funding-heading">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2 id="funding-heading">{{ t("title") }}</h2>
-        <p class="page-subtitle">{{ t("settings_section_title") }}</p>
-      </div>
-      <HelpButton />
+  <section class="funding-page">
+    <!-- The settings page header carries the title and help button. -->
+    <div class="page-intro">
+      <p class="page-subtitle">{{ t("page_subtitle") }}</p>
       <button
         v-if="activeSubTab === 'grants'"
         type="button"
@@ -1184,8 +1179,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: var(--pav-space-6);
 
-  /* Page Header */
-  .page-header {
+  /* Page intro: the description and the tab's create action */
+  .page-intro {
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-4);
@@ -1196,19 +1191,10 @@ onMounted(async () => {
       justify-content: space-between;
     }
 
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
+    .page-subtitle {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-muted);
     }
 
     .create-grant-button {

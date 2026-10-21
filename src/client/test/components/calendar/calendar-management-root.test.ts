@@ -53,7 +53,7 @@ const ReportsStub = routeStub('ReportsStub', ['calendarId'], () => {
   }
 });
 const ImportStub = routeStub('ImportStub', ['calendarId', 'instanceHost']);
-const WidgetStub = routeStub('WidgetStub', ['calendarId', 'calendarUrlName']);
+const WidgetStub = routeStub('WidgetStub', ['calendarId', 'calendarUrlName', 'isOwner']);
 
 /** The calendar subtree with the real route names and the real index guards. */
 function buildRouter(): Router {
@@ -98,10 +98,6 @@ const makeCalendarInfo = (urlName: string, role: 'owner' | 'editor'): CalendarIn
   const calendar = new Calendar('cal-uuid-1', urlName);
   return new CalendarInfo(calendar, role);
 };
-
-// The empty state draws a random id for its heading; it says nothing about
-// the calendar, so markup comparisons ignore it.
-const normalizeIds = (html: string) => html.replace(/empty-title-[a-z0-9]+/g, 'empty-title-ID');
 
 describe('CalendarManagementRoot', () => {
   let pinia: Pinia;
@@ -219,6 +215,17 @@ describe('CalendarManagementRoot', () => {
       const { wrapper } = await mountAt('/settings/calendar/my-calendar/widget');
 
       expect(wrapper.findComponent(WidgetStub).props('calendarUrlName')).toBe('my-calendar');
+    });
+
+    it.each([
+      ['owner', true],
+      ['editor', false],
+    ] as const)('passes ownership to the widget leaf for an %s', async (relationship, isOwner) => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', relationship)]);
+
+      const { wrapper } = await mountAt('/settings/calendar/my-calendar/widget');
+
+      expect(wrapper.findComponent(WidgetStub).props('isOwner')).toBe(isOwner);
     });
 
     it('renders the index list page for a resolved calendar', async () => {
@@ -398,7 +405,7 @@ describe('CalendarManagementRoot', () => {
     async function capture(path: string) {
       const { wrapper: w, router } = await mountAt(path);
       const result = {
-        html: normalizeIds(w.html()),
+        html: w.html(),
         fullPath: router.currentRoute.value.fullPath,
         mounts: [...mounts],
         status: w.find('[role="status"]').text(),

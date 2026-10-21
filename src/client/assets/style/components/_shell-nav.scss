@@ -205,6 +205,41 @@
         @include sr-only;
       }
 
+      /* Tooltip: hover or keyboard focus reveals the same label element
+         beside the rail, so the link's name never doubles. It shows the
+         label only; the badge count stays on the icon and its sr-only text
+         stays hidden inside the label. The sidebar sets no overflow, so the
+         tooltip is not clipped, and the sidebar's stacking context sits
+         above the main column. Escape adds the dismissed class (nav-item.vue)
+         until the next hover or focus */
+      &:is(:hover, :focus-visible):not(.shell-nav-item--tooltip-dismissed) .shell-nav-item__label {
+        inset-block-start: 50%;
+        inset-inline-start: calc(100% + var(--pav-space-3));
+        translate: 0 -50%;
+        width: auto;
+        height: auto;
+        margin: 0;
+        padding: var(--pav-space-1_5) var(--pav-space-2_5);
+        overflow: visible;
+        clip: auto;
+        z-index: var(--pav-z-index-tooltip);
+        background-color: var(--pav-surface-primary);
+        color: var(--pav-text-primary);
+        border: var(--pav-border-width-1) solid var(--pav-border-primary);
+        border-radius: var(--pav-border-radius-md);
+        box-shadow: var(--pav-shadow-md);
+
+        /* Bridges the gap to the item so the pointer can move onto the
+           tooltip without leaving the link's hover (1.4.13 hoverable) */
+        &::before {
+          content: '';
+          position: absolute;
+          inset-block: 0;
+          inset-inline-end: 100%;
+          inline-size: calc(var(--pav-space-3) + var(--pav-border-width-1));
+        }
+      }
+
       .shell-nav-item__badge {
         /* Anchored from the item's centre so it overlaps the icon's
            block-start, inline-end corner in either direction */

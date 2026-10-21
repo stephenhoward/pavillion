@@ -867,13 +867,6 @@ onUnmounted(() => {
     @include public-filter-label;
     // Override font-size for better readability
     font-size: 12px;
-    opacity: 0.6;
-
-    // Forced colors paint the label in the user's system ink; the dim would
-    // undo the contrast they chose.
-    @media (forced-colors: active) {
-      opacity: 1;
-    }
   }
 }
 

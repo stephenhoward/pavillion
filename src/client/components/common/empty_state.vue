@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import DocLink from '@/client/components/common/doc-link.vue';
 import type { GuideRef } from '@/client/service/docs';
@@ -29,8 +29,7 @@ const props = defineProps<{
   guideLabel?: string;
 }>();
 
-const dialogId = Math.random().toString(36).substring(2, 11);
-const titleId = computed(() => `empty-title-${dialogId}`);
+const titleId = useId();
 </script>
 
 <style scoped lang="scss">

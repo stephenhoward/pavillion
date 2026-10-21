@@ -39,7 +39,6 @@ import {
   isVisibleLeaf,
   SETTINGS_GROUP_INDEX_ROUTES,
 } from '@/client/components/logged_in/settings/nav-items';
-import HelpButton from '@/client/components/common/help-button.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 
 const route = useRoute();
@@ -103,7 +102,7 @@ const leafProps = (name: unknown): Record<string, unknown> => {
     case 'calendar_import':
       return { calendarId, instanceHost: instanceHost.value };
     case 'calendar_widget':
-      return { calendarId, calendarUrlName: current.calendar.urlName };
+      return { calendarId, calendarUrlName: current.calendar.urlName, isOwner: current.isOwner };
     default:
       return {};
   }
@@ -164,9 +163,6 @@ onBeforeMount(async () => {
     </p>
 
     <template v-else-if="navContext">
-      <div class="calendar-management-root__help">
-        <HelpButton />
-      </div>
       <RouterView v-slot="{ Component, route: leafRoute }">
         <component
           :is="Component"
@@ -188,11 +184,6 @@ onBeforeMount(async () => {
 <style scoped lang="scss">
 .calendar-management-root {
   min-width: 0;
-
-  &__help {
-    display: flex;
-    justify-content: flex-end;
-  }
 
   &__error {
     margin: 0;

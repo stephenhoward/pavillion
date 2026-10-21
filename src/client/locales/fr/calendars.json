@@ -25,8 +25,19 @@
     "current_label": "Actuel",
     "create_calendar_button": "Créer un nouveau calendrier",
     "editor_badge": "Éditeur",
-    "aria_switch_calendar": "Changer de calendrier : {{name}}",
+    "trigger_description": "Sélectionnez pour changer de calendrier",
     "no_calendars": "Vous n'avez encore aucun calendrier."
+  },
+  "account_list": {
+    "owner_badge": "Propriétaire",
+    "editor_badge": "Éditeur",
+    "leave_button": "Quitter",
+    "leave_button_aria": "Quitter {{calendar}}",
+    "create_calendar_button": "Créer un calendrier",
+    "empty_title": "Pas encore de calendrier",
+    "empty_description": "Les calendriers dont vous êtes propriétaire ou éditeur apparaissent ici. Créez-en un, ou demandez au propriétaire d'un calendrier de vous inviter comme éditeur.",
+    "loading": "Chargement des calendriers…",
+    "error_loading": "Impossible de charger vos calendriers."
   },
   "calendar": {
     "create_button": "Créer un événement",
@@ -114,6 +125,7 @@
     "confirm_leave_title": "Quitter le calendrier",
     "confirm_leave_message": "Êtes-vous sûr de vouloir quitter ce calendrier ? Vous n'aurez plus d'accès en édition et devrez être réinvité pour retrouver l'accès.",
     "error_leaving_calendar": "Échec de la sortie du calendrier",
+    "left_calendar_success": "Vous avez quitté {{calendar}}.",
     "resend_button": "Renvoyer",
     "resending": "Renvoi...",
     "canceling": "Annulation...",
@@ -176,8 +188,7 @@
     "event_count_one": "{{count}} événement",
     "event_count_other": "{{count}} événements",
     "languages_count_one": "{{count}} langue",
-    "languages_count_other": "{{count}} langues",
-    "places_tab": "Lieux"
+    "languages_count_other": "{{count}} langues"
   },
   "import": {
     "section_title": "Sources d'importation",
@@ -473,7 +484,6 @@
     "add_category_option": "+ Ajouter cette catégorie"
   },
   "settings": {
-    "title": "Paramètres du calendrier",
     "loading": "Chargement des paramètres...",
     "calendar_content_section": "Titre et description du calendrier",
     "calendar_title_label": "Titre du calendrier",
@@ -510,7 +520,8 @@
     "confirm_cancel_button": "Annuler",
     "extended_features_disable_success": "Fonctionnalités étendues désactivées pour ce calendrier.",
     "extended_features_disable_error": "Échec de la désactivation des fonctionnalités étendues.",
-    "extended_features_enabled_success": "Fonctionnalités étendues activées pour ce calendrier."
+    "extended_features_enabled_success": "Fonctionnalités étendues activées pour ce calendrier.",
+    "extended_features_checkout_error": "Nous n'avons pas pu confirmer votre plan de financement. Si votre paiement a abouti, les fonctionnalités étendues seront activées sous peu ; sinon, veuillez réessayer."
   },
   "widget": {
     "domains_section_title": "Domaine autorisé",
@@ -540,7 +551,8 @@
       "error_adding": "Échec de l'ajout du domaine",
       "error_removing": "Échec de la suppression du domaine",
       "error_invalid_domain": "Format de domaine invalide. Le domaine ne doit pas inclure de protocole ni de chemin (par exemple, utilisez « exemple.com » au lieu de « https://exemple.com/ »).",
-      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés"
+      "error_duplicate": "Ce domaine figure déjà dans la liste des domaines autorisés",
+      "owner_can_enable": "L'intégration de ce calendrier dans un autre site web est une fonctionnalité étendue. Le propriétaire du calendrier peut l'activer."
     },
     "config": {
       "configuration_title": "Paramètres du widget",
@@ -565,6 +577,7 @@
       "color_mode_dark": "Mode sombre (toujours utiliser le thème sombre)",
       "preview_title": "Aperçu",
       "preview_description": "Découvrez à quoi ressemblera votre widget avec les paramètres actuels.",
+      "preview_iframe_title": "Aperçu du widget",
       "save_button": "Enregistrer la configuration",
       "saving": "Enregistrement...",
       "save_success": "Configuration du widget enregistrée.",

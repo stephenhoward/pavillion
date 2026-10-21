@@ -7,7 +7,6 @@ import { ReportStatus, ReportCategory, type EscalationType } from '@/common/mode
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import CreateReportModal from '@/client/components/admin/create-report.vue';
 import { DateTime } from 'luxon';
-import HelpButton from '@/client/components/common/help-button.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'moderation',
@@ -182,14 +181,10 @@ function goToSettings() {
 
 <template>
   <div class="moderation-dashboard">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header-text">
-        <h2>{{ t('title') }}</h2>
-        <p class="page-subtitle">{{ t('subtitle') }}</p>
-      </div>
-      <HelpButton />
-      <div class="page-header-actions">
+    <!-- The settings page header carries the title and help button. -->
+    <div class="page-intro">
+      <p class="page-subtitle">{{ t('subtitle') }}</p>
+      <div class="page-intro-actions">
         <button type="button" class="action-button action-create" @click="openCreateModal">
           <svg width="16"
                height="16"
@@ -597,7 +592,7 @@ function goToSettings() {
   flex-direction: column;
   gap: var(--pav-space-6);
 
-  .page-header {
+  .page-intro {
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-4);
@@ -608,22 +603,13 @@ function goToSettings() {
       justify-content: space-between;
     }
 
-    .page-header-text {
-      h2 {
-        margin: 0 0 var(--pav-space-1) 0;
-        font-size: var(--pav-font-size-2xl);
-        font-weight: var(--pav-font-weight-light);
-        color: var(--pav-color-text-primary);
-      }
-
-      .page-subtitle {
-        margin: 0;
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
+    .page-subtitle {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-muted);
     }
 
-    .page-header-actions {
+    .page-intro-actions {
       display: flex;
       gap: var(--pav-space-2);
 
@@ -1075,8 +1061,8 @@ function goToSettings() {
 // Dark mode adjustments
 @media (prefers-color-scheme: dark) {
   .moderation-dashboard {
-    .page-header {
-      .page-header-actions {
+    .page-intro {
+      .page-intro-actions {
         .action-button {
           &.action-settings {
             background: var(--pav-color-stone-800);
