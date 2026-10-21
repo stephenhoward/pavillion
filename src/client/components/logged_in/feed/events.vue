@@ -452,6 +452,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 div.events-container {
   display: flex;
   flex-direction: column;
@@ -633,7 +634,7 @@ div.events-container {
         }
       }
 
-      @media (max-width: 768px) {
+      @include pav-media-down(md) {
         flex-direction: column;
         gap: var(--pav-space-3);
 

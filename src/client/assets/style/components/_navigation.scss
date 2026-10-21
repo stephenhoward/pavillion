@@ -5,6 +5,8 @@
  * Note: Shell navigation (sidebar, bottom nav) styles are in _shell-nav.scss
  */
 
+@use '../tokens/breakpoint-mixins' as *;
+
 /* Tab navigation */
 .tabs {
   border-bottom: var(--pav-border-width-1) solid var(--pav-border-primary);
@@ -94,7 +96,7 @@
 }
 
 /* Responsive: stack nav links vertically on narrow viewports */
-@media (width <= 768px) {
+@include pav-media-down(md) {
   nav {
     flex-direction: column;
     align-items: stretch;

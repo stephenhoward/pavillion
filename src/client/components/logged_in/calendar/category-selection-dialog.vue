@@ -171,6 +171,7 @@ const toggleCategory = (categoryId) => {
 
 <style scoped lang="scss">
 @use '@/client/assets/style/components/event-management' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 .category-selection-body {
   display: flex;
@@ -226,7 +227,7 @@ const toggleCategory = (categoryId) => {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 0.75rem;
 
-    @media (max-width: 768px) {
+    @include pav-media-down(md) {
       grid-template-columns: 1fr;
     }
   }

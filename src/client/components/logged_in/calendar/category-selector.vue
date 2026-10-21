@@ -231,6 +231,7 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '@/client/assets/style/components/event-management' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 .category-selector {
   margin-bottom: var(--pav-space-6);
@@ -271,7 +272,7 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--pav-space-3);
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     grid-template-columns: 1fr;
   }
 }

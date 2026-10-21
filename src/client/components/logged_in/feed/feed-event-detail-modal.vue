@@ -205,6 +205,7 @@ defineExpose({ open, close });
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 .feed-detail-dialog {
   position: fixed;
   width: 100%;
@@ -235,7 +236,7 @@ defineExpose({ open, close });
   border: var(--pav-border-width-1) solid var(--pav-border-primary);
   box-shadow: var(--pav-shadow-modal);
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     margin: var(--pav-space-md);
     max-width: calc(100% - var(--pav-space-xl));
   }

@@ -239,6 +239,7 @@ function handleFilesChanged(files) {
 </template>
 
 <style lang="scss" scoped>
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 /* Full-screen overlay - covers the entire viewport */
 .series-editor-page {
   position: fixed;
@@ -397,7 +398,7 @@ function handleFilesChanged(files) {
   gap: 2rem;
   padding: 2rem;
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     padding: 1rem;
     gap: 1.5rem;
   }

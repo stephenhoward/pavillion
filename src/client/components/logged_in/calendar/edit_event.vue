@@ -1,4 +1,5 @@
 <style scoped lang="scss">
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 /* Full-page event editor container - uses 100vh since it renders as a top-level route */
 .event-editor-page {
   display: flex;
@@ -184,7 +185,7 @@ form {
   gap: 2rem;
   padding: 2rem;
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     padding: 1rem;
     gap: 1.5rem;
   }
@@ -562,7 +563,7 @@ form {
     border-top-color: var(--pav-color-stone-700);
   }
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     flex-direction: column-reverse;
 
     button {

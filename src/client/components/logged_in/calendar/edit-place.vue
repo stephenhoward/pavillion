@@ -1,5 +1,6 @@
 <style scoped lang="scss">
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 /* Full-page place editor container - uses 100vh since it renders as a top-level route */
 .place-editor-page {
@@ -209,7 +210,7 @@ form {
   gap: 2rem;
   padding: 2rem;
 
-  @media (max-width: 768px) {
+  @include pav-media-down(md) {
     padding: 1rem;
     gap: 1.5rem;
   }
