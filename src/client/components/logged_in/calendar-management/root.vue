@@ -96,11 +96,10 @@ const leafProps = (name: unknown): Record<string, unknown> => {
   const calendarId = current.calendar.id;
   switch (name) {
     case 'calendar_general':
+    case 'calendar_editors':
     case 'calendar_reports':
     case 'calendar_report_detail':
       return { calendarId };
-    case 'calendar_editors':
-      return { calendarId, isOwner: current.isOwner };
     case 'calendar_import':
       return { calendarId, instanceHost: instanceHost.value };
     case 'calendar_widget':

@@ -18,7 +18,7 @@
     <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-content">
       <!-- Section Header -->
       <AdminSectionHeader :title="t('title')">
-        <template v-if="props.isOwner" #actions>
+        <template #actions>
           <PillButton variant="primary" @click="openAddForm">
             <Plus :size="20" :stroke-width="2" />
             {{ t('add_editor_button') }}
@@ -52,18 +52,6 @@
               {{ state.isRemoving === editor.id ? t('removing') : t('remove_button') }}
             </button>
           </div>
-        </div>
-
-        <!-- Leave Calendar Button -->
-        <div v-if="canLeaveCalendar()" class="leave-calendar-section">
-          <button
-            type="button"
-            class="btn-ghost btn-ghost--danger"
-            @click="confirmLeaveCalendar"
-            :disabled="state.isLeavingCalendar"
-          >
-            {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
-          </button>
         </div>
       </div>
 
@@ -112,7 +100,6 @@
                  :guide="{ slug: 'guides/calendar-owners/editors', key: 'editors' }"
                  :guide-label="t('guide_link')">
       <button
-        v-if="props.isOwner"
         type="button"
         class="btn btn--cta btn--lg"
         @click="openAddForm"
@@ -195,34 +182,6 @@
         </div>
       </div>
     </ModalLayout>
-
-    <!-- Leave Calendar Confirmation Modal -->
-    <ModalLayout
-      v-if="state.showLeaveConfirm"
-      :title="t('confirm_leave_title')"
-      @close="cancelLeaveCalendar"
-    >
-      <div class="confirmation-modal">
-        <p>{{ t('confirm_leave_message') }}</p>
-        <div class="form-actions">
-          <button
-            type="button"
-            class="btn-ghost"
-            @click="cancelLeaveCalendar"
-            :disabled="state.isLeavingCalendar"
-          >
-            {{ t('cancel_button') }}
-          </button>
-          <PillButton
-            variant="danger"
-            @click="leaveCalendar"
-            :disabled="state.isLeavingCalendar"
-          >
-            {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
-          </PillButton>
-        </div>
-      </div>
-    </ModalLayout>
   </div>
 </template>
 
@@ -231,7 +190,6 @@ import { reactive, onMounted, nextTick, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Plus, Crown, Globe, Mail, ArrowUp, Trash2, X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
-import AuthenticationService from '@/client/service/authn';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -240,15 +198,11 @@ import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import AdminSectionHeader from '@/client/components/common/admin-section-header.vue';
 
-// Props
+// The Editors leaf is owner-only (nav-items.ts), so every viewer here may manage editors.
 const props = defineProps({
   calendarId: {
     type: String,
     required: true,
-  },
-  isOwner: {
-    type: Boolean,
-    default: false,
   },
 });
 
@@ -262,10 +216,6 @@ const { t } = useTranslation('calendars', {
 
 // Services
 const calendarService = new CalendarService();
-const authService = new AuthenticationService(localStorage);
-
-// Get current user email
-const currentUserEmail = authService.userEmail();
 
 // Component state
 const state = reactive({
@@ -280,29 +230,11 @@ const state = reactive({
   addError: '',
   editorToRemove: null,
   isRemoving: false,
-  isLeavingCalendar: false,
-  showLeaveConfirm: false,
   invitationOperations: {}, // Track loading states for invitation operations
 });
 
 // Refs for form focus
 const emailInput = ref(null);
-
-/**
- * Check if current user is an editor (but not owner) of this calendar
- */
-const isCurrentUserEditor = () => {
-  if (!currentUserEmail) return false;
-  return state.editors.some(editor => editor.email === currentUserEmail);
-};
-
-/**
- * Check if the current user can leave the calendar
- * (is an editor but not owner - this is determined on the backend)
- */
-const canLeaveCalendar = () => {
-  return currentUserEmail && isCurrentUserEditor();
-};
 
 /**
  * Clear messages with a timeout
@@ -498,58 +430,6 @@ const removeEditor = async () => {
 };
 
 /**
- * Show confirmation for leaving calendar
- */
-const confirmLeaveCalendar = () => {
-  state.showLeaveConfirm = true;
-};
-
-/**
- * Cancel leaving calendar
- */
-const cancelLeaveCalendar = () => {
-  state.showLeaveConfirm = false;
-  state.isLeavingCalendar = false;
-};
-
-/**
- * Leave the calendar (self-removal using unified revoke API)
- */
-const leaveCalendar = async () => {
-  try {
-    state.isLeavingCalendar = true;
-
-    // Find the current user's editor record to get their account ID
-    const currentEditor = state.editors.find(editor => editor.email === currentUserEmail);
-    if (!currentEditor) {
-      state.error = t('error_editor_not_found');
-      return;
-    }
-
-    // Use the revoke endpoint for self-removal
-    await calendarService.revokeEditAccess(props.calendarId, currentEditor.id);
-
-    // After leaving, we should redirect or refresh the page
-    // since the user is no longer an editor
-    window.location.href = '/';
-  }
-  catch (error) {
-    console.error('Error leaving calendar:', error);
-
-    if (error instanceof CalendarEditorPermissionError) {
-      state.error = t('error_permission_denied');
-    }
-    else {
-      state.error = t('error_leaving_calendar');
-    }
-  }
-  finally {
-    state.isLeavingCalendar = false;
-    state.showLeaveConfirm = false;
-  }
-};
-
-/**
  * Cancel a pending invitation
  */
 const cancelInvitation = async (invitationId) => {
@@ -725,14 +605,6 @@ onMounted(loadEditors);
     opacity: 0.5;
     cursor: not-allowed;
   }
-
-  &.btn-ghost--danger {
-    color: var(--pav-text-error);
-
-    &:hover {
-      color: var(--pav-text-error-hover);
-    }
-  }
 }
 
 .btn-text {
@@ -761,12 +633,6 @@ onMounted(loadEditors);
       color: var(--pav-color-interactive-active-text);
     }
   }
-}
-
-.leave-calendar-section {
-  margin-top: var(--pav-space-4);
-  padding-top: var(--pav-space-4);
-  border-top: 1px solid var(--pav-border-primary);
 }
 
 .add-editor-form {

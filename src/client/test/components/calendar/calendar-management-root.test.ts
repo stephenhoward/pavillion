@@ -42,7 +42,7 @@ function routeStub(name: string, props: string[], onSetup?: () => void) {
 
 const IndexStub = routeStub('IndexStub', []);
 const GeneralStub = routeStub('GeneralStub', ['calendarId']);
-const EditorsStub = routeStub('EditorsStub', ['calendarId', 'isOwner']);
+const EditorsStub = routeStub('EditorsStub', ['calendarId']);
 // Stands in for the reports leaf, fetching a deep-linked report on mount the
 // way the detail gate does, so a mount that should not happen shows up as a
 // request.
@@ -202,7 +202,7 @@ describe('CalendarManagementRoot', () => {
   });
 
   describe('props', () => {
-    it('passes isOwner to the editors leaf for an owner', async () => {
+    it('passes the calendar id to the editors leaf for an owner', async () => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
 
       const { wrapper } = await mountAt('/settings/calendar/my-calendar/editors');
@@ -210,7 +210,7 @@ describe('CalendarManagementRoot', () => {
       const editors = wrapper.findComponent(EditorsStub);
       expect(editors.exists()).toBe(true);
       expect(editors.props('calendarId')).toBe('cal-uuid-1');
-      expect(editors.props('isOwner')).toBe(true);
+      expect(editors.attributes('isowner')).toBeUndefined();
     });
 
     it('passes the calendar url name to the widget leaf', async () => {
