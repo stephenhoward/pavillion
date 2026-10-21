@@ -1,19 +1,27 @@
 <script setup lang="ts">
+/**
+ * The calendar switcher: the current calendar's name followed by a chevron,
+ * opening a sheet of the viewer's calendars. Every host (the calendar view,
+ * the feed, the settings page header) renders this one control, so it takes
+ * the calendar name rather than free text, and names itself
+ * "Switch calendar: {name}".
+ */
 import { nextTick, ref } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import { ChevronDown } from 'lucide-vue-next';
 import CalendarSwitcherSheet from './CalendarSwitcherSheet.vue';
 import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-calendar-sheet.vue';
 
 defineProps<{
-  /** Text shown on the trigger: the calendar name, or a host's section label. */
-  label: string;
+  /** The current calendar's display name, shown on the trigger. */
+  calendarName: string;
   /** Named route the sheet navigates to with `{ calendar }` on pick, and a created calendar opens on. */
   routeName: string;
   /** Calendar the host page shows, or null. */
   currentUrlName: string | null;
-  /** Accessible name for the trigger, pre-translated by the host. */
-  ariaLabel: string;
 }>();
+
+const { t } = useTranslation('calendars', { keyPrefix: 'switcher' });
 
 const triggerEl = ref<HTMLButtonElement | null>(null);
 const sheetOpen = ref(false);
@@ -59,10 +67,10 @@ function closeCreate() {
     class="calendar-switcher"
     aria-haspopup="dialog"
     :aria-expanded="sheetOpen ? 'true' : 'false'"
-    :aria-label="ariaLabel"
+    :aria-label="t('aria_switch_calendar', { name: calendarName })"
     @click="sheetOpen = true"
   >
-    <span class="calendar-switcher__label">{{ label }}</span>
+    <span class="calendar-switcher__label">{{ calendarName }}</span>
     <ChevronDown :size="18" aria-hidden="true" />
   </button>
 

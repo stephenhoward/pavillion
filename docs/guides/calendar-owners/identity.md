@@ -6,7 +6,7 @@ description: Customize the public identity of your Pavillion calendar — name, 
 
 Your calendar has a public face. Visitors see it when they land on your page; other calendar owners see it when they're deciding whether to follow you or repost from your events. This guide is about the settings you have to shape that presence deliberately — what to put in each field, and what gets harder to change later.
 
-Everything this guide covers is under **Settings → Calendar → General**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title, on a phone at the top of the **Calendar** list.
+Everything this guide covers is under **Settings → Calendar → General**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen.
 
 ## Who sees your identity, and where
 

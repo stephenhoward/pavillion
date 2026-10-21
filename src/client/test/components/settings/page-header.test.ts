@@ -164,8 +164,7 @@ describe('settings page header', () => {
       expect(heading(w).find('button').exists()).toBe(false);
       expect(switcher.props('routeName')).toBe('calendar_editors');
       expect(switcher.props('currentUrlName')).toBe('riverside');
-      expect(switcher.props('label')).toBe('Riverside Arts');
-      expect(switcher.props('ariaLabel')).toBe('Switch calendar: Riverside Arts');
+      expect(switcher.props('calendarName')).toBe('Riverside Arts');
     });
 
     it('hands the switcher the parent leaf on report detail, so switching drops the report', async () => {
@@ -173,15 +172,28 @@ describe('settings page header', () => {
       expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_reports');
     });
 
-    it('places the switcher beside the h1 on the calendar section', async () => {
+    // The same control as the calendar and feed views: the name, with its
+    // chevron, is the switcher, inside the h1.
+    it('makes the calendar name in the h1 the switcher on the calendar section', async () => {
       const w = await mountAt('/settings/calendar/riverside');
       const switcher = w.findComponent(CalendarSwitcher);
       expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
-      expect(heading(w).find('button').exists()).toBe(false);
-      expect(heading(w).element.parentElement?.querySelector(':scope > button.calendar-switcher')).not.toBeNull();
+      expect(w.findAll('button.calendar-switcher')).toHaveLength(1);
+      const trigger = heading(w).find('button.calendar-switcher');
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.text()).toBe('Riverside Arts');
+      expect(trigger.attributes('aria-label')).toBe('Switch calendar: Riverside Arts');
+      expect(w.text()).not.toContain('Switch calendar');
       expect(switcher.props('routeName')).toBe('calendar_management');
-      expect(switcher.props('label')).toBe('Switch calendar');
-      expect(switcher.props('ariaLabel')).toBe('Switch calendar: Riverside Arts');
+      expect(switcher.props('calendarName')).toBe('Riverside Arts');
+    });
+
+    it('keeps the section h1 programmatically focusable around the switcher', async () => {
+      const w = await mountAt('/settings/calendar/riverside', { attachTo: document.body });
+      expect(heading(w).attributes('tabindex')).toBe('-1');
+      focusSettingsHeading();
+      expect(document.activeElement).toBe(heading(w).element);
+      expect(document.title).toBe('Riverside Arts');
     });
 
     it('shows the group name as text on an account leaf, with no switcher', async () => {

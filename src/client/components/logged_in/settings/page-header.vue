@@ -14,7 +14,10 @@
  *   label. The parent leaf follows the group in the eyebrow as a link back to
  *   it, and is the back link's target below md. Following that link moves
  *   focus to the h1, because the link is gone once the leaf renders.
- * - A calendar section puts the switcher beside the h1, never inside it.
+ * - On the calendar section the calendar name in the h1 is the switcher, the
+ *   same control as on the calendar and feed views; on a calendar leaf it is
+ *   the eyebrow at md+. Either way it is the name and a chevron, named
+ *   "Switch calendar: {name}" by the switcher itself.
  * - The help button ends the title row on every level whose route has
  *   guides, so no settings pane renders one of its own.
  * - A calendar the viewer cannot resolve (nonexistent, not a member, or not
@@ -49,7 +52,6 @@ type HeaderLevel =
 const route = useRoute();
 const calendarStore = useCalendarStore();
 const { t } = useTranslation('settings');
-const { t: tCal } = useTranslation('calendars');
 
 const level = computed<HeaderLevel>(() => {
   const group = matchedSettingsGroup(route);
@@ -144,7 +146,7 @@ const eyebrowText = computed(() => {
 });
 
 // The eyebrow switcher's label is the calendar name as the owner typed it;
-// _settings.scss exempts it from the eyebrow's uppercase.
+// _settings.scss exempts it from the eyebrow's uppercase and letter-spacing.
 const showEyebrowSwitcher = computed(
   () => level.value.kind === 'leaf' && group.value === 'calendar' && !unresolved.value,
 );
@@ -160,8 +162,6 @@ async function followParentLeaf(event: MouseEvent, navigate: (event?: MouseEvent
     focusSettingsHeading();
   }
 }
-
-const switcherAriaLabel = computed(() => tCal('switcher.aria_switch_calendar', { name: calendarName.value }));
 
 // The header owns document.title while it is mounted and hands the previous
 // title back when settings is left.
@@ -187,10 +187,9 @@ onBeforeUnmount(() => {
     <div v-if="showEyebrowSwitcher || eyebrowText" class="settings-page-header__eyebrow">
       <CalendarSwitcher
         v-if="showEyebrowSwitcher"
-        :label="calendarName"
+        :calendar-name="calendarName"
         :route-name="switcherRouteName"
         :current-url-name="calendarUrlName"
-        :aria-label="switcherAriaLabel"
       />
       <span v-else>{{ eyebrowText }}</span>
       <template v-if="parentLeaf">
@@ -201,14 +200,17 @@ onBeforeUnmount(() => {
       </template>
     </div>
     <div class="settings-page-header__title-row">
-      <h1 class="settings-page-header__title" tabindex="-1">{{ heading }}</h1>
-      <CalendarSwitcher
-        v-if="showSectionSwitcher"
-        :label="tCal('switcher.title')"
-        :route-name="SETTINGS_GROUP_INDEX_ROUTES.calendar"
-        :current-url-name="calendarUrlName"
-        :aria-label="switcherAriaLabel"
-      />
+      <!-- tabindex="-1" keeps the h1 the focus rule's target; on the calendar
+           section focus lands on the h1 and the switcher is its next stop. -->
+      <h1 class="settings-page-header__title" tabindex="-1">
+        <CalendarSwitcher
+          v-if="showSectionSwitcher"
+          :calendar-name="calendarName"
+          :route-name="SETTINGS_GROUP_INDEX_ROUTES.calendar"
+          :current-url-name="calendarUrlName"
+        />
+        <template v-else>{{ heading }}</template>
+      </h1>
       <HelpButton v-if="!unresolved" />
     </div>
   </header>

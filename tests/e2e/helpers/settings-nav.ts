@@ -160,13 +160,34 @@ export function calendarLeafPath(calendar: string, leaf: CalendarLeaf): string {
 }
 
 /**
- * A calendar's index page (below md only), titled with the calendar's name.
+ * The accessible name of a calendar switcher, and so of an h1 whose content
+ * is one: the calendar index's, the calendar view's and the feed's.
+ *
+ * @param displayName - The calendar's display name, e.g. "Test Calendar"
+ */
+export function switcherName(displayName: string): string {
+  return `Switch calendar: ${displayName}`;
+}
+
+/**
+ * A calendar's index page (below md only). Its h1 is the calendar switcher,
+ * showing the calendar's name and named by the switcher.
  *
  * @param calendar - The calendar's url name
  * @param displayName - The calendar's display name, e.g. "Test Calendar"
  */
 export function calendarIndex(calendar: string, displayName: string): SettingsPage {
-  return { path: calendarIndexPath(calendar), title: displayName };
+  return { path: calendarIndexPath(calendar), title: switcherName(displayName) };
+}
+
+/**
+ * The index of a calendar the viewer cannot resolve (nonexistent, not a
+ * member), titled with the group and carrying no switcher.
+ *
+ * @param calendar - The calendar's url name
+ */
+export function unresolvedCalendarIndex(calendar: string): SettingsPage {
+  return { path: calendarIndexPath(calendar), title: UNRESOLVED_CALENDAR_TITLE };
 }
 
 /**
@@ -313,8 +334,8 @@ export function settingsContent(page: Page): Locator {
 
 /**
  * The calendar switcher trigger, a button named "Switch calendar: {name}".
- * In settings it sits beside the h1 on a calendar index and above it on a
- * calendar leaf.
+ * In settings it is the h1's content on a calendar index and the eyebrow
+ * above the h1 on a calendar leaf at md+.
  *
  * @param scope - The page or a region within it
  */

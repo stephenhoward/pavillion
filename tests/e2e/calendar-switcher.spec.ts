@@ -188,6 +188,51 @@ test.describe('Calendar switcher', () => {
     await expect(page.getByRole('main')).toHaveCount(1);
   });
 
+  // One control everywhere: the calendar's name and a chevron, named by the
+  // switcher, opening a sheet whose type does not inherit from its host (an
+  // h1's size, the settings eyebrow's uppercase).
+  test('every switcher is the calendar name and a chevron, and opens the same sheet', async ({ page }) => {
+    await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
+    const calendar = 'multicalendar_calendar';
+    const hosts = [
+      { viewport: PHONE, path: `/calendar/${calendar}`, inH1: true },
+      { viewport: PHONE, path: `/feed/${calendar}`, inH1: true },
+      { viewport: PHONE, path: `/settings/calendar/${calendar}`, inH1: true },
+      { viewport: DESKTOP, path: `/calendar/${calendar}`, inH1: true },
+      { viewport: DESKTOP, path: `/settings/calendar/${calendar}/widget`, inH1: false },
+    ];
+    const sheetLook: Record<number, string> = {};
+
+    for (const host of hosts) {
+      await page.setViewportSize(host.viewport);
+      await page.goto(env.baseURL + host.path);
+      const trigger = calendarSwitcherTrigger(page).filter({ visible: true });
+      await expect(trigger, host.path).toHaveCount(1);
+
+      const name = (await trigger.locator('.calendar-switcher__label').textContent())?.trim() ?? '';
+      expect(name, host.path).not.toBe('');
+      await expect(trigger, host.path).toHaveAccessibleName(`Switch calendar: ${name}`);
+      await expect(trigger, host.path).toHaveText(name);
+      await expect(trigger.locator('svg'), host.path).toHaveCount(1);
+      await expect(page.getByRole('heading', { level: 1 }).locator('button.calendar-switcher'), host.path)
+        .toHaveCount(host.inH1 ? 1 : 0);
+
+      await trigger.click();
+      const sheet = page.getByRole('dialog', { name: 'Switch calendar' });
+      await expect(sheet).toBeVisible();
+      const look = await sheet.getByTestId('switcher-row').first().evaluate((row) => {
+        const style = getComputedStyle(row);
+        return [style.fontSize, style.fontWeight, style.textTransform, style.letterSpacing].join(' ');
+      });
+      sheetLook[host.viewport.width] ??= look;
+      expect(look, host.path).toBe(sheetLook[host.viewport.width]);
+
+      await page.keyboard.press('Escape');
+      await expect(sheet).toBeHidden();
+      await expect(trigger, host.path).toBeFocused();
+    }
+  });
+
   test('the open calendar switcher sheet has no axe violations', async ({ page }) => {
     // This user's sheet has a current row, a link row and an Editor badge.
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);

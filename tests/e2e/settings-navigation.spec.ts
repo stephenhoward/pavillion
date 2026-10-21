@@ -24,7 +24,6 @@ import {
   accountCalendarRow,
   confirmLeaveButton,
   SHELL_MD,
-  UNRESOLVED_CALENDAR_TITLE,
   WCAG_TAGS,
   adminLeaf,
   adminLeafPath,
@@ -55,7 +54,9 @@ import {
   shellSkipLink,
   settingsTitle,
   settingsTree,
+  switcherName,
   treeSkipControl,
+  unresolvedCalendarIndex,
 } from './helpers/settings-nav';
 
 /**
@@ -151,7 +152,7 @@ test.describe('phone drill-down', () => {
     // Scoped to main: the bottom bar has its own "Calendar" link.
     await settingsRow(main, 'Calendar').click();
     await expect(page).toHaveURL(pathPattern(calendarIndexPath(ADMIN_CALENDAR_URL_NAME)));
-    await expect(settingsTitle(page, ADMIN_CALENDAR_NAME)).toBeFocused();
+    await expect(settingsTitle(page, switcherName(ADMIN_CALENDAR_NAME))).toBeFocused();
     await expect(calendarSwitcherTrigger(page)).toBeVisible();
     await expect(mobileNav(page)).toBeVisible();
 
@@ -162,7 +163,7 @@ test.describe('phone drill-down', () => {
 
     await backLink(page, ADMIN_CALENDAR_NAME).click();
     await expect(page).toHaveURL(pathPattern(calendarIndexPath(ADMIN_CALENDAR_URL_NAME)));
-    await expect(settingsTitle(page, ADMIN_CALENDAR_NAME)).toBeFocused();
+    await expect(settingsTitle(page, switcherName(ADMIN_CALENDAR_NAME))).toBeFocused();
     await expect(mobileNav(page)).toBeVisible();
 
     await backLink(page, 'Settings').click();
@@ -281,8 +282,7 @@ test.describe('account calendars', () => {
     expect(focusedOnRowOrHeading, 'focus moved to a row link or the h1').toBe(true);
 
     // The calendar is gone from the switcher's store too: its settings no longer resolve.
-    await page.goto(env.baseURL + calendarIndexPath(ADMIN_CALENDAR_URL_NAME));
-    await expect(settingsTitle(page, UNRESOLVED_CALENDAR_TITLE)).toBeVisible();
+    await gotoSettings(page, env.baseURL, unresolvedCalendarIndex(ADMIN_CALENDAR_URL_NAME));
   });
 });
 
@@ -480,7 +480,7 @@ for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as cons
 
       const snapshots: string[] = [];
       for (const calendar of [ADMIN_CALENDAR_URL_NAME, NONEXISTENT_CALENDAR]) {
-        const index = calendarIndex(calendar, UNRESOLVED_CALENDAR_TITLE);
+        const index = unresolvedCalendarIndex(calendar);
         await gotoSettings(page, env.baseURL, index);
         await expect(emptyState(main)).toBeVisible();
         await expect(page).toHaveURL(pathPattern(index.path));
@@ -710,7 +710,7 @@ test.describe('one h1 and one current item per list', () => {
 
     for (const viewport of [PHONE, DESKTOP]) {
       await page.setViewportSize(viewport);
-      await gotoSettings(page, env.baseURL, calendarIndex(ADMIN_CALENDAR_URL_NAME, UNRESOLVED_CALENDAR_TITLE));
+      await gotoSettings(page, env.baseURL, unresolvedCalendarIndex(ADMIN_CALENDAR_URL_NAME));
       await expect(emptyState(page.getByRole('main'))).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     }

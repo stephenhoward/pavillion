@@ -779,12 +779,13 @@ describe('settings routes on the real route table', () => {
       return { wrapper, router };
     }
 
-    it('titles the calendar index as its section, with the switcher beside the h1', async () => {
+    it('titles the calendar index with the calendar name, which is the switcher', async () => {
       const { wrapper: w, router } = await headerAt('/settings/calendar/riverside');
 
       expect(router.currentRoute.value.name).toBe('calendar_management');
       expect(w.findAll('h1')).toHaveLength(1);
       expect(w.find('h1').text()).toBe('Riverside Arts');
+      expect(w.find('h1 button.calendar-switcher').exists()).toBe(true);
       expect(w.find('.settings-page-header__eyebrow').exists()).toBe(false);
       expect(w.findComponent(CalendarSwitcher).props('routeName')).toBe('calendar_management');
     });

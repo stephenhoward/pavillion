@@ -144,8 +144,8 @@
     }
   }
 
-  /* The switcher trigger, in the eyebrow and beside the h1, takes the
-     shared pointer-target minimum, past WCAG 2.5.8's 24px. */
+  /* The switcher trigger, in the eyebrow and in the calendar section's h1,
+     takes the shared pointer-target minimum, past WCAG 2.5.8's 24px. */
   &__eyebrow,
   &__title-row {
     .calendar-switcher {
@@ -153,9 +153,11 @@
     }
   }
 
-  /* The calendar name is user-entered, so the eyebrow switcher keeps its
-     case rather than taking the eyebrow's uppercase. */
+  /* The calendar name is user-entered, so the eyebrow switcher shows it as
+     typed, as every other switcher does, rather than in the eyebrow's
+     uppercase and tracking. */
   &__eyebrow .calendar-switcher__label {
+    letter-spacing: normal;
     text-transform: none;
   }
 

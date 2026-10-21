@@ -38,7 +38,7 @@ A separate per-editor toggle exists to let a specific editor review reports file
 
 ## Invite an editor
 
-Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title, on a phone at the top of the **Calendar** list. The first time you visit, the list is empty.
+Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen. The first time you visit, the list is empty.
 
 Click <Btn>Add Editor</Btn>, enter the email address of the person you want to add, and submit.
 
