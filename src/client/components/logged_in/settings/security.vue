@@ -127,7 +127,7 @@ onMounted(loadEmail);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--pav-color-interactive-active);
+  color: var(--pav-color-interactive-active-text);
   background: transparent;
   border: none;
   border-radius: 0.5rem;

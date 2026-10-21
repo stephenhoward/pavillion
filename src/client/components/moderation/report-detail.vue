@@ -683,7 +683,7 @@ onMounted(async () => {
     font-weight: var(--pav-font-weight-medium);
     text-transform: uppercase;
     letter-spacing: var(--pav-letter-spacing-wider);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
   }
 
   &__info-value {
@@ -774,7 +774,7 @@ onMounted(async () => {
   // Escalation timeline
   &__empty-history {
     font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-500);
+    color: var(--pav-text-secondary);
     font-style: italic;
   }
 

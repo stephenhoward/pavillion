@@ -11,11 +11,18 @@
 }
 
 /* PolicyLink sets its own margin and size; in a settings footer it aligns
-   with the rows above it. */
+   with the rows above it. The link sits inside a sentence, so it carries an
+   underline and the active-text colour rather than the reset's brand orange,
+   which reads at 2.8:1 on the surface and too close to the sentence's ink. */
 @mixin settings-footer-policy-link {
   .policy-link {
     padding-inline: var(--pav-space-3);
     color: var(--pav-text-secondary);
+
+    a {
+      color: var(--pav-color-interactive-active-text);
+      text-decoration: underline;
+    }
   }
 }
 

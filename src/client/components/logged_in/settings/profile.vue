@@ -278,7 +278,7 @@ onMounted(loadProfile);
   margin-inline-start: auto;
   padding: 0.125rem 0.5rem;
   font-size: 0.75rem;
-  color: var(--pav-text-muted);
+  color: var(--pav-text-secondary);
   background: var(--pav-interactive-disabled);
   border-radius: 9999px;
 }
