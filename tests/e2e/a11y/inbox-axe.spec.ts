@@ -132,9 +132,11 @@ test.describe('Inbox accessibility scans', () => {
     await expect(reportRegion(page)).toBeFocused();
 
     // AxeBuilder.include takes CSS, not a role locator. The report region
-    // carries no id or class, and is the page's one labelled region.
+    // carries no id or class and is named by a translated aria-label, so it
+    // is selected as the region wrapping the report detail — the element
+    // `reportRegion` finds by role and name.
     const results = await new AxeBuilder({ page })
-      .include('[role="region"][aria-labelledby]')
+      .include('[role="region"]:has(> .report-detail)')
       .withTags(WCAG_TAGS)
       .disableRules(KNOWN_DESIGN_TOKEN_VIOLATIONS)
       .analyze();
