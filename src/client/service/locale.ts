@@ -4,6 +4,7 @@ import { createI18nConfig } from '@/common/i18n/config';
 
 import { readLocaleCookie, writeLocaleCookie } from '@/common/i18n/cookie';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import AccountService from '@/client/service/account';
 
 // Import English translation resources
 import enSystem from '@/client/locales/en/system.json';
@@ -186,25 +187,54 @@ export const initI18Next = (serverLanguage?: string) => {
 };
 
 /**
- * Applies the account's preferred language to i18next if it differs from the
- * currently active language.
+ * Applies an account's saved language to the UI and writes the pavilion_locale
+ * cookie so the next load in this browser starts in it.
  *
- * Called after a user's profile is loaded to ensure the UI matches their stored
- * language preference. Does nothing if the account language is invalid or already
- * matches the current i18next language.
+ * A missing or unsupported language means the account has no saved preference:
+ * the cookie, browser and instance-default chain from `detectLanguage` stays
+ * in charge, and no cookie is written.
  *
- * @param language - The account's stored language preference code
+ * @param language - The account's saved language code, or null when unset
  */
-export async function applyAccountLanguage(language: string): Promise<void> {
+export async function applyAccountLanguage(language: string | null | undefined): Promise<void> {
   if (!language || !isValidLanguageCode(language)) {
     return;
   }
+
+  writeLocaleCookie(language);
 
   if (i18next.language === language) {
     return;
   }
 
   await i18next.changeLanguage(language);
+}
+
+/**
+ * Reads the signed-in account's saved language and applies it.
+ *
+ * Called once when the client boots and once after a login, so a later
+ * choice made in this browser holds until the next reload. Does nothing
+ * without a signed-in session, so an anonymous visitor never gets the cookie.
+ * A failed read leaves the detected language in place.
+ *
+ * @param authn - The session whose account language to apply
+ * @param accountService - Service used to read the account's saved language
+ */
+export async function applySavedAccountLanguage(
+  authn: { isLoggedIn(): boolean },
+  accountService: AccountService = new AccountService(),
+): Promise<void> {
+  if (!authn.isLoggedIn()) {
+    return;
+  }
+
+  try {
+    await applyAccountLanguage(await accountService.getPreferredLanguage());
+  }
+  catch {
+    // The UI stays in the detected language; nothing else depends on this.
+  }
 }
 
 /**

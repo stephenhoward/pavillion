@@ -44,7 +44,9 @@ export function readLocaleCookie(): string | null {
  * Cookie attributes: SameSite=Lax, max-age=31536000 (1 year).
  * The Secure attribute is added only when the page is served over HTTPS,
  * so that local HTTP development environments do not silently reject the cookie.
- * This function must only be called on explicit user action.
+ * This function must only be called to persist a language a person chose: a
+ * selection made in this browser, or a signed-in account's saved language.
+ * Never call it for an anonymous visitor who has not picked a language.
  *
  * This utility does not validate locale codes. Callers should validate
  * against AVAILABLE_LANGUAGES (via isValidLanguageCode) before writing.

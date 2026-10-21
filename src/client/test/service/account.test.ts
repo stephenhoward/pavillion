@@ -57,6 +57,35 @@ describe('AccountService', () => {
     });
   });
 
+  describe('getPreferredLanguage', () => {
+    it('returns the saved language from the current account', async () => {
+      const axiosGetStub = sandbox.stub(axios, 'get').resolves({ data: { id: '123', language: 'fr' } });
+
+      const result = await service.getPreferredLanguage();
+
+      expect(axiosGetStub.calledWith('/api/v1/accounts/me')).toBe(true);
+      expect(result).toBe('fr');
+    });
+
+    it('returns null when the account has no saved language', async () => {
+      sandbox.stub(axios, 'get').resolves({ data: { id: '123', language: null } });
+
+      expect(await service.getPreferredLanguage()).toBeNull();
+    });
+
+    it('returns null for an unsupported language code', async () => {
+      sandbox.stub(axios, 'get').resolves({ data: { id: '123', language: 'xx' } });
+
+      expect(await service.getPreferredLanguage()).toBeNull();
+    });
+
+    it('throws a mapped error when the request fails', async () => {
+      sandbox.stub(axios, 'get').rejects(new Error('API Error'));
+
+      await expect(service.getPreferredLanguage()).rejects.toThrow(UnknownError);
+    });
+  });
+
   describe('updateProfile', () => {
     it('should update user display name', async () => {
       const mockUpdatedProfile = {

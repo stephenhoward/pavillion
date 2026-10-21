@@ -2,6 +2,7 @@
 import { reactive, inject, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { isValidEmail } from '@/common/validation/email';
+import { applySavedAccountLanguage } from '@/client/service/locale';
 import ErrorAlert from './error-alert.vue';
 
 interface Props {
@@ -48,6 +49,7 @@ async function doLogin() {
 
     if ( await authn.login(state.email,state.password) ) {
       state.err = '';
+      await applySavedAccountLanguage(authn);
       emit('success');
     }
     else {

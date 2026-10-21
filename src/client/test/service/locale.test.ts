@@ -25,7 +25,8 @@ vi.mock('@/common/i18n/config', () => ({
 
 import { readLocaleCookie, writeLocaleCookie } from '@/common/i18n/cookie';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
-import { detectLanguage, initI18Next, applyAccountLanguage, changeLanguage } from '@/client/service/locale';
+import { detectLanguage, initI18Next, applyAccountLanguage, applySavedAccountLanguage, changeLanguage } from '@/client/service/locale';
+import AccountService from '@/client/service/account';
 
 describe('locale service', () => {
   beforeEach(() => {
@@ -246,36 +247,93 @@ describe('locale service', () => {
   });
 
   describe('applyAccountLanguage', () => {
-    it('should change language when account language differs from current', async () => {
+    it('should change language and write the cookie when the account language differs', async () => {
       (i18next as any).language = 'en';
 
       await applyAccountLanguage('es');
 
       expect(i18next.changeLanguage).toHaveBeenCalledWith('es');
+      expect(writeLocaleCookie).toHaveBeenCalledWith('es');
     });
 
-    it('should not change language when account language matches current', async () => {
+    it('should write the cookie but not change language when it already matches', async () => {
       (i18next as any).language = 'es';
 
       await applyAccountLanguage('es');
 
       expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).toHaveBeenCalledWith('es');
     });
 
-    it('should not change language when account language is invalid', async () => {
+    it('should leave language and cookie alone when the account language is invalid', async () => {
       (i18next as any).language = 'en';
 
       await applyAccountLanguage('xx');
 
       expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).not.toHaveBeenCalled();
     });
 
-    it('should not change language when account language is empty string', async () => {
-      (i18next as any).language = 'en';
+    it('should leave language and cookie alone when the account has no saved language', async () => {
+      (i18next as any).language = 'es';
 
+      await applyAccountLanguage(null);
       await applyAccountLanguage('');
 
       expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).not.toHaveBeenCalled();
+      expect(i18next.language).toBe('es');
+    });
+  });
+
+  describe('applySavedAccountLanguage', () => {
+    const signedIn = { isLoggedIn: () => true };
+    const anonymous = { isLoggedIn: () => false };
+
+    function serviceReturning(language: string | null): AccountService {
+      const service = new AccountService();
+      vi.spyOn(service, 'getPreferredLanguage').mockResolvedValue(language);
+      return service;
+    }
+
+    it('applies the saved language for a signed-in account', async () => {
+      (i18next as any).language = 'en';
+
+      await applySavedAccountLanguage(signedIn, serviceReturning('fr'));
+
+      expect(i18next.changeLanguage).toHaveBeenCalledWith('fr');
+      expect(writeLocaleCookie).toHaveBeenCalledWith('fr');
+    });
+
+    it('leaves the detected language and cookie alone when no language is saved', async () => {
+      (i18next as any).language = 'es';
+
+      await applySavedAccountLanguage(signedIn, serviceReturning(null));
+
+      expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).not.toHaveBeenCalled();
+      expect(i18next.language).toBe('es');
+    });
+
+    it('does not read the account or write a cookie for an anonymous visitor', async () => {
+      const service = serviceReturning('fr');
+
+      await applySavedAccountLanguage(anonymous, service);
+
+      expect(service.getPreferredLanguage).not.toHaveBeenCalled();
+      expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).not.toHaveBeenCalled();
+    });
+
+    it('keeps the detected language when the account read fails', async () => {
+      (i18next as any).language = 'es';
+      const service = new AccountService();
+      vi.spyOn(service, 'getPreferredLanguage').mockRejectedValue(new Error('network'));
+
+      await expect(applySavedAccountLanguage(signedIn, service)).resolves.toBeUndefined();
+
+      expect(i18next.changeLanguage).not.toHaveBeenCalled();
+      expect(writeLocaleCookie).not.toHaveBeenCalled();
     });
   });
 

@@ -4,7 +4,8 @@
 // screen reader does not resolve `<label for>` onto an `<input>`, so the
 // fields are announced without their names even though browsers name them.
 // See the environment note in src/common/test-utils/screen-reader.ts.
-import { expect, describe, it, afterEach } from 'vitest';
+import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
@@ -13,6 +14,12 @@ import { mountComponent } from '@/client/test/lib/vue';
 import LoginForm from '@/client/components/logged_out/LoginForm.vue';
 import ErrorAlert from '@/client/components/logged_out/error-alert.vue';
 import { screenReader, type ScreenReaderHandle } from '@/common/test-utils/screen-reader';
+import { applySavedAccountLanguage } from '@/client/service/locale';
+
+vi.mock('@/client/service/locale', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/service/locale')>()),
+  applySavedAccountLanguage: vi.fn().mockResolvedValue(undefined),
+}));
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -34,6 +41,7 @@ const mountedLoginForm = (options: MountedLoginFormOptions = {}) => {
     login: async () => {
       return false;
     },
+    isLoggedIn: () => false,
   };
 
   const wrapper = mountComponent(LoginForm, router, {
@@ -281,6 +289,45 @@ describe('LoginForm Behavior', () => {
   });
 });
 
+
+describe('LoginForm account language', () => {
+  const sandbox = sinon.createSandbox();
+  beforeEach(() => vi.mocked(applySavedAccountLanguage).mockClear());
+  afterEach(() => sandbox.restore());
+
+  const submitValidLogin = async (wrapper: ReturnType<typeof mountedLoginForm>['wrapper']) => {
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+    await wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+  };
+
+  it('applies the account\'s saved language after a successful login, before emitting success', async () => {
+    const { wrapper, authn } = mountedLoginForm();
+    sandbox.stub(authn, 'login').resolves(true);
+    let emittedWhenApplied: unknown;
+    vi.mocked(applySavedAccountLanguage).mockImplementationOnce(async () => {
+      emittedWhenApplied = wrapper.emitted('success');
+    });
+
+    await submitValidLogin(wrapper);
+
+    expect(applySavedAccountLanguage).toHaveBeenCalledTimes(1);
+    expect(applySavedAccountLanguage).toHaveBeenCalledWith(authn);
+    expect(emittedWhenApplied).toBeUndefined();
+    expect(wrapper.emitted('success')).toHaveLength(1);
+  });
+
+  it('does not apply an account language when the login fails', async () => {
+    const { wrapper, authn } = mountedLoginForm();
+    sandbox.stub(authn, 'login').resolves(false);
+
+    await submitValidLogin(wrapper);
+
+    expect(applySavedAccountLanguage).not.toHaveBeenCalled();
+    expect(wrapper.emitted('success')).toBeUndefined();
+  });
+});
 
 describe('LoginForm', () => {
   describe('screen reader announcement', () => {

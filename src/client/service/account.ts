@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Account } from '@/common/model/account';
 import { UnauthenticatedError, UnknownError } from '@/common/exceptions';
 import { handleApiError } from '@/client/service/utils';
+import { isValidLanguageCode } from '@/common/i18n/languages';
 
 const errorMap = {
   UnauthenticatedError,
@@ -21,6 +22,26 @@ export default class AccountService {
     }
     catch (error) {
       console.error('Error fetching profile:', error);
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
+   * Get the current user's saved language preference.
+   *
+   * Reads the raw value rather than going through `Account.fromObject`, which
+   * substitutes 'en' for an unset language: callers need to tell "no saved
+   * preference" apart from a saved English one.
+   *
+   * @returns The saved language code, or null when none is saved
+   */
+  async getPreferredLanguage(): Promise<string | null> {
+    try {
+      const response = await axios.get('/api/v1/accounts/me');
+      const language = response.data?.language;
+      return typeof language === 'string' && isValidLanguageCode(language) ? language : null;
+    }
+    catch (error) {
       handleApiError(error, errorMap);
     }
   }

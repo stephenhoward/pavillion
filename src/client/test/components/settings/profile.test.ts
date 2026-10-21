@@ -69,12 +69,13 @@ describe('Profile settings leaf', () => {
       expect(username.text()).toContain('testuser');
     });
 
-    it('applies the account language after loading the profile', async () => {
+    it('does not re-apply the account language on mount, so a choice made in this browser holds', async () => {
       vi.spyOn(AccountService.prototype, 'getProfile').mockResolvedValue(buildProfile('fr'));
       mountProfile();
       await flushPromises();
 
-      expect(localeService.applyAccountLanguage).toHaveBeenCalledWith('fr');
+      expect(localeService.applyAccountLanguage).not.toHaveBeenCalled();
+      expect(localeService.changeLanguage).not.toHaveBeenCalled();
     });
 
     it('saves the display name on blur and announces success', async () => {
