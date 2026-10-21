@@ -92,11 +92,11 @@ describe('settings guards', () => {
       });
     });
 
-    it('forwards root to the editors leaf when the current calendar is edited', async () => {
+    it('forwards root to the widget leaf when the current calendar is edited', async () => {
       useCalendarStore().setSelectedCalendar('e1');
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('root'), route())).toEqual({
-        name: 'calendar_editors', params: { calendar: 'shared' },
+        name: 'calendar_widget', params: { calendar: 'shared' },
       });
     });
 
@@ -121,10 +121,10 @@ describe('settings guards', () => {
       });
     });
 
-    it('forwards a calendar the viewer edits to its editors leaf', async () => {
+    it('forwards a calendar the viewer edits to its widget leaf', async () => {
       const { settingsIndexRedirect } = createSettingsGuards(deps);
       expect(await run(settingsIndexRedirect('calendar'), route({ calendar: 'shared' }))).toEqual({
-        name: 'calendar_editors', params: { calendar: 'shared' },
+        name: 'calendar_widget', params: { calendar: 'shared' },
       });
     });
 

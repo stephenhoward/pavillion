@@ -60,7 +60,7 @@ What happens to the events they created or edited: nothing. Events belong to the
 
 What happens to a pending invitation if you change your mind before the person accepts: open the **Pending Invitations** section of the same page and click <Btn>Cancel</Btn> on the row. The invitation link stops working immediately, and the invited person — if they hadn't yet acted on the email — will see "this invitation is no longer valid" if they click it later.
 
-If an editor wants to remove *themselves* from a calendar — they're stepping back, the project ended, the calendar is no longer something they want to be associated with — they can. Their Editors page shows a <Btn>Leave Calendar</Btn> button at the bottom of the editors list. Clicking it walks them through the same removal flow without needing the owner's involvement. This is a small but important property: editor membership isn't something the owner can compel; people get to opt out.
+If an editor wants to step back from a calendar — the project ended, the calendar is no longer something they want to be associated with — they ask you to remove them, and you follow the steps above. The Editors page is yours alone as the owner; editors don't see it.
 
 ## Patterns for small teams
 

@@ -190,7 +190,7 @@ describe.each([
       wrapper = null;
     });
 
-    it('goes legacy redirect, then the owner gate, to editors without mounting reports', async () => {
+    it('goes legacy redirect, then the owner gate, to widget without mounting reports', async () => {
       const getReport = vi.spyOn(ModerationService.prototype, 'getReport');
       const committed: string[] = [];
       router.afterEach((to, _from, failure) => {
@@ -204,9 +204,9 @@ describe.each([
       wrapper = mountComponent({ template: '<RouterView />' }, router, { pinia, attachTo: document.body });
       await flushPromises();
 
-      expect(committed).toEqual(['/settings/calendar/shared/editors']);
-      expect(current().fullPath).toBe('/settings/calendar/shared/editors');
-      expect(wrapper.find('[data-stub="EditorsLeaf"]').exists()).toBe(true);
+      expect(committed).toEqual(['/settings/calendar/shared/widget']);
+      expect(current().fullPath).toBe('/settings/calendar/shared/widget');
+      expect(wrapper.find('[data-stub="WidgetLeaf"]').exists()).toBe(true);
       expect(wrapper.find('[data-stub="ReportsDashboard"]').exists()).toBe(false);
       expect(wrapper.find('[data-stub="ReportDetail"]').exists()).toBe(false);
       expect(getReport).not.toHaveBeenCalled();

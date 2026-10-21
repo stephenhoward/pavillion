@@ -119,43 +119,31 @@ describe('calendar settings gate with the settings layout', () => {
 
   const heading = (w: VueWrapper) => w.find('h1.settings-page-header__title');
 
-  it('keeps an editor on editors with no navigation and no focus move', async () => {
-    await mountAt('/settings/calendar/shared/editors');
+  it('keeps an editor on widget with no navigation and no focus move', async () => {
+    await mountAt('/settings/calendar/shared/widget');
     const push = vi.spyOn(router.options.history, 'push');
     const replace = vi.spyOn(router.options.history, 'replace');
 
     await navigate('/settings/calendar/shared/general');
 
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
     expect(focusLog).toEqual([]);
   });
 
-  it('moves focus once, to an h1 reading Editors, when an editor is refused from widget', async () => {
-    const w = await mountAt('/settings/calendar/shared/widget');
-
-    await navigate('/settings/calendar/shared/general');
-
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
-    expect(focusLog).toEqual(['H1:Editors']);
-    expect(heading(w).text()).toBe('Editors');
-    expect(w.find('[data-leaf="GeneralLeaf"]').exists()).toBe(false);
-    expect(w.find('[data-leaf="EditorsLeaf"]').exists()).toBe(true);
-  });
-
-  it('lands an owner of one calendar on editors of a calendar they only edit', async () => {
+  it('lands an owner of one calendar on widget of a calendar they only edit', async () => {
     const w = await mountAt('/settings/calendar/riverside/general');
     expect(w.find('[data-leaf="GeneralLeaf"]').exists()).toBe(true);
 
     await navigate('/settings/calendar/shared/general');
 
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
-    expect(w.find('[data-leaf="EditorsLeaf"]').exists()).toBe(true);
+    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
+    expect(w.find('[data-leaf="WidgetLeaf"]').exists()).toBe(true);
     expect(w.find('[data-leaf="GeneralLeaf"]').exists()).toBe(false);
   });
 
-  it('lands a cold load of a refused leaf on editors before commit, with no focus move', async () => {
+  it('lands a cold load of a refused leaf on widget before commit, with no focus move', async () => {
     const committed: string[] = [];
     router.afterEach((to, _from, failure) => {
       if (!failure) {
@@ -169,13 +157,13 @@ describe('calendar settings gate with the settings layout', () => {
     wrapper = mountComponent({ template: '<RouterView />' }, router, { pinia, attachTo: document.body });
     await flushPromises();
 
-    expect(committed).toEqual(['/settings/calendar/shared/editors']);
-    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
-    expect(heading(wrapper).text()).toBe('Editors');
+    expect(committed).toEqual(['/settings/calendar/shared/widget']);
+    expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
+    expect(heading(wrapper).text()).toBe('Widget');
     expect(focusLog).toEqual([]);
   });
 
-  it('moves focus once, to an h1 reading Editors, on entry from Profile to a refused leaf', async () => {
+  it('moves focus once, to an h1 reading Widget, on entry from Profile to a refused leaf', async () => {
     const w = await mountAt('/settings/account/profile');
     const committed: string[] = [];
     router.afterEach((to, _from, failure) => {
@@ -186,8 +174,8 @@ describe('calendar settings gate with the settings layout', () => {
 
     await navigate('/settings/calendar/shared/general');
 
-    expect(committed).toEqual(['/settings/calendar/shared/editors']);
-    expect(focusLog).toEqual(['H1:Editors']);
-    expect(heading(w).text()).toBe('Editors');
+    expect(committed).toEqual(['/settings/calendar/shared/widget']);
+    expect(focusLog).toEqual(['H1:Widget']);
+    expect(heading(w).text()).toBe('Widget');
   });
 });

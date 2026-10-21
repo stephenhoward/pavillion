@@ -131,7 +131,7 @@ describe('settings list page', () => {
       { label: 'calendar owner', path: '/settings/calendar/riverside', group: 'calendar', param: 'riverside',
         calendars: [owned()], isAdmin: false, expected: { name: 'calendar_general', params: { calendar: 'riverside' } } },
       { label: 'calendar editor', path: '/settings/calendar/shared', group: 'calendar', param: 'shared',
-        calendars: [edited()], isAdmin: false, expected: { name: 'calendar_editors', params: { calendar: 'shared' } } },
+        calendars: [edited()], isAdmin: false, expected: { name: 'calendar_widget', params: { calendar: 'shared' } } },
       { label: 'root', path: '/settings', group: 'root', param: undefined,
         calendars: [owned()], isAdmin: false, expected: { name: 'calendar_general', params: { calendar: 'riverside' } } },
       { label: 'account', path: '/settings/account', group: 'account', param: undefined,
@@ -330,7 +330,7 @@ describe('settings list page', () => {
 
     it('lists the calendar leaves the viewer may see', async () => {
       const w = await mountAt('/settings/calendar/shared', { calendars: [owned(), edited()] });
-      expect(rowLabels(w)).toEqual(['Editors', 'Widget']);
+      expect(rowLabels(w)).toEqual(['Widget']);
     });
 
     it('omits Funding Plan from the account list when funding is off', async () => {

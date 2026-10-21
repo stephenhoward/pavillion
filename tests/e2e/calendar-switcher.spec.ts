@@ -131,9 +131,9 @@ test.describe('Calendar switcher', () => {
 
   test('switching calendar on a settings leaf stays on the same leaf', async ({ page }) => {
     // MultiCalendar owns multicalendar_calendar and edits testuser_calendar;
-    // Editors is visible to owner and editor alike.
+    // Widget is visible to owner and editor alike.
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
-    await gotoSettings(page, env.baseURL, calendarLeaf('multicalendar_calendar', 'editors'));
+    await gotoSettings(page, env.baseURL, calendarLeaf('multicalendar_calendar', 'widget'));
 
     const rows = await openSwitcherLinkRows(page);
     // The sheet lists calendars only: Account and Instance live in the tree.
@@ -142,8 +142,8 @@ test.describe('Calendar switcher', () => {
 
     await rows.and(page.locator('[data-url-name="testuser_calendar"]')).getByRole('link').click();
 
-    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/editors$/);
-    await expect(settingsTitle(page, 'Editors')).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/widget$/);
+    await expect(settingsTitle(page, 'Widget')).toBeVisible();
   });
 
   test('switching from an owner-only leaf to a calendar the viewer edits lands on its first visible leaf', async ({ page }) => {
@@ -153,8 +153,8 @@ test.describe('Calendar switcher', () => {
     const rows = await openSwitcherLinkRows(page);
     await rows.and(page.locator('[data-url-name="testuser_calendar"]')).getByRole('link').click();
 
-    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/editors$/);
-    await expect(settingsTitle(page, 'Editors')).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/calendar\/testuser_calendar\/widget$/);
+    await expect(settingsTitle(page, 'Widget')).toBeVisible();
   });
 
   test('the instance settings are reachable at desktop width inside one main landmark', async ({ page }) => {

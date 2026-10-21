@@ -39,8 +39,9 @@ export function routeFor(target: NotificationTarget | null): RouteLocationRaw | 
     case 'event':
       return { name: 'event_edit', params: { eventId: target.eventId } };
     case 'calendar':
-      // Emitted for an editor invitation; the editors leaf is visible to every member.
-      return { name: 'calendar_editors', params: { calendar: target.calendarUrlName } };
+      // Emitted for an editor invitation. The invitee is an editor, not the
+      // owner, so the link opens the first calendar leaf an editor can see.
+      return { name: 'calendar_widget', params: { calendar: target.calendarUrlName } };
     case 'moderation_report':
       return { name: 'moderation_report_detail', params: { reportId: target.reportId } };
     case 'owner_report':

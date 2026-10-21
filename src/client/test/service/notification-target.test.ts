@@ -12,9 +12,9 @@ describe('routeFor', () => {
     });
   });
 
-  it('maps a calendar target to the calendar_editors leaf', () => {
+  it('maps a calendar target to the calendar_widget leaf, the first one an invited editor can open', () => {
     expect(routeFor({ kind: 'calendar', calendarUrlName: 'my-calendar' })).toEqual({
-      name: 'calendar_editors',
+      name: 'calendar_widget',
       params: { calendar: 'my-calendar' },
     });
   });

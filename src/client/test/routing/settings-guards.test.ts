@@ -225,7 +225,7 @@ describe('settings routes on the real route table', () => {
 
     it.each([
       ['an owner on General', [owned('o1', 'riverside')], '/settings/calendar/riverside/general'],
-      ['an editor on Editors', [edited('e1', 'shared')], '/settings/calendar/shared/editors'],
+      ['an editor on Widget', [edited('e1', 'shared')], '/settings/calendar/shared/widget'],
       ['a viewer with no calendars on Profile', [], '/settings/account/profile'],
     ])('lands %s at md+', async (_who, infos, expected) => {
       viewerHolds(...infos);
@@ -304,7 +304,7 @@ describe('settings routes on the real route table', () => {
       ['owner', false, '/settings/calendar/riverside'],
       ['owner', true, '/settings/calendar/riverside/general'],
       ['editor', false, '/settings/calendar/riverside'],
-      ['editor', true, '/settings/calendar/riverside/editors'],
+      ['editor', true, '/settings/calendar/riverside/widget'],
     ] as const)('lands an %s at md+ = %s on %s', async (role, sidebar, expected) => {
       viewerHolds(role === 'owner' ? owned('c1', 'riverside') : edited('c1', 'riverside'));
       const router = routerAt(sidebar);
@@ -341,7 +341,7 @@ describe('settings routes on the real route table', () => {
 
       await router.push(path);
 
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
     });
   });
 
@@ -493,13 +493,14 @@ describe('settings routes on the real route table', () => {
 
     it.each([
       ['/settings/calendar/shared/general'],
+      ['/settings/calendar/shared/editors'],
       ['/settings/calendar/shared/reports/9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
       ['/settings/calendar/shared?tab=reports&report=9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
-    ])('replaces an editor entering %s with editors, query dropped', async (path) => {
+    ])('replaces an editor entering %s with widget, query dropped', async (path) => {
       viewerHas('editor');
       const router = routerAt(false);
       await router.push(path);
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
     });
 
     it('keeps Profile when an editor is refused on entry from it', async () => {
@@ -508,7 +509,7 @@ describe('settings routes on the real route table', () => {
       await router.push('/settings/account/profile');
 
       await router.push('/settings/calendar/shared/general');
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/editors');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/shared/widget');
 
       await traverse(router, -1);
       expect(router.currentRoute.value.path).toBe('/settings/account/profile');

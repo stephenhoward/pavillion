@@ -165,7 +165,7 @@ interface LeafDefinition {
 
 const CALENDAR_LEAVES: readonly LeafDefinition[] = [
   { id: 'general', routeName: 'calendar_general', labelKey: 'nav.calendar.general', icon: Settings, ownerOnly: true },
-  { id: 'editors', routeName: 'calendar_editors', labelKey: 'nav.calendar.editors', icon: Users },
+  { id: 'editors', routeName: 'calendar_editors', labelKey: 'nav.calendar.editors', icon: Users, ownerOnly: true },
   {
     id: 'reports', routeName: 'calendar_reports', labelKey: 'nav.calendar.reports', icon: ShieldCheck, ownerOnly: true,
     subRoutes: ['calendar_report_detail'],

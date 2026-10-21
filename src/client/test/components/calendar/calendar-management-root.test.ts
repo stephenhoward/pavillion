@@ -183,18 +183,15 @@ describe('CalendarManagementRoot', () => {
   });
 
   describe('props', () => {
-    it.each([
-      ['owner', true],
-      ['editor', false],
-    ] as const)('passes isOwner to the editors leaf for an %s', async (role, isOwner) => {
-      stubLoadedCalendars([makeCalendarInfo('my-calendar', role)]);
+    it('passes isOwner to the editors leaf for an owner', async () => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
 
       const { wrapper } = await mountAt('/settings/calendar/my-calendar/editors');
 
       const editors = wrapper.findComponent(EditorsStub);
       expect(editors.exists()).toBe(true);
       expect(editors.props('calendarId')).toBe('cal-uuid-1');
-      expect(editors.props('isOwner')).toBe(isOwner);
+      expect(editors.props('isOwner')).toBe(true);
     });
 
     it('passes the calendar url name to the widget leaf', async () => {
@@ -218,10 +215,11 @@ describe('CalendarManagementRoot', () => {
   describe('owner-only leaves', () => {
     it.each([
       ['general', 'GeneralStub'],
+      ['editors', 'EditorsStub'],
       ['reports', 'ReportsStub'],
       [`reports/${REPORT_ID}`, 'ReportsStub'],
       ['import', 'ImportStub'],
-    ])('replaces an editor at %s with editors, dropping the query', async (leaf, stub) => {
+    ])('replaces an editor at %s with widget, dropping the query', async (leaf, stub) => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);
 
       const router = buildRouter();
@@ -232,31 +230,31 @@ describe('CalendarManagementRoot', () => {
       wrapper = mountComponent(App, router, { pinia });
       await flushPromises();
 
-      expect(router.currentRoute.value.name).toBe('calendar_editors');
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/editors');
+      expect(router.currentRoute.value.name).toBe('calendar_widget');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/widget');
       expect(push).not.toHaveBeenCalled();
       expect(replace).toHaveBeenCalledTimes(1);
       expect(mounts).not.toContain(stub);
-      expect(mounts).toEqual(['EditorsStub']);
+      expect(mounts).toEqual(['WidgetStub']);
     });
 
-    it('keeps an editor on editors when they navigate in-app to an owner-only leaf', async () => {
+    it('keeps an editor on widget when they navigate in-app to an owner-only leaf', async () => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);
-      const { router } = await mountAt('/settings/calendar/my-calendar/editors');
+      const { router } = await mountAt('/settings/calendar/my-calendar/widget');
       const push = vi.spyOn(router.options.history, 'push');
       const replace = vi.spyOn(router.options.history, 'replace');
 
       await router.push({ name: 'calendar_reports', params: { calendar: 'my-calendar' } }).catch(() => {});
       await flushPromises();
 
-      expect(router.currentRoute.value.name).toBe('calendar_editors');
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/editors');
-      expect(mounts).toEqual(['EditorsStub']);
+      expect(router.currentRoute.value.name).toBe('calendar_widget');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/widget');
+      expect(mounts).toEqual(['WidgetStub']);
       expect(push).not.toHaveBeenCalled();
       expect(replace).not.toHaveBeenCalled();
     });
 
-    it('unmounts an owner-only leaf and replaces to editors when ownership is lost', async () => {
+    it('unmounts an owner-only leaf and replaces to widget when ownership is lost', async () => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
       const { router } = await mountAt('/settings/calendar/my-calendar/general');
       expect(mounts).toEqual(['GeneralStub']);
@@ -266,10 +264,10 @@ describe('CalendarManagementRoot', () => {
       useCalendarStore().setCalendarInfos([makeCalendarInfo('my-calendar', 'editor')], currentAccountId());
       await flushPromises();
 
-      expect(router.currentRoute.value.name).toBe('calendar_editors');
-      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/editors');
+      expect(router.currentRoute.value.name).toBe('calendar_widget');
+      expect(router.currentRoute.value.fullPath).toBe('/settings/calendar/my-calendar/widget');
       expect(unmounts).toEqual(['GeneralStub']);
-      expect(mounts).toEqual(['GeneralStub', 'EditorsStub']);
+      expect(mounts).toEqual(['GeneralStub', 'WidgetStub']);
       expect(push).not.toHaveBeenCalled();
       expect(replace).toHaveBeenCalledTimes(1);
     });
@@ -288,7 +286,6 @@ describe('CalendarManagementRoot', () => {
     });
 
     it.each([
-      ['editors', 'calendar_editors', 'EditorsStub'],
       ['widget', 'calendar_widget', 'WidgetStub'],
     ])('keeps an editor on %s', async (leaf, name, stub) => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);

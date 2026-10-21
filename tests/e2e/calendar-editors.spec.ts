@@ -167,22 +167,23 @@ test.describe('Calendar Editor Collaboration', () => {
     // Runs while the invitee holds editor access, between the accept and
     // remove tests. The describe's beforeEach logs `page` in as admin, so the
     // editor gets a context of their own.
-    test('an editor\'s direct request for an owner-only leaf lands on Editors', async ({ browser }) => {
+    test('an editor\'s direct request for an owner-only leaf lands on Widget', async ({ browser }) => {
       const context = await browser.newContext();
       const editorPage = await context.newPage();
       try {
         await loginViaUi(editorPage, env.baseURL, INVITEE_EMAIL, INVITEE_PASSWORD);
 
-        // Reports is owner-only: the editor is replaced to Editors, query dropped
-        await editorPage.goto(env.baseURL + calendarLeafPath('test_calendar', 'reports') + '?x=1');
-        await expect(editorPage).toHaveURL(env.baseURL + calendarLeafPath('test_calendar', 'editors'));
-        await expect(settingsTitle(editorPage, 'Editors')).toBeVisible();
+        // Reports and Editors are owner-only: the editor is replaced to Widget, query dropped
+        for (const leaf of ['reports', 'editors'] as const) {
+          await editorPage.goto(env.baseURL + calendarLeafPath('test_calendar', leaf) + '?x=1');
+          await expect(editorPage).toHaveURL(env.baseURL + calendarLeafPath('test_calendar', 'widget'));
+          await expect(settingsTitle(editorPage, 'Widget')).toBeVisible();
+        }
 
-        // The tree's Calendar group offers the editor Editors and Widget only
+        // The tree's Calendar group offers the editor Widget only
         const calendarGroup = settingsGroup(settingsTree(editorPage), 'Calendar');
-        await expect(settingsRow(calendarGroup, 'Editors')).toBeVisible();
         await expect(settingsRow(calendarGroup, 'Widget')).toBeVisible();
-        for (const ownerOnly of ['General', 'Reports', 'Import']) {
+        for (const ownerOnly of ['General', 'Editors', 'Reports', 'Import']) {
           await expect(settingsRow(calendarGroup, ownerOnly)).toHaveCount(0);
         }
       }

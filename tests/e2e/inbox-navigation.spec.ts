@@ -113,7 +113,7 @@ test.describe('Inbox row navigation — one case per target kind', () => {
     expect(page.url()).toBe(`${env.baseURL}/event/${ADMIN_EVENT_ID}`);
   });
 
-  test('calendar target (verb: EditorInvited) opens the calendar\'s Editors page', async ({ page }) => {
+  test('calendar target (verb: EditorInvited) opens the calendar\'s Widget page, the first leaf an editor sees', async ({ page }) => {
     // `EditorInvited` stands in for the `calendar` kind. `EditorRevoked`
     // stores the same object shape but deliberately derives `null`, which is
     // a unit-tier distinction, not a routing one.
@@ -121,12 +121,12 @@ test.describe('Inbox row navigation — one case per target kind', () => {
 
     const row = await inboxRow(page, 'invited you to edit');
     const objectLink = row.locator('a.object-link');
-    const editorsPath = calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'editors');
-    await expect(objectLink).toHaveAttribute('href', editorsPath);
+    const widgetPath = calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'widget');
+    await expect(objectLink).toHaveAttribute('href', widgetPath);
     await objectLink.click();
 
-    await page.waitForURL(`**${editorsPath}`, { timeout: 10000 });
-    expect(page.url()).toBe(`${env.baseURL}${editorsPath}`);
+    await page.waitForURL(`**${widgetPath}`, { timeout: 10000 });
+    expect(page.url()).toBe(`${env.baseURL}${widgetPath}`);
   });
 
   test('moderation_report target (verb: Flag, viewed as instance admin) opens the moderation queue', async ({ page }) => {

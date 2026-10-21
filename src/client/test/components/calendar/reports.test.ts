@@ -77,6 +77,7 @@ vi.mock('@/client/components/moderation/report-detail.vue', async (importOrigina
 
 const Leaf = defineComponent({ props: ['calendarId', 'isOwner', 'instanceHost', 'calendarUrlName'], render: () => h('div') });
 const EditorsLeaf = defineComponent({ props: ['calendarId', 'isOwner'], render: () => h('div', { 'data-editors': '' }) });
+const WidgetLeaf = defineComponent({ props: ['calendarId', 'isOwner', 'calendarUrlName'], render: () => h('div', { 'data-widget': '' }) });
 
 function buildRouter(): Router {
   const routes: RouteRecordRaw[] = [
@@ -87,7 +88,7 @@ function buildRouter(): Router {
       { path: 'reports', name: 'calendar_reports', component: CalendarReports },
       { path: 'reports/:reportId', name: 'calendar_report_detail', component: CalendarReports },
       { path: 'import', name: 'calendar_import', component: Leaf },
-      { path: 'widget', name: 'calendar_widget', component: Leaf },
+      { path: 'widget', name: 'calendar_widget', component: WidgetLeaf },
     ] },
     { path: '/admin/moderation/reports/:reportId', name: 'moderation_report_detail', component: Leaf },
   ];
@@ -402,8 +403,8 @@ describe('Calendar reports leaf', () => {
       const w = await mountAt(detailPath(REPORT_ID));
 
       expect(getReport).not.toHaveBeenCalled();
-      expect(fullPath()).toBe('/settings/calendar/my-calendar/editors');
-      expect(w.find('[data-editors]').exists()).toBe(true);
+      expect(fullPath()).toBe('/settings/calendar/my-calendar/widget');
+      expect(w.find('[data-widget]').exists()).toBe(true);
       expect(w.find('[data-dashboard]').exists()).toBe(false);
       expect(region(w).exists()).toBe(false);
     });

@@ -202,14 +202,14 @@ test.describe('desktop forward', () => {
     }
   });
 
-  test('an editor\'s calendar index forwards to Editors', async ({ page }) => {
+  test('an editor\'s calendar index forwards to Widget', async ({ page }) => {
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
 
     await gotoSettings(page, env.baseURL, {
       path: calendarIndexPath(TESTUSER_CALENDAR_URL_NAME),
-      title: 'Editors',
+      title: 'Widget',
     });
-    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'editors')));
+    await expect(page).toHaveURL(pathPattern(calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'widget')));
   });
 });
 

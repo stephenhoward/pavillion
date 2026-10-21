@@ -265,7 +265,7 @@ describe('settings tree', () => {
     const w = await mountAt('/settings/account/profile', {
       calendars: [new CalendarInfo(calendar('e1', 'shared', 'Shared Events'), 'editor')],
     });
-    expect(rows(w, 'Calendar')).toEqual(['Editors', 'Widget']);
+    expect(rows(w, 'Calendar')).toEqual(['Widget']);
   });
 
   it('omits the Calendar group when the viewer has no calendar', async () => {
