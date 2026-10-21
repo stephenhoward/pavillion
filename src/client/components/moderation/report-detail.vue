@@ -11,6 +11,7 @@ import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { ArrowLeft } from 'lucide-vue-next';
 import { useModerationStore } from '@/client/stores/moderation-store';
+import type { ReportDetailResponse } from '@/client/service/moderation';
 import { ReportStatus } from '@/common/model/report';
 import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
@@ -21,6 +22,11 @@ const props = defineProps<{
   reportId: string;
   /** An id for the report heading, so a surrounding region can be named by it. */
   headingId?: string;
+  /**
+   * The report, when the caller has already fetched it: it is shown as is,
+   * with no request of its own. Without it, the report is fetched on mount.
+   */
+  fetchedReport?: ReportDetailResponse;
 }>();
 
 const emit = defineEmits<{
@@ -224,14 +230,27 @@ const clearMessage = (field: 'actionSuccess' | 'notesSuccess', delay = 5000) => 
   }, delay);
 };
 
+/** Starts the owner notes field from the loaded report's notes. */
+const initOwnerNotes = () => {
+  if (report.value?.ownerNotes) {
+    state.ownerNotes = report.value.ownerNotes;
+  }
+};
+
+// A report the caller supplies goes into the store before the first render,
+// so the heading is there as soon as the view mounts.
+if (props.fetchedReport) {
+  store.setCurrentReport(props.fetchedReport);
+  initOwnerNotes();
+}
+
 onMounted(async () => {
+  if (props.fetchedReport) {
+    return;
+  }
   try {
     await store.fetchReport(props.calendarId, props.reportId);
-
-    // Initialize owner notes from fetched report
-    if (report.value?.ownerNotes) {
-      state.ownerNotes = report.value.ownerNotes;
-    }
+    initOwnerNotes();
   }
   catch {
     // Error is handled by the store

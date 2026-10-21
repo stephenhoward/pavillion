@@ -117,6 +117,45 @@ describe('ReportDetail', () => {
     });
   });
 
+  describe('Loading the report', () => {
+    const mountDetail = (props: Record<string, unknown>) => mount(ReportDetail, {
+      props: { calendarId: 'calendar-789', reportId: 'report-123', ...props },
+      global: {
+        plugins: [pinia],
+        stubs: { LoadingMessage: true, PillButton: true, ArrowLeft: true },
+      },
+    });
+
+    it('renders a report the caller already fetched without fetching it again', async () => {
+      const report = createMockReport(false);
+      report.ownerNotes = 'Checked with the organizer';
+      const fetchReport = sandbox.stub(store, 'fetchReport').resolves();
+
+      wrapper = mountDetail({ fetchedReport: { report, escalationHistory: [] } });
+
+      // The heading is there on the first render, before any promise settles.
+      expect(wrapper.find('h2.report-detail__title').exists()).toBe(true);
+      await flushPromises();
+
+      expect(fetchReport.called).toBe(false);
+      expect(store.currentReport?.report.id).toBe('report-123');
+      expect((wrapper.find('textarea.report-detail__textarea').element as HTMLTextAreaElement).value)
+        .toBe('Checked with the organizer');
+    });
+
+    it('fetches the report itself when the caller passes none', async () => {
+      const fetchReport = sandbox.stub(store, 'fetchReport').callsFake(async () => {
+        store.currentReport = { report: createMockReport(false), escalationHistory: [] };
+      });
+
+      wrapper = mountDetail({});
+      await flushPromises();
+
+      expect(fetchReport.calledOnceWithExactly('calendar-789', 'report-123')).toBe(true);
+      expect(wrapper.find('h2.report-detail__title').exists()).toBe(true);
+    });
+  });
+
   describe('Stale store report', () => {
     it('does not render a previous report left in the store by a failed fetch', async () => {
       const previous = createMockReport(false);
