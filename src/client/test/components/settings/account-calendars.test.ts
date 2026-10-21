@@ -85,7 +85,7 @@ describe('Account calendars screen', () => {
         authn: { isAdmin: () => false },
         site_config: { settings: () => ({ domain: 'pavillion.dev' }) },
       },
-      stubs: { CreateCalendarSheet: true, HelpButton: true },
+      stubs: { CreateCalendarSheet: true },
     });
     await flushPromises();
     return { wrapper, router, ensure };
@@ -248,7 +248,7 @@ describe('Account calendars screen', () => {
     wrapper = mountComponent(AccountCalendars, router, {
       pinia,
       provide: { authn: { isAdmin: () => false } },
-      stubs: { CreateCalendarSheet: true, HelpButton: true },
+      stubs: { CreateCalendarSheet: true },
     });
     await flushPromises();
 

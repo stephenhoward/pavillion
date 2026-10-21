@@ -732,6 +732,7 @@ test.describe('one page title and the header help button', () => {
   const leaves = [
     calendarLeaf(ADMIN_CALENDAR_URL_NAME, 'general'),
     settingsLeaf.profile,
+    settingsLeaf.calendars,
     ...([
       'settings',
       'accounts',

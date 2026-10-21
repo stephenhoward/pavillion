@@ -2,7 +2,7 @@
 /**
  * Account settings leaf: every calendar the account owns or edits, owned
  * first, the order the calendar switcher uses. The settings layout supplies
- * the page heading and the column.
+ * the page heading, its help button and the column.
  *
  * - A calendar's name links to the first settings screen its viewer sees on
  *   it (General for an owner, Widget for an editor), computed by the same
@@ -27,7 +27,6 @@ import type { CalendarInfo } from '@/common/model/calendar_info';
 import type { Calendar } from '@/common/model/calendar';
 import EmptyState from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import HelpButton from '@/client/components/common/help-button.vue';
 import CreateCalendarSheet from '@/client/components/logged_in/calendar/create-calendar-sheet.vue';
 import LeaveCalendarDialog from './leave-calendar-dialog.vue';
 import { firstVisibleLeaf, SETTINGS_GROUP_INDEX_ROUTES } from './nav-items';
@@ -101,10 +100,6 @@ async function onLeft() {
 
 <template>
   <div class="account-calendars">
-    <div class="account-calendars__help">
-      <HelpButton />
-    </div>
-
     <p v-if="loadFailed" class="alert alert--error" role="alert">{{ t('error_loading') }}</p>
 
     <LoadingMessage v-else-if="!store.loaded" :description="t('loading')" />
@@ -190,15 +185,6 @@ async function onLeft() {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-4);
-
-  &__help {
-    display: flex;
-    justify-content: flex-end;
-
-    &:empty {
-      display: none;
-    }
-  }
 
   &__list {
     list-style: none;

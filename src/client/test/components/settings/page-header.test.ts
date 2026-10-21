@@ -205,6 +205,7 @@ describe('settings page header', () => {
       ['a calendar leaf', '/settings/calendar/riverside/editors'],
       ['the calendar section', '/settings/calendar/riverside'],
       ['an account leaf', '/settings/account/security'],
+      ['the account calendars leaf', '/settings/account/calendars'],
       ['an admin leaf', '/settings/admin/settings'],
       ['a moderation sub-page', '/settings/admin/moderation/settings'],
     ])('sits in the title row beside the h1 on %s', async (_case, path) => {
