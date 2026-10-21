@@ -406,6 +406,7 @@
   "funding": {
     "loading": "Chargement...",
     "load_settings_error": "Échec du chargement des paramètres du plan de financement.",
+    "page_subtitle": "Consultez les plans de financement qui soutiennent cette instance, définissez les tarifs et les prestataires de paiement, et accordez un accès gracieux à des calendriers",
     "settings_section_title": "Configuration du plan de financement",
     "subtab_nav_label": "Sections de financement",
     "enabled_label": "Activer les plans de financement",

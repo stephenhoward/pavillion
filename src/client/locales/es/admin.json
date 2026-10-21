@@ -406,6 +406,7 @@
   "funding": {
     "loading": "Cargando...",
     "load_settings_error": "Error al cargar la configuración del plan de financiación.",
+    "page_subtitle": "Revisa los planes de financiación que apoyan esta instancia, configura los precios y los proveedores de pago, y concede acceso de cortesía a calendarios",
     "settings_section_title": "Configuración del plan de financiación",
     "subtab_nav_label": "Secciones de financiación",
     "enabled_label": "Habilitar planes de financiación",

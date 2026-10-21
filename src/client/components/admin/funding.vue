@@ -510,7 +510,7 @@ onMounted(async () => {
   <section class="funding-page">
     <!-- The settings page header carries the title and help button. -->
     <div class="page-intro">
-      <p class="page-subtitle">{{ t("settings_section_title") }}</p>
+      <p class="page-subtitle">{{ t("page_subtitle") }}</p>
       <button
         v-if="activeSubTab === 'grants'"
         type="button"

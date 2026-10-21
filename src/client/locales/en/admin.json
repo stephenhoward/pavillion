@@ -406,6 +406,7 @@
   "funding": {
     "loading": "Loading...",
     "load_settings_error": "Failed to load funding plan settings.",
+    "page_subtitle": "Review the funding plans that support this instance, set pricing and payment providers, and grant calendars complimentary access",
     "settings_section_title": "Funding Plan Configuration",
     "subtab_nav_label": "Funding sections",
     "enabled_label": "Enable Funding Plans",
