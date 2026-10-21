@@ -60,7 +60,7 @@ What happens to the events they created or edited: nothing. Events belong to the
 
 What happens to a pending invitation if you change your mind before the person accepts: open the **Pending Invitations** section of the same screen and click <Btn>Cancel</Btn> on the row. The invitation link stops working immediately, and the invited person — if they hadn't yet acted on the email — will see "this invitation is no longer valid" if they click it later.
 
-If an editor wants to step back from a calendar — the project ended, the calendar is no longer something they want to be associated with — they ask you to remove them, and you follow the steps above. The Editors screen is yours alone as the owner; editors don't see it.
+If an editor wants to step back from a calendar — the project ended, the calendar is no longer something they want to be associated with — they don't need to ask you. **Settings → Account → Calendars** lists every calendar they own or edit, and each calendar they edit has a <Btn>Leave</Btn> button. It asks once; once they confirm, their edit access ends and the calendar drops out of their calendar switcher. Coming back takes a fresh invitation from you. Editor membership isn't something an owner can compel; people get to opt out. The Editors screen itself stays yours alone as the owner; editors don't see it.
 
 ## Patterns for small teams
 
@@ -104,4 +104,4 @@ The short version: every person who edits the calendar should have their own Pav
 
 - If you're inviting an editor for a specific job — moderating reports, running ICS imports, managing categories — the relevant per-task guide goes deeper on what they'll be doing day to day.
 - If your team is bigger than this guide assumes, consider whether you actually want one calendar with many editors, or several calendars with the right editors on each one. The [When to create a calendar](./when-to-create-a-calendar) guide covers that decision.
-- If you're stepping back from a calendar yourself, the **Leave Calendar** button covered above is the right tool. If *you're the owner* and need to hand the calendar off entirely — owner transfer is not yet supported in v1, so reach out to your instance administrator for help.
+- If you're stepping back from a calendar you edit, the <Btn>Leave</Btn> button on **Settings → Account → Calendars** is the right tool. If *you're the owner* and need to hand the calendar off entirely — owner transfer is not yet supported in v1, so reach out to your instance administrator for help.
