@@ -510,7 +510,8 @@
     "confirm_cancel_button": "Annuler",
     "extended_features_disable_success": "Fonctionnalités étendues désactivées pour ce calendrier.",
     "extended_features_disable_error": "Échec de la désactivation des fonctionnalités étendues.",
-    "extended_features_enabled_success": "Fonctionnalités étendues activées pour ce calendrier."
+    "extended_features_enabled_success": "Fonctionnalités étendues activées pour ce calendrier.",
+    "extended_features_checkout_error": "Nous n'avons pas pu confirmer votre plan de financement. Si votre paiement a abouti, les fonctionnalités étendues seront activées sous peu ; sinon, veuillez réessayer."
   },
   "widget": {
     "domains_section_title": "Domaine autorisé",

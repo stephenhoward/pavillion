@@ -510,7 +510,8 @@
     "confirm_cancel_button": "Cancelar",
     "extended_features_disable_success": "Funciones ampliadas desactivadas para este calendario.",
     "extended_features_disable_error": "Error al desactivar las funciones ampliadas.",
-    "extended_features_enabled_success": "Funciones ampliadas activadas para este calendario."
+    "extended_features_enabled_success": "Funciones ampliadas activadas para este calendario.",
+    "extended_features_checkout_error": "No pudimos confirmar tu plan de financiación. Si el pago se realizó, las funciones ampliadas se activarán en breve; si no, inténtalo de nuevo."
   },
   "widget": {
     "domains_section_title": "Dominio permitido",

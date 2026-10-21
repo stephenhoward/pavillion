@@ -277,6 +277,7 @@ import LanguageTabSelector from '@/client/components/common/language-tab-selecto
 import LanguagePicker from '@/client/components/common/language-picker.vue';
 import FundingUpsellCard from '@/client/components/common/FundingUpsellCard.vue';
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
+import { useCheckoutReturn } from '@/client/composables/useCheckoutReturn';
 
 // Props
 const props = defineProps<{
@@ -695,6 +696,18 @@ const onPlanStarted = () => {
   state.success = t('extended_features_enabled_success');
   clearMessages();
 };
+
+// This leaf is the Stripe return URL. A redirect-based payment method lands
+// here with ?session_id= and the funding sheet closed, so confirm it here.
+useCheckoutReturn(async (outcome) => {
+  if (outcome === 'success') {
+    await refreshFundingAccess();
+    onPlanStarted();
+    return;
+  }
+  state.error = t('extended_features_checkout_error');
+  clearMessages();
+});
 
 // Load settings and funding status when component mounts. The instance name
 // the upsell needs is the card's own business, not this screen's.

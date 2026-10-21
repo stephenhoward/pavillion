@@ -510,7 +510,8 @@
     "confirm_cancel_button": "Cancel",
     "extended_features_disable_success": "Extended features disabled for this calendar.",
     "extended_features_disable_error": "Failed to disable extended features.",
-    "extended_features_enabled_success": "Extended features enabled for this calendar."
+    "extended_features_enabled_success": "Extended features enabled for this calendar.",
+    "extended_features_checkout_error": "We couldn't confirm your funding plan. If your payment went through, extended features will turn on shortly; otherwise, please try again."
   },
   "widget": {
     "domains_section_title": "Allowed Domain",
