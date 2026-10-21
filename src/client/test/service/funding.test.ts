@@ -806,6 +806,26 @@ describe('FundingService.createCheckoutSession', () => {
   });
 });
 
+describe('FundingService.getPortalUrl', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('sends the return URL as a query parameter and returns the portal URL', async () => {
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: { portalUrl: 'https://billing.stripe.com/p/session/test' } });
+
+    const result = await service.getPortalUrl('http://localhost:3000/settings/account/funding');
+
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/portal', {
+      params: { returnUrl: 'http://localhost:3000/settings/account/funding' },
+    });
+    expect(result).toBe('https://billing.stripe.com/p/session/test');
+  });
+});
+
 describe('FundingService.getCheckoutSessionStatus', () => {
   const service = new FundingService();
 

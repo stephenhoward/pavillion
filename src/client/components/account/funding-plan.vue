@@ -2,6 +2,7 @@
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { CoveredCalendarInfo } from '@/client/service/funding';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -12,6 +13,7 @@ const { t } = useTranslation('funding');
 // Service instance
 const fundingService = new FundingService();
 const calendarStore = useCalendarStore();
+const router = useRouter();
 
 // State management
 const loading = ref(true);
@@ -150,7 +152,12 @@ async function cancelFundingPlan() {
  */
 async function openBillingPortal() {
   try {
-    const portalUrl = await fundingService.getPortalUrl();
+    // The portal returns to this leaf, resolved by name so no query from the
+    // current page is inherited; the server pins the origin
+    // (validateReturnUrlOrigin). A provider return URL addresses a leaf,
+    // never a settings index (DEC-021).
+    const returnUrl = window.location.origin + router.resolve({ name: 'funding_plan' }).href;
+    const portalUrl = await fundingService.getPortalUrl(returnUrl);
     window.location.href = portalUrl;
   }
   catch (error) {

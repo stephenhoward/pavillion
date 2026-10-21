@@ -1459,6 +1459,10 @@ export default class FundingService {
       throw new MissingRequiredFieldError('returnUrl');
     }
 
+    // The portal sends the supporter back to this URL, so pin it to this
+    // instance as checkout does (defense in depth against an open redirect)
+    this.validateReturnUrlOrigin(returnUrl);
+
     const fundingPlan = await this.getStatus(accountId);
     if (!fundingPlan) {
       throw new Error('No funding plan found');
