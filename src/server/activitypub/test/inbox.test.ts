@@ -1562,8 +1562,8 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
 
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
     sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
-    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
-    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
+    sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
 
     const enqueued: any[] = [];
     eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
@@ -1598,8 +1598,8 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
     sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
     // Event resolves only via the eventParams.id local UUID lookup.
-    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
-    const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
+    const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
 
     const enqueued: any[] = [];
     eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
@@ -1779,7 +1779,8 @@ describe('ProcessInboxService - processUpdateEvent', () => {
         attributed_to: 'https://remote.instance/calendars/source',
       });
 
-      const existingEvent = new CalendarEvent(eventId, null);
+      // A remote editor updates an event owned by the calendar it edits.
+      const existingEvent = new CalendarEvent(eventId, testCalendar.id);
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
 
       // This is a Person actor
