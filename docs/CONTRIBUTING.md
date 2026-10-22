@@ -30,7 +30,7 @@ Key links for contributors:
    npm run dev
    ```
 
-We recommend reviewing the roadmap and open issues to find areas where you can contribute effectively.
+We recommend reviewing the [open issues](https://github.com/stephenhoward/pavillion/issues) and the [product mission](mission.md) to find areas where you can contribute effectively.
 
 ## Project Structure
 

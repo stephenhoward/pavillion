@@ -11,7 +11,11 @@ If someone reading the codebase or using the product would be surprised that thi
 
 ## Product Documents
 
-These principles reference a product-level document, not code-level conventions: `agent-os/product/decisions.md` — the index of documented architectural decisions, each linking to a file under `agent-os/product/decisions/`.
+These principles reference product-level documents, not code-level conventions:
+
+- `docs/mission.md` — the product mission
+- `.agents/reference/stakeholders.md` — the stakeholder personas the product serves
+- `agent-os/product/decisions.md` — the index of documented architectural decisions, each linking to a file under `agent-os/product/decisions/`
 
 ---
 
@@ -182,29 +186,29 @@ Ask: "Would this feature work and make sense for a single community instance tha
 
 ## Product Direction
 
-Does this move toward the roadmap's stated goals, or does it pull in a tangential direction?
+Does this advance the product's mission within its accepted decisions, or does it pull in a tangential direction?
 
 ### What to Check
 
-- Is the feature part of the current or next roadmap phase?
-- If it's not on the roadmap, does it support a roadmap item or is it tangential?
-- Does it advance the product toward the stated success criteria for the current phase?
-- Does it avoid introducing scope or complexity that would delay roadmap priorities?
+- Does the feature serve a problem or user named in `docs/mission.md`?
+- Does it serve a stakeholder described in `.agents/reference/stakeholders.md`, or a persona the product does not serve?
+- Is it consistent with the accepted decisions in `agent-os/product/decisions.md`, or does it presume a direction no decision supports?
+- Does it avoid introducing scope or complexity the mission does not call for?
 
 ### Red Flags
 
 **In specs:**
-- Features from Phase 4-5 being built during Phase 1-2 without justification
+- Features whose justification cannot be traced to the mission or an accepted decision
 - "Nice to have" features that consume capacity needed for must-have items
 - Features that serve a different product vision than Pavillion's
-- Infrastructure work that doesn't unblock any current roadmap item
+- Infrastructure work that no requested feature depends on
 
 **In code:**
-- Implementation of capabilities not requested by any spec or roadmap item
+- Implementation of capabilities not requested by any spec
 - Premature optimization for scale problems the product hasn't reached
-- Integration points for external services not on the roadmap
+- Integration points for external services no spec or decision calls for
 - Admin features for workflows that don't exist yet
 
 ### Evaluation
 
-Ask: "Does completing this bring us closer to the current phase's success criteria, or does it pull us sideways?"
+Ask: "Does completing this advance the mission for the people it names, or does it pull us sideways?"

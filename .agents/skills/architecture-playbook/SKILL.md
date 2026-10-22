@@ -20,7 +20,11 @@ Where those skills check code-level patterns, architecture standards check **pro
 
 ## Product Documents Referenced
 
-Architecture review is grounded in `agent-os/product/decisions.md` — the canonical record of documented architectural decisions with rationale and consequences.
+Architecture review is grounded in:
+
+- `docs/mission.md` — the product mission
+- `.agents/reference/stakeholders.md` — the stakeholder personas the product serves
+- `agent-os/product/decisions.md` — the canonical record of documented architectural decisions with rationale and consequences
 
 ## Routing Guide
 
@@ -31,7 +35,7 @@ Architecture review is grounded in `agent-os/product/decisions.md` — the canon
 | Unclear rationale, lost "why" between layers | Narrative Coherence |
 | Ownership ambiguity, overlapping domains | Responsibility Clarity |
 | Federation behavior, local vs. shared data | Federation Model Alignment |
-| Roadmap drift, tangential features | Product Direction |
+| Mission drift, tangential features | Product Direction |
 
 ## Instructions
 
@@ -42,7 +46,7 @@ The principles file covers: conceptual integrity, decision adherence, narrative 
 
 When reviewing:
 
-1. Read `agent-os/product/decisions.md` for context
+1. Read `docs/mission.md` and `agent-os/product/decisions.md` for context
 2. Identify which architecture dimensions are relevant to the spec or code under review
 3. Read the relevant sections of `./principles.md`
 4. Evaluate whether the spec/code maintains the product's conceptual integrity
