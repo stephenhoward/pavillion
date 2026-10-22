@@ -14,7 +14,7 @@ describe('Widget API Routes', () => {
   let app: Application;
   let sandbox = sinon.createSandbox();
   let mockInterface: CalendarInterface;
-  let mockWidgetService: WidgetDomainService;
+  let domainService: WidgetDomainService;
   let widgetRoutes: WidgetRoutes;
   let calendar: Calendar;
 
@@ -23,18 +23,24 @@ describe('Widget API Routes', () => {
     app = express();
     app.use(express.json());
 
-    // Create mock calendar interface and services
+    // Origin checks delegate to the real matching rule unless a test forces
+    // an outcome with .returns().
+    domainService = new WidgetDomainService();
+
+    // Create mock calendar interface
     mockInterface = {
       getCalendarByName: sandbox.stub(),
       getCalendarForWidget: sandbox.stub(),
       getWidgetConfig: sandbox.stub().resolves(new WidgetConfig()),
+      isWidgetOriginAllowed: sandbox.stub().callsFake(
+        (cal: Calendar, origin: string) => domainService.isOriginAllowed(cal, origin),
+      ),
     } as any;
 
-    mockWidgetService = new WidgetDomainService();
     calendar = new Calendar('calendar-id-123', 'test-calendar');
 
     // Create widget routes and install
-    widgetRoutes = new WidgetRoutes(mockInterface, mockWidgetService);
+    widgetRoutes = new WidgetRoutes(mockInterface);
     widgetRoutes.installHandlers(app, '/api/widget/v1');
   });
 
@@ -78,8 +84,8 @@ describe('Widget API Routes', () => {
       getCalendarStub.resolves(calendar);
       getCalendarForWidgetStub.resolves(calendar);
 
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(true);
+      const isOriginAllowedStub = mockInterface.isWidgetOriginAllowed as sinon.SinonStub;
+      isOriginAllowedStub.returns(true);
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/test-calendar')
@@ -96,8 +102,8 @@ describe('Widget API Routes', () => {
       getCalendarStub.resolves(calendar);
       getCalendarForWidgetStub.resolves(calendar);
 
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(false);
+      const isOriginAllowedStub = mockInterface.isWidgetOriginAllowed as sinon.SinonStub;
+      isOriginAllowedStub.returns(false);
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/test-calendar')
@@ -156,28 +162,10 @@ describe('Widget API Routes', () => {
     });
   });
 
-  describe('Dynamic CSP frame-ancestors header generation', () => {
-    it('should set CSP header with requesting domain for allowed origin', async () => {
-      const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
-      const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
-      getCalendarStub.resolves(calendar);
-      getCalendarForWidgetStub.resolves(calendar);
-
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(true);
-
-      const response = await supertest(app)
-        .get('/api/widget/v1/calendars/test-calendar')
-        .set('Origin', 'https://example.com')
-        .expect(200);
-
-      const cspHeader = response.headers['content-security-policy'];
-      expect(cspHeader).toBeDefined();
-      expect(cspHeader).toContain('frame-ancestors');
-      expect(cspHeader).toContain('https://example.com');
-    });
-
-    it('should set CSP header with localhost for localhost requests', async () => {
+  describe('Response headers for a validated origin', () => {
+    // Framing is the widget shell's job (DEC-020 rule 1); this JSON endpoint
+    // writes no frame-ancestors of its own.
+    it('should not set a Content-Security-Policy of its own', async () => {
       const getCalendarStub = mockInterface.getCalendarByName as sinon.SinonStub;
       const getCalendarForWidgetStub = mockInterface.getCalendarForWidget as sinon.SinonStub;
       getCalendarStub.resolves(calendar);
@@ -188,10 +176,7 @@ describe('Widget API Routes', () => {
         .set('Origin', 'http://localhost:3000')
         .expect(200);
 
-      const cspHeader = response.headers['content-security-policy'];
-      expect(cspHeader).toBeDefined();
-      expect(cspHeader).toContain('frame-ancestors');
-      expect(cspHeader).toContain('http://localhost:3000');
+      expect(response.headers['content-security-policy']).toBeUndefined();
     });
 
     it('should set CORS Allow-Origin header for validated domain', async () => {
@@ -200,8 +185,8 @@ describe('Widget API Routes', () => {
       getCalendarStub.resolves(calendar);
       getCalendarForWidgetStub.resolves(calendar);
 
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(true);
+      const isOriginAllowedStub = mockInterface.isWidgetOriginAllowed as sinon.SinonStub;
+      isOriginAllowedStub.returns(true);
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/test-calendar')
@@ -266,8 +251,8 @@ describe('Widget API Routes', () => {
       getCalendarForWidgetStub.rejects(new SubscriptionRequiredError('widget_embedding'));
       mockInterface.getCalendarForWidget = getCalendarForWidgetStub;
 
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(true);
+      const isOriginAllowedStub = mockInterface.isWidgetOriginAllowed as sinon.SinonStub;
+      isOriginAllowedStub.returns(true);
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/test-calendar')

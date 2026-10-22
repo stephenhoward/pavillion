@@ -574,8 +574,8 @@ export function createRouter(
   // domain builds the policy and caches it per calendar (short TTL), bounding
   // the per-load lookup on this public route.
   //
-  // Fails closed to 'self' before the public interface is bound or if the
-  // lookup errors. An unknown calendar gets the unconfigured policy. That is
+  // Fails closed to 'self' before the public interface is bound, if the
+  // lookup errors, or if the policy is not a valid header value. An unknown calendar gets the unconfigured policy. That is
   // uniformity, not a privacy property (DEC-020 rule 3): calendar existence is
   // already public elsewhere, and a configured calendar's header differs anyway.
   //
@@ -583,16 +583,19 @@ export function createRouter(
   // override frame-ancestors in legacy browsers and block every embed.
   router.use(/^\/widget\/([^/]+)/i, async (req, res, next) => {
     const calendarUrlName = req.params[0];
-    let policy = "frame-ancestors 'self'";
-    if (publicInterfaceHolder.current) {
-      try {
-        policy = await publicInterfaceHolder.current.getWidgetFrameAncestors(calendarUrlName);
-      }
-      catch (error) {
-        logger.error({ err: error }, 'Failed to resolve widget frame-ancestors policy');
-      }
+    const failClosedPolicy = "frame-ancestors 'self'";
+    try {
+      // The write sits inside the try: setHeader throws on an invalid value
+      // (CR/LF), and that too must fail closed rather than hang the request.
+      const policy = publicInterfaceHolder.current
+        ? await publicInterfaceHolder.current.getWidgetFrameAncestors(calendarUrlName)
+        : failClosedPolicy;
+      res.setHeader('Content-Security-Policy', policy);
     }
-    res.setHeader('Content-Security-Policy', policy);
+    catch (error) {
+      logger.error({ err: error }, 'Failed to resolve widget frame-ancestors policy');
+      res.setHeader('Content-Security-Policy', failClosedPolicy);
+    }
     res.removeHeader('X-Frame-Options');
     next();
   });
