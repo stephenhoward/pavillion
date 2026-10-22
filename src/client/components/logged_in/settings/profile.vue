@@ -8,17 +8,25 @@ import { reactive, inject, onMounted, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import type AuthenticationService from '@/client/service/authn';
 import AccountService from '@/client/service/account';
-import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
+import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE, isValidLanguageCode } from '@/common/i18n/languages';
 import { changeLanguage } from '@/client/service/locale';
 
 const authn = inject('authn') as AuthenticationService;
-const { t } = useTranslation('profile');
+const { t, i18next } = useTranslation('profile');
 const accountService = new AccountService();
+
+/**
+ * The language the UI is showing now, from the cookie, browser or instance
+ * default when the account has no saved preference.
+ */
+function currentUiLanguage(): string {
+  return isValidLanguageCode(i18next.language) ? i18next.language : DEFAULT_LANGUAGE_CODE;
+}
 
 const state = reactive({
   displayName: '',
   username: authn.userEmail()?.split('@')[0] || '',
-  preferredLanguage: 'en',
+  preferredLanguage: currentUiLanguage(),
   isLoading: true,
   isSaving: false,
 });
@@ -32,14 +40,21 @@ const saveError = ref('');
 /**
  * Load the profile into the form. The account's language is applied on login
  * and app load (see applySavedAccountLanguage), not here.
+ *
+ * The select shows the saved language, or the current UI language when none
+ * is saved. It reads getPreferredLanguage rather than the profile's language,
+ * which reports 'en' for an unset preference.
  */
 async function loadProfile() {
   try {
     state.isLoading = true;
-    const profile = await accountService.getProfile();
+    const [profile, savedLanguage] = await Promise.all([
+      accountService.getProfile(),
+      accountService.getPreferredLanguage(),
+    ]);
     state.displayName = profile.displayName || '';
     state.username = profile.username || profile.email.split('@')[0];
-    state.preferredLanguage = profile.language || 'en';
+    state.preferredLanguage = savedLanguage ?? currentUiLanguage();
   }
   catch (error) {
     console.error('Error loading profile:', error);

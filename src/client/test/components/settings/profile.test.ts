@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router, RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
+import i18next from 'i18next';
 import { mountComponent } from '@/client/test/lib/vue';
 import ProfileSettings from '@/client/components/logged_in/settings/profile.vue';
 import AccountService from '@/client/service/account';
@@ -47,6 +48,7 @@ function mountProfile() {
 describe('Profile settings leaf', () => {
   beforeEach(() => {
     vi.spyOn(AccountService.prototype, 'getProfile').mockResolvedValue(buildProfile('en'));
+    vi.spyOn(AccountService.prototype, 'getPreferredLanguage').mockResolvedValue('en');
     vi.spyOn(AccountService.prototype, 'updateLanguage').mockResolvedValue(undefined);
     vi.spyOn(localeService, 'changeLanguage').mockResolvedValue(undefined);
     vi.spyOn(localeService, 'applyAccountLanguage').mockResolvedValue(undefined);
@@ -184,8 +186,8 @@ describe('Profile settings leaf', () => {
   });
 
   describe('initial value', () => {
-    it('reflects the language loaded from the user profile', async () => {
-      vi.spyOn(AccountService.prototype, 'getProfile').mockResolvedValue(buildProfile('es'));
+    it('reflects the language saved on the account', async () => {
+      vi.spyOn(AccountService.prototype, 'getPreferredLanguage').mockResolvedValue('es');
 
       const { wrapper } = mountProfile();
       await flushPromises();
@@ -193,11 +195,39 @@ describe('Profile settings leaf', () => {
       expect(wrapper.find<HTMLSelectElement>('select#language').element.value).toBe('es');
     });
 
-    it('defaults to "en" when profile language is en', async () => {
+    it('prefers the saved language over the current UI language', async () => {
+      vi.spyOn(AccountService.prototype, 'getPreferredLanguage').mockResolvedValue('es');
+
       const { wrapper } = mountProfile();
+      await i18next.changeLanguage('fr');
       await flushPromises();
 
-      expect(wrapper.find<HTMLSelectElement>('select#language').element.value).toBe('en');
+      expect(wrapper.find<HTMLSelectElement>('select#language').element.value).toBe('es');
+    });
+
+    it('shows the current UI language when the account has no saved language', async () => {
+      // getProfile() reports 'en' for an unset language; the select must not trust it.
+      vi.spyOn(AccountService.prototype, 'getPreferredLanguage').mockResolvedValue(null);
+
+      const { wrapper } = mountProfile();
+      await i18next.changeLanguage('fr');
+      await flushPromises();
+
+      expect(wrapper.find<HTMLSelectElement>('select#language').element.value).toBe('fr');
+    });
+
+    it('saves a choice made by an account with no saved language', async () => {
+      vi.spyOn(AccountService.prototype, 'getPreferredLanguage').mockResolvedValue(null);
+
+      const { wrapper } = mountProfile();
+      await i18next.changeLanguage('fr');
+      await flushPromises();
+
+      await wrapper.find('select#language').setValue('es');
+      await flushPromises();
+
+      expect(localeService.changeLanguage).toHaveBeenCalledWith('es', expect.any(Function));
+      expect(wrapper.find<HTMLSelectElement>('select#language').element.value).toBe('es');
     });
   });
 
