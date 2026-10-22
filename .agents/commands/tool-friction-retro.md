@@ -38,9 +38,9 @@ write a report saying so; do not widen the search.
 
 ## Privacy — hard rules, checked before every push
 
-Transcripts can contain private material: reads of gitignored files (including
-`agent-os/product/*`, which names the customer and prospects), credentials in
-command output, personal context. Therefore, in every **public artifact** of this
+Transcripts can contain private material: reads of gitignored files (which
+may hold untracked private content such as customer or prospect names),
+credentials in command output, personal context. Therefore, in every **public artifact** of this
 run — branch names, commit messages, PR titles, PR bodies:
 
 - **Never quote transcript text.** Describe the friction pattern generically:

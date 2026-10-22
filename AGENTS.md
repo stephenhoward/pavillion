@@ -149,3 +149,5 @@ Testing uses Vitest for unit/integration, Playwright for e2e, and Playwright MCP
 ## Product Decisions
 
 Architectural and product decisions live in @agent-os/product/decisions.md — an index of individual decision files under `agent-os/product/decisions/`. Load a decision when its **Consult when** triggers match the work at hand; decision text overrides conflicting guidance elsewhere.
+
+The product mission lives in `docs/mission.md` and the stakeholder personas in `.agents/reference/stakeholders.md`.
