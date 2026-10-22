@@ -75,6 +75,50 @@ export function validateRequired(fields: string[]) {
 }
 
 /**
+ * Middleware factory that rejects a request whose body carries any of the named
+ * fields as something other than a string (null, number, boolean, object or
+ * array).
+ *
+ * Absent fields pass through so each handler keeps its own missing-field
+ * behaviour. All offending fields are reported together.
+ *
+ * Unlike the other factories in this module, it answers the request itself
+ * with a 400 instead of calling next(err): the global error handler maps an
+ * error without a `status` to a generic 500.
+ *
+ * @param fields - Body field names that must be strings when present
+ * @returns Express middleware function
+ *
+ * @example
+ * router.post('/login',
+ *   validateStringFields(['email', 'password']),
+ *   async (req, res) => { ... }
+ * );
+ */
+export function validateStringFields(fields: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const invalid = fields.filter((field) => {
+      const value = req.body?.[field];
+      return value !== undefined && typeof value !== 'string';
+    });
+
+    if (invalid.length > 0) {
+      const fieldErrors: Record<string, string[]> = {};
+      for (const field of invalid) {
+        fieldErrors[field] = ['This field must be a string'];
+      }
+      expressHelper.sendValidationError(res, new ValidationError(
+        `Fields must be strings: ${invalid.join(', ')}`,
+        fieldErrors,
+      ));
+      return;
+    }
+
+    next();
+  };
+}
+
+/**
  * Middleware that validates startDate and endDate query parameters.
  *
  * Both parameters are optional, but when provided they must be valid ISO 8601

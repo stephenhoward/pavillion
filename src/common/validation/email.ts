@@ -8,7 +8,9 @@
  * @returns true if the email matches basic format requirements
  */
 export function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // The typeof guard matters: RegExp.test coerces its argument, so an array
+  // like ['a@b.co'] would otherwise stringify to a valid-looking address.
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 /**
@@ -29,8 +31,8 @@ export function isValidEmail(email: string): boolean {
  * enforces exact-string uniqueness only (see migration 0037).
  *
  * @param email - The email string to normalize
- * @returns The trimmed, lowercased email, or `''` for nullish/empty input
+ * @returns The trimmed, lowercased email, or `''` for empty or non-string input
  */
 export function normalizeEmail(email: string): string {
-  return (email ?? '').trim().toLowerCase();
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }

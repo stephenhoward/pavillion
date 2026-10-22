@@ -6,6 +6,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
 import { limitAcceptInvitationByIp } from '@/server/common/middleware/rate-limiters';
+import { validateStringFields } from '@/server/common/middleware/validation';
 
 export default class AccountInvitationRouteHandlers {
   private service: AccountsInterface;
@@ -17,9 +18,9 @@ export default class AccountInvitationRouteHandlers {
   installHandlers(app: express.Application, routePrefix: string): void {
     var router = express.Router();
     router.get('/invitations', ExpressHelper.loggedInOnly, this.listInvitations.bind(this));
-    router.post('/invitations', ExpressHelper.loggedInOnly, this.inviteToRegister.bind(this));
+    router.post('/invitations', ExpressHelper.loggedInOnly, validateStringFields(['email']), this.inviteToRegister.bind(this));
     router.get('/invitations/:code', ...ExpressHelper.noUserOnly, this.checkInviteCode.bind(this));
-    router.post('/invitations/:code', limitAcceptInvitationByIp, ...ExpressHelper.noUserOnly, this.acceptInvite.bind(this));
+    router.post('/invitations/:code', limitAcceptInvitationByIp, ...ExpressHelper.noUserOnly, validateStringFields(['password']), this.acceptInvite.bind(this));
     router.delete('/invitations/:id', ExpressHelper.adminOnly, this.cancelInvite.bind(this));
     router.post('/invitations/:id/resend', ExpressHelper.adminOnly, this.resendInvite.bind(this));
     app.use(routePrefix, router);

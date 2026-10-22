@@ -30,6 +30,18 @@ describe('isValidEmail', () => {
       expect(isValidEmail(email)).toBe(false);
     });
   }
+
+  it('rejects non-string input', () => {
+    expect(isValidEmail(5 as unknown as string)).toBe(false);
+    expect(isValidEmail(true as unknown as string)).toBe(false);
+    expect(isValidEmail({} as unknown as string)).toBe(false);
+  });
+
+  it('rejects a one-element array holding a valid address', () => {
+    // RegExp.test coerces its argument, so ['a@b.co'] would stringify to
+    // 'a@b.co' and pass the format check without the typeof guard.
+    expect(isValidEmail(['a@b.co'] as unknown as string)).toBe(false);
+  });
 });
 
 describe('normalizeEmail', () => {
@@ -56,5 +68,12 @@ describe('normalizeEmail', () => {
   it('returns an empty string for nullish input without throwing', () => {
     expect(normalizeEmail(null as unknown as string)).toBe('');
     expect(normalizeEmail(undefined as unknown as string)).toBe('');
+  });
+
+  it('returns an empty string for non-string input without throwing', () => {
+    expect(normalizeEmail(5 as unknown as string)).toBe('');
+    expect(normalizeEmail(true as unknown as string)).toBe('');
+    expect(normalizeEmail({} as unknown as string)).toBe('');
+    expect(normalizeEmail(['a@b.co'] as unknown as string)).toBe('');
   });
 });

@@ -10,6 +10,7 @@ import { InvalidPasswordError } from '@/server/authentication/exceptions';
 import AuthenticationInterface from '@/server/authentication/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
+import { validateStringFields } from '@/server/common/middleware/validation';
 
 const logger = createLogger('authentication');
 import {
@@ -35,11 +36,11 @@ export default class AuthenticationRouteHandlers {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    router.post('/login', limitLoginByIp, limitLoginByEmail, ...ExpressHelper.noUserOnly, this.login.bind(this) );
+    router.post('/login', limitLoginByIp, limitLoginByEmail, ...ExpressHelper.noUserOnly, validateStringFields(['email', 'password']), this.login.bind(this) );
     router.get('/token', ...ExpressHelper.loggedInOnly, this.getToken.bind(this) );
     router.get('/reset-password/:code', this.checkPasswordResetCode.bind(this) );
-    router.post('/reset-password', limitPasswordResetByIp, limitPasswordResetByEmail, this.generatePasswordResetCode.bind(this) );
-    router.post('/reset-password/:code', limitConfirmPasswordResetByIp, this.setPassword.bind(this) );
+    router.post('/reset-password', limitPasswordResetByIp, limitPasswordResetByEmail, validateStringFields(['email']), this.generatePasswordResetCode.bind(this) );
+    router.post('/reset-password/:code', limitConfirmPasswordResetByIp, validateStringFields(['password']), this.setPassword.bind(this) );
     // CRITICAL: the confirm route is registered BEFORE `/email` so the static
     // `confirm` segment can never be shadowed by a future `/email/:param` or
     // `/email/*` wildcard (Express matches in registration order; mirrors the
@@ -48,7 +49,7 @@ export default class AuthenticationRouteHandlers {
     // no CSRF token are applied — either would break the email-link flow. Only
     // an IP limiter guards it (epic pv-91a3).
     router.post('/email/confirm/:token', limitConfirmEmailChangeByIp, this.confirmEmailChange.bind(this) );
-    router.post('/email', ...ExpressHelper.loggedInOnly, limitEmailChangeByAccount, limitEmailChangeByDestination, this.changeEmail.bind(this) );
+    router.post('/email', ...ExpressHelper.loggedInOnly, limitEmailChangeByAccount, limitEmailChangeByDestination, validateStringFields(['email', 'password']), this.changeEmail.bind(this) );
     app.use(routePrefix, router);
   }
 
@@ -129,11 +130,20 @@ export default class AuthenticationRouteHandlers {
       return;
     }
 
-    let account = await this.service.resetPassword(req.params.code, req.body.password);
-    if ( account ) {
-      res.send(ExpressHelper.generateJWT(account));
+    try {
+      let account = await this.service.resetPassword(req.params.code, req.body.password);
+      if ( account ) {
+        res.send(ExpressHelper.generateJWT(account));
+      }
+      else {
+        res.status(400).json({
+          error: 'error resetting password',
+          errorName: 'PasswordResetError',
+        });
+      }
     }
-    else {
+    catch (error) {
+      logError(error, 'Error resetting password');
       res.status(400).json({
         error: 'error resetting password',
         errorName: 'PasswordResetError',

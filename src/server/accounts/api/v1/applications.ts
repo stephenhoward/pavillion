@@ -14,6 +14,7 @@ import {
   limitApplicationByIp,
   limitConfirmApplicationByIp,
 } from '@/server/common/middleware/rate-limiters';
+import { validateStringFields } from '@/server/common/middleware/validation';
 
 const logger = createLogger('accounts');
 
@@ -35,6 +36,7 @@ export default class AccountApplicationRouteHandlers {
       limitApplicationByIp,
       limitApplicationByEmail,
       ...ExpressHelper.noUserOnly,
+      validateStringFields(['email']),
       this.applyToRegister.bind(this),
     );
     // CRITICAL: the confirm route is registered BEFORE `/applications/:id` so

@@ -18,6 +18,7 @@ import SetupDomain from '@/server/setup';
 import AuthenticationDomain from '@/server/authentication';
 import EventEmitter from 'events';
 import AuthenticationRouteHandlers from '../api/v1/auth';
+import { noAccountExistsError } from '@/server/accounts/exceptions';
 
 describe('API v1', () => {
 
@@ -170,6 +171,18 @@ describe('resetPassword', () => {
     expect(response.status).toBe(400);
     expect(stub.called).toBe(true);
   });
+
+  it('resetPassword: service throw becomes a 400 PasswordResetError', async () => {
+    let router = express.Router();
+    stub.rejects(new Error('database unavailable'));
+    router.post('/handler/:code', handlers.setPassword.bind(handlers));
+
+    let response = await request(testApp(router)).post('/handler/1234').send({password: 'password123'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('PasswordResetError');
+    expect(stub.called).toBe(true);
+  });
 });
 
 describe('login', () => {
@@ -306,5 +319,151 @@ describe('JWT strategy', () => {
     const response = await request(app).get('/protected').set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe('non-string credentials on the installed auth routes', () => {
+  const nonStrings: Array<[string, unknown]> = [
+    ['a number', 5],
+    ['an object', { a: 1 }],
+    ['an array', ['a']],
+  ];
+
+  let app: express.Application;
+  let accountsDomain: AccountsDomain;
+  let authenticationDomain: AuthenticationDomain;
+  let getAccountByEmail: sinon.SinonStub;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const setupDomain = new SetupDomain();
+    accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
+    authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    // Calls through to the real lookup, so a non-string email that slips past
+    // the guard reaches normalizeEmail exactly as it does in production.
+    getAccountByEmail = sinon.stub(accountsDomain.interface, 'getAccountByEmail').callThrough();
+    sinon.stub(accountsDomain.interface, 'getAccountById').resolves(new Account('id', 'testme', 'testme'));
+
+    app = express();
+    AuthenticationAPI.install(app, authenticationDomain.interface, accountsDomain.interface);
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  function expectStringFieldError(response: request.Response, field: string) {
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.fields[field]).toBeDefined();
+  }
+
+  describe('POST /login', () => {
+    for (const field of ['email', 'password']) {
+      for (const [label, value] of nonStrings) {
+        it(`rejects ${label} ${field} with 400 before any account lookup`, async () => {
+          const body = { email: 'user@example.com', password: 'password123', [field]: value };
+
+          const response = await request(app).post('/api/auth/v1/login').send(body);
+
+          expectStringFieldError(response, field);
+          expect(getAccountByEmail.notCalled).toBe(true);
+        });
+      }
+    }
+
+    it('keeps answering after a malformed login', async () => {
+      const account = new Account('id', 'user@example.com', 'user@example.com');
+      const malformed = await request(app).post('/api/auth/v1/login').send({ email: 5, password: 'password123' });
+      expect(malformed.status).toBe(400);
+
+      getAccountByEmail.resolves(account);
+      sinon.stub(authenticationDomain.interface, 'checkPassword').resolves(true);
+
+      const response = await request(app)
+        .post('/api/auth/v1/login')
+        .send({ email: 'user@example.com', password: 'password123' });
+
+      expect(response.status).toBe(200);
+      expect(jwt.verify(response.text, config.get<string>('jwt.secret'))).toMatchObject({ id: 'id' });
+    });
+  });
+
+  describe('POST /reset-password', () => {
+    let generate: sinon.SinonStub;
+
+    beforeEach(() => {
+      generate = sinon.stub(AuthenticationService.prototype, 'generatePasswordResetCode');
+    });
+
+    for (const [label, value] of nonStrings) {
+      it(`rejects ${label} email with 400 before generating a code`, async () => {
+        const response = await request(app).post('/api/auth/v1/reset-password').send({ email: value });
+
+        expectStringFieldError(response, 'email');
+        expect(generate.notCalled).toBe(true);
+      });
+    }
+
+    it('still answers an absent email with the uniform success response', async () => {
+      generate.rejects(new noAccountExistsError());
+
+      const response = await request(app).post('/api/auth/v1/reset-password').send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true });
+    });
+  });
+
+  describe('POST /reset-password/:code', () => {
+    let reset: sinon.SinonStub;
+
+    beforeEach(() => {
+      reset = sinon.stub(AuthenticationService.prototype, 'resetPassword');
+    });
+
+    for (const [label, value] of nonStrings) {
+      it(`rejects ${label} password with 400 before resetting`, async () => {
+        const response = await request(app).post('/api/auth/v1/reset-password/abc').send({ password: value });
+
+        expectStringFieldError(response, 'password');
+        expect(reset.notCalled).toBe(true);
+      });
+    }
+
+    it('still answers an absent password with password_too_short', async () => {
+      const response = await request(app).post('/api/auth/v1/reset-password/abc').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('password_too_short');
+      expect(reset.notCalled).toBe(true);
+    });
+  });
+
+  describe('POST /email', () => {
+    let initiate: sinon.SinonStub;
+    let token: string;
+
+    beforeEach(() => {
+      initiate = sinon.stub(AuthenticationService.prototype, 'initiateEmailChange');
+      token = ExpressHelper.generateJWT(new Account('id', 'testme', 'testme'));
+    });
+
+    for (const field of ['email', 'password']) {
+      for (const [label, value] of nonStrings) {
+        it(`rejects ${label} ${field} with 400 before initiating a change`, async () => {
+          const body = { email: 'new@example.com', password: 'password123', [field]: value };
+
+          const response = await request(app)
+            .post('/api/auth/v1/email')
+            .set('Authorization', `Bearer ${token}`)
+            .send(body);
+
+          expectStringFieldError(response, field);
+          expect(initiate.notCalled).toBe(true);
+        });
+      }
+    }
   });
 });

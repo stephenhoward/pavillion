@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
+import passport from 'passport';
 import { EventEmitter } from 'events';
 import AccountRouteHandlers from '../api/v1/accounts';
 import AccountInvitationRouteHandlers from '../api/v1/invitations';
@@ -1153,5 +1154,100 @@ describe('Admin API', () => {
       expect(regularAccount.hasRole('admin')).toBe(false);
       expect(adminAccount.hasRole('admin')).toBe(true);
     });
+  });
+});
+
+describe('non-string email and password on the installed account routes', () => {
+  const nonStrings: Array<[string, unknown]> = [
+    ['a number', 5],
+    ['an object', {}],
+    ['an array', []],
+  ];
+
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let accountsInterface: AccountsInterface;
+  let app: express.Application;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    accountsInterface = new AccountsInterface(eventBus, new ConfigurationInterface(), new SetupInterface());
+
+    // The authentication domain normally registers the 'jwt' strategy; stand
+    // in for it so loggedInOnly routes see an authenticated caller.
+    const caller = new Account('id', 'user@example.com', 'user@example.com');
+    passport.use('jwt', {
+      authenticate(this: { success: (user: Account) => void }) {
+        this.success(caller);
+      },
+    } as unknown as passport.Strategy);
+
+    app = express();
+    AccountApiV1.install(app, accountsInterface);
+  });
+
+  afterEach(() => {
+    passport.unuse('jwt');
+    sandbox.restore();
+  });
+
+  function expectStringFieldError(response: request.Response, field: string) {
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.fields[field]).toBeDefined();
+  }
+
+  for (const [label, value] of nonStrings) {
+    it(`POST /register rejects ${label} email before registering`, async () => {
+      const stub = sandbox.stub(accountsInterface, 'registerNewAccount');
+
+      const response = await request(app).post('/api/v1/register').send({ email: value });
+
+      expectStringFieldError(response, 'email');
+      expect(stub.notCalled).toBe(true);
+    });
+
+    it(`POST /applications rejects ${label} email before applying`, async () => {
+      const stub = sandbox.stub(accountsInterface, 'applyForNewAccount');
+
+      const response = await request(app)
+        .post('/api/v1/applications')
+        .send({ email: value, message: 'hello' });
+
+      expectStringFieldError(response, 'email');
+      expect(stub.notCalled).toBe(true);
+    });
+
+    it(`POST /invitations/:code rejects ${label} password before accepting`, async () => {
+      const stub = sandbox.stub(accountsInterface, 'acceptAccountInvite');
+
+      const response = await request(app).post('/api/v1/invitations/abc').send({ password: value });
+
+      expectStringFieldError(response, 'password');
+      expect(stub.notCalled).toBe(true);
+    });
+
+    it(`POST /invitations rejects ${label} email before inviting`, async () => {
+      const stub = sandbox.stub(accountsInterface, 'inviteNewAccount');
+
+      const response = await request(app)
+        .post('/api/v1/invitations')
+        .send({ email: value, message: 'hello' });
+
+      expectStringFieldError(response, 'email');
+      expect(stub.notCalled).toBe(true);
+    });
+  }
+
+  it('keeps answering after a malformed request', async () => {
+    const stub = sandbox.stub(accountsInterface, 'registerNewAccount')
+      .resolves(new Account('id', 'new@example.com', 'new@example.com'));
+
+    const malformed = await request(app).post('/api/v1/register').send({ email: 5 });
+    expect(malformed.status).toBe(400);
+
+    const response = await request(app).post('/api/v1/register').send({ email: 'new@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(stub.calledOnceWith('new@example.com')).toBe(true);
   });
 });
