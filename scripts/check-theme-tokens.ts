@@ -35,6 +35,21 @@
  *     property names are case-sensitive, so it is an unset read or a dead
  *     declaration. public-theme-tokens.test.ts catches a typo after `--pav-`;
  *     this catches one in the prefix itself.
+ *   Rule 5, raw colour literals (warn-only). A hex colour, an rgb()/rgba()/
+ *     hsl()/hsla()/hwb()/lab()/lch()/oklab()/oklch() call, or a CSS named
+ *     colour in a declaration value or an `@include` argument, outside the
+ *     two token-layer mixin bodies. A component-local `$ink: #fff;` is
+ *     reported at its declaration. Such a literal renders the same in both
+ *     themes, so it is never the light-value-in-dark-mode bug Rules 1-2 stop,
+ *     but it bypasses the token layer. Reported as a warning on every hit, with
+ *     no baseline: the existing hits are few, owned by their own beads
+ *     (white-on-accent ink until the on-accent token exists, the report
+ *     dialog backdrop, the image vignette bases), and shrink as those land.
+ *     Warnings never change the exit code. Not reported: selectors (an id
+ *     spelled in hex digits, a class named for a colour), `#{}` interpolation,
+ *     strings and `url()` contents, `transparent` / `currentColor`, and
+ *     `mask` / `-webkit-mask*` values, whose colour is an alpha channel rather
+ *     than paint.
  *
  * Design (see bead pv-l3my.7, DESIGN §4):
  *   - Text scan, not a Sass compile: the rules are about what the source says,
@@ -68,9 +83,9 @@
  *     `#{...}` interpolation, or an include reached through another mixin, is
  *     not resolved; a top-level selector list (`#app, .x`) is not a named
  *     site and fails.
- *   - A literal colour written straight into a component (no variable, no
- *     dark rule) is not this guard's business; it renders the same in both
- *     themes, and the warn-only raw-literal guard is a separate bead.
+ *   - Rule 5 reads value context textually: a literal reached through a Sass
+ *     function argument in a selector, or a colour held in a string (an SVG
+ *     data URI's fill), is not reported.
  *
  * Overlap with src/common/ui/test/boundary.test.ts, on purpose: that test
  * holds shared components to a tighter, module-specific contract (no
@@ -156,6 +171,41 @@ const DARK_PATTERNS: { pattern: RegExp; what: string }[] = [
   { pattern: /(?<![\w-])light-dark\s*\(/g, what: 'light-dark()' },
   { pattern: /\.widget-theme-(?:light|dark)(?![\w-])/g, what: 'retired .widget-theme-light/-dark class' },
 ];
+
+/**
+ * The CSS named colours, lower-cased. `transparent` and `currentcolor` are
+ * left out: neither is a single-theme value.
+ */
+const NAMED_COLOURS = new Set([
+  'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque', 'black',
+  'blanchedalmond', 'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse',
+  'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
+  'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki', 'darkmagenta',
+  'darkolivegreen', 'darkorange', 'darkorchid', 'darkred', 'darksalmon', 'darkseagreen',
+  'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink',
+  'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite', 'forestgreen',
+  'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod', 'gray', 'green', 'greenyellow',
+  'grey', 'honeydew', 'hotpink', 'indianred', 'indigo', 'ivory', 'khaki', 'lavender',
+  'lavenderblush', 'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan',
+  'lightgoldenrodyellow', 'lightgray', 'lightgreen', 'lightgrey', 'lightpink', 'lightsalmon',
+  'lightseagreen', 'lightskyblue', 'lightslategray', 'lightslategrey', 'lightsteelblue',
+  'lightyellow', 'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
+  'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen', 'mediumslateblue',
+  'mediumspringgreen', 'mediumturquoise', 'mediumvioletred', 'midnightblue', 'mintcream',
+  'mistyrose', 'moccasin', 'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange',
+  'orangered', 'orchid', 'palegoldenrod', 'palegreen', 'paleturquoise', 'palevioletred',
+  'papayawhip', 'peachpuff', 'peru', 'pink', 'plum', 'powderblue', 'purple', 'rebeccapurple',
+  'red', 'rosybrown', 'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen',
+  'seashell', 'sienna', 'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow',
+  'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato', 'turquoise', 'violet', 'wheat',
+  'white', 'whitesmoke', 'yellow', 'yellowgreen',
+]);
+
+/** Rule 5's candidates: a hex colour, a colour function, or a bare word checked against NAMED_COLOURS. */
+const COLOUR_LITERAL = /(?<![\w&-])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-])|(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\s*\(|(?<![\w$@.#%&-])[a-z]+(?![\w(-])/gi;
+
+/** A `mask` or `-webkit-mask*` property, whose colour is an alpha channel, not paint. */
+const MASK_PROPERTY = /^(?:-webkit-)?mask(?:-|$)/i;
 
 const PUBLIC_VARIABLE = /\$public[-_][\w-]*/g;
 const TOKEN_LAYER_INCLUDE = includeOf('public-theme-tokens');
@@ -262,6 +312,76 @@ export function detectSource(code: string, fileName: string): Violation[] {
   return violations.sort((a, b) => a.line - b.line);
 }
 
+/**
+ * `style` with the contents of every string and `url(...)` blanked, and each
+ * `#{...}` interpolation's braces turned to parentheses, offsets kept. Rule 5
+ * then reads `{`, `}` and `;` as statement boundaries only.
+ */
+function literalScanText(style: string): string {
+  const blank = (text: string) => text.replace(/[^\n]/g, ' ');
+  return style
+    .replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, match => match[0] + blank(match.slice(1, -1)) + match[0])
+    .replace(/(url\()([^)]*)\)/gi, (_m, open: string, body: string) => `${open}${blank(body)})`)
+    .replace(/#\{([^{}]*)\}/g, (_m, body: string) => `#(${body})`);
+}
+
+/**
+ * Whether `index` sits in a declaration value or an `@include` argument, and
+ * not in a mask value: the statement around it ends at `;` or `}` rather than
+ * opening a block, and the match follows its `:` (or the statement is an
+ * `@include`).
+ */
+function inPaintValue(text: string, index: number): boolean {
+  let start = index;
+  while (start > 0 && !'{};'.includes(text[start - 1])) start--;
+  let end = index;
+  while (end < text.length && !'{};'.includes(text[end])) end++;
+  if (text[end] === '{') {
+    return false;
+  }
+  const statement = text.slice(start, index).trimStart();
+  if (/^@include\b/.test(statement)) {
+    return true;
+  }
+  const colon = statement.indexOf(':');
+  return colon !== -1 && !MASK_PROPERTY.test(statement.slice(0, colon).trim());
+}
+
+/**
+ * Rule 5, warn-only: the raw colour literals in one file's source, outside the
+ * token-layer mixin bodies in mixins.scss. Separate from `detectSource` so a
+ * warning can never become a violation; `main` prints both but exits on
+ * violations alone.
+ */
+export function detectLiteralSource(code: string, fileName: string): Violation[] {
+  if (!fileName.endsWith('.vue') && !fileName.endsWith('.scss')) {
+    return [];
+  }
+  const style = stripStyleComments(fileName.endsWith('.vue') ? styleBlocksInPlace(code) : code);
+  const text = literalScanText(style);
+  const exempt = hasPathSuffix(fileName, MIXINS_FILE) ? tokenLayerSpans(style, fileName) ?? [] : [];
+  const warnings: Violation[] = [];
+
+  for (const match of text.matchAll(COLOUR_LITERAL)) {
+    const literal = match[0].replace(/\s+\($/, '(');
+    const isWord = /^[a-z]+$/i.test(literal);
+    if (isWord && !NAMED_COLOURS.has(literal.toLowerCase())) continue;
+    if (exempt.some(span => match.index! >= span.start && match.index! < span.end)) continue;
+    if (!inPaintValue(text, match.index!)) continue;
+    warnings.push({
+      file: fileName,
+      line: lineAt(text, match.index!),
+      message: `Rule 5 (warn-only): raw colour literal ${literal} outside the token layer, the same in both themes; read a --pav-* token instead`,
+    });
+  }
+  return warnings;
+}
+
+/** Read each file path and collect its Rule 5 warnings. */
+export function detectLiterals(filePaths: string[]): Violation[] {
+  return filePaths.flatMap(filePath => detectLiteralSource(fs.readFileSync(filePath, 'utf8'), filePath));
+}
+
 /** Read and scan each file path. */
 export function detect(filePaths: string[]): Violation[] {
   return filePaths.flatMap(filePath => detectSource(fs.readFileSync(filePath, 'utf8'), filePath));
@@ -292,12 +412,22 @@ export function collectThemeFiles(roots: string[]): string[] {
 
 /**
  * CLI entry as a pure function returning the process exit code (1 on any
- * violation, else 0). Roots default to DEFAULT_ROOTS.
+ * violation, else 0; Rule 5 warnings are printed but never change it). Roots
+ * default to DEFAULT_ROOTS.
  */
 export function main(argv: string[] = process.argv.slice(2)): number {
   const roots = (argv.length > 0 ? argv : DEFAULT_ROOTS).map(root => path.resolve(root));
   const files = collectThemeFiles(roots);
   const violations = detect(files);
+  const warnings = detectLiterals(files);
+
+  for (const w of warnings) {
+    const rel = path.relative(process.cwd(), w.file);
+    process.stderr.write(`${rel}:${w.line} — ${w.message}\n`);
+  }
+  if (warnings.length > 0) {
+    process.stderr.write(`check-theme-tokens: ${warnings.length} raw colour literal warning(s) (warn-only, exit code unaffected).\n\n`);
+  }
 
   for (const v of violations) {
     const rel = path.relative(process.cwd(), v.file);
