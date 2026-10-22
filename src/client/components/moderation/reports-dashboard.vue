@@ -9,7 +9,7 @@
 import { reactive, onMounted, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useModerationStore } from '@/client/stores/moderation-store';
-import { ReportStatus, ReportCategory } from '@/common/model/report';
+import { ReportStatus, ReportCategory, type Report } from '@/common/model/report';
 import type { ReportFilters } from '@/client/service/moderation';
 import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
@@ -99,6 +99,29 @@ const goToPage = async (page: number) => {
 const viewReport = (reportId: string) => {
   emit('view-report', reportId);
 };
+
+/**
+ * The event cell's visible text: the report carries no event title, so the
+ * button shows a shortened event id.
+ *
+ * @param report - The report shown in the row
+ * @returns The shortened event id
+ */
+const shortEventId = (report: Report): string => `${report.eventId.substring(0, 8)}...`;
+
+/**
+ * Per-row accessible name for the event cell's button. It contains the
+ * visible text so speech-input users can still target the button by what
+ * they see, and adds the category and date so each row's name is distinct.
+ *
+ * @param report - The report shown in the row
+ * @returns The button's accessible name
+ */
+const viewReportLabel = (report: Report): string => t('dashboard.view_report_label', {
+  category: categoryLabel(report.category),
+  event: shortEventId(report),
+  date: formatDate(report.createdAt),
+});
 
 /**
  * Whether the previous page button should be enabled.
@@ -231,9 +254,10 @@ onMounted(async () => {
               <button
                 type="button"
                 class="reports-dashboard__event-id"
+                :aria-label="viewReportLabel(report)"
                 @click.stop="viewReport(report.id)"
               >
-                {{ report.eventId.substring(0, 8) }}...
+                {{ shortEventId(report) }}
               </button>
             </td>
             <td>{{ categoryLabel(report.category) }}</td>

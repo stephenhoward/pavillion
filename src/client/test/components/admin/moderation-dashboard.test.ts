@@ -20,6 +20,7 @@ const reports = [
     adminPriority: 'medium',
     adminDeadline: null,
     escalationType: null,
+    createdAt: new Date('2026-10-01T12:00:00Z'),
   },
   {
     id: ESCALATED_REPORT_ID,
@@ -31,6 +32,7 @@ const reports = [
     adminPriority: null,
     adminDeadline: null,
     escalationType: 'manual',
+    createdAt: new Date('2026-10-02T12:00:00Z'),
   },
 ];
 
@@ -98,6 +100,25 @@ describe('Admin ModerationDashboard report rows', () => {
       expect(links[0].attributes('href')).toBe(detailPath(id));
       expect(links[0].text()).toBe('View Details');
     }
+  });
+
+  it('names each row link after its own report, keeping the visible text in the name', () => {
+    const links = wrapper!.findAll('tbody tr a');
+    const names = links.map((link) => link.attributes('aria-label'));
+
+    expect(names[0]).toContain('View Details');
+    expect(names[0]).toContain('Spam');
+    expect(names[0]).toContain('aaaaaaaa');
+    expect(names[1]).toContain('View Details');
+    expect(names[1]).toContain('Harassment');
+    expect(names[1]).toContain('bbbbbbbb');
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('gives the mobile card links the same per-report names as the rows', () => {
+    const rowNames = wrapper!.findAll('tbody tr a').map((link) => link.attributes('aria-label'));
+    const cardNames = wrapper!.findAll('.report-card a').map((link) => link.attributes('aria-label'));
+    expect(cardNames).toEqual(rowNames);
   });
 
   it('opens the mobile cards through the same links', () => {
