@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Response } from '@playwright/test';
 import axios from 'axios';
 import { loginAsAdmin } from './helpers/auth';
 import {
@@ -32,37 +32,130 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
-// A seeded event from layouts/development/db/
+// A seeded event, and the admin-owned calendar it belongs to, from
+// layouts/development/db/
 const TEST_EVENT_ID = '37d1bb5a-452b-432e-ac46-268b9c565bde';
+const TEST_CALENDAR_ID = 'c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3';
 
 let env: TestEnvironment;
+let adminToken: string;
 let seededReportId: string;
+
+const REPORTS_API = '/api/v1/admin/reports';
+const SETTINGS_API = '/api/v1/admin/moderation/settings';
 
 // Configure tests to run serially since they may share state
 test.describe.configure({ mode: 'serial' });
+
+/**
+ * Creates an admin-initiated report through the API. An admin may report
+ * an event only once.
+ *
+ * @param eventId - The event to report
+ * @param description - The report's description, shown on its detail page
+ * @returns The new report's id
+ */
+async function seedAdminReport(eventId: string, description: string): Promise<string> {
+  const response = await axios.post(
+    `${env.baseURL}${REPORTS_API}`,
+    {
+      eventId,
+      category: 'spam',
+      description,
+      priority: 'medium',
+      adminNotes: 'Seeded by admin-moderation.spec.ts',
+    },
+    { headers: { Authorization: `Bearer ${adminToken}` } },
+  );
+  return response.data.report.id;
+}
+
+/**
+ * Creates an event on the admin's seeded calendar through the API.
+ *
+ * @param name - The event's English name
+ * @returns The new event's id
+ */
+async function seedEvent(name: string): Promise<string> {
+  const response = await axios.post(
+    `${env.baseURL}/api/v1/events`,
+    {
+      calendarId: TEST_CALENDAR_ID,
+      content: { en: { name } },
+      schedules: [{ start: '2030-06-01T18:00:00Z', eventEndTime: '2030-06-01T20:00:00Z' }],
+    },
+    { headers: { Authorization: `Bearer ${adminToken}` } },
+  );
+  return response.data.id;
+}
+
+/**
+ * Resolves when the dashboard's report list request matching `matches`
+ * completes.
+ *
+ * @param page - Playwright page instance
+ * @param matches - Predicate on the request's query parameters
+ */
+function waitForReportList(page: Page, matches: (params: URLSearchParams) => boolean): Promise<Response> {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === REPORTS_API
+      && response.request().method() === 'GET'
+      && matches(url.searchParams);
+  });
+}
+
+/**
+ * Resolves when a moderation settings request with the given method
+ * completes.
+ *
+ * @param page - Playwright page instance
+ * @param method - GET for the page's load, PUT for a save
+ */
+function waitForSettingsRequest(page: Page, method: 'GET' | 'PUT'): Promise<Response> {
+  return page.waitForResponse((response) => new URL(response.url()).pathname === SETTINGS_API
+    && response.request().method() === method);
+}
+
+/**
+ * Opens moderation settings and waits until the stored settings have
+ * loaded into the form, so a field read or written afterwards is never
+ * overwritten by the load.
+ *
+ * @param page - Playwright page instance
+ */
+async function gotoModerationSettings(page: Page): Promise<void> {
+  const loaded = waitForSettingsRequest(page, 'GET');
+  await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
+  await loaded;
+  await expect(page.locator('input#auto-escalation')).toBeVisible();
+}
+
+/**
+ * Saves the moderation settings form and waits for the confirmation.
+ *
+ * @param page - Playwright page instance
+ */
+async function saveModerationSettings(page: Page): Promise<void> {
+  const saved = waitForSettingsRequest(page, 'PUT');
+  await page.getByRole('button', { name: 'Save Settings' }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(page.locator('.message-success')).toHaveText('Settings saved successfully');
+}
 
 // Start server once for entire file
 test.beforeAll(async () => {
   env = await startTestServer();
 
-  // Seed one admin-initiated report so the dashboard always lists a report
-  // and the report-detail tests have something to open.
   const loginResponse = await axios.post(`${env.baseURL}/api/auth/v1/login`, {
     email: 'admin@pavillion.dev',
     password: 'admin',
   });
-  const reportResponse = await axios.post(
-    `${env.baseURL}/api/v1/admin/reports`,
-    {
-      eventId: TEST_EVENT_ID,
-      category: 'spam',
-      description: 'E2E seed: a report for the admin report-detail tests.',
-      priority: 'medium',
-      adminNotes: 'Seeded by admin-moderation.spec.ts',
-    },
-    { headers: { Authorization: `Bearer ${loginResponse.data}` } },
-  );
-  seededReportId = reportResponse.data.report.id;
+  adminToken = loginResponse.data;
+
+  // Seed one admin-initiated report so the dashboard always lists a report
+  // and the report-detail tests have something to open.
+  seededReportId = await seedAdminReport(TEST_EVENT_ID, 'E2E seed: a report for the admin report-detail tests.');
 });
 
 /**
@@ -108,12 +201,15 @@ test.describe('Admin Moderation Dashboard', () => {
     const statusFilter = page.locator('select#status-filter');
     await expect(statusFilter).toBeVisible();
 
-    // Select a specific status
-    await statusFilter.selectOption({ index: 1 }); // Select first non-"All" option
-    await page.waitForTimeout(500);
+    // Select Submitted, the seeded report's status; the list refetches with
+    // the filter applied
+    const filtered = waitForReportList(page, (params) => params.get('status') === 'submitted');
+    await statusFilter.selectOption('submitted');
+    expect((await filtered).ok()).toBe(true);
 
-    // Verify the page updated (doesn't cause errors)
-    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
+    // The seeded report is still listed under the filter
+    await expect(statusFilter).toHaveValue('submitted');
+    await expect(page.locator('table.reports-table').first()).toBeVisible();
   });
 
   test('should navigate to report detail', async ({ page }) => {
@@ -172,186 +268,72 @@ test.describe('Admin Moderation Settings', () => {
   });
 
   test('should access moderation settings page', async ({ page }) => {
-    // Navigate directly to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
+    await gotoModerationSettings(page);
 
-    // Wait for page to load (give more time for loading state)
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
-
-    // Wait for loading to complete
-    const loadingMessage = page.locator('text=/Loading settings/i').first();
-    if (await loadingMessage.isVisible().catch(() => false)) {
-      await page.waitForTimeout(2000); // Wait for data to load
-    }
-
-    // Verify we're on settings page
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible();
+    // The loaded form replaces the loading message
+    await expect(page.getByRole('heading', { name: 'Escalation Settings' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save Settings' })).toBeVisible();
   });
 
   test('should display IP retention settings', async ({ page }) => {
-    // Navigate to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
+    await gotoModerationSettings(page);
 
-    // Wait for loading to complete
-    await page.waitForTimeout(2000);
-
-    // Look for IP retention related fields by their IDs
-    const ipHashField = page.locator('input#ip-hash-retention');
-    const ipSubnetField = page.locator('input#ip-subnet-retention');
-
-    // Wait for at least one field to be visible
-    try {
-      await ipHashField.waitFor({ timeout: 5000 });
-    } catch {
-      // Field might not be visible yet
-    }
-
-    const hasIpHashField = await ipHashField.isVisible().catch(() => false);
-    const hasIpSubnetField = await ipSubnetField.isVisible().catch(() => false);
-
-    // At least one IP retention setting should be visible
-    expect(hasIpHashField || hasIpSubnetField).toBeTruthy();
+    await expect(page.locator('input#ip-hash-retention')).toBeVisible();
+    await expect(page.locator('input#ip-subnet-retention')).toBeVisible();
   });
 
   test('should display escalation threshold settings', async ({ page }) => {
-    // Navigate to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
+    await gotoModerationSettings(page);
 
-    // Wait for loading to complete
-    await page.waitForTimeout(2000);
-
-    // Look for escalation threshold field
-    const thresholdField = page.locator('input#auto-escalation-threshold');
-    const autoEscalationField = page.locator('input#auto-escalation');
-
-    try {
-      await thresholdField.waitFor({ timeout: 5000 });
-    } catch {
-      // Field might not be visible yet
-    }
-
-    const hasThresholdField = await thresholdField.isVisible().catch(() => false);
-    const hasAutoEscalationField = await autoEscalationField.isVisible().catch(() => false);
-
-    // Settings page should have escalation-related fields
-    expect(hasThresholdField || hasAutoEscalationField).toBeTruthy();
+    await expect(page.locator('input#auto-escalation')).toBeVisible();
+    await expect(page.locator('input#auto-escalation-threshold')).toBeVisible();
   });
 
   test('should update and save moderation settings', async ({ page }) => {
-    // Navigate to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
+    await gotoModerationSettings(page);
 
-    // Wait for loading to complete
-    await page.waitForTimeout(2000);
-
-    // Find a numeric input field
     const autoEscalationField = page.locator('input#auto-escalation');
+    const currentValue = await autoEscalationField.inputValue();
+    const newValue = currentValue === '72' ? '48' : '72';
 
-    if (await autoEscalationField.isVisible().catch(() => false)) {
-      // Get current value
-      const currentValue = await autoEscalationField.inputValue();
-      const newValue = currentValue === '72' ? '48' : '72';
+    await autoEscalationField.fill(newValue);
+    await saveModerationSettings(page);
 
-      // Update the value
-      await autoEscalationField.clear();
-      await autoEscalationField.fill(newValue);
-
-      // Find and click save button
-      const saveButton = page.locator('button:has-text("Save"), button[type="submit"]').first();
-
-      if (await saveButton.isVisible().catch(() => false)) {
-        await saveButton.click();
-        await page.waitForTimeout(2000);
-
-        // Verify success message
-        const successMessage = page.locator('.message-success, [role="status"]:has-text("Success")').first();
-        const hasSuccess = await successMessage.isVisible().catch(() => false);
-        expect(hasSuccess).toBeTruthy();
-      }
-    }
+    await expect(autoEscalationField).toHaveValue(newValue);
   });
 
   test('should persist settings across page reload', async ({ page }) => {
-    // Navigate to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
+    await gotoModerationSettings(page);
 
-    // Wait for loading to complete
-    await page.waitForTimeout(3000);
-
-    // Find a numeric input and set a known value
     const autoEscalationField = page.locator('input#auto-escalation');
+    const testValue = '96';
+    await autoEscalationField.fill(testValue);
+    await saveModerationSettings(page);
 
-    if (await autoEscalationField.isVisible().catch(() => false)) {
-      // Set a specific test value
-      const testValue = '96';
-      await autoEscalationField.clear();
-      await autoEscalationField.fill(testValue);
-
-      // Save the change
-      const saveButton = page.locator('button:has-text("Save"), button[type="submit"]').first();
-      if (await saveButton.isVisible().catch(() => false)) {
-        await saveButton.click();
-        await page.waitForTimeout(3000); // Wait for save to complete
-      }
-
-      // Verify it was set
-      const savedValue = await autoEscalationField.inputValue();
-      expect(savedValue).toBe(testValue);
-
-      // Reload the page
-      await page.reload();
-      await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
-      await page.waitForTimeout(3000);
-
-      // Verify the value persisted
-      const reloadedValue = await autoEscalationField.inputValue();
-      expect(reloadedValue).toBe(testValue);
-    }
+    // Reload and wait for the stored settings to load back into the form
+    const reloaded = waitForSettingsRequest(page, 'GET');
+    await page.reload();
+    await reloaded;
+    await expect(autoEscalationField).toHaveValue(testValue);
   });
 
   test('should validate IP retention day inputs', async ({ page }) => {
-    // Navigate to moderation settings
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation/settings'));
-    await expect(settingsTitle(page, adminLeaf('moderation/settings').title)).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
+    await gotoModerationSettings(page);
 
-    // Find IP hash retention field
     const ipHashField = page.locator('input#ip-hash-retention');
+    const originalValue = await ipHashField.inputValue();
 
-    if (await ipHashField.isVisible().catch(() => false)) {
-      // Store original value to restore later
-      const originalValue = await ipHashField.inputValue();
+    // Zero is below the field's minimum of one day, so the form refuses to
+    // submit
+    await ipHashField.fill('0');
+    await page.getByRole('button', { name: 'Save Settings' }).click();
+    expect(await ipHashField.evaluate((input: HTMLInputElement) => input.validity.rangeUnderflow)).toBe(true);
 
-      // Try to enter an invalid value (0 or negative)
-      await ipHashField.clear();
-      await ipHashField.fill('0');
-
-      // Try to save
-      const saveButton = page.locator('button:has-text("Save"), button[type="submit"]').first();
-      if (await saveButton.isVisible().catch(() => false)) {
-        await saveButton.click();
-        await page.waitForTimeout(1000);
-
-        // Should show validation error or not allow saving
-        const errorMessage = page.locator('.error-text, .message-error, [role="alert"]').first();
-        const hasError = await errorMessage.isVisible().catch(() => false);
-
-        // Either shows error OR doesn't save (stays on page)
-        const stillOnSettingsPage = await settingsTitle(page, adminLeaf('moderation/settings').title).isVisible();
-
-        expect(hasError || stillOnSettingsPage).toBeTruthy();
-
-        // Restore original value
-        await ipHashField.clear();
-        await ipHashField.fill(originalValue);
-        await saveButton.click();
-        await page.waitForTimeout(1000);
-      }
-    }
+    // Nothing was saved: the stored value survives a reload
+    const reloaded = waitForSettingsRequest(page, 'GET');
+    await page.reload();
+    await reloaded;
+    await expect(ipHashField).toHaveValue(originalValue);
   });
 });
 
@@ -365,19 +347,9 @@ test.describe('Admin Create Report', () => {
     await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
     await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
 
-    // Look for "Create Report" button
-    const createButton = page.locator('button:has-text("Create Report")').first();
+    await page.getByRole('button', { name: 'Create Report' }).click();
 
-    if (await createButton.isVisible().catch(() => false)) {
-      await createButton.click();
-      await page.waitForTimeout(500);
-
-      // Verify modal opened
-      const modal = page.locator('.modal, dialog').first();
-      const hasModal = await modal.isVisible().catch(() => false);
-
-      expect(hasModal).toBeTruthy();
-    }
+    await expect(page.getByRole('dialog', { name: 'Create Admin Report' })).toBeVisible();
   });
 });
 
@@ -431,20 +403,21 @@ test.describe('Admin Moderation Integration', () => {
 
     // Apply a filter
     const statusFilter = page.locator('select#status-filter');
-    await statusFilter.selectOption({ index: 1 });
-    await page.waitForTimeout(500);
+    const filtered = waitForReportList(page, (params) => params.get('status') === 'submitted');
+    await statusFilter.selectOption('submitted');
+    await filtered;
 
-    // Check if reset button appears
-    const resetButton = page.locator('button:has-text("Reset")').first();
+    // An active filter shows the reset button
+    const resetButton = page.getByRole('button', { name: 'Reset Filters' });
+    await expect(resetButton).toBeVisible();
 
-    if (await resetButton.isVisible().catch(() => false)) {
-      await resetButton.click();
-      await page.waitForTimeout(500);
+    // Resetting refetches the unfiltered list and clears the select
+    const unfiltered = waitForReportList(page, (params) => !params.has('status'));
+    await resetButton.click();
+    await unfiltered;
 
-      // Verify filter was reset (back to "All Statuses")
-      const selectedOption = await statusFilter.locator('option:checked').textContent();
-      expect(selectedOption?.toLowerCase()).toContain('all');
-    }
+    await expect(statusFilter).toHaveValue('');
+    await expect(resetButton).toBeHidden();
   });
 });
 
@@ -453,25 +426,30 @@ test.describe('Admin Moderation Pagination', () => {
     await loginAsAdmin(page, env.baseURL);
   });
 
-  test('should display pagination if many reports exist', async ({ page }) => {
-    // Navigate to moderation dashboard
-    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
-    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible({ timeout: 10000 });
-
-    // Look for pagination controls
-    const pagination = page.locator('nav[aria-label*="pagination" i], .pagination').first();
-
-    // Pagination may or may not exist depending on report count
-    const hasPagination = await pagination.isVisible().catch(() => false);
-
-    // Just verify the page loaded successfully
-    await expect(settingsTitle(page, adminLeaf('moderation').title)).toBeVisible();
-
-    // If pagination exists, verify it's functional
-    if (hasPagination) {
-      const nextButton = page.locator('button:has-text("Next"), button[aria-label*="next" i]').first();
-      const hasNextButton = await nextButton.isVisible().catch(() => false);
-      expect(hasNextButton).toBeTruthy();
+  test('should page through reports when more than one page exists', async ({ page }) => {
+    // The dashboard lists 20 reports a page; with the beforeAll report, 20
+    // more make a second page. An admin reports each event once, so each
+    // report gets an event of its own. This is the file's last test, so the
+    // extra reports cannot crowd the seeded one out of the earlier tests.
+    // All events are created before any report: a report's flagged handler
+    // runs after its response, and on the e2e server's single-connection
+    // SQLite its transaction collides with an event creation's.
+    const eventIds: string[] = [];
+    for (let i = 1; i <= 20; i++) {
+      eventIds.push(await seedEvent(`E2E pagination event ${i}`));
     }
+    for (const [i, eventId] of eventIds.entries()) {
+      await seedAdminReport(eventId, `E2E seed: pagination report ${i + 1}.`);
+    }
+
+    await gotoSettings(page, env.baseURL, adminLeaf('moderation'));
+
+    const pagination = page.getByRole('navigation', { name: 'Report pagination' });
+    await expect(pagination).toBeVisible();
+    await expect(pagination).toContainText('Page 1 of 2');
+
+    await pagination.getByRole('button', { name: 'Next' }).click();
+    await expect(pagination).toContainText('Page 2 of 2');
+    await expect(pagination.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 });
