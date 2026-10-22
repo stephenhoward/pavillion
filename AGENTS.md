@@ -6,6 +6,8 @@ This file provides guidance to AI coding agents (Claude Code, and any other agen
 
 Pavillion is a federated events calendar built with Vue.js 3 frontend and Express.js backend. It uses ActivityPub for federation, allowing organizations to share events across multiple instances. The application supports multilingual content and emphasizes accessibility and community building.
 
+Read [docs/mission.md](docs/mission.md) before working. When a piece of work conflicts with it, the mission document wins unless a recorded decision says otherwise.
+
 ## Agent Configuration Layout
 
 Agent configuration lives in `.agents/`, with `.claude` as a symlink pointing at it:
