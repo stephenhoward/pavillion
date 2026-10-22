@@ -35,7 +35,7 @@ describe('ReportsDashboard.vue', () => {
   describe('report rows', () => {
     const REPORT_ID = 'report-1';
 
-    async function mountWithReport() {
+    async function mountWithReports(reports: object[]) {
       const store = useModerationStore();
       const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: {} }] });
       const wrapper = mountComponent(ReportsDashboard, router, {
@@ -43,17 +43,21 @@ describe('ReportsDashboard.vue', () => {
         props: { calendarId: 'cal-1' },
       });
       await flushPromises();
-      // onMounted resets the store, so the row is seeded after mount.
-      store.reports = [{
+      // onMounted resets the store, so the rows are seeded after mount.
+      store.reports = reports as never;
+      await flushPromises();
+      return wrapper;
+    }
+
+    function mountWithReport() {
+      return mountWithReports([{
         id: REPORT_ID,
         eventId: 'aaaaaaaa-0000-0000-0000-000000000000',
         category: 'spam',
         reporterType: 'anonymous',
         status: 'submitted',
         createdAt: new Date('2026-10-01T12:00:00Z'),
-      }] as never;
-      await flushPromises();
-      return wrapper;
+      }]);
     }
 
     it('is a plain table whose rows are not tab stops', async () => {
@@ -72,6 +76,37 @@ describe('ReportsDashboard.vue', () => {
 
       await buttons[0].trigger('click');
       expect(wrapper.emitted('view-report')).toEqual([[REPORT_ID]]);
+    });
+
+    it('names each event button after its own report, keeping the visible text in the name', async () => {
+      const wrapper = await mountWithReports([
+        {
+          id: 'report-1',
+          eventId: 'aaaaaaaa-0000-0000-0000-000000000000',
+          category: 'spam',
+          reporterType: 'anonymous',
+          status: 'submitted',
+          createdAt: new Date('2026-10-01T12:00:00Z'),
+        },
+        {
+          id: 'report-2',
+          eventId: 'aaaaaaaa-0000-0000-0000-000000000000',
+          category: 'harassment',
+          reporterType: 'anonymous',
+          status: 'submitted',
+          createdAt: new Date('2026-10-02T12:00:00Z'),
+        },
+      ]);
+
+      const buttons = wrapper.findAll('tbody tr button');
+      expect(buttons).toHaveLength(2);
+      const names = buttons.map((button) => button.attributes('aria-label'));
+
+      expect(names[0]).toMatch(/^View Spam report for event aaaaaaaa\.\.\./);
+      expect(names[0]).toContain(buttons[0].text());
+      expect(names[1]).toMatch(/^View Harassment report for event aaaaaaaa\.\.\./);
+      expect(names[1]).toContain(buttons[1].text());
+      expect(new Set(names).size).toBe(names.length);
     });
 
     it('still opens the report once when a pointer user clicks elsewhere on the row', async () => {

@@ -54,6 +54,7 @@
     "admin_reports": "Signalements initiés par des administrateurs",
     "escalated_reports": "Signalements remontés",
     "view_details": "Voir les détails",
+    "view_details_label": "{{action}} : signalement ({{category}}) sur l'événement {{event}}, {{date}}",
     "deadline": "Échéance",
     "create_report": "Créer un signalement",
     "settings_button_label": "Paramètres de modération",

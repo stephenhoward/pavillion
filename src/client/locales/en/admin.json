@@ -54,6 +54,7 @@
     "admin_reports": "Admin-Initiated Reports",
     "escalated_reports": "Escalated Reports",
     "view_details": "View Details",
+    "view_details_label": "{{action}}: {{category}} report on event {{event}}, {{date}}",
     "deadline": "Deadline",
     "create_report": "Create Report",
     "settings_button_label": "Moderation Settings",

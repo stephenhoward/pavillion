@@ -224,6 +224,7 @@
       "column_reporter": "Auteur du signalement",
       "column_status": "Statut",
       "column_date": "Date",
+      "view_report_label": "Voir le signalement ({{category}}) de l'événement {{event}}, {{date}}",
       "loading": "Chargement des signalements...",
       "error_loading": "Impossible de charger les signalements. Veuillez réessayer.",
       "page_info": "Page {{current}} sur {{total}}",

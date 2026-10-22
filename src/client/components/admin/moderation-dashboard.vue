@@ -3,7 +3,7 @@ import { onMounted, computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useModerationStore } from '@/client/stores/moderation-store';
-import { ReportStatus, ReportCategory, type EscalationType } from '@/common/model/report';
+import { ReportStatus, ReportCategory, type EscalationType, type Report } from '@/common/model/report';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import CreateReportModal from '@/client/components/admin/create-report.vue';
 import { DateTime } from 'luxon';
@@ -156,6 +156,21 @@ const getEscalationBadge = (report: any) => {
   }
   return null;
 };
+
+/**
+ * Per-report accessible name for a row's "View Details" link. It contains
+ * the visible text so speech-input users can still target the link by what
+ * they see, and adds the category, event and filing date so a links list
+ * does not read N identical names.
+ */
+function viewDetailsLabel(report: Report): string {
+  return t('view_details_label', {
+    action: t('view_details'),
+    category: t(`category.${report.category}`),
+    event: report.eventId.substring(0, 8),
+    date: formatDate(report.createdAt),
+  });
+}
 
 function reportDetailRoute(reportId: string) {
   return { name: 'moderation_report_detail', params: { reportId } };
@@ -381,7 +396,10 @@ function goToSettings() {
                     <span class="status-badge">{{ t(`status.${report.status}`) }}</span>
                   </td>
                   <td class="cell-actions">
-                    <router-link :to="reportDetailRoute(report.id)" class="action-link" @click.stop>
+                    <router-link :to="reportDetailRoute(report.id)"
+                                 class="action-link"
+                                 :aria-label="viewDetailsLabel(report)"
+                                 @click.stop>
                       {{ t('view_details') }}
                     </router-link>
                   </td>
@@ -400,7 +418,10 @@ function goToSettings() {
             >
               <div class="report-card-header">
                 <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
-                <router-link :to="reportDetailRoute(report.id)" class="action-link-mobile" @click.stop>
+                <router-link :to="reportDetailRoute(report.id)"
+                             class="action-link-mobile"
+                             :aria-label="viewDetailsLabel(report)"
+                             @click.stop>
                   {{ t('view_details') }}
                 </router-link>
               </div>
@@ -488,7 +509,10 @@ function goToSettings() {
                     <span class="status-badge">{{ t(`status.${report.status}`) }}</span>
                   </td>
                   <td class="cell-actions">
-                    <router-link :to="reportDetailRoute(report.id)" class="action-link" @click.stop>
+                    <router-link :to="reportDetailRoute(report.id)"
+                                 class="action-link"
+                                 :aria-label="viewDetailsLabel(report)"
+                                 @click.stop>
                       {{ t('view_details') }}
                     </router-link>
                   </td>
@@ -507,7 +531,10 @@ function goToSettings() {
             >
               <div class="report-card-header">
                 <span class="event-id">{{ report.eventId.substring(0, 8) }}...</span>
-                <router-link :to="reportDetailRoute(report.id)" class="action-link-mobile" @click.stop>
+                <router-link :to="reportDetailRoute(report.id)"
+                             class="action-link-mobile"
+                             :aria-label="viewDetailsLabel(report)"
+                             @click.stop>
                   {{ t('view_details') }}
                 </router-link>
               </div>

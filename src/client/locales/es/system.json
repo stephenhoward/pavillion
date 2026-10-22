@@ -224,6 +224,7 @@
       "column_reporter": "Reportante",
       "column_status": "Estado",
       "column_date": "Fecha",
+      "view_report_label": "Ver reporte ({{category}}) del evento {{event}}, {{date}}",
       "loading": "Cargando reportes...",
       "error_loading": "No se pudieron cargar los reportes. Por favor intenta de nuevo.",
       "page_info": "Página {{current}} de {{total}}",

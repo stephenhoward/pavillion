@@ -54,6 +54,7 @@
     "admin_reports": "Reportes iniciados por administradores",
     "escalated_reports": "Reportes escalados",
     "view_details": "Ver detalles",
+    "view_details_label": "{{action}}: reporte ({{category}}) del evento {{event}}, {{date}}",
     "deadline": "Fecha límite",
     "create_report": "Crear reporte",
     "settings_button_label": "Configuración de moderación",

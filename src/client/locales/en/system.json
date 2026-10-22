@@ -224,6 +224,7 @@
       "column_reporter": "Reporter",
       "column_status": "Status",
       "column_date": "Date",
+      "view_report_label": "View {{category}} report for event {{event}}, {{date}}",
       "loading": "Loading reports...",
       "error_loading": "Failed to load reports. Please try again.",
       "page_info": "Page {{current}} of {{total}}",
