@@ -41,6 +41,32 @@ import {
 const rateLimitEnabled = config.get<boolean>('rateLimit.enabled');
 const describeOrSkip = rateLimitEnabled ? describe : describe.skip;
 
+/**
+ * Boots the real server app with an admin provisioned, so setup-mode
+ * middleware (503 for unauthenticated API calls until an admin exists) does
+ * not mask the limiter under test. Imports are deferred so the full-server
+ * init cost is only paid by the tests that need it.
+ */
+async function initRealServer(adminEmail: string): Promise<Express> {
+  const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
+  const { EventEmitter } = await import('events');
+  const { default: AccountService } = await import('@/server/accounts/service/account');
+  const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
+  const { default: SetupInterface } = await import('@/server/setup/interface');
+
+  const realEnv = new TestEnvironment();
+  await realEnv.init();
+
+  const accountService = new AccountService(
+    new EventEmitter(),
+    new ConfigurationInterface(),
+    new SetupInterface(),
+  );
+  await accountService._setupAccount(adminEmail, 'testpassword!1');
+
+  return realEnv.app as Express;
+}
+
 describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
   let app: Express;
 
@@ -101,6 +127,38 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       expect(blocked.headers['ratelimit-limit']).toBe(String(maxRequests));
       expect(blocked.headers['ratelimit-remaining']).toBe('0');
       expect(blocked.headers['retry-after']).toBeDefined();
+    });
+
+    it('is wired on POST /api/v1/applications: an exhausted email is refused by the email limiter, not the IP limiter', async () => {
+      const maxRequests = config.get<number>('rateLimit.application.byEmail.max');
+
+      // Exhaust the email bucket through the stub route. The limiter is a
+      // module-level singleton, so the real route shares this store.
+      const sameEmail = `application-real-route-${Date.now()}@example.com`;
+      for (let i = 0; i < maxRequests; i++) {
+        const response = await request(app)
+          .post('/apply-email-only')
+          .send({ email: sameEmail });
+        expect(response.status).toBe(200);
+      }
+
+      const realApp = await initRealServer('rate-limit-apply-email-admin@pavillion.dev');
+
+      // limitApplicationByIp runs first on the real route and its localhost
+      // bucket is spent elsewhere in this file, which would mask the email
+      // limiter. The real app trusts one proxy hop, so a fresh forwarded
+      // address gives the IP limiter an unspent bucket and lets the request
+      // reach limitApplicationByEmail.
+      const realPost = await request(realApp)
+        .post('/api/v1/applications')
+        .set('X-Forwarded-For', '203.0.113.10')
+        .send({ email: sameEmail });
+
+      expect(realPost.status).toBe(429);
+      expect(realPost.body.errorName).toBe('RateLimitError');
+      expect(realPost.body.error).toBe(
+        'Too many application requests for this email, please try again later.',
+      );
     });
   });
 
@@ -325,6 +383,37 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
         .post('/register-email-only')
         .send({ email: emailB });
       expect(responseB.status).toBe(200);
+    });
+
+    it('is wired on POST /api/v1/register: an exhausted email is refused by the email limiter, not the IP limiter', async () => {
+      const maxRequests = config.get<number>('rateLimit.register.byEmail.max');
+
+      // Exhaust the email bucket through the stub route. The limiter is a
+      // module-level singleton, so the real route shares this store.
+      const sameEmail = `register-real-route-${Date.now()}@example.com`;
+      for (let i = 0; i < maxRequests; i++) {
+        const response = await request(app)
+          .post('/register-email-only')
+          .send({ email: sameEmail });
+        expect(response.status).toBe(200);
+      }
+
+      const realApp = await initRealServer('rate-limit-register-email-admin@pavillion.dev');
+
+      // limitRegisterByIp runs first on the real route; a fresh forwarded
+      // address (the real app trusts one proxy hop) keeps it from masking the
+      // email limiter regardless of how much of the localhost bucket other
+      // tests have spent.
+      const realPost = await request(realApp)
+        .post('/api/v1/register')
+        .set('X-Forwarded-For', '203.0.113.20')
+        .send({ email: sameEmail });
+
+      expect(realPost.status).toBe(429);
+      expect(realPost.body.errorName).toBe('RateLimitError');
+      expect(realPost.body.error).toBe(
+        'Too many register requests for this email, please try again later.',
+      );
     });
   });
 

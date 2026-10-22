@@ -5,24 +5,30 @@ import request from 'supertest';
 import config from 'config';
 
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
+import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
 import {
   getActorRateLimitStore,
+  getCalendarRateLimitStore,
   getUserRateLimitStore,
   resetActorRateLimitStore,
+  resetCalendarRateLimitStore,
   resetUserRateLimitStore,
 } from '@/server/activitypub/middleware/rate-limit';
 
 /**
- * Integration tests for ActivityPub user-inbox rate limiting.
+ * Integration tests for ActivityPub inbox rate limiting.
  *
- * These tests exercise the REAL route-level middleware chain installed by
- * UserActorRoutes.installHandlers on POST /users/:username/inbox:
+ * These tests exercise the REAL route-level middleware chains installed on the
+ * two inbox routes:
  *
- *   createActorRateLimiter() -> createUserRateLimiter() -> verifyHttpSignature -> handler
+ *   POST /users/:username/inbox (UserActorRoutes.installHandlers)
+ *     createActorRateLimiter() -> createUserRateLimiter() -> verifyHttpSignature -> handler
  *
- * The limiters run BEFORE HTTP signature verification, mirroring the calendar
- * inbox chain (activitypub/api/v1/server.ts) and the DEC-013 ingest-boundary
- * posture. Signature verification is bypassed here (SKIP_SIGNATURES) so requests
+ *   POST /calendars/:urlname/inbox (ActivityPubServerRoutes.installHandlers)
+ *     createActorRateLimiter() -> createCalendarRateLimiter() -> verifyHttpSignature -> handler
+ *
+ * The limiters run BEFORE HTTP signature verification, matching the DEC-013
+ * ingest-boundary posture. Signature verification is bypassed here (SKIP_SIGNATURES) so requests
  * reach the limiters and the terminal handler without managing certificates;
  * this isolates limiter behavior while still proving the wiring and ordering.
  *
@@ -59,6 +65,36 @@ function buildServer(): http.Server {
   const routes = new UserActorRoutes(createStubUserActorService());
   routes.installHandlers(app, '/');
   return http.createServer(app);
+}
+
+/**
+ * Minimal stubs of the interfaces ActivityPubServerRoutes needs on the calendar
+ * inbox path. Under-limit requests send a well-formed Follow from a non-Person
+ * actor, which resolves the calendar and is enqueued through addToInbox, so the
+ * handler answers 200 and the limiter's 200/429 split is unambiguous.
+ */
+function buildCalendarServer(): http.Server {
+  const app = express();
+  const activityPubInterface: any = {
+    isPersonActorUri: () => false,
+    addToInbox: async () => undefined,
+  };
+  const calendarInterface: any = {
+    getCalendarByName: async (urlName: string) => ({ id: `calendar-${urlName}`, urlName }),
+  };
+  const routes = new ActivityPubServerRoutes(activityPubInterface, calendarInterface);
+  routes.installHandlers(app, '/');
+  return http.createServer(app);
+}
+
+function followActivity(calendar: string, actor: string, n: number | string) {
+  return {
+    '@context': 'https://www.w3.org/ns/activitystreams',
+    id: `${actor}/activities/follow-${n}`,
+    type: 'Follow',
+    actor,
+    object: `https://local.example/calendars/${calendar}`,
+  };
 }
 
 describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
@@ -269,6 +305,117 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       // 429 (not 401) confirms the limiter shed the request before signature
       // verification ran, matching the calendar-inbox chain ordering.
       expect(blocked.status).toBe(429);
+    });
+  });
+});
+
+describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () => {
+  // Same suite-lifetime server rationale as the user-inbox suite above.
+  let server: http.Server;
+
+  beforeAll(async () => {
+    process.env.SKIP_SIGNATURES = 'true';
+
+    server = buildCalendarServer();
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+      server.closeAllConnections();
+    });
+
+    delete process.env.SKIP_SIGNATURES;
+    resetActorRateLimitStore();
+    resetCalendarRateLimitStore();
+  });
+
+  beforeEach(() => {
+    getActorRateLimitStore().clear();
+    getCalendarRateLimitStore().clear();
+  });
+
+  describe('per-calendar limiter', () => {
+    it('returns 429 once the per-calendar threshold is exceeded', async () => {
+      const max = config.get<number>('rateLimit.activitypub.calendar.max');
+
+      // Vary the actor each request so the actor limiter (lower cap) does not
+      // fire first; this isolates the per-calendar limiter as the cause of the 429.
+      for (let i = 0; i < max; i++) {
+        const sender = `https://remote.example/users/sender${i}`;
+        const response = await request(server)
+          .post('/calendars/alpha/inbox')
+          .send(followActivity('alpha', sender, i));
+
+        expect(response.status).toBe(200);
+      }
+
+      const lastSender = 'https://remote.example/users/senderN';
+      const blocked = await request(server)
+        .post('/calendars/alpha/inbox')
+        .send(followActivity('alpha', lastSender, 'N'));
+
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers['retry-after']).toBeDefined();
+      expect(blocked.body.error).toBe('Too many requests to this calendar, please try again later.');
+      expect(JSON.stringify(blocked.body)).not.toContain('alpha');
+    });
+
+    it('keeps per-calendar limits isolated: exhausting calendar A does not affect calendar B', async () => {
+      const max = config.get<number>('rateLimit.activitypub.calendar.max');
+
+      for (let i = 0; i < max; i++) {
+        const sender = `https://remote.example/users/sender${i}`;
+        const response = await request(server)
+          .post('/calendars/alpha/inbox')
+          .send(followActivity('alpha', sender, i));
+
+        expect(response.status).toBe(200);
+      }
+
+      const aBlocked = await request(server)
+        .post('/calendars/alpha/inbox')
+        .send(followActivity('alpha', 'https://remote.example/users/senderN', 'N'));
+
+      expect(aBlocked.status).toBe(429);
+
+      // Calendar B is unaffected by calendar A's exhaustion.
+      const bAllowed = await request(server)
+        .post('/calendars/beta/inbox')
+        .send(followActivity('beta', 'https://remote.example/users/fresh', 'fresh'));
+
+      expect(bAllowed.status).toBe(200);
+    });
+  });
+
+  describe('chain ordering', () => {
+    it('runs the actor limiter on the calendar inbox before signature verification', async () => {
+      // The actor cap is lower than the per-calendar cap. Holding both the
+      // calendar and actor constant, the actor limiter must trip first, proving
+      // it is installed and reached on the calendar-inbox route.
+      const actorMax = config.get<number>('rateLimit.activitypub.actor.max');
+      const calendarMax = config.get<number>('rateLimit.activitypub.calendar.max');
+      expect(actorMax).toBeLessThan(calendarMax);
+
+      const actor = 'https://remote.example/users/steady';
+
+      for (let i = 0; i < actorMax; i++) {
+        const response = await request(server)
+          .post('/calendars/alpha/inbox')
+          .send(followActivity('alpha', actor, i));
+
+        expect(response.status).toBe(200);
+      }
+
+      const blocked = await request(server)
+        .post('/calendars/alpha/inbox')
+        .send(followActivity('alpha', actor, 'N'));
+
+      // 429 (not 401) confirms the limiter shed the request before signature
+      // verification ran.
+      expect(blocked.status).toBe(429);
+      expect(blocked.body.error).toBe('Too many requests from this actor, please try again later.');
     });
   });
 });
