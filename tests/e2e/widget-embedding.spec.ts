@@ -401,6 +401,37 @@ test.describe('Widget Embedding', () => {
     expect(loaded).toBeGreaterThan(0);
   });
 
+  test('widget keyboard focus takes the shared accent ring from the global reset', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 20000 });
+
+    // The footer link has no focus rule of its own, so its ring can only come
+    // from the shared reset. No pointer input has happened, so programmatic
+    // focus matches :focus-visible.
+    const link = iframe.locator('.widget-footer a');
+    await link.focus();
+
+    await expect.poll(
+      async () => link.evaluate((el) => {
+        const probe = document.createElement('span');
+        probe.style.backgroundColor = 'var(--pav-accent)';
+        document.querySelector('.widget-root')!.appendChild(probe);
+        const accent = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        const style = getComputedStyle(el);
+        return {
+          focusVisible: el.matches(':focus-visible'),
+          matches: style.outlineColor === accent,
+          resolved: accent !== 'rgba(0, 0, 0, 0)',
+          outlineStyle: style.outlineStyle,
+        };
+      }),
+      { message: 'footer link :focus-visible outline is the accent', timeout: 15000 },
+    ).toEqual({ focusVisible: true, matches: true, resolved: true, outlineStyle: 'solid' });
+  });
+
   test('event detail address link is styled, not the browser default', async ({ page }) => {
     // Not every seeded event has an address, so give the detail one.
     await page.route('**/api/public/v1/events/*/instances/*', async (route) => {
