@@ -2,13 +2,14 @@ import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 import config from 'config';
-import { Op } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import EmailInterface from "@/server/email/interface";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
+import db from '@/server/common/entity/db';
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import { noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
@@ -444,49 +445,59 @@ export default class AccountService {
       throw new AccountAlreadyExistsError();
     }
 
-    const accountEntity = AccountEntity.build({
-      id: uuidv4(),
-      email: normalizeEmail(email),
-      username: '',
-    });
-
-    await accountEntity.save();
-
-    const accountSecretsEntity = AccountSecretsEntity.build({ account_id: accountEntity.id });
-    await accountSecretsEntity.save();
-
-    let accountInfo:AccountInfo = {
-      account: accountEntity.toModel(),
-      password_code: '',
-    };
-
-    if( password ) {
-      this.setPassword(accountEntity.toModel(), password);
-    }
-    else {
-      const passwordResetCode = await this.generatePasswordResetCodeForAccount(accountEntity.toModel());
-      accountInfo.password_code = passwordResetCode;
-    }
-
-    // In test environment, assign admin role to FIRST account only and clear setup cache
-    // This allows tests to run without being blocked by setup mode middleware
-    // while still allowing permission testing with non-admin accounts
-    if (process.env.NODE_ENV === 'test') {
-      // Check if there are any existing admin accounts
-      const existingAdmins = await AccountRoleEntity.findAll({
-        where: { role: 'admin' },
+    // The account, its secrets row, the password (or reset code) and any role
+    // rows are written in one transaction, so a failed write rolls them all
+    // back instead of leaving an account the invitee cannot log in to or
+    // re-create.
+    const accountInfo = await db.transaction(async (transaction): Promise<AccountInfo> => {
+      const accountEntity = AccountEntity.build({
+        id: uuidv4(),
+        email: normalizeEmail(email),
+        username: '',
       });
 
-      // Only assign admin role if this is the first account (no admins exist yet)
-      if (existingAdmins.length === 0) {
-        const roleEntity = AccountRoleEntity.build({
-          account_id: accountEntity.id,
-          role: 'admin',
-        });
-        await roleEntity.save();
+      await accountEntity.save({ transaction });
+
+      const accountSecretsEntity = AccountSecretsEntity.build({ account_id: accountEntity.id });
+      await accountSecretsEntity.save({ transaction });
+
+      const info: AccountInfo = {
+        account: accountEntity.toModel(),
+        password_code: '',
+      };
+
+      if( password ) {
+        await this.setPassword(accountEntity.toModel(), password, transaction);
+      }
+      else {
+        info.password_code = await this.generatePasswordResetCodeForAccount(accountEntity.toModel(), transaction);
       }
 
-      // Clear setup mode cache so middleware will query DB fresh and find the admin
+      // In test environment, assign admin role to FIRST account only
+      // This allows tests to run without being blocked by setup mode middleware
+      // while still allowing permission testing with non-admin accounts
+      if (process.env.NODE_ENV === 'test') {
+        // Check if there are any existing admin accounts
+        const existingAdmins = await AccountRoleEntity.findAll({
+          where: { role: 'admin' },
+          transaction,
+        });
+
+        // Only assign admin role if this is the first account (no admins exist yet)
+        if (existingAdmins.length === 0) {
+          const roleEntity = AccountRoleEntity.build({
+            account_id: accountEntity.id,
+            role: 'admin',
+          });
+          await roleEntity.save({ transaction });
+        }
+      }
+
+      return info;
+    });
+
+    // Clear setup mode cache so middleware will query DB fresh and find the admin
+    if (process.env.NODE_ENV === 'test') {
       this.setupInterface.clearCache();
     }
 
@@ -516,10 +527,11 @@ export default class AccountService {
    * Generates a password reset code for a specific account.
    *
    * @param {Account} account - The account to generate a password reset code for
+   * @param {Transaction} [transaction] - Transaction to enroll the read and write in
    * @returns {Promise<string>} The generated password reset code
    */
-  async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
-    let secret = await AccountSecretsEntity.findByPk(account.id);
+  async generatePasswordResetCodeForAccount(account: Account, transaction?: Transaction): Promise<string> {
+    let secret = await AccountSecretsEntity.findByPk(account.id, { transaction });
     if ( ! secret ) {
       secret = AccountSecretsEntity.build({
         id: account.id,
@@ -527,7 +539,7 @@ export default class AccountService {
     }
     secret.password_reset_code = randomBytes(16).toString('hex');
     secret.password_reset_expiration = DateTime.now().plus({ hours: 1 }).toJSDate();
-    await secret.save();
+    await secret.save({ transaction });
 
     return secret.password_reset_code;
   }
@@ -1136,10 +1148,11 @@ export default class AccountService {
     * Sets the password for an account
     * @param {Account} account - The account to set the password for
     * @param {string} password - The new password
+    * @param {Transaction} [transaction] - Transaction to enroll the read and write in
     * @returns {Promise<boolean>} True if the password was successfully set
     */
-  async setPassword(account: Account, password: string): Promise<boolean> {
-    let secret = await AccountSecretsEntity.findByPk(account.id);
+  async setPassword(account: Account, password: string, transaction?: Transaction): Promise<boolean> {
+    let secret = await AccountSecretsEntity.findByPk(account.id, { transaction });
     if (!secret) {
       secret = AccountSecretsEntity.build({
         account_id: account.id,
@@ -1149,7 +1162,7 @@ export default class AccountService {
     const hashedPassword = scryptSync(password, salt, 64).toString('hex');
     secret.salt = salt;
     secret.password = hashedPassword;
-    await secret.save();
+    await secret.save({ transaction });
     return true;
   }
 
