@@ -519,3 +519,317 @@ describe('EventObject.parseInboundEvent — federated XSS strip path', () => {
     });
   });
 });
+
+/**
+ * The remote-editor envelope (`object.eventParams` on a Person-actor Create or
+ * Update) is a fourth inbound wire format. It is parsed under the same rule as
+ * the other three — strip markup, close the key set — and anything it names
+ * outside the allow-list (media, series, ids, routing state) is never taken
+ * from a peer. See DEC-014, "Inbound content is allow-listed by the receiver".
+ */
+describe('EventObject.parseRemoteEditorParams — remote-editor envelope', () => {
+  const editorUri = 'https://editor.example/users/alice';
+  const editorObject = { id: 'https://editor.example/events/e1', attributedTo: editorUri };
+
+  describe('content', () => {
+    it('strips markup from name, description and accessibilityInfo', () => {
+      const r = EventObject.parseRemoteEditorParams({
+        content: {
+          en: {
+            name: '<b>Festival</b><script>alert(1)</script>',
+            description: '<p>A <img src=x onerror=alert(1)>fun time</p>',
+            accessibilityInfo: '<a href="javascript:alert(1)">Ramp</a>',
+          },
+        },
+      }, { actorUri: editorUri, apObject: editorObject });
+
+      expectInert(r.content!.en.name);
+      expectInert(r.content!.en.description);
+      expectInert(r.content!.en.accessibilityInfo);
+      expect(r.content!.en.description).toBe('A fun time');
+      expect(r.content!.en.accessibilityInfo).toBe('Ramp');
+    });
+
+    it('closes the content key set and drops non-string values', () => {
+      const r = EventObject.parseRemoteEditorParams({
+        content: {
+          en: { name: 42, description: { nested: 'object' }, imageAlt: ['x'], evil: '<script>x</script>', language: 'fr' },
+          fr: 'a raw string',
+        },
+      }, { actorUri: editorUri, apObject: editorObject });
+
+      expect(Object.keys(r.content!)).toEqual(['en']);
+      expect(Object.keys(r.content!.en).sort()).toEqual(
+        ['accessibilityInfo', 'description', 'imageAlt', 'name', 'title'],
+      );
+      expect(r.content!.en.name).toBeUndefined();
+      expect(r.content!.en.description).toBeUndefined();
+      expect(r.content!.en.imageAlt).toBeUndefined();
+    });
+
+    it('leaves content absent when no language entry survives', () => {
+      const r = EventObject.parseRemoteEditorParams({ content: { en: null } }, { actorUri: editorUri });
+      expect(r).not.toHaveProperty('content');
+    });
+  });
+
+  describe('top-level allow-list', () => {
+    it('drops every envelope key outside the allow-list', () => {
+      const dropped = {
+        id: 'some-local-uuid',
+        calendarId: 'other-calendar',
+        eventSourceUrl: 'javascript:alert(1)',
+        media: { id: 'local-media' },
+        mediaId: 'local-media',
+        mediaFocalPointX: 99,
+        mediaFocalPointY: -5,
+        mediaZoom: 1000,
+        series: { id: 'local-series' },
+        categories: [{ id: 'local-category' }],
+        locationId: 'local-location',
+        spaceId: 'local-space',
+        repostStatus: 'auto',
+        sourceCalendar: { id: 'x' },
+        date: '2030-01-01',
+        createdAt: '2000-01-01T00:00:00Z',
+        isRecurring: true,
+        recurrenceSummary: 'every day',
+      };
+      const r = EventObject.parseRemoteEditorParams(
+        { ...dropped, content: { en: { name: 'Festival' } } },
+        { actorUri: editorUri, apObject: editorObject },
+      );
+
+      for (const key of Object.keys(dropped)) {
+        expect(r).not.toHaveProperty(key);
+      }
+      expect(r.content!.en.name).toBe('Festival');
+    });
+
+    it('returns an empty result for a non-object envelope', () => {
+      for (const raw of [null, undefined, 'string', 42, ['array']]) {
+        expect(EventObject.parseRemoteEditorParams(raw, { actorUri: editorUri })).toEqual({});
+      }
+    });
+
+    it('takes no own __proto__ or constructor key and leaves Object.prototype untouched', () => {
+      const raw = JSON.parse('{"__proto__": {"polluted": true}, "constructor": {"prototype": {"polluted": true}}, "content": {"en": {"name": "Festival"}}}');
+      const r = EventObject.parseRemoteEditorParams(raw, { actorUri: editorUri });
+
+      expect(Object.prototype.hasOwnProperty.call(r, '__proto__')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(r, 'constructor')).toBe(false);
+      expect(({} as any).polluted).toBeUndefined();
+      expect((r as any).polluted).toBeUndefined();
+    });
+  });
+
+  describe('externalUrl + urlPrompt', () => {
+    it('keeps a valid pair', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { externalUrl: 'https://tickets.example/e1', urlPrompt: 'tickets' },
+        { actorUri: editorUri },
+      );
+      expect(r.externalUrl).toBe('https://tickets.example/e1');
+      expect(r.urlPrompt).toBe('tickets');
+    });
+
+    it('nulls both when the href is not http(s)', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { externalUrl: 'javascript:alert(1)', urlPrompt: 'tickets' },
+        { actorUri: editorUri },
+      );
+      expect(r.externalUrl).toBeNull();
+      expect(r.urlPrompt).toBeNull();
+    });
+
+    it('nulls both when the prompt is not a known token', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { externalUrl: 'https://tickets.example/e1', urlPrompt: 'click-me' },
+        { actorUri: editorUri },
+      );
+      expect(r.externalUrl).toBeNull();
+      expect(r.urlPrompt).toBeNull();
+    });
+
+    it('emits neither key when the envelope names neither', () => {
+      const r = EventObject.parseRemoteEditorParams({ content: { en: { name: 'x' } } }, { actorUri: editorUri });
+      expect(r).not.toHaveProperty('externalUrl');
+      expect(r).not.toHaveProperty('urlPrompt');
+    });
+  });
+
+  describe('schedules', () => {
+    it('passes only the keys a schedule is read from', () => {
+      const r = EventObject.parseRemoteEditorParams({
+        schedules: [{
+          id: 's1',
+          start: '2030-01-01T10:00:00Z',
+          end: '2030-01-01T11:00:00Z',
+          eventEndTime: '2030-01-01T11:00:00Z',
+          frequency: 'weekly',
+          interval: 1,
+          count: 3,
+          byDay: ['MO'],
+          isException: false,
+          eventId: 'someone-elses-event',
+          evil: 'raw',
+        }],
+      }, { actorUri: editorUri, apObject: editorObject });
+
+      expect(Object.keys(r.schedules[0]).sort()).toEqual([
+        'byDay', 'count', 'end', 'eventEndTime', 'frequency', 'id', 'interval', 'isException', 'start',
+      ]);
+    });
+
+    it('drops a non-array schedules value and non-object entries', () => {
+      expect(EventObject.parseRemoteEditorParams({ schedules: 'raw' }, { actorUri: editorUri }))
+        .not.toHaveProperty('schedules');
+      const r = EventObject.parseRemoteEditorParams(
+        { schedules: [null, 'raw', { start: '2030-01-01T10:00:00Z' }] },
+        { actorUri: editorUri, apObject: editorObject },
+      );
+      expect(r.schedules).toEqual([{ start: '2030-01-01T10:00:00Z' }]);
+    });
+
+    it('keeps hideFromPublic when the editor shares the event origin', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { schedules: [{ start: '2030-01-01T10:00:00Z', isException: true, hideFromPublic: false }] },
+        { actorUri: editorUri, apObject: editorObject },
+      );
+      expect(r.schedules[0].hideFromPublic).toBe(false);
+    });
+
+    it('strips hideFromPublic when the editor is not on the event origin', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { schedules: [{ start: '2030-01-01T10:00:00Z', isException: true, hideFromPublic: false }] },
+        { actorUri: editorUri, apObject: { id: 'https://origin.example/calendars/owner/events/e1' } },
+      );
+      expect(r.schedules[0]).not.toHaveProperty('hideFromPublic');
+      expect(r.schedules[0].isException).toBe(true);
+    });
+
+    it('strips hideFromPublic when the event origin is unknown', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { schedules: [{ start: '2030-01-01T10:00:00Z', hideFromPublic: false }] },
+        { actorUri: editorUri },
+      );
+      expect(r.schedules[0]).not.toHaveProperty('hideFromPublic');
+    });
+  });
+
+  describe('location and space', () => {
+    it('strips markup from location fields and drops id, spaces and calendarId', () => {
+      const r = EventObject.parseRemoteEditorParams({
+        location: {
+          id: 'someone-elses-location',
+          calendarId: 'other-calendar',
+          name: '<b>Hall</b>',
+          address: '<script>x</script>123 Main St',
+          city: '<i>Town</i>',
+          state: 'ST',
+          postalCode: '<u>12345</u>',
+          country: 'US',
+          content: { en: { language: 'en', accessibilityInfo: '<b>Ramp</b>', evil: 'raw' } },
+          spaces: [{ id: 'someone-elses-space' }],
+        },
+      }, { actorUri: editorUri });
+
+      expect(r.location).toEqual({
+        name: 'Hall',
+        address: 'x123 Main St',
+        city: 'Town',
+        state: 'ST',
+        postalCode: '12345',
+        country: 'US',
+        content: { en: { accessibilityInfo: 'Ramp' } },
+      });
+    });
+
+    it('keeps a location originUri on the editor host and drops one on any other host', () => {
+      const own = EventObject.parseRemoteEditorParams(
+        { location: { name: 'Hall', originUri: 'https://editor.example/calendars/c/places/p1' } },
+        { actorUri: editorUri },
+      );
+      expect(own.location!.originUri).toBe('https://editor.example/calendars/c/places/p1');
+
+      const foreign = EventObject.parseRemoteEditorParams(
+        { location: { name: 'Hall', originUri: 'https://victim.example/calendars/c/places/p1' } },
+        { actorUri: editorUri },
+      );
+      expect(foreign.location!.name).toBe('Hall');
+      expect(foreign.location).not.toHaveProperty('originUri');
+    });
+
+    it('keeps a space only by a validated originUri and never emits its id', () => {
+      const r = EventObject.parseRemoteEditorParams({
+        location: { name: 'Hall', originUri: 'https://editor.example/places/p1' },
+        space: {
+          id: 'someone-elses-space',
+          placeId: 'someone-elses-location',
+          originUri: 'https://editor.example/places/p1/spaces/s1',
+          content: { en: { name: '<b>Room</b>', accessibilityInfo: 'Lift' } },
+        },
+      }, { actorUri: editorUri });
+
+      expect(r.space).toEqual({
+        originUri: 'https://editor.example/places/p1/spaces/s1',
+        content: { en: { name: 'Room', accessibilityInfo: 'Lift' } },
+      });
+    });
+
+    it('drops a space whose originUri is missing or on another host', () => {
+      for (const space of [
+        { id: 'someone-elses-space' },
+        { id: 'someone-elses-space', originUri: 'https://victim.example/places/p1/spaces/s1' },
+      ]) {
+        const r = EventObject.parseRemoteEditorParams(
+          { location: { name: 'Hall' }, space },
+          { actorUri: editorUri },
+        );
+        expect(r).not.toHaveProperty('space');
+      }
+    });
+
+    it('drops a non-object location or space', () => {
+      const r = EventObject.parseRemoteEditorParams(
+        { location: 'raw', space: ['raw'] },
+        { actorUri: editorUri },
+      );
+      expect(r).not.toHaveProperty('location');
+      expect(r).not.toHaveProperty('space');
+    });
+  });
+
+  // Structural tripwire: the envelope parser may only ever emit keys the AS
+  // parser also emits, so a remote editor can never set a field a peer's
+  // calendar actor could not.
+  it('emits a subset of the parseInboundEvent key set', () => {
+    const editorKeys = Object.keys(EventObject.parseRemoteEditorParams({
+      content: { en: { name: 'Festival' } },
+      schedules: [{ start: '2030-01-01T10:00:00Z' }],
+      location: { name: 'Hall', originUri: 'https://editor.example/places/p1' },
+      space: { originUri: 'https://editor.example/places/p1/spaces/s1', content: { en: { name: 'Room' } } },
+      externalUrl: 'https://tickets.example/e1',
+      urlPrompt: 'tickets',
+    }, { actorUri: editorUri, apObject: editorObject }));
+
+    const inboundKeys = Object.keys(EventObject.parseInboundEvent({
+      id: 'https://remote.example/events/e1',
+      'pavillion:content': { en: { name: 'Festival' } },
+      'pavillion:categories': ['https://remote.example/categories/c1'],
+      'pavillion:series': 'https://remote.example/series/s1',
+      'pavillion:schedules': [{ start: '2030-01-01T10:00:00Z' }],
+      'pavillion:place': { id: 'https://remote.example/places/p1', content: { en: { name: 'Hall' } } },
+      'pavillion:space': { id: 'https://remote.example/places/p1/spaces/s1', content: { en: { name: 'Room' } } },
+      attachment: [{ type: 'Link', rel: 'external', href: 'https://tickets.example/e1' }],
+      'pavillion:urlPrompt': 'tickets',
+      published: '2029-12-01T00:00:00Z',
+      startTime: '2030-01-01T10:00:00Z',
+    }));
+
+    expect(editorKeys.sort()).toEqual(['content', 'externalUrl', 'location', 'schedules', 'space', 'urlPrompt']);
+    for (const key of editorKeys) {
+      expect(inboundKeys).toContain(key);
+    }
+  });
+});

@@ -41,6 +41,14 @@ function stripHtmlTags(html: string): string {
  * and primitives in a content position are malformed and resolve as absent.
  */
 function isLanguageKeyedMap(value: unknown): value is Record<string, unknown> {
+  return isRecord(value);
+}
+
+/**
+ * True for a plain record: a non-null, non-array object. The envelope and its
+ * nested objects are read only through this check.
+ */
+function isRecord(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -52,7 +60,9 @@ function isLanguageKeyedMap(value: unknown): value is Record<string, unknown> {
  * The key set is closed: the parser builds its result only from the keys
  * declared below, so no other wire key reaches eventParams. Local routing
  * state (`calendarId`, `mediaId`, `locationId`, `repostStatus`, ...) is never
- * taken from a peer; callers set what they need after parsing.
+ * taken from a peer; callers set what they need after parsing. The
+ * remote-editor envelope is closed the same way, to a subset of these keys
+ * (see {@link RemoteEditorParams}).
  */
 export interface RemoteEventParams {
   /**
@@ -87,6 +97,31 @@ export interface RemoteEventParams {
   /** EventLocationSpace-shaped object from `pavillion:space` (only when its parent path matches the place id). */
   space?: { originUri?: string; content?: Record<string, any> };
 }
+
+/**
+ * What {@link EventObject.parseRemoteEditorParams} takes from the
+ * remote-editor envelope (`object.eventParams` on a Person-actor Create or
+ * Update). The key set is closed and a strict subset of
+ * {@link RemoteEventParams}: `content`, `schedules`, `location`, `space`,
+ * `externalUrl`, `urlPrompt`. Every key is optional — only what the envelope
+ * supplied and the allow-list kept is present, and the inbox overlays exactly
+ * those keys onto the parseInboundEvent result.
+ */
+export type RemoteEditorParams = Partial<Pick<
+  RemoteEventParams,
+  'content' | 'schedules' | 'location' | 'space' | 'externalUrl' | 'urlPrompt'
+>>;
+
+/**
+ * Keys a schedule entry in the remote-editor envelope may carry: exactly the
+ * keys CalendarEventSchedule.fromObject reads.
+ */
+const REMOTE_EDITOR_SCHEDULE_KEYS = [
+  'id', 'start', 'end', 'eventEndTime', 'frequency', 'interval', 'count', 'byDay', 'isException', 'hideFromPublic',
+] as const;
+
+/** Plain-text location fields a remote-editor envelope may carry. */
+const REMOTE_EDITOR_LOCATION_FIELDS = ['name', 'address', 'city', 'state', 'postalCode', 'country'] as const;
 
 class EventObject extends ActivityPubObject {
   type: string = 'Event';
@@ -511,30 +546,18 @@ class EventObject extends ActivityPubObject {
     // Security-critical: sanitize inbound attachment Link href and urlPrompt enum.
     // Cross-field invariant: both must be valid together, or both are null. A partial
     // record (only one field valid) is never persisted — it is dropped entirely.
-    let parsedExternalUrl: string | null = null;
+    let rawHref: unknown = undefined;
     if (Array.isArray(apObject.attachment)) {
       const externalLink = apObject.attachment.find(
         (a: any) => a && a.type === 'Link' && a.rel === 'external',
       );
       if (externalLink) {
-        parsedExternalUrl = sanitizeExternalUrlHref(externalLink.href);
+        rawHref = externalLink.href;
       }
     }
-
-    let parsedPrompt: UrlPrompt | null = null;
-    const rawPrompt = apObject['pavillion:urlPrompt'];
-    if (typeof rawPrompt === 'string' && URL_PROMPT_VALUES.includes(rawPrompt as UrlPrompt)) {
-      parsedPrompt = rawPrompt as UrlPrompt;
-    }
-
-    // Cross-field consistency: if only one is set, null them both
-    if (!parsedExternalUrl || !parsedPrompt) {
-      parsedExternalUrl = null;
-      parsedPrompt = null;
-    }
-
-    result.externalUrl = parsedExternalUrl;
-    result.urlPrompt = parsedPrompt;
+    const externalLink = EventObject._resolveExternalUrlPair(rawHref, apObject['pavillion:urlPrompt']);
+    result.externalUrl = externalLink.externalUrl;
+    result.urlPrompt = externalLink.urlPrompt;
 
     // --- Schedules resolution ---
     // Priority: pavillion:schedules > bare schedules > synthesize from startTime/endTime
@@ -587,24 +610,8 @@ class EventObject extends ActivityPubObject {
     // allowed through so standard updates (name, summary, location, ...) from
     // authorized non-origin actors (e.g. remote Person editors) continue to
     // apply, but cancellation state cannot be forged across origins.
-    if (options.actorUri && Array.isArray(result.schedules) && result.schedules.length > 0) {
-      const eventOriginDomain = EventObject._extractOriginDomain(apObject);
-      const actorDomain = EventObject._safeExtractDomain(options.actorUri);
-      const originMismatch = !actorDomain || !eventOriginDomain || actorDomain !== eventOriginDomain;
-      if (originMismatch) {
-        result.schedules = result.schedules.map((s: Record<string, any>) => {
-          if (s && typeof s === 'object' && 'hideFromPublic' in s) {
-            const rest: Record<string, any> = {};
-            for (const key of Object.keys(s)) {
-              if (key !== 'hideFromPublic') {
-                rest[key] = s[key];
-              }
-            }
-            return rest;
-          }
-          return s;
-        });
-      }
+    if (options.actorUri && Array.isArray(result.schedules)) {
+      result.schedules = EventObject._gateHideFromPublic(result.schedules, apObject, options.actorUri);
     }
 
     // --- published → createdAt mapping ---
@@ -736,6 +743,176 @@ class EventObject extends ActivityPubObject {
     }
 
     return result;
+  }
+
+  /**
+   * Parses the remote-editor envelope into the subset of eventParams a remote
+   * editor may set.
+   *
+   * A Person actor that is an authorized editor of one of our calendars sends
+   * Create/Update activities whose object carries `eventParams`: the editing
+   * instance's own event body (CalendarEvent.toObject() shape). That envelope
+   * is a fourth inbound wire format beside the three parseInboundEvent
+   * handles, and it is parsed under the same rule — strip markup, close the
+   * key set — rather than merged raw over the parsed result.
+   *
+   * Allow-list (every other envelope key is dropped):
+   *   - `content` — through `_sanitizeContentObject`; absent when empty.
+   *   - `schedules` — array only; each object entry keeps only the keys
+   *     CalendarEventSchedule.fromObject reads, then the same `hideFromPublic`
+   *     origin gate parseInboundEvent applies.
+   *   - `location` — address fields markup-stripped, per-language
+   *     accessibilityInfo only, `originUri` only when it passes
+   *     `_validatePavillionId` against the editor's host. Its `id`, `spaces`
+   *     and `calendarId` are dropped.
+   *   - `space` — content via `_sanitizeSpaceContent`, kept only with an
+   *     `originUri` that passes `_validatePavillionId`; the receiver resolves a
+   *     space by origin alone, so its `id` and `placeId` are never emitted.
+   *   - `externalUrl` + `urlPrompt` — the same sanitizer and both-or-neither
+   *     rule as the AS attachment; emitted only when the envelope names either.
+   *
+   * Media, series, categories, ids and local routing state (`calendarId`,
+   * `eventSourceUrl`, `locationId`, `repostStatus`, ...) are never taken from
+   * the envelope: they name rows on this instance a remote editor has no
+   * legitimate way to know. Length caps stay with the calendar domain
+   * (DEC-014).
+   *
+   * @param raw - The envelope as it arrived (`message.object.eventParams`)
+   * @param options.actorUri - The editor's actor URI; host for `originUri`
+   *   validation and the `hideFromPublic` origin gate
+   * @param options.apObject - The AS object the envelope rode on; its `id` /
+   *   `attributedTo` give the event's origin for the `hideFromPublic` gate
+   * @returns Only the keys the envelope supplied and the allow-list kept;
+   *   callers overlay these onto the parseInboundEvent result
+   */
+  static parseRemoteEditorParams(
+    raw: unknown,
+    options: { actorUri?: string; apObject?: Record<string, any> } = {},
+  ): RemoteEditorParams {
+    const result: RemoteEditorParams = {};
+    if (!isRecord(raw)) {
+      return result;
+    }
+
+    if (isLanguageKeyedMap(raw.content)) {
+      const content = EventObject._sanitizeContentObject(raw.content);
+      if (Object.keys(content).length > 0) {
+        result.content = content;
+      }
+    }
+
+    if (Array.isArray(raw.schedules)) {
+      let schedules: Record<string, any>[] = [];
+      for (const entry of raw.schedules) {
+        if (isRecord(entry)) {
+          const schedule: Record<string, any> = {};
+          for (const key of REMOTE_EDITOR_SCHEDULE_KEYS) {
+            if (entry[key] !== undefined) {
+              schedule[key] = entry[key];
+            }
+          }
+          schedules.push(schedule);
+        }
+      }
+      if (options.actorUri) {
+        schedules = EventObject._gateHideFromPublic(schedules, options.apObject ?? {}, options.actorUri);
+      }
+      result.schedules = schedules;
+    }
+
+    if (isRecord(raw.location)) {
+      const location: Record<string, any> = {};
+      for (const key of REMOTE_EDITOR_LOCATION_FIELDS) {
+        if (typeof raw.location[key] === 'string') {
+          location[key] = stripHtmlTags(raw.location[key]);
+        }
+      }
+      const originUri = EventObject._validatePavillionId(raw.location.originUri, options.actorUri);
+      if (originUri !== null) {
+        location.originUri = originUri;
+      }
+      const sanitizedContent = EventObject._sanitizeLocationContent(raw.location.content);
+      const content: Record<string, { accessibilityInfo: string }> = {};
+      for (const lang of Object.keys(sanitizedContent)) {
+        content[lang] = { accessibilityInfo: sanitizedContent[lang].accessibilityInfo };
+      }
+      if (Object.keys(content).length > 0) {
+        location.content = content;
+      }
+      result.location = location;
+    }
+
+    if (isRecord(raw.space)) {
+      const originUri = EventObject._validatePavillionId(raw.space.originUri, options.actorUri);
+      if (originUri !== null) {
+        const space: { originUri: string; content?: Record<string, any> } = { originUri };
+        const content = EventObject._sanitizeSpaceContent(raw.space.content);
+        if (Object.keys(content).length > 0) {
+          space.content = content;
+        }
+        result.space = space;
+      }
+    }
+
+    if (raw.externalUrl !== undefined || raw.urlPrompt !== undefined) {
+      const externalLink = EventObject._resolveExternalUrlPair(raw.externalUrl, raw.urlPrompt);
+      result.externalUrl = externalLink.externalUrl;
+      result.urlPrompt = externalLink.urlPrompt;
+    }
+
+    return result;
+  }
+
+  /**
+   * Sanitizes an inbound external link: the href through
+   * sanitizeExternalUrlHref, the prompt against URL_PROMPT_VALUES. The two are
+   * one record — if either is invalid or missing, both resolve to null, so a
+   * partial pair is never persisted.
+   */
+  private static _resolveExternalUrlPair(
+    rawHref: unknown,
+    rawPrompt: unknown,
+  ): { externalUrl: string | null; urlPrompt: UrlPrompt | null } {
+    const externalUrl = sanitizeExternalUrlHref(rawHref);
+    const urlPrompt = typeof rawPrompt === 'string' && URL_PROMPT_VALUES.includes(rawPrompt as UrlPrompt)
+      ? rawPrompt as UrlPrompt
+      : null;
+    if (!externalUrl || !urlPrompt) {
+      return { externalUrl: null, urlPrompt: null };
+    }
+    return { externalUrl, urlPrompt };
+  }
+
+  /**
+   * Origin gate for schedule cancellation state. `hideFromPublic` is a
+   * privileged field: only the instance that owns the event may set it. When
+   * the actor's domain does not match the event's origin domain (or either is
+   * unknown), `hideFromPublic` is removed from every schedule entry; the rest
+   * of each entry passes through unchanged.
+   */
+  private static _gateHideFromPublic(
+    schedules: any[],
+    apObject: Record<string, any>,
+    actorUri: string,
+  ): any[] {
+    const eventOriginDomain = EventObject._extractOriginDomain(apObject);
+    const actorDomain = EventObject._safeExtractDomain(actorUri);
+    const originMismatch = !actorDomain || !eventOriginDomain || actorDomain !== eventOriginDomain;
+    if (!originMismatch) {
+      return schedules;
+    }
+    return schedules.map((s: Record<string, any>) => {
+      if (s && typeof s === 'object' && 'hideFromPublic' in s) {
+        const rest: Record<string, any> = {};
+        for (const key of Object.keys(s)) {
+          if (key !== 'hideFromPublic') {
+            rest[key] = s[key];
+          }
+        }
+        return rest;
+      }
+      return s;
+    });
   }
 
   /**
