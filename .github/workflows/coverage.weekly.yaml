@@ -15,9 +15,9 @@
 name: Weekly Coverage
 on:
   schedule:
-    # Mondays 08:00 UTC — after Renovate (06:00) and the health scan (07:00), so
+    # Sundays 20:00 UTC — after Renovate (18:00) and the health scan (19:00), so
     # the three weekly jobs don't contend for runners.
-    - cron: '0 8 * * 1'
+    - cron: '0 20 * * 0'
   workflow_dispatch:
 
 concurrency:

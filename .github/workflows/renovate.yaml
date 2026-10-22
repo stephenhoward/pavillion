@@ -1,7 +1,9 @@
 name: Renovate
 on:
   schedule:
-    - cron: '0 6 * * 1'
+    # Sundays 18:00 UTC — first of the three weekly jobs; the health scan
+    # follows at 19:00 and the coverage report at 20:00.
+    - cron: '0 18 * * 0'
   workflow_dispatch:
 
 concurrency:
