@@ -22,7 +22,7 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -1498,6 +1498,72 @@ describe('Structured Logging for Activity Rejections', () => {
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('unauthorized_editor');
       expect(logEntry.activity_type).toBe('Update');
+    });
+  });
+
+  describe('Remote editor Update scoped to the receiving calendar', () => {
+    const OTHER_CALENDAR_ID = 'other-calendar-id';
+    const TARGET_EVENT_ID = 'target-event-id';
+
+    /**
+     * Resolves the event the way the Person-actor path does when the AP id
+     * does not match: by the local UUID in eventParams.id, then the AP
+     * object by event_id.
+     */
+    function stubEventLookup(eventCalendarId: string) {
+      sandbox.stub(EventObjectEntity, 'findOne').callsFake(async (options: any) => {
+        if (options?.where?.event_id === TARGET_EVENT_ID) {
+          return EventObjectEntity.build({ event_id: TARGET_EVENT_ID, ap_id: `https://local.federation.test/events/${TARGET_EVENT_ID}` });
+        }
+        return null;
+      });
+      sandbox.stub(service.calendarInterface, 'getEventById')
+        .resolves({ id: TARGET_EVENT_ID, calendarId: eventCalendarId } as any);
+    }
+
+    function buildEditorUpdate() {
+      return createMockUpdateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Edited Event',
+        eventParams: { id: TARGET_EVENT_ID },
+      });
+    }
+
+    it('rejects an editor Update for an event owned by another calendar and writes nothing', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      stubEventLookup(OTHER_CALENDAR_ID);
+      const updateRemoteEvent = sandbox.stub(service.calendarInterface, 'updateRemoteEvent');
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await expect(service.processUpdateEvent(calendar, buildEditorUpdate() as any)).rejects.toThrow();
+
+      expect(updateRemoteEvent.called).toBe(false);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('misdirected_activity');
+      expect(logEntry.activity_type).toBe('Update');
+      expect(logEntry.calendar_id).toBe(TEST_CALENDAR_ID);
+    });
+
+    it('applies an editor Update for an event owned by the receiving calendar', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      stubEventLookup(TEST_CALENDAR_ID);
+      const updateRemoteEvent = sandbox.stub(service.calendarInterface, 'updateRemoteEvent')
+        .resolves({ id: TARGET_EVENT_ID, calendarId: TEST_CALENDAR_ID } as any);
+      sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await service.processUpdateEvent(calendar, buildEditorUpdate() as any);
+
+      expect(updateRemoteEvent.calledOnce).toBe(true);
+      expect(updateRemoteEvent.firstCall.args[0]).toBe(calendar);
+      expect(updateRemoteEvent.firstCall.args[1].id).toBe(TARGET_EVENT_ID);
+      expect(mockLogActivityRejection).not.toHaveBeenCalled();
     });
   });
 
