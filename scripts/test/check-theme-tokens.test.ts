@@ -5,6 +5,8 @@ import path from 'node:path';
 import {
   detectSource,
   detect,
+  detectLiteralSource,
+  detectLiterals,
   collectThemeFiles,
   DEFAULT_ROOTS,
   main,
@@ -227,6 +229,77 @@ describe('check-theme-tokens: Rule 4, token prefix spelling', () => {
   });
 });
 
+describe('check-theme-tokens: Rule 5, raw colour literals (warn-only)', () => {
+  const linesOf = (code: string, fileName: string) => detectLiteralSource(code, fileName).map(w => w.line);
+
+  it('warns on a hex literal with its line', () => {
+    const warnings = detectLiteralSource(scssFile('.a {', '  color: #fff;', '  border-color: #C86002AA;', '}'), SITE_PARTIAL);
+    expect(warnings.map(w => w.line)).toEqual([2, 3]);
+    expect(warnings[0].message).toContain('Rule 5 (warn-only): raw colour literal #fff');
+  });
+
+  it.each([
+    ['rgba()', '.a { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); }', 'rgba('],
+    ['rgb() with slash alpha', '.a { background-color: rgb(0 0 0 / 50%); }', 'rgb('],
+    ['hsl()', '.a { color: hsl(20 100% 50%); }', 'hsl('],
+    ['a named colour', '.a { color: white; }', 'white'],
+    ['a mixed-case named colour', '.a { color: White; }', 'White'],
+    ['a literal passed to an @include', '.a { @include public-ring(#fff); }', '#fff'],
+  ])('warns on %s', (_name, code, literal) => {
+    const warnings = detectLiteralSource(code, SITE_PARTIAL);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain(`raw colour literal ${literal}`);
+  });
+
+  it('warns on a component-local colour variable at its declaration', () => {
+    const code = vueFile({ styles: ['$ink: #fff;\n.a {\n  color: $ink;\n}'] });
+    const expectedLine = code.split('\n').findIndex(line => line.includes('$ink: #fff')) + 1;
+    expect(linesOf(code, SITE_COMPONENT)).toEqual([expectedLine]);
+  });
+
+  it('does not warn inside the token-layer mixins, and does in a neighbouring mixin', () => {
+    const code = tokenLayer('', '@mixin public-button-primary {', '  color: white;', '}');
+    expect(linesOf(code, MIXINS)).toEqual([22]);
+  });
+
+  it('warns inside a token-layer mixin copied to another file', () => {
+    expect(linesOf(tokenLayer(), SITE_PARTIAL)).toEqual([8]);
+  });
+
+  it('does not warn on a literal in a comment', () => {
+    const code = scssFile('// was color: #fff;', '/* background: rgba(0, 0, 0, 0.5); color: white; */', '.a { color: var(--pav-text-primary); }');
+    expect(detectLiteralSource(code, SITE_PARTIAL)).toEqual([]);
+  });
+
+  it.each([
+    ['an id selector spelled in hex digits', '#add, #fade .b { color: var(--pav-accent); }'],
+    ['a class or element named for a colour', '.white, .red > tan { display: block; }'],
+    ['a selector with a pseudo-class', 'a:hover .white { display: block; }'],
+    ['white-space', '.a { white-space: nowrap; }'],
+    ['a token or variable named for a colour', '.a { color: var(--pav-white); border-color: $white; }'],
+    ['#{} interpolation', '.a { --pav-gap: #{$public-space-md}; }'],
+    ['a string or url()', '.a { content: "#fff white"; background: url(white.png); }'],
+    ['transparent and currentColor', '.a { border-color: transparent; fill: currentColor; }'],
+    ['a mask, whose colour is alpha, not paint', '.a { mask-image: linear-gradient(black, transparent); -webkit-mask: linear-gradient(black, transparent); }'],
+    ['a media query', '@media (min-width: 600px) { .a { display: none; } }'],
+  ])('does not warn on %s', (_name, code) => {
+    expect(detectLiteralSource(code, SITE_PARTIAL)).toEqual([]);
+  });
+
+  it('reads only <style> blocks of a .vue file', () => {
+    const code = vueFile({
+      template: '<div style="color: white" />',
+      script: 'const c = \'color: #fff\';',
+      styles: ['.a { color: var(--pav-text-primary); }'],
+    });
+    expect(detectLiteralSource(code, SITE_COMPONENT)).toEqual([]);
+  });
+
+  it('is never a violation: detectSource stays silent on a literal', () => {
+    expect(detectSource('.a { color: #fff; }', SITE_PARTIAL)).toEqual([]);
+  });
+});
+
 describe('check-theme-tokens: comments', () => {
   it('passes a comment mentioning [data-theme] or a colour variable', () => {
     const code = scssFile('// The widget sets [data-theme="dark"] on <html>.', '/* was $public-text-primary-light */', '.a { color: red; }');
@@ -322,6 +395,21 @@ describe('check-theme-tokens: directory scan + CLI exit code', () => {
   it('main() exits 0 on a clean root', () => {
     fs.writeFileSync(path.join(tmpDir, 'ok.scss'), '.a { color: var(--pav-text-primary); }\n');
     expect(main([tmpDir])).toBe(0);
+    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('no theme-token violations found in 1 file(s)'));
+  });
+
+  it('detectLiterals() aggregates warnings across files', () => {
+    fs.writeFileSync(path.join(tmpDir, 'ok.scss'), '.a { color: var(--pav-text-primary); }\n');
+    fs.writeFileSync(path.join(tmpDir, 'raw.scss'), '.a { color: #fff; }\n');
+    expect(detectLiterals(collectThemeFiles([tmpDir])).map(w => path.basename(w.file))).toEqual(['raw.scss']);
+  });
+
+  it('main() exits 0 on a raw colour literal and prints it as a warning', () => {
+    fs.writeFileSync(path.join(tmpDir, 'raw.scss'), '.a {\n  color: white;\n}\n');
+    expect(main([tmpDir])).toBe(0);
+    const written = vi.mocked(process.stderr.write).mock.calls.map(call => String(call[0])).join('');
+    expect(written).toMatch(/raw\.scss:2 — Rule 5 \(warn-only\): raw colour literal white/);
+    expect(written).toContain('check-theme-tokens: 1 raw colour literal warning(s)');
     expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('no theme-token violations found in 1 file(s)'));
   });
 
