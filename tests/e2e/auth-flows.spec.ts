@@ -105,33 +105,22 @@ test.describe('Authentication Workflows', () => {
 
       // Find and change registration mode to 'open'
       const registrationSelect = page.locator('select#registrationMode');
-      if (await registrationSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await registrationSelect.selectOption('open');
+      await registrationSelect.selectOption('open');
 
-        // Click the Save Settings button within the Instance Settings section
-        const instanceSettingsForm = page.getByLabel('Instance Settings');
-        await instanceSettingsForm.getByRole('button', { name: 'Save Settings' }).click();
-
-        // Wait for save confirmation
-        await page.waitForTimeout(2000);
-      }
+      // Click the Save Settings button within the Instance Settings section
+      const instanceSettingsForm = page.getByLabel('Instance Settings');
+      await instanceSettingsForm.getByRole('button', { name: 'Save Settings' }).click();
+      await expect(instanceSettingsForm.locator('.message-success')).toBeVisible({ timeout: 5000 });
 
       // Clear emails before registration
       await clearEmails(env.baseURL);
 
       // Now navigate to register page (logged-out page)
       await page.goto(env.baseURL + '/auth/register');
-      await page.waitForTimeout(1000);
 
       const registerEmail = `newuser-${Date.now()}@example.com`;
       const emailInput = page.locator('#register-email');
-
-      // If register page redirected (mode not open), skip gracefully
-      if (!await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-        console.log('[Test] Registration page not available (mode may not be open), skipping');
-        test.skip();
-        return;
-      }
+      await expect(emailInput).toBeVisible({ timeout: 5000 });
 
       await emailInput.fill(registerEmail);
       await page.getByRole('button', { name: 'Create an account' }).click();
@@ -158,7 +147,6 @@ test.describe('Authentication Workflows', () => {
 
       // Step 1: Navigate to forgot password page
       await page.goto(env.baseURL + '/auth/forgot');
-      await page.waitForTimeout(1000);
 
       // Step 2: Submit password reset request
       await page.locator('#reset-email').fill(targetEmail);
@@ -180,7 +168,6 @@ test.describe('Authentication Workflows', () => {
 
       // Step 5: Navigate to password reset page with the code
       await page.goto(`${env.baseURL}/auth/password?code=${resetCode}`);
-      await page.waitForTimeout(2000);
 
       // Step 6: The code should auto-validate and show the password form
       const newPasswordInput = page.locator('#new-password');

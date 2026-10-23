@@ -84,10 +84,8 @@ test.describe('Calendar Editor Collaboration', () => {
       const submitButton = modal.locator('button.pill-button--primary').filter({ hasText: /Add Editor/i });
       await submitButton.click();
 
-      // Wait for the modal to close and success message to appear
-      await page.waitForTimeout(2000);
-
-      // Verify success message appears (invitation pending)
+      // The modal closes and a success message appears (invitation pending)
+      await expect(modal).toBeHidden({ timeout: 5000 });
       const successAlert = page.locator('.alert--success');
       await expect(successAlert).toBeVisible({ timeout: 5000 });
 
@@ -213,9 +211,7 @@ test.describe('Calendar Editor Collaboration', () => {
       // Confirm removal by clicking the Remove button in the modal (danger variant)
       const confirmRemoveButton = confirmModal.locator('button.pill-button--danger');
       await confirmRemoveButton.click();
-
-      // Wait for the removal to complete
-      await page.waitForTimeout(2000);
+      await expect(confirmModal).toBeHidden({ timeout: 5000 });
 
       // Verify the editor was removed - the email should no longer appear
       const removedEditor = page.locator('.editor-card').filter({

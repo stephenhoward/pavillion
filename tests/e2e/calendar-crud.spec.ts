@@ -59,12 +59,8 @@ test.describe('Calendar CRUD Workflow', () => {
       const calendarTitle = 'My Test Calendar';
       await titleInput.fill(calendarTitle);
 
-      // Wait for auto-slug to populate the name field
-      await page.waitForTimeout(500);
-
-      // Verify that the name field was auto-populated from the title
-      const autoSlug = await nameInput.inputValue();
-      expect(autoSlug).toBe('my-test-calendar');
+      // The name field is auto-populated from the title
+      await expect(nameInput).toHaveValue('my-test-calendar');
 
       // Submit the form
       const submitButton = sheet.locator('button[type="submit"].btn--cta');
@@ -93,7 +89,7 @@ test.describe('Calendar CRUD Workflow', () => {
       // Fill in title first
       const calendarTitle = 'Another Calendar';
       await titleInput.fill(calendarTitle);
-      await page.waitForTimeout(300);
+      await expect(nameInput).toHaveValue('another-calendar');
 
       // Override the auto-generated name with a custom one
       await nameInput.clear();
