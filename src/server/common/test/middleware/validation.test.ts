@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
-import { validateUUID, validateRequired, validateDateRange } from '@/server/common/middleware/validation';
+import { validateUUID, validateRequired, validateDateRange, validateStringFields } from '@/server/common/middleware/validation';
 
 // Install a simple error handler that serializes ValidationError into JSON
 function installErrorHandler(app: Express): void {
@@ -90,6 +90,71 @@ describe('validateRequired', () => {
     const response = await request(app).get('/search');
     expect(response.status).toBe(400);
     expect(response.body.errorName).toBe('ValidationError');
+  });
+});
+
+describe('validateStringFields', () => {
+  let app: Express;
+
+  beforeEach(() => {
+    // No error handler is installed: the middleware must answer the request
+    // itself rather than relying on next(err) reaching a 400-mapping handler.
+    app = express();
+    app.post('/no-parser', validateStringFields(['email']), (_req, res) => {
+      res.json({ ok: true });
+    });
+    app.use(express.json());
+    app.post('/login', validateStringFields(['email', 'password']), (_req, res) => {
+      res.json({ ok: true });
+    });
+  });
+
+  it('should pass when every named field is a string', async () => {
+    const response = await request(app)
+      .post('/login')
+      .send({ email: 'user@example.com', password: 'secret' });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+  });
+
+  it('should pass when a named field is absent', async () => {
+    const response = await request(app).post('/login').send({ email: 'user@example.com' });
+    expect(response.status).toBe(200);
+  });
+
+  it('should pass when the request has no parsed body', async () => {
+    const response = await request(app).post('/no-parser');
+    expect(response.status).toBe(200);
+  });
+
+  const nonStrings: Array<[string, unknown]> = [
+    ['null', null],
+    ['a number', 5],
+    ['a boolean', true],
+    ['an object', { a: 1 }],
+    ['an array', ['a']],
+  ];
+
+  for (const [label, value] of nonStrings) {
+    it(`should reject ${label} with a 400 ValidationError`, async () => {
+      const response = await request(app)
+        .post('/login')
+        .send({ email: value, password: 'secret' });
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields.email).toEqual(['This field must be a string']);
+      expect(response.body.fields.password).toBeUndefined();
+    });
+  }
+
+  it('should report every non-string field together', async () => {
+    const response = await request(app)
+      .post('/login')
+      .send({ email: 5, password: { a: 1 } });
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.error).toBe('Fields must be strings: email, password');
+    expect(Object.keys(response.body.fields)).toEqual(['email', 'password']);
   });
 });
 
