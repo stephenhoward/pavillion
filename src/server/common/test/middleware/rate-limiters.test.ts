@@ -28,6 +28,12 @@ import {
   limitConfirmApplicationByIp,
   limitEmailChangeByDestination,
   limitConfirmEmailChangeByIp,
+  limitFundingWebhookByIp,
+  limitRegisterByIp,
+  limitRegisterByEmail,
+  limitConfirmPasswordResetByIp,
+  limitAcceptInvitationByIp,
+  limitEmailChangeByAccount,
 } from '@/server/common/middleware/rate-limiters';
 
 describe('rate-limiters', () => {
@@ -216,6 +222,54 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(900000); // 15 minutes
     });
 
+    it('should use correct config values for funding webhook by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.fundingWebhook.byIp.max');
+      const windowMs = config.get<number>('rateLimit.fundingWebhook.byIp.windowMs');
+
+      expect(maxRequests).toBe(300);
+      expect(windowMs).toBe(60000); // 1 minute
+    });
+
+    it('should use correct config values for register by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.register.byIp.max');
+      const windowMs = config.get<number>('rateLimit.register.byIp.windowMs');
+
+      expect(maxRequests).toBe(5);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for register by email', () => {
+      const maxRequests = config.get<number>('rateLimit.register.byEmail.max');
+      const windowMs = config.get<number>('rateLimit.register.byEmail.windowMs');
+
+      expect(maxRequests).toBe(3);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
+    it('should use correct config values for password reset confirm by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.passwordReset.confirm.byIp.max');
+      const windowMs = config.get<number>('rateLimit.passwordReset.confirm.byIp.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for invitation accept by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.invitation.accept.byIp.max');
+      const windowMs = config.get<number>('rateLimit.invitation.accept.byIp.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for email change by account', () => {
+      const maxRequests = config.get<number>('rateLimit.emailChange.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.emailChange.byAccount.windowMs');
+
+      expect(maxRequests).toBe(10);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -337,6 +391,36 @@ describe('rate-limiters', () => {
     it('should export limitConfirmEmailChangeByIp limiter', () => {
       expect(limitConfirmEmailChangeByIp).toBeDefined();
       expect(typeof limitConfirmEmailChangeByIp).toBe('function');
+    });
+
+    it('should export limitFundingWebhookByIp limiter', () => {
+      expect(limitFundingWebhookByIp).toBeDefined();
+      expect(typeof limitFundingWebhookByIp).toBe('function');
+    });
+
+    it('should export limitRegisterByIp limiter', () => {
+      expect(limitRegisterByIp).toBeDefined();
+      expect(typeof limitRegisterByIp).toBe('function');
+    });
+
+    it('should export limitRegisterByEmail limiter', () => {
+      expect(limitRegisterByEmail).toBeDefined();
+      expect(typeof limitRegisterByEmail).toBe('function');
+    });
+
+    it('should export limitConfirmPasswordResetByIp limiter', () => {
+      expect(limitConfirmPasswordResetByIp).toBeDefined();
+      expect(typeof limitConfirmPasswordResetByIp).toBe('function');
+    });
+
+    it('should export limitAcceptInvitationByIp limiter', () => {
+      expect(limitAcceptInvitationByIp).toBeDefined();
+      expect(typeof limitAcceptInvitationByIp).toBe('function');
+    });
+
+    it('should export limitEmailChangeByAccount limiter', () => {
+      expect(limitEmailChangeByAccount).toBeDefined();
+      expect(typeof limitEmailChangeByAccount).toBe('function');
     });
   });
 
@@ -468,6 +552,91 @@ describe('rate-limiters', () => {
       responses.forEach(response => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual({ success: true });
+      });
+    });
+
+    it('should allow register limiters to pass through when disabled', async () => {
+      app.post('/register',
+        limitRegisterByIp,
+        limitRegisterByEmail,
+        (req, res) => {
+          res.json({ success: true });
+        },
+      );
+
+      const responses = await Promise.all([
+        request(app).post('/register').send({ email: 'test@example.com' }),
+        request(app).post('/register').send({ email: 'test@example.com' }),
+        request(app).post('/register').send({ email: 'test@example.com' }),
+        request(app).post('/register').send({ email: 'test@example.com' }),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      });
+    });
+
+    it('should allow token-redemption IP limiters to pass through when disabled', async () => {
+      app.post('/reset-password/:code', limitConfirmPasswordResetByIp, (req, res) => {
+        res.json({ success: true });
+      });
+      app.post('/invitations/:code', limitAcceptInvitationByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const responses = await Promise.all([
+        request(app).post('/reset-password/code-a'),
+        request(app).post('/reset-password/code-b'),
+        request(app).post('/invitations/code-a'),
+        request(app).post('/invitations/code-b'),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      });
+    });
+
+    it('should allow email change account limiter to pass through when disabled', async () => {
+      app.post('/email',
+        addRequestUser,
+        limitEmailChangeByAccount,
+        (req, res) => {
+          res.json({ success: true });
+        },
+      );
+
+      const responses = await Promise.all([
+        request(app).post('/email').send({ email: 'new-a@example.com', password: 'pw' }),
+        request(app).post('/email').send({ email: 'new-b@example.com', password: 'pw' }),
+        request(app).post('/email').send({ email: 'new-c@example.com', password: 'pw' }),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      });
+    });
+
+    it('should allow funding webhook limiter to pass through when disabled', async () => {
+      app.post('/webhook', limitFundingWebhookByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const responses = await Promise.all([
+        request(app).post('/webhook'),
+        request(app).post('/webhook'),
+        request(app).post('/webhook'),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
       });
     });
 

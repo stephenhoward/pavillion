@@ -68,7 +68,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
 
     it('should enforce IP-based rate limit on password reset', async () => {
-      const maxAttempts = 5; // From config: rateLimit.passwordReset.byIp.max
+      const maxAttempts = config.get<number>('rateLimit.passwordReset.byIp.max');
       const responses = [];
 
       // Use a unique base email to avoid email rate limit interference
@@ -95,6 +95,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
       // Verify the rate limited response has correct error message
       const rateLimitedResponse = rateLimitedResponses[0];
       expect(rateLimitedResponse.body.error).toBe('Too many password reset requests from this IP, please try again later.');
+      expect(rateLimitedResponse.body.errorName).toBe('RateLimitError');
 
       // Verify rate limit headers
       expect(rateLimitedResponse.headers['ratelimit-limit']).toBe(String(maxAttempts));
@@ -103,7 +104,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
 
     it('should enforce email-based rate limit on password reset', async () => {
-      const maxAttempts = 3; // From config: rateLimit.passwordReset.byEmail.max
+      const maxAttempts = config.get<number>('rateLimit.passwordReset.byEmail.max');
       const sameEmail = `emailreset${Date.now()}@example.com`;
       const responses = [];
 
@@ -121,6 +122,9 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
 
       // Should have at least one rate limited response (could be IP or email limit)
       expect(rateLimitedResponses.length).toBeGreaterThan(0);
+
+      // Both limiters share the RateLimitError contract, whichever one fired.
+      rateLimitedResponses.forEach(r => expect(r.body.errorName).toBe('RateLimitError'));
 
       // Check if we hit the email-specific limit
       const emailRateLimited = rateLimitedResponses.find(r =>
@@ -142,7 +146,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
 
   describe('Password Reset Confirm Rate Limiting', () => {
     it('should enforce IP-based rate limit on password reset confirm (token brute-force defense)', async () => {
-      const maxAttempts = 20; // From config: rateLimit.passwordReset.confirm.byIp.max
+      const maxAttempts = config.get<number>('rateLimit.passwordReset.confirm.byIp.max');
       const responses = [];
 
       // Each request uses a distinct (invalid) code so the limiter, not the
@@ -192,7 +196,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
 
     it('should enforce IP-based rate limit on login', async () => {
-      const maxAttempts = 10; // From config: rateLimit.login.byIp.max
+      const maxAttempts = config.get<number>('rateLimit.login.byIp.max');
       const responses = [];
       const baseTimestamp = Date.now();
 
@@ -217,6 +221,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
       // Verify the rate limited response has correct error message
       const rateLimitedResponse = rateLimitedResponses[0];
       expect(rateLimitedResponse.body.error).toBe('Too many login requests from this IP, please try again later.');
+      expect(rateLimitedResponse.body.errorName).toBe('RateLimitError');
 
       // Verify rate limit headers
       expect(rateLimitedResponse.headers['ratelimit-limit']).toBe(String(maxAttempts));
@@ -225,7 +230,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     });
 
     it('should enforce email-based rate limit on login', async () => {
-      const maxAttempts = 5; // From config: rateLimit.login.byEmail.max
+      const maxAttempts = config.get<number>('rateLimit.login.byEmail.max');
       const sameEmail = `emaillogin${Date.now()}@example.com`;
       const responses = [];
 
@@ -241,6 +246,9 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
       // Count rate-limited responses
       const rateLimitedResponses = responses.filter(r => r.status === 429);
       expect(rateLimitedResponses.length).toBeGreaterThan(0);
+
+      // Both limiters share the RateLimitError contract, whichever one fired.
+      rateLimitedResponses.forEach(r => expect(r.body.errorName).toBe('RateLimitError'));
 
       // Check if we hit the email-specific limit
       const emailRateLimited = rateLimitedResponses.find(r =>
@@ -267,7 +275,7 @@ describeOrSkip('Authentication Rate Limiting Integration Tests', () => {
     // (skipFailedRequests: false), so a deliberately-wrong password drives the
     // counter to the threshold without mutating the account's email — and lets
     // us assert the limiter, not the handler, is what produces the 429.
-    const emailChangeMax = 10; // From config: rateLimit.emailChange.byAccount.max
+    const emailChangeMax = config.get<number>('rateLimit.emailChange.byAccount.max');
 
     // Mint the JWT directly from the account model rather than via env.login():
     // the login route is throttled by the shared IP login limiter (10/15m),
