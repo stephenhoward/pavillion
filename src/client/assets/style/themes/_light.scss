@@ -65,7 +65,9 @@
      text colour to reach 3:1 on the active tint (orange-500 is 2.64:1) */
   --pav-nav-active-icon: var(--pav-color-interactive-active-text);
   --pav-nav-inactive-text: var(--pav-color-stone-500);
-  --pav-nav-inactive-icon: var(--pav-color-stone-400);
+  /* The rail shows only icons, so they must reach 3:1 (stone-400 was 2.52:1);
+     ratios in _shell-nav.scss */
+  --pav-nav-inactive-icon: var(--pav-color-stone-500);
 
   /* Hairline ring layered into box-shadow for cards/surfaces. Resolves through
      --pav-border-subtle so it adapts automatically to the active theme. */

@@ -38,7 +38,12 @@
   position: relative;
   font-family: var(--pav-font-family-display);
 
-  /* Icon styling - Lucide icons render as SVG with stroke, not fill */
+  /* Icon styling - Lucide icons render as SVG with stroke, not fill.
+     On the rail the icon is the only visible identifier, so the inactive
+     icon must reach 3:1 (WCAG 1.4.11) on the sidebar and on the bottom bar.
+     Light stone-500: 4.80:1 on the sidebar, 4.60:1 on the bar (stone-400
+     was 2.52:1 and 2.42:1). Dark stone-500: 3.65:1 and 3.16:1. It stays
+     quieter than the current item's filled orange icon by hue and shape */
   &__icon {
     width: 1.25rem;
     height: 1.25rem;
@@ -80,8 +85,10 @@
     background-color: var(--pav-interactive-hover);
     color: var(--pav-text-primary);
 
+    /* Inherits rather than naming the colour, so forced colours (below)
+       can hand the icon the system colour through hover too */
     .shell-nav-item__icon {
-      color: var(--pav-text-primary);
+      color: inherit;
     }
   }
 
@@ -124,8 +131,9 @@
     }
 
     /* Chromium keeps an author colour set on an SVG, which could vanish on
-       the user's Canvas; the filled icon takes the link's system colour */
-    &[aria-current='page'] .shell-nav-item__icon {
+       the user's Canvas; every icon, current or not, takes the link's
+       system colour */
+    .shell-nav-item__icon {
       color: inherit;
     }
   }
