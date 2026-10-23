@@ -32,6 +32,8 @@ import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor'
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { NotificationActivityEntity, NotificationRecipientEntity } from '@/server/notifications/entity/notification_activity';
+import { waitFor } from '@/server/common/test/lib/test_polling';
 
 describe('Event Feed Integration Tests', () => {
   let env: TestEnvironment;
@@ -78,6 +80,44 @@ describe('Event Feed Integration Tests', () => {
     await env.cleanup();
   });
 
+  /**
+   * Follows a local calendar through the API and waits for the follow's
+   * background cascade to finish.
+   *
+   * The follow response returns before local dispatch delivers the Follow to
+   * the followed calendar's inbox, which records a notification inside a
+   * transaction. The test database is in-memory SQLite, where every
+   * transaction shares one connection, so a later test that opens its own
+   * transaction (account setup, calendar creation) while that one is still
+   * open fails with "cannot start a transaction within a transaction". The
+   * recipient row is the last write of that transaction, so waiting for it
+   * keeps one test's cascade from running into the next.
+   */
+  async function followLocalCalendar(authKey: string, followerCalendarId: string, followed: Calendar): Promise<request.Response> {
+    const response = await env.authPost(
+      authKey,
+      '/api/v1/social/follows',
+      {
+        calendarId: followerCalendarId,
+        remoteCalendar: `${followed.urlName}@pavillion.dev`,
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
+      },
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(async () => {
+      const activity = await NotificationActivityEntity.findOne({
+        where: { verb: 'Follow', object_type: 'calendar', object_id: followed.id },
+      });
+      return activity && NotificationRecipientEntity.findOne({
+        where: { notification_activity_id: activity.id },
+      });
+    }, { label: `Follow notification for ${followed.urlName}` });
+
+    return response;
+  }
+
   describe('Test 1: Full Workflow - Local Calendar Follow', () => {
     it('should allow Account A to follow Account B\'s calendar and see B\'s events in feed', async () => {
       // Step 1: Account B creates multiple events
@@ -111,20 +151,7 @@ describe('Event Feed Integration Tests', () => {
 
       // Step 2: Account A follows Account B's calendar via API
       // For local calendars, use WebFinger identifier format: calendarname@domain
-      const calendarBIdentifier = `${calendarB.urlName}@pavillion.dev`;
-
-      const followResponse = await env.authPost(
-        authKeyA,
-        '/api/v1/social/follows',
-        {
-          calendarId: calendarA.id,
-          remoteCalendar: calendarBIdentifier,
-          autoRepostOriginals: false,
-          autoRepostReposts: false,
-        },
-      );
-
-      expect(followResponse.status).toBe(200);
+      await followLocalCalendar(authKeyA, calendarA.id, calendarB);
 
       // Step 3: Verify the follow relationship was created
       const followsResponse = await env.authGet(
@@ -192,18 +219,7 @@ describe('Event Feed Integration Tests', () => {
       });
 
       // Step 1: Account A follows local Calendar C
-      const calendarCIdentifier = `${calendarC.urlName}@pavillion.dev`;
-      const followCResponse = await env.authPost(
-        authKeyA,
-        '/api/v1/social/follows',
-        {
-          calendarId: calendarA.id,
-          remoteCalendar: calendarCIdentifier,
-          autoRepostOriginals: false,
-          autoRepostReposts: false,
-        },
-      );
-      expect(followCResponse.status).toBe(200);
+      await followLocalCalendar(authKeyA, calendarA.id, calendarC);
 
       // Step 2: Mock remote Calendar D with events
       const remoteCalendarActorUri = 'https://remote.example.com/calendars/calendard';
@@ -325,18 +341,7 @@ describe('Event Feed Integration Tests', () => {
       });
 
       // Step 2: Account D follows Account E's calendar
-      const calendarEIdentifier = `${calendarE.urlName}@pavillion.dev`;
-      const followResponse = await env.authPost(
-        authKeyD,
-        '/api/v1/social/follows',
-        {
-          calendarId: calendarD.id,
-          remoteCalendar: calendarEIdentifier,
-          autoRepostOriginals: false,
-          autoRepostReposts: false,
-        },
-      );
-      expect(followResponse.status).toBe(200);
+      await followLocalCalendar(authKeyD, calendarD.id, calendarE);
 
       // Step 3: Verify the follow was created
       const followsAfterFollow = await env.authGet(
