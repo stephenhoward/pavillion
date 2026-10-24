@@ -976,9 +976,12 @@ export async function getCalendarReports(
  * hand-build the activity and post it.
  *
  * The federation instances run with `SKIP_SIGNATURES=true`
- * (docker-compose.federation.yml), so no HTTP Signature is attached. Signature
- * enforcement has its own coverage in `signature_strict_receive.spec.ts` and
- * must not be duplicated here.
+ * (docker-compose.federation.yml), so the Signature header attached here is
+ * never verified. It is still required: the inbox derives the verified origin
+ * from its keyId and refuses an activity whose id is not on that origin, so
+ * the keyId names the activity's own actor. Signature enforcement has its own
+ * coverage in `signature_strict_receive.spec.ts` and must not be duplicated
+ * here.
  *
  * The raw `Response` is returned rather than a parsed body: a 400 from the
  * inbox's per-type validation switch is a meaningful protocol outcome the
@@ -1000,6 +1003,11 @@ export async function postActivityToInbox(
       method: 'POST',
       headers: {
         'Content-Type': 'application/activity+json',
+        // The keyId parser requires a signed, present, in-window Date.
+        'Date': new Date().toUTCString(),
+        'Signature':
+          `keyId="${String(activity.actor)}#main-key",algorithm="rsa-sha256",` +
+          'headers="(request-target) host date",signature="unverified"',
       },
       body: JSON.stringify(activity),
       // @ts-ignore - agent is not in the TypeScript types but works at runtime

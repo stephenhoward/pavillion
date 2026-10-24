@@ -23,6 +23,7 @@ import { AP_CONTEXT } from '@/server/activitypub/model/base';
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
 import { logInboxActivityAccepted, logInboxActivityArrival } from '@/server/activitypub/helper/inbox-acceptance-log';
+import { ActivityIdOriginMismatchError } from '@/server/activitypub/helper/activity-id-origin';
 import type { InboxAuthContext } from '@/server/activitypub/interface';
 import {
   createActorRateLimiter,
@@ -544,7 +545,19 @@ export default class ActivityPubServerRoutes {
         source: 'http_signature',
         origin: extractKeyIdOrigin(req),
       };
-      await this.service.addToInbox(calendar, message, auth);
+      try {
+        await this.service.addToInbox(calendar, message, auth);
+      }
+      catch (error) {
+        // The id is not on the origin that signed it (or the origin is
+        // unknown): refused before any row was written, and already logged
+        // by the rejection logger. Answered like the other ingest refusals.
+        if (error instanceof ActivityIdOriginMismatchError) {
+          res.status(400).json({ error: error.message, errorName: error.name });
+          return;
+        }
+        throw error;
+      }
       logInboxActivityAccepted('calendar', calendarName, req.body);
       res.status(200).send('Message received');
     }

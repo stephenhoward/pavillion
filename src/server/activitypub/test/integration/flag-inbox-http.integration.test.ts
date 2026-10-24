@@ -320,7 +320,10 @@ describe('Inbound Flag over HTTP (integration)', () => {
 
   it('creates no report for a Flag from a blocked instance', async () => {
     const eventId = await seedEvent('flagged-by-blocked');
-    const activity = buildFlag(eventId, { actor: BLOCKED_ACTOR_URI });
+    const activity = buildFlag(eventId, {
+      actor: BLOCKED_ACTOR_URI,
+      id: `https://${BLOCKED_HOST}/flags/${uuidv4()}`,
+    });
 
     // The route admits the activity — instance blocking is enforced at
     // dispatch, which marks the row 'blocked' rather than acting on it.

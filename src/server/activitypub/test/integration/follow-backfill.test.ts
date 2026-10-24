@@ -353,6 +353,32 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.findByPk(foreignActivityId)).toBeNull();
   });
 
+  it('skips an activity whose id is not on the source actor origin, leaving no row, and keeps the rest of the page', async () => {
+    // A source outbox may not claim another host's activity id: the inbox is
+    // first-writer-wins on id, so storing it would shadow that host's genuine
+    // activity (e.g. a deterministic `{objectUrl}/delete`).
+    const claimedId = 'https://other.example/events/elsewhere/delete';
+    const ownId = `${SOURCE_ORIGIN}/activities/own`;
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage([
+        { id: claimedId, type: 'Delete', actor: SOURCE_ACTOR_URI, published: '2026-05-16T11:00:00Z', object: 'https://other.example/events/elsewhere' },
+        buildCreate(ownId, '2026-05-16T11:00:00Z'),
+      ]),
+    });
+
+    const service = runService({ fetcher });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    expect(await ActivityPubInboxMessageEntity.findByPk(claimedId)).toBeNull();
+    expect(await ActivityPubInboxMessageEntity.findByPk(ownId)).not.toBeNull();
+  });
+
   // -------------------------------------------------------------------------
   // 3. Drain ordering
   // -------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { Calendar } from '@/common/model/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import { ActivityIdOriginMismatchError } from '@/server/activitypub/helper/activity-id-origin';
 
 describe('parseWebFingerResource', () => {
 
@@ -173,11 +174,13 @@ describe("addToInbox", () => {
     sandbox.restore();
   });
 
+  const ACTIVITY_ID = 'https://remote.example.com/activities/1';
+
   it('should persist the message with auth context and emit inboxMessageAdded', async () => {
     // fromObject only copies actor/object, so set id/type explicitly to
     // verify addToInbox forwards them into the shared writer.
-    let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
-    message.id = 'testid';
+    let message = ActivityPubActivity.fromObject({ type: 'Create', id: ACTIVITY_ID });
+    message.id = ACTIVITY_ID;
     message.type = 'Create';
     let calendar = Calendar.fromObject({ id: 'testid' });
 
@@ -186,7 +189,7 @@ describe("addToInbox", () => {
 
     // The shared inbox writer persists via findOrCreate (first writer wins).
     let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
-    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
+    findOrCreateStub.resolves([{ id: ACTIVITY_ID } as any, true]);
 
     let emitSpy = sandbox.spy(eventBus, 'emit');
 
@@ -198,42 +201,58 @@ describe("addToInbox", () => {
     expect(response).toBe(null);
     expect(findOrCreateStub.calledOnce).toBe(true);
     const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
-    expect(findOrCreateArgs.where.id).toBe('testid');
+    expect(findOrCreateArgs.where.id).toBe(ACTIVITY_ID);
     expect(findOrCreateArgs.defaults.type).toBe('Create');
     expect(findOrCreateArgs.defaults.auth_source).toBe('http_signature');
     expect(findOrCreateArgs.defaults.auth_origin).toBe('https://remote.example.com');
 
     // The live entry point emits so the inbox subscription drains immediately.
-    expect(emitSpy.calledWith('inboxMessageAdded', { calendar_id: 'testid', id: 'testid' })).toBe(true);
+    expect(emitSpy.calledWith('inboxMessageAdded', { calendar_id: 'testid', id: ACTIVITY_ID })).toBe(true);
   });
 
-  it('should persist null auth_origin when origin is unknown', async () => {
-    let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
+  it('should refuse, write nothing and emit nothing when the id is not on the verified origin', async () => {
+    let message = ActivityPubActivity.fromObject({ type: 'Delete', actor: 'https://foreign.example.com/calendars/x' });
+    message.id = 'https://remote.example.com/events/1/delete';
+    message.type = 'Delete';
     let calendar = Calendar.fromObject({ id: 'testid' });
 
-    let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
-    getCalendarStub.resolves(calendar);
-
+    sandbox.stub(service.calendarService, 'getCalendar').resolves(calendar);
     let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
-    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
+    let emitSpy = sandbox.spy(eventBus, 'emit');
 
-    await service.addToInbox(calendar, message, { source: 'http_signature', origin: null });
+    await expect(
+      service.addToInbox(calendar, message, { source: 'http_signature', origin: 'https://foreign.example.com' }),
+    ).rejects.toBeInstanceOf(ActivityIdOriginMismatchError);
 
-    expect(findOrCreateStub.calledOnce).toBe(true);
-    const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
-    expect(findOrCreateArgs.defaults.auth_source).toBe('http_signature');
-    expect(findOrCreateArgs.defaults.auth_origin).toBe(null);
+    expect(findOrCreateStub.called).toBe(false);
+    expect(emitSpy.calledWith('inboxMessageAdded')).toBe(false);
+  });
+
+  it('should refuse when the verified origin is unknown', async () => {
+    let message = ActivityPubActivity.fromObject({ type: 'Create' });
+    message.id = ACTIVITY_ID;
+    message.type = 'Create';
+    let calendar = Calendar.fromObject({ id: 'testid' });
+
+    sandbox.stub(service.calendarService, 'getCalendar').resolves(calendar);
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+
+    await expect(
+      service.addToInbox(calendar, message, { source: 'http_signature', origin: null }),
+    ).rejects.toBeInstanceOf(ActivityIdOriginMismatchError);
+
+    expect(findOrCreateStub.called).toBe(false);
   });
 
   it('should throw an error if calendar not found', async () => {
-    let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
+    let message = ActivityPubActivity.fromObject({ type: 'Create', id: ACTIVITY_ID });
     let calendar = Calendar.fromObject({ id: 'testid' });
 
     let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(null);
 
     await expect(
-      service.addToInbox(calendar, message, { source: 'http_signature', origin: null }),
+      service.addToInbox(calendar, message, { source: 'http_signature', origin: 'https://remote.example.com' }),
     ).rejects.toThrow('Account not found');
   });
 });
@@ -242,6 +261,8 @@ describe("enqueueInboxRow", () => {
   let service: ActivityPubService;
   let eventBus: EventEmitter;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const ACTIVITY_ID = 'https://remote.example.com/activities/1';
 
   beforeEach(() => {
     eventBus = new EventEmitter();
@@ -256,24 +277,24 @@ describe("enqueueInboxRow", () => {
 
   it('should persist the row via findOrCreate without emitting inboxMessageAdded', async () => {
     let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
-    findOrCreateStub.resolves([{ id: 'testid' } as any, true]);
+    findOrCreateStub.resolves([{ id: ACTIVITY_ID } as any, true]);
 
     let emitSpy = sandbox.spy(eventBus, 'emit');
 
     const messageTime = new Date('2026-05-15T00:00:00Z');
     let result = await service.enqueueInboxRow({
       calendarId: 'cal-1',
-      id: 'testid',
+      id: ACTIVITY_ID,
       type: 'Create',
       messageTime,
-      message: { type: 'Create', id: 'testid' },
+      message: { type: 'Create', id: ACTIVITY_ID },
       auth: { source: 'outbox_pull', origin: 'https://remote.example.com' },
     });
 
     expect(result).toEqual({ created: true });
     expect(findOrCreateStub.calledOnce).toBe(true);
     const findOrCreateArgs = findOrCreateStub.firstCall.args[0] as any;
-    expect(findOrCreateArgs.where.id).toBe('testid');
+    expect(findOrCreateArgs.where.id).toBe(ACTIVITY_ID);
     expect(findOrCreateArgs.defaults.calendar_id).toBe('cal-1');
     expect(findOrCreateArgs.defaults.message_time).toBe(messageTime);
     expect(findOrCreateArgs.defaults.auth_source).toBe('outbox_pull');
@@ -285,17 +306,32 @@ describe("enqueueInboxRow", () => {
 
   it('should return created=false on an idempotent no-op against an existing id', async () => {
     let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
-    findOrCreateStub.resolves([{ id: 'testid' } as any, false]);
+    findOrCreateStub.resolves([{ id: ACTIVITY_ID } as any, false]);
 
     let result = await service.enqueueInboxRow({
       calendarId: 'cal-1',
-      id: 'testid',
+      id: ACTIVITY_ID,
       type: 'Create',
       messageTime: new Date('2026-05-15T00:00:00Z'),
-      message: { type: 'Create', id: 'testid' },
-      auth: { source: 'outbox_pull', origin: null },
+      message: { type: 'Create', id: ACTIVITY_ID },
+      auth: { source: 'outbox_pull', origin: 'https://remote.example.com' },
     });
 
     expect(result).toEqual({ created: false });
+  });
+
+  it('should refuse and write nothing when the id is not on the source origin', async () => {
+    let findOrCreateStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOrCreate');
+
+    await expect(service.enqueueInboxRow({
+      calendarId: 'cal-1',
+      id: 'https://other.example.com/events/1/delete',
+      type: 'Delete',
+      messageTime: new Date('2026-05-15T00:00:00Z'),
+      message: { type: 'Delete', id: 'https://other.example.com/events/1/delete' },
+      auth: { source: 'outbox_pull', origin: 'https://remote.example.com' },
+    })).rejects.toBeInstanceOf(ActivityIdOriginMismatchError);
+
+    expect(findOrCreateStub.called).toBe(false);
   });
 });
