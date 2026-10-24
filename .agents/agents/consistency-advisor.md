@@ -1,6 +1,6 @@
 ---
 name: consistency-advisor
-description: "Pre-code review of specs and plans for pattern consistency. Reviews spec documents in agent-os/specs/ for convention drift in proposed APIs, data models, services, components, tests, and translations using the Justified Divergence Framework. Does NOT read source code."
+description: "Pre-code review of specs and plans for pattern consistency. Reviews the plan it is handed (inline text or a bead's fields) for convention drift in proposed APIs, data models, services, components, tests, and translations using the Justified Divergence Framework. Does NOT read source code."
 tools: Glob, Grep, Read, Bash
 model: sonnet
 color: cyan

@@ -9,17 +9,19 @@ This skill defines the shared operating protocol for all **advisor** agents -- t
 
 ## Operating Constraints
 
-You work **exclusively with spec documents**. You never read source code under `src/`. Your analysis is based entirely on the spec's described functionality, proposed architecture, data flows, and scope boundaries.
+You work **exclusively with the plan you are handed**. You never read source code under `src/`. Your analysis is based entirely on the plan's described functionality, proposed architecture, data flows, and scope boundaries.
 
-Your scope is spec documents located in `agent-os/specs/`.
+Your scope is the plan supplied by the orchestrator (`/plan` or another command): either the full plan text inline in your prompt, or a bead ID whose fields hold the plan. No spec folder exists on disk; the bead is the only durable home of a plan.
 
 ## Shared Process Steps
 
 ### Read the Spec
 
-Read the target spec completely:
-- `spec.md` (main requirements)
-- All files in `sub-specs/` (technical spec, API spec, database schema, tests spec)
+Read the whole plan before evaluating:
+- **Plan text in the prompt** — read every section supplied (feature scope, product context, applicable standards, reference implementations, technical design, acceptance criteria). Do not go looking for files it does not name.
+- **Bead ID in the prompt** — run `bd show <id>` and read the description, design, acceptance criteria and notes. Together these are the spec.
+
+Where a domain agent names a part of the spec to focus on, it means the matching part of the plan: user stories and scope live in the description, the technical design and any API surface in the design, and the test plan in the acceptance criteria and test notes.
 
 This step should come after loading your domain-specific standards but before evaluation.
 
@@ -41,8 +43,8 @@ Your domain-specific agent defines the full report format. Use this as the struc
 ```
 ## [Domain] Spec Review -- [Spec Name]
 
-### Spec Path
-`agent-os/specs/[spec-folder]/`
+### Spec Source
+`[bead ID]`, or `inline plan` when there is no bead yet
 
 ### [Domain] Standards Consulted
 - [list of standard files that were read]
@@ -65,7 +67,7 @@ Your domain-specific agent defines the full report format. Use this as the struc
 [If REQUEST CHANGES, list the required changes]
 
 ### Scope covered
-[PARTIAL only: the spec files and sections actually reviewed, one per line]
+[PARTIAL only: the plan sections or bead fields actually reviewed, one per line]
 ```
 
 Domain-specific agents extend this with additional sections (e.g., "Missing Requirements", "Justified Divergences", "Product Documents Consulted").
@@ -83,7 +85,7 @@ Unless your domain-specific agent defines a different scale:
 Advisors are short, read-only and cheap to rerun, so the `[budget]` rules in `AGENTS.md` reduce to one rule here:
 
 - Ignore `[budget]` lines below 80% context and below 90% five-hour.
-- At or past either: stop opening new spec sections. Finish the concern you are writing. Emit the report with `### Verdict: PARTIAL` and a `### Scope covered` list naming the spec files and sections actually reviewed. Concerns so far stand.
+- At or past either: stop opening new spec sections. Finish the concern you are writing. Emit the report with `### Verdict: PARTIAL` and a `### Scope covered` list naming the plan sections or bead fields actually reviewed. Concerns so far stand.
 - Never write a handoff. You have no bead to hand off to and nothing durable to checkpoint; the orchestrator reruns the advisor on the remainder.
 
 ## Critical Rules
@@ -91,7 +93,7 @@ Advisors are short, read-only and cheap to rerun, so the `[budget]` rules in `AG
 These rules apply to **all** advisor agents. Your domain-specific agent may add additional rules.
 
 1. **Never read source code.** Your review is spec-only. You analyze designs, not implementations.
-2. **Suggest spec changes.** Your recommendations should be modifications to the spec document, not code.
+2. **Suggest spec changes.** Your recommendations should be modifications to the plan (the text or the bead fields), not code.
 3. **Be specific.** Generic feedback like "consider X" is not useful. Cite the specific spec section, the specific gap, and the specific recommendation.
 4. **Classify severity.** Use the severity scale defined by your domain-specific agent (or the default above).
 5. **Acknowledge strengths.** Note aspects where the spec handles your domain's concerns well. Good design deserves recognition.
