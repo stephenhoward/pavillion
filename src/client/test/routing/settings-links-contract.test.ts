@@ -23,7 +23,6 @@ describe('settings links built outside the SPA', () => {
         currentCalendarRedirect: () => pass,
         settingsIndexRedirect: () => pass,
         calendarLeafGate: pass,
-        legacyTabReportsRedirect: pass,
         fundingEnabledRedirect: pass,
       }),
     });

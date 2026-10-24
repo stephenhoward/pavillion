@@ -74,8 +74,6 @@ export interface ClientRouteDeps {
   settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
   /** Calendar subtree entry: replace an owner-only leaf the viewer may not see, before commit. */
   calendarLeafGate: NavigationGuard;
-  /** Temporary: maps the retired `?tab=reports[&report=]` calendar settings form onto the Reports leaf. */
-  legacyTabReportsRedirect: NavigationGuard;
   /** Funding plan leaf: redirect to Profile when instance funding is disabled. */
   fundingEnabledRedirect: NavigationGuard;
 }
@@ -96,7 +94,7 @@ const RedirectOnly = { render: () => null };
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
   const {
     mustBeLoggedIn, mustBeAdmin, setupGuard, authRouteGuard, currentCalendarRedirect,
-    settingsIndexRedirect, calendarLeafGate, legacyTabReportsRedirect, fundingEnabledRedirect,
+    settingsIndexRedirect, calendarLeafGate, fundingEnabledRedirect,
   } = deps;
 
   const routes: RouteRecordRaw[] = [
@@ -130,7 +128,7 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
             { path: 'calendar/:calendar', component: CalendarManagementView, beforeEnter: [mustBeLoggedIn, calendarLeafGate],
               children: [
                 { path: '', component: SettingsListPage, name: 'calendar_management', meta: { settingsGroup: 'calendar' },
-                  beforeEnter: [mustBeLoggedIn, legacyTabReportsRedirect, settingsIndexRedirect('calendar')] },
+                  beforeEnter: [mustBeLoggedIn, settingsIndexRedirect('calendar')] },
                 { path: 'general', component: CalendarGeneralView, name: 'calendar_general', beforeEnter: mustBeLoggedIn },
                 { path: 'editors', component: CalendarEditorsView, name: 'calendar_editors', beforeEnter: mustBeLoggedIn },
                 { path: 'reports', component: CalendarReportsView, name: 'calendar_reports', beforeEnter: mustBeLoggedIn },

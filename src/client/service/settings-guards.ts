@@ -212,7 +212,6 @@ export async function settingsIndexTarget(
 export interface SettingsGuards {
   settingsIndexRedirect: (group: SettingsGroup) => NavigationGuard;
   calendarLeafGate: NavigationGuard;
-  legacyTabReportsRedirect: NavigationGuard;
   fundingEnabledRedirect: NavigationGuard;
 }
 
@@ -256,24 +255,6 @@ export function createSettingsGuards(deps: SettingsGuardDeps): SettingsGuards {
       const ctx = buildSettingsNavContext('calendar', to.params.calendar, readSettingsNavSources(deps.isAdmin));
       const target = calendarLeafRedirect(to.name, ctx);
       return target ? redirect(target, to) : true;
-    },
-
-    /**
-     * Temporary: maps the retired `?tab=reports[&report=<uuid>]` form, which
-     * sent moderation emails still hold, onto the Reports leaf. Any other tab
-     * value is ignored. Targets are built from fixed literals, never from the
-     * query. Remove with pv-y5xy once those emails have aged out.
-     */
-    legacyTabReportsRedirect: (to) => {
-      const { tab, report } = to.query;
-      const calendar = to.params.calendar;
-      if (typeof tab !== 'string' || tab !== 'reports' || typeof calendar !== 'string') {
-        return true;
-      }
-      if (isReportId(report)) {
-        return redirect({ name: 'calendar_report_detail', params: { calendar, reportId: report } }, to);
-      }
-      return redirect({ name: 'calendar_reports', params: { calendar } }, to);
     },
 
     /** The funding plan leaf: redirect to Profile when the tree hides it. */

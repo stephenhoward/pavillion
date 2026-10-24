@@ -154,7 +154,6 @@ describe('ROUTE_GUIDES keys', () => {
       currentCalendarRedirect: () => pass,
       settingsIndexRedirect: () => pass,
       calendarLeafGate: pass,
-      legacyTabReportsRedirect: pass,
       fundingEnabledRedirect: pass,
     }));
     for (const key of Object.keys(ROUTE_GUIDES)) {

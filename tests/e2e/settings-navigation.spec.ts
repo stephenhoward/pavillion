@@ -66,9 +66,9 @@ import {
  * the md+ forward from an index to its first leaf (a replace, so browser
  * Back leaves settings), the main nav collapsing to an icon rail whose links
  * keep their accessible names, resizing across the breakpoint in both
- * directions, the CSS and script breakpoints agreeing at 767/768, the legacy
- * `?tab=reports` link, and the unresolved-calendar index rendering the same
- * page for a non-member and a nonexistent calendar.
+ * directions, the CSS and script breakpoints agreeing at 767/768, and the
+ * unresolved-calendar index rendering the same page for a non-member and a
+ * nonexistent calendar.
  *
  * The accessibility half: axe scans of the representative states in both
  * colour schemes, one h1 and one current item per list in every state, the
@@ -112,7 +112,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
   env = await startTestServer({ extraEnv: { LOCAL_DOMAIN } });
-  // Seeds the owner report the legacy ?tab=reports&report= case opens.
+  // Seeds the owner report the report-detail cases open.
   fixtures = await seedNotificationFixtures(env.baseURL);
 });
 
@@ -447,27 +447,6 @@ test.describe('tree layout', () => {
     });
   }
 });
-
-// The legacy query form dies with its redirect (follow-up pv-y5xy); delete these cases with it.
-for (const [label, viewport] of [['phone', PHONE], ['desktop', DESKTOP]] as const) {
-  test.describe(`legacy ?tab=reports link (${label})`, () => {
-    test.use({ viewport });
-
-    test('tab=reports&report= opens the report detail and drops the query', async ({ page }) => {
-      await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);
-      const index = calendarIndexPath(TESTUSER_CALENDAR_URL_NAME);
-
-      await page.goto(`${env.baseURL}${index}?tab=reports&report=${fixtures.ownedReportId}`);
-      await expect(page).toHaveURL(env.baseURL + calendarReportPath(TESTUSER_CALENDAR_URL_NAME, fixtures.ownedReportId));
-      await expect(reportRegion(page)).toBeVisible({ timeout: 10000 });
-      await expect(reportRegion(page)).toBeFocused();
-
-      await page.goto(`${env.baseURL}${index}?tab=reports`);
-      await expect(page).toHaveURL(env.baseURL + calendarLeafPath(TESTUSER_CALENDAR_URL_NAME, 'reports'));
-      await expect(settingsTitle(page, 'Reports')).toBeVisible();
-    });
-  });
-}
 
 // Desktop first: a wrong forward from the index would leak there.
 for (const [label, viewport] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {

@@ -496,7 +496,6 @@ describe('settings routes on the real route table', () => {
       ['/settings/calendar/shared/general'],
       ['/settings/calendar/shared/editors'],
       ['/settings/calendar/shared/reports/9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
-      ['/settings/calendar/shared?tab=reports&report=9f8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'],
     ])('replaces an editor entering %s with widget, query dropped', async (path) => {
       viewerHas('editor');
       const router = routerAt(false);
