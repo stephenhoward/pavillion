@@ -183,7 +183,6 @@ describe('settings guards', () => {
     it.each([
       ['settingsIndexRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.settingsIndexRedirect('account'), route()],
       ['calendarLeafGate', (g: ReturnType<typeof createSettingsGuards>) => g.calendarLeafGate, Object.assign(route({ calendar: 'shared' }), { name: 'calendar_general' })],
-      ['legacyTabReportsRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.legacyTabReportsRedirect, route({ calendar: 'riverside' }, { tab: 'reports' })],
       ['fundingEnabledRedirect', (g: ReturnType<typeof createSettingsGuards>) => g.fundingEnabledRedirect, route()],
     ] as const)('%s replaces when the URL it leaves is already in the address bar', async (_name, pick, to) => {
       funding = false;
@@ -268,69 +267,6 @@ describe('settings guards', () => {
       expect(buildSettingsNavContext('account', undefined, sources())).toEqual({
         calendarUrlName: 'riverside', isOwner: true, isAdmin: false, fundingEnabled: false,
       });
-    });
-  });
-
-  describe('legacyTabReportsRedirect', () => {
-    const calendar = 'riverside';
-
-    it('maps tab=reports to the reports leaf', async () => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports' }))).toEqual({
-        name: 'calendar_reports', params: { calendar },
-      });
-    });
-
-    it('maps tab=reports with a v4 report id to the report detail', async () => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports', report: REPORT_ID }))).toEqual({
-        name: 'calendar_report_detail', params: { calendar, reportId: REPORT_ID },
-      });
-    });
-
-    it.each([
-      ['a non-v4 UUID', '3f2b8c1e-9a4d-1e6f-8b2a-1c3d5e7f9a0b'],
-      ['a malformed id', 'not-a-uuid'],
-      ['a path', '../x'],
-      ['an array', [REPORT_ID]],
-    ])('ignores %s as the report and lands on the reports leaf', async (_label, report) => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      expect(await run(legacyTabReportsRedirect, route({ calendar }, { tab: 'reports', report }))).toEqual({
-        name: 'calendar_reports', params: { calendar },
-      });
-    });
-
-    it.each<[string, Query]>([
-      ['an array tab', { tab: ['reports'] }],
-      ['__proto__', { tab: '__proto__' }],
-      ['a path-like tab', { tab: '/settings/admin' }],
-      ['a protocol-relative tab', { tab: '//evil.example' }],
-      ['an absolute URL tab', { tab: 'https://evil.example' }],
-      ['tab=settings with a checkout session', { tab: 'settings', session_id: 'cs_test_123' }],
-      ['a bare ?tab', { tab: null }],
-      ['no tab', {}],
-    ])('lets %s through untouched', async (_label, query) => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      expect(await run(legacyTabReportsRedirect, route({ calendar }, query))).toBe(true);
-    });
-
-    it.each<[string, Params]>([
-      ['a missing calendar param', {}],
-      ['an array calendar param', { calendar: [calendar] }],
-    ])('lets tab=reports with %s through untouched', async (_label, params) => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      expect(await run(legacyTabReportsRedirect, route(params, { tab: 'reports', report: REPORT_ID }))).toBe(true);
-    });
-
-    it('carries no other query key into the target', async () => {
-      const { legacyTabReportsRedirect } = createSettingsGuards(deps);
-      const result = await run(
-        legacyTabReportsRedirect,
-        route({ calendar }, { tab: 'reports', report: REPORT_ID, session_id: 'cs_test_123', foo: 'bar' }),
-      );
-      expect(typeof result).toBe('object');
-      expect('query' in (result as object)).toBe(false);
-      expect('path' in (result as object)).toBe(false);
     });
   });
 

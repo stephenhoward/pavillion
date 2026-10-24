@@ -67,7 +67,7 @@ function buildRouter(): Router {
   const routes: RouteRecordRaw[] = [
     { path: '/settings/calendar/:calendar', component: CalendarManagementRoot, children: [
       { path: '', name: 'calendar_management', component: IndexStub, meta: { settingsGroup: 'calendar' },
-        beforeEnter: [guards.legacyTabReportsRedirect, guards.settingsIndexRedirect('calendar')] },
+        beforeEnter: [guards.settingsIndexRedirect('calendar')] },
       { path: 'general', name: 'calendar_general', component: GeneralStub },
       { path: 'editors', name: 'calendar_editors', component: EditorsStub },
       { path: 'reports', name: 'calendar_reports', component: ReportsStub },
@@ -461,7 +461,6 @@ describe('CalendarManagementRoot', () => {
       it.each([
         paths[0],
         `/settings/calendar/${PARAM}/reports/${REPORT_ID}`,
-        `/settings/calendar/${PARAM}?tab=reports&report=${REPORT_ID}`,
       ])('requests only the viewer\'s own list and the funding flag at %s', async (path) => {
         const nonMember = await networkOutcome(path, [makeCalendarInfo('other-calendar', 'owner')], sidebar);
         const nonexistent = await networkOutcome(path, [], sidebar);
@@ -471,20 +470,6 @@ describe('CalendarManagementRoot', () => {
         expect(nonMember.html).toContain('Calendar not available');
         expect(nonMember.html).toBe(nonexistent.html);
         expect(nonMember.fullPath).toBe(nonexistent.fullPath);
-      });
-
-      it('treats the legacy ?tab=reports deep link identically', async () => {
-        const path = `/settings/calendar/${PARAM}?tab=reports&report=${REPORT_ID}`;
-        const getReport = vi.spyOn(ModerationService.prototype, 'getReport');
-
-        const nonMember = await outcome(path, [makeCalendarInfo('other-calendar', 'owner')], sidebar);
-        const nonexistent = await outcome(path, [], sidebar);
-
-        expect(nonMember.html).toBe(nonexistent.html);
-        expect(nonMember.fullPath).toBe(nonexistent.fullPath);
-        expect(nonMember.html).not.toContain(PARAM);
-        expect(nonMember.mounts).toEqual([]);
-        expect(getReport).not.toHaveBeenCalled();
       });
     });
   });

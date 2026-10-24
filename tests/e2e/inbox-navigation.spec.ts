@@ -242,8 +242,7 @@ async function loadRejectedReportView(page: Page, reportId: string) {
 
 test.describe('Reports deep link (reports/:reportId)', () => {
   // Every case here is an OWNER on their own calendar. A viewer with no
-  // relationship to the calendar is covered by settings-navigation.spec.ts,
-  // as is the legacy `?tab=reports&report=` link.
+  // relationship to the calendar is covered by settings-navigation.spec.ts.
 
   test('a valid owned report opens and moves focus to the report region', async ({ page }) => {
     await loginViaUi(page, env.baseURL, TESTUSER_EMAIL, TESTUSER_PASSWORD);

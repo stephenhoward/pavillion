@@ -20,9 +20,6 @@
  *   callers short-circuit it before asking for a leaf, so it gets no forward
  *   and the same URL with the empty state at either viewport, which keeps
  *   non-member and nonexistent calendars non-disclosing.
- * - **The legacy `?tab=reports` redirect is temporary.** It maps only
- *   `tab=reports` onto the Reports leaf because sent moderation emails hold
- *   that form, and is removed once those emails have aged out.
  *
  * These rules are recorded in DEC-021, client settings information
  * architecture (agent-os/product/decisions/dec-021-client-settings-information-architecture.md).

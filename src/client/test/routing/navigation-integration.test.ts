@@ -128,7 +128,6 @@ describe('Navigation Integration - Task Group 4', () => {
         currentCalendarRedirect: () => pass,
         settingsIndexRedirect: () => pass,
         calendarLeafGate: pass,
-        legacyTabReportsRedirect: pass,
         fundingEnabledRedirect: pass,
       }),
     });
@@ -364,7 +363,6 @@ describe('Navigation Integration - Task Group 4', () => {
           currentCalendarRedirect: () => pass,
           settingsIndexRedirect: () => pass,
           calendarLeafGate: pass,
-          legacyTabReportsRedirect: pass,
           fundingEnabledRedirect: pass,
         }),
       });
@@ -389,7 +387,6 @@ describe('Navigation Integration - Task Group 4', () => {
           currentCalendarRedirect: () => pass,
           settingsIndexRedirect: () => pass,
           calendarLeafGate: pass,
-          legacyTabReportsRedirect: pass,
           fundingEnabledRedirect: pass,
         }),
       });
