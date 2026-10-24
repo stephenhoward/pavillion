@@ -2235,3 +2235,194 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
     expect(deleteEventSpy.called).toBe(false);
   });
 });
+
+/**
+ * The remote-editor envelope (`object.eventParams` on a Person-actor Create or
+ * Update) is parsed by EventObject.parseRemoteEditorParams and overlaid key by
+ * key; it is never merged raw. These tests pin what reaches the calendar
+ * domain from each handler.
+ */
+describe('ProcessInboxService - remote-editor envelope', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const editorUri = 'https://editor.example/users/alice';
+
+  /** An envelope carrying markup plus every key the allow-list drops. */
+  const hostileEnvelope = (id?: string) => ({
+    ...(id ? { id } : {}),
+    calendarId: 'some-other-calendar',
+    eventSourceUrl: 'javascript:alert(1)',
+    media: { id: 'local-media-id' },
+    mediaId: 'local-media-id',
+    mediaFocalPointX: 99,
+    mediaZoom: 1000,
+    series: { id: 'local-series-id' },
+    categories: [{ id: 'local-category-id' }],
+    locationId: 'local-location-id',
+    spaceId: 'local-space-id',
+    repostStatus: 'auto',
+    space: { id: 'local-space-id' },
+    externalUrl: 'javascript:alert(1)',
+    urlPrompt: 'tickets',
+    content: {
+      en: {
+        name: '<b>Festival</b>',
+        description: '<script>alert(1)</script>A fun time',
+        accessibilityInfo: '<i>Ramp</i>',
+        evil: 'raw',
+      },
+    },
+  });
+
+  const DROPPED_KEYS = [
+    'media', 'mediaId', 'mediaFocalPointX', 'mediaZoom', 'series', 'categories',
+    'locationId', 'spaceId', 'repostStatus', 'space',
+  ];
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  describe('processCreateEvent', () => {
+    it('passes sanitized content and none of the dropped keys to addRemoteEvent', async () => {
+      const addRemoteEvent = sandbox.stub(calendarInterface, 'addRemoteEvent')
+        .resolves(new CalendarEvent(uuidv4(), testCalendar.id));
+      const apObjectId = `https://editor.example/events/${uuidv4()}`;
+
+      await inboxService.processCreateEvent(testCalendar, CreateActivity.fromObject({
+        type: 'Create',
+        actor: editorUri,
+        object: {
+          type: 'Event',
+          id: apObjectId,
+          name: 'Festival',
+          attributedTo: editorUri,
+          eventParams: hostileEnvelope('attacker-chosen-id'),
+        },
+      })!);
+
+      expect(addRemoteEvent.calledOnce).toBe(true);
+      const params = addRemoteEvent.firstCall.args[1];
+      expect(params.content.en.name).toBe('Festival');
+      expect(params.content.en.description).toBe('alert(1)A fun time');
+      expect(params.content.en.accessibilityInfo).toBe('Ramp');
+      expect(params.content.en.evil).toBeUndefined();
+      expect(params.externalUrl).toBeNull();
+      expect(params.urlPrompt).toBeNull();
+      expect(params.eventSourceUrl).toBe(apObjectId);
+      expect(params.calendarId).toBe(testCalendar.id);
+      expect(params.id).not.toBe('attacker-chosen-id');
+      for (const key of DROPPED_KEYS) {
+        expect(params).not.toHaveProperty(key);
+      }
+    });
+
+    it('builds params from the ActivityStreams object alone when there is no envelope', async () => {
+      const addRemoteEvent = sandbox.stub(calendarInterface, 'addRemoteEvent')
+        .resolves(new CalendarEvent(uuidv4(), testCalendar.id));
+      const apObjectId = `https://editor.example/events/${uuidv4()}`;
+
+      await inboxService.processCreateEvent(testCalendar, CreateActivity.fromObject({
+        type: 'Create',
+        actor: editorUri,
+        object: {
+          type: 'Event',
+          id: apObjectId,
+          name: '<b>Festival</b>',
+          summary: 'A fun time',
+          startTime: '2030-01-01T10:00:00Z',
+          attributedTo: editorUri,
+        },
+      })!);
+
+      const params = addRemoteEvent.firstCall.args[1];
+      expect(params.content).toEqual({ en: { name: 'Festival', description: 'A fun time' } });
+      expect(params.schedules).toEqual([{ start: '2030-01-01T10:00:00Z' }]);
+      expect(params.eventSourceUrl).toBe(apObjectId);
+      expect(params.calendarId).toBe(testCalendar.id);
+      expect(params.externalUrl).toBeNull();
+      expect(params.urlPrompt).toBeNull();
+    });
+  });
+
+  describe('processUpdateEvent', () => {
+    it('passes sanitized content and none of the dropped keys to updateRemoteEvent', async () => {
+      const eventId = uuidv4();
+      const apObjectId = `https://editor.example/events/${eventId}`;
+      await EventObjectEntity.create({ event_id: eventId, ap_id: apObjectId, attributed_to: editorUri });
+      sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, testCalendar.id));
+      const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent')
+        .resolves(new CalendarEvent(eventId, testCalendar.id));
+
+      await inboxService.processUpdateEvent(testCalendar, UpdateActivity.fromObject({
+        type: 'Update',
+        actor: editorUri,
+        object: {
+          type: 'Event',
+          id: apObjectId,
+          name: 'Festival',
+          attributedTo: editorUri,
+          eventParams: hostileEnvelope(eventId),
+        },
+      })!);
+
+      expect(updateRemoteEvent.calledOnce).toBe(true);
+      const params = updateRemoteEvent.firstCall.args[1];
+      expect(params.id).toBe(eventId);
+      expect(params.content.en.name).toBe('Festival');
+      expect(params.content.en.description).toBe('alert(1)A fun time');
+      expect(params.content.en.evil).toBeUndefined();
+      expect(params.eventSourceUrl).toBe(apObjectId);
+      expect(params).not.toHaveProperty('calendarId');
+      for (const key of DROPPED_KEYS) {
+        expect(params).not.toHaveProperty(key);
+      }
+    });
+
+    it('builds params from the ActivityStreams object alone when there is no envelope', async () => {
+      const eventId = uuidv4();
+      const apObjectId = `https://editor.example/events/${eventId}`;
+      await EventObjectEntity.create({ event_id: eventId, ap_id: apObjectId, attributed_to: editorUri });
+      sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, testCalendar.id));
+      const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent')
+        .resolves(new CalendarEvent(eventId, testCalendar.id));
+
+      await inboxService.processUpdateEvent(testCalendar, UpdateActivity.fromObject({
+        type: 'Update',
+        actor: editorUri,
+        object: { type: 'Event', id: apObjectId, name: 'Renamed', attributedTo: editorUri },
+      })!);
+
+      const params = updateRemoteEvent.firstCall.args[1];
+      expect(params.id).toBe(eventId);
+      expect(params.content).toEqual({ en: { name: 'Renamed', description: '' } });
+      expect(params.eventSourceUrl).toBe(apObjectId);
+    });
+  });
+});

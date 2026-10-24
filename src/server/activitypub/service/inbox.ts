@@ -1062,10 +1062,13 @@ class ProcessInboxService {
       calendarId: null,
     };
 
-    // For Person actor creates, use the full event params from the object
+    // For Person actor creates, overlay what the remote-editor envelope may
+    // set. The envelope is parsed, never merged raw: the parser strips markup,
+    // closes the key set and drops ids, media and routing state.
     if (isPersonActor) {
       if (message.object.eventParams) {
-        Object.assign(eventParams, message.object.eventParams);
+        this.overlayRemoteEditorParams(eventParams, message.object, actorUri);
+        // Belt and braces: the parser never emits id or calendarId.
         eventParams.id = localEventId;
       }
       eventParams.calendarId = calendar.id;
@@ -1309,6 +1312,33 @@ class ProcessInboxService {
         return null;
       default:
         throw new Error(`Unsupported activity type: ${(activity as any).type}`);
+    }
+  }
+
+  /**
+   * Overlays the remote-editor envelope (`apObject.eventParams`) onto
+   * eventParams already built by parseInboundEvent. Only keys
+   * EventObject.parseRemoteEditorParams emitted are written, so the envelope
+   * can replace sanitized content, schedules, location, space and the external
+   * link, and nothing else. Called only on the authorized Person-actor path.
+   *
+   * @param eventParams - Params built from the AS object (mutated)
+   * @param apObject - The inbound AS object carrying the envelope
+   * @param actorUri - The editor's actor URI
+   */
+  private overlayRemoteEditorParams(
+    eventParams: Record<string, any>,
+    apObject: Record<string, any>,
+    actorUri: string,
+  ): void {
+    const editorParams: Record<string, unknown> = EventObject.parseRemoteEditorParams(
+      apObject.eventParams,
+      { actorUri, apObject },
+    );
+    for (const key of Object.keys(editorParams)) {
+      if (editorParams[key] !== undefined) {
+        eventParams[key] = editorParams[key];
+      }
     }
   }
 
@@ -1761,15 +1791,17 @@ class ProcessInboxService {
     // the calendar-actor path, domain-of-origin is already enforced above
     // (line 1324), but passing actorUri here is harmless and makes the origin
     // invariant explicit at the parse boundary.
-    const eventParams = {
+    const eventParams: Record<string, any> = {
       ...EventObject.parseInboundEvent(message.object, { actorUri }),
       id: apObject.event_id,
       eventSourceUrl: apObjectId,
     };
 
-    // For Person actor updates, use the full event params from the object
+    // For Person actor updates, overlay what the remote-editor envelope may
+    // set (parsed, never merged raw — see processCreateEvent).
     if (isPersonActor && message.object.eventParams) {
-      Object.assign(eventParams, message.object.eventParams);
+      this.overlayRemoteEditorParams(eventParams, message.object, actorUri);
+      // Belt and braces: the parser never emits id.
       eventParams.id = apObject.event_id;
     }
 
