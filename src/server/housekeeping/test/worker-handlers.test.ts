@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import CalendarInterface from '@/server/calendar/interface';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { JobHandler, JobMeta } from '@/server/housekeeping/service/job-queue';
 import { MONITORED_QUEUES } from '@/server/housekeeping/service/metrics';
@@ -18,13 +20,15 @@ import { registerJobHandlers } from '@/server/worker';
  */
 class FakeJobQueueService {
   public handlers: Record<string, JobHandler<any>> = {};
+  public schedules: Record<string, string> = {};
 
   async subscribe<T>(jobName: string, handler: JobHandler<T>): Promise<void> {
     this.handlers[jobName] = handler;
   }
 
-  async schedule<T>(jobName: string, _cron: string, handler: JobHandler<T>): Promise<void> {
+  async schedule<T>(jobName: string, cron: string, handler: JobHandler<T>): Promise<void> {
     this.handlers[jobName] = handler;
+    this.schedules[jobName] = cron;
   }
 }
 
@@ -185,6 +189,29 @@ describe('Worker backup-job retry-storm alerting', () => {
       await expect(handler({ type: 'manual' }, { retryCount: 1, retryLimit: 2 })).rejects.toBe(failure);
 
       expect(sendBackupFailedStub.callCount).toBe(0);
+    });
+  });
+
+  describe('instances:refresh handler', () => {
+    it('is scheduled on the configured housekeeping.instances.schedule', () => {
+      expect(queue.handlers['instances:refresh']).toBeDefined();
+      expect(queue.schedules['instances:refresh']).toBe(config.get<string>('housekeeping.instances.schedule'));
+    });
+
+    it('refreshes every event instance through the calendar interface', async () => {
+      const refresh = sandbox.stub(CalendarInterface.prototype, 'refreshAllEventInstances')
+        .resolves({ refreshed: 3, failed: 1 });
+
+      await queue.handlers['instances:refresh']({});
+
+      expect(refresh.callCount).toBe(1);
+    });
+
+    it('re-throws a failure of the run so pg-boss records it', async () => {
+      const failure = new Error('database unavailable');
+      sandbox.stub(CalendarInterface.prototype, 'refreshAllEventInstances').rejects(failure);
+
+      await expect(queue.handlers['instances:refresh']({})).rejects.toBe(failure);
     });
   });
 

@@ -25,6 +25,7 @@ export const MONITORED_QUEUES = [
   'moderation:ip-cleanup',
   'notifications:cleanup',
   'inbox:cleanup',
+  'instances:refresh',
   'activitypub:follow:backfill',
 ] as const;
 
