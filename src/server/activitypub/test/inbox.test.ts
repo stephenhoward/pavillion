@@ -1288,8 +1288,10 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await db.query('PRAGMA foreign_keys = ON');
   });
 
-  function buildReconstitutedEvent(eventId: string): CalendarEvent {
-    const event = new CalendarEvent(eventId, null);
+  // calendarId is null for a remote copy; pass the owning calendar for a
+  // locally-owned event.
+  function buildReconstitutedEvent(eventId: string, calendarId: string | null = null): CalendarEvent {
+    const event = new CalendarEvent(eventId, calendarId);
     event.addContent(new CalendarEventContent('en', 'Reposted Event', ''));
     return event;
   }
@@ -1636,7 +1638,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
 
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
     sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
-    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+    sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
     const enqueued: any[] = [];

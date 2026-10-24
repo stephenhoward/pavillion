@@ -1981,6 +1981,25 @@ class ProcessInboxService {
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
+      // SECURITY: editor membership was checked against the receiving
+      // calendar, so the event must belong to that calendar. The event may
+      // have been resolved by the Tombstone's eventId, which is not scoped
+      // to it, and that field is a payload claim — compare against live
+      // ownership, never against the Tombstone's own calendarId.
+      if (existingEvent.calendarId !== calendar.id) {
+        logger.warn(`Person actor ${actorUri} sent a Delete to calendar ${calendar.urlName} for an event it does not own`);
+        logActivityRejection({
+          rejection_type: 'misdirected_activity',
+          activity_type: 'Delete',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Delete delivered to calendar ${calendar.urlName}, which does not own the target event`,
+        });
+        throw new Error('Event does not belong to this calendar');
+      }
+
       logger.info(`Processing Delete from authorized remote editor: ${actorUri}`);
     }
     else {
@@ -2015,7 +2034,7 @@ class ProcessInboxService {
       where: { event_id: eventIdToDelete, calendar_id: calendar.id },
     });
 
-    await this.calendarInterface.deleteRemoteEvent(eventIdToDelete);
+    await this.calendarInterface.deleteRemoteEvent(calendar, eventIdToDelete);
 
     // Also delete the EventObjectEntity record if it exists
     if (apObject) {

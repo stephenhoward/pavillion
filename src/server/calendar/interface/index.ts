@@ -368,8 +368,8 @@ export default class CalendarInterface {
     return this.eventService.updateRemoteEvent(calendar, eventParams);
   }
 
-  async deleteRemoteEvent(eventId: string): Promise<void> {
-    return this.eventService.deleteRemoteEvent(eventId);
+  async deleteRemoteEvent(calendar: Calendar, eventId: string): Promise<void> {
+    return this.eventService.deleteRemoteEvent(calendar, eventId);
   }
 
   // Location operations

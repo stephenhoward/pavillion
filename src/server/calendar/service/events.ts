@@ -1669,16 +1669,25 @@ class EventService {
    * Delete a remote event.
    * This is called when receiving a Delete activity via ActivityPub.
    *
+   * @param calendar - the local calendar the Delete was delivered to
    * @param eventId - the ID of the event to delete
    * @returns a promise that resolves when the event is deleted
    */
-  async deleteRemoteEvent(eventId: string): Promise<void> {
+  async deleteRemoteEvent(calendar: Calendar, eventId: string): Promise<void> {
     const eventEntity = await EventEntity.findByPk(eventId, {
       include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });
 
     if (!eventEntity) {
       throw new EventNotFoundError(`Remote event ${eventId} not found for deletion`);
+    }
+
+    // SECURITY: a locally-owned event may only be deleted through the
+    // calendar that owns it. Remote copies (calendar_id null) are deleted
+    // through whichever local calendar received the federated Delete, so
+    // they are not held to this check.
+    if (eventEntity.calendar_id !== null && eventEntity.calendar_id !== calendar.id) {
+      throw new InsufficientCalendarPermissionsError(`Event ${eventId} does not belong to calendar ${calendar.id}`);
     }
 
     await db.transaction(async (transaction) => {
