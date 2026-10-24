@@ -472,6 +472,13 @@ describe('ActivityPub Inbox Security Pipeline', () => {
       process.env.SKIP_SIGNATURES = 'true';
     });
 
+    // SKIP_SIGNATURES bypasses verification but the route still derives the
+    // verified origin from the keyId, and an activity id must be on that
+    // origin. Every activity in this section is on remote.example.com.
+    const REMOTE_SIGNATURE =
+      'keyId="https://remote.example.com/calendars/events#main-key",algorithm="rsa-sha256",' +
+      'headers="(request-target) host date content-type digest",signature="fakeSignature"';
+
     it('should accept valid Follow activity from calendar actor', async () => {
       const validFollowActivity = {
         '@context': 'https://www.w3.org/ns/activitystreams',
@@ -486,6 +493,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
         .set('Content-Type', 'application/activity+json')
         .set('Date', new Date().toUTCString())
         .set('Host', 'localhost')
+        .set('Signature', REMOTE_SIGNATURE)
         .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(validFollowActivity)).digest('base64')}`)
         .send(validFollowActivity);
 
@@ -507,6 +515,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
         .set('Content-Type', 'application/activity+json')
         .set('Date', new Date().toUTCString())
         .set('Host', 'localhost')
+        .set('Signature', REMOTE_SIGNATURE)
         .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(validAnnounceActivity)).digest('base64')}`)
         .send(validAnnounceActivity);
 
@@ -528,6 +537,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
         .set('Content-Type', 'application/activity+json')
         .set('Date', new Date().toUTCString())
         .set('Host', 'localhost')
+        .set('Signature', REMOTE_SIGNATURE)
         .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(validUndoActivity)).digest('base64')}`)
         .send(validUndoActivity);
 
@@ -559,6 +569,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
           .set('Content-Type', 'application/activity+json')
           .set('Date', new Date().toUTCString())
           .set('Host', 'localhost')
+          .set('Signature', REMOTE_SIGNATURE)
           .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(activity)).digest('base64')}`)
           .send(activity);
 
@@ -592,6 +603,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
         .set('Content-Type', 'application/activity+json')
         .set('Date', new Date().toUTCString())
         .set('Host', 'localhost')
+        .set('Signature', REMOTE_SIGNATURE)
         .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(completeActivity)).digest('base64')}`)
         .send(completeActivity);
 

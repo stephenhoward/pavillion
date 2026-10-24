@@ -76,6 +76,7 @@ import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { clampMessageTime } from '@/server/activitypub/helper/clamp-message-time';
+import { ActivityIdOriginMismatchError } from '@/server/activitypub/helper/activity-id-origin';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
@@ -524,6 +525,11 @@ export class FollowBackfillService {
       return created;
     }
     catch (error) {
+      // An id not on the source actor's origin is refused by the inbox
+      // writer, which has already logged the rejection; skip the item.
+      if (error instanceof ActivityIdOriginMismatchError) {
+        return false;
+      }
       logError(error, `[ActivityPub backfill] enqueueInboxRow failed for ${type} ${activityId}`);
       return false;
     }

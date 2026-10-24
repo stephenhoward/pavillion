@@ -13,9 +13,21 @@ import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import CalendarInterface from "@/server/calendar/interface";
 import AccountsInterface from "@/server/accounts/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
+import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from "@/server/activitypub/helper/activity-id-origin";
+import { logActivityRejection } from "@/server/activitypub/helper/rejection-logger";
 
 
 const logger = createLogger('activitypub');
+
+/** Host of a URI for rejection logging; 'unknown' when it does not parse. */
+function hostOf(uri: string): string {
+  try {
+    return new URL(uri).hostname;
+  }
+  catch {
+    return 'unknown';
+  }
+}
 
 /**
  * Context describing how an inbound activity was authenticated before it was
@@ -288,14 +300,41 @@ export default class ActivityPubService {
    * `auth` keeps the DEC-013 invariant — "authenticated by some recorded
    * mechanism" — enforced in one place.
    *
+   * Because first writer wins, the id must be owned by whoever authenticated
+   * the activity: before any row is written, the id's host must equal the
+   * verified origin's host (`auth.origin`; DEC-013's policy key, never the
+   * self-asserted `actor`). A mismatch, or an unknown origin, is refused here
+   * so that no peer can claim another host's deterministic Delete or Undo id
+   * ahead of the genuine activity. Both remote entry points pass through this
+   * gate; in-process local dispatch writes its own rows and is exempt, as it
+   * is from the other ownership gates.
+   *
    * This method is time-policy- and emission-agnostic: callers resolve
    * `messageTime` and decide whether to emit `inboxMessageAdded`.
    *
    * @param input Resolved row fields including auth context.
    * @returns `{ created }` — true when this call inserted the row, false when a
    *   row with the same id already existed.
+   * @throws ActivityIdOriginMismatchError when the id is not on the verified
+   *   origin; no row is written.
    */
   private async writeInboxRow(input: InboxRowInput): Promise<{ created: boolean }> {
+    if (!isActivityIdOnOrigin(input.id, input.auth.origin)) {
+      const actor = (input.message as { actor?: unknown }).actor;
+      const actorUri = typeof actor === 'string' ? actor : 'unknown';
+      logActivityRejection({
+        rejection_type: 'activity_id_origin_mismatch',
+        activity_type: input.type,
+        actor_uri: actorUri,
+        actor_domain: hostOf(actorUri),
+        calendar_id: input.calendarId,
+        reason: 'activity id is not on the origin that authenticated it',
+        message_id: input.id,
+        additional_context: { authSource: input.auth.source, verifiedOrigin: input.auth.origin },
+      });
+      throw new ActivityIdOriginMismatchError();
+    }
+
     const [, created] = await ActivityPubInboxMessageEntity.findOrCreate({
       where: { id: input.id },
       defaults: {
@@ -331,6 +370,8 @@ export default class ActivityPubService {
    * @param message
    * @param auth Authentication context (auth_source + verified origin).
    * @returns null
+   * @throws ActivityIdOriginMismatchError when the activity id is not on the
+   *   verified origin (see {@link writeInboxRow}); nothing is written or emitted.
    */
   async addToInbox(
     calendar: Calendar,
