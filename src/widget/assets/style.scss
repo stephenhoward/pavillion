@@ -1,32 +1,19 @@
 // ================================================================
-// PAVILLION WIDGET GLOBAL RESET
+// PAVILLION WIDGET GLOBAL STYLES
 // ================================================================
 //
 // The widget renders the public site's shared components, which are
-// written for the site's global reset (src/site/assets/style.scss).
-// This file carries the parts of it they depend on: border-box
-// sizing, a margin-free document, and the typeface. The iframe is its
-// own document and inherits nothing from the embedding page, so
-// without the typeface rule most text falls back to the browser
-// default serif.
+// written for the site's global reset. Layout, typeface and focus ring
+// come from that same reset, src/common/ui/assets/reset.scss, so the
+// widget cannot silently miss a rule the site gains. The iframe is its
+// own document and inherits nothing from the embedding page.
 //
-// No colour. The iframe's canvas stays transparent, and the --pav-*
-// tokens live on .widget-root, so nothing here may set a colour.
-// Nothing here may tie html or body to the viewport height either:
-// the widget reports its content height to the embedding page, and
-// inside an iframe the viewport is that last reported height.
+// No colour literal and no background here: the iframe's canvas stays
+// transparent. No viewport-tied html or body sizing either: the widget
+// reports its content height to the embedding page, and inside an
+// iframe the viewport is that last reported height. --pav-* reads
+// resolve only under .widget-root, where every focusable element lives.
 // ================================================================
 
-@use '@/common/ui/assets/mixins' as *;
 @use '@/common/ui/assets/fonts';
-
-* {
-  font-family: $public-font-family;
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-}
+@use '@/common/ui/assets/reset';

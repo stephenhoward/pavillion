@@ -201,10 +201,6 @@ watch(() => route.fullPath, (newPath) => {
     &:hover {
       color: var(--pav-accent-hover);
     }
-
-    &:focus-visible {
-      @include public-focus-visible;
-    }
   }
 
   .pavillion-logo {

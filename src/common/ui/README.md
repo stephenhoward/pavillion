@@ -51,7 +51,7 @@ Site and widget style loads it as `@use '@/common/ui/assets/mixins'`.
 
 Breakpoints that a component must branch on in script live in `assets/breakpoints.ts`, mirroring the `public-tablet-up` and `public-desktop-up` mixins. Sass and TypeScript cannot share one declaration, so `test/breakpoints.test.ts` fails when the two drift apart.
 
-The Creato Display typeface lives in `assets/fonts/`, and `assets/fonts.scss` declares its `@font-face` rules. All three apps load it from their global stylesheets (the client through `src/client/assets/style/base/_fonts.scss`), so the faces are declared once. The widget needs it as much as the others: it renders in an iframe, which inherits no fonts from the embedding page.
+The Creato Display typeface lives in `assets/fonts/`, and `assets/fonts.scss` declares its `@font-face` rules. All three apps load it from their global stylesheets (the client through `src/client/assets/style/base/_fonts.scss`), so the faces are declared once. The widget needs it as much as the others: it renders in an iframe, which inherits no fonts from the embedding page. `assets/reset.scss` is the site's and widget's shared global reset, loaded by both public global stylesheets the same way: border-box sizing, a margin-free document, the typeface and the focus ring. Viewport-tied `html`/`body` sizing stays in the site stylesheet, because the widget reports its document height to the embedding page.
 
 ## i18n
 

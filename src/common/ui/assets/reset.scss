@@ -1,0 +1,45 @@
+// ================================================================
+// PUBLIC DOCUMENT RESET
+// ================================================================
+//
+// The global reset shared by the site and the widget, loaded by both
+// global stylesheets (src/site/assets/style.scss and
+// src/widget/assets/style.scss) the same way as fonts.scss. Shared and
+// site components are written against it, so declaring it once keeps
+// the widget from silently missing a rule the site gains: border-box
+// sizing, a margin-free document, the typeface and the focus ring.
+//
+// Three constraints hold for everything in this file:
+//
+// - No colour literal and no background. The widget iframe's canvas
+//   stays transparent over the embedding page.
+// - No viewport-relative height or width on html or body. The widget
+//   reports its content height to the embedding page, and inside the
+//   iframe the viewport is that last reported height, so viewport-tied
+//   sizing could grow the frame but never let it shrink (see the
+//   ResizeObserver comment in src/widget/components/app.vue). The
+//   site's html/body sizing stays in the site stylesheet.
+// - --pav-* reads (the focus ring's var(--pav-accent)) are permitted
+//   only because every focusable element in both documents sits under
+//   the token element, #app in the site and .widget-root in the widget.
+//   An element focusable outside it would get no ring at all: the var()
+//   fails at computed-value time and the outline falls to its initial
+//   value, dropping the browser's ring too.
+// ================================================================
+
+@use '@/common/ui/assets/mixins' as *;
+
+* {
+  font-family: $public-font-family;
+  box-sizing: border-box;
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
