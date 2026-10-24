@@ -202,6 +202,19 @@ export default class CalendarInterface {
     return this.widgetDomainService.getFrameAncestors(urlName);
   }
 
+  /**
+   * Whether an Origin may call the widget data API for a calendar: the same
+   * host and scheme rule as the widget shell's frame-ancestors policy, plus
+   * the localhost exception. See WidgetDomainService.isOriginAllowed.
+   *
+   * @param calendar - Calendar being requested
+   * @param origin - Origin header value from the request
+   * @returns True if the origin is allowed
+   */
+  isWidgetOriginAllowed(calendar: Calendar, origin: string): boolean {
+    return this.widgetDomainService.isOriginAllowed(calendar, origin);
+  }
+
   async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
     return this.calendarService.createCalendar(account, urlName, name);
   }

@@ -41,7 +41,7 @@ describe('Widget Integration Tests', () => {
   let sandbox: sinon.SinonSandbox;
   let calendar: Calendar;
   let mockInterface: CalendarInterface;
-  let mockWidgetService: WidgetDomainService;
+  let domainService: WidgetDomainService;
 
   beforeAll(async () => {
     // Initialize i18next for all tests
@@ -87,15 +87,20 @@ describe('Widget Integration Tests', () => {
 
     // Create mock calendar and services
     calendar = new Calendar('test-id', 'my-calendar');
+    // Origin checks delegate to the real matching rule unless a test forces
+    // an outcome with .returns().
+    domainService = new WidgetDomainService();
     mockInterface = {
       getCalendarByName: sandbox.stub(),
       getCalendarForWidget: sandbox.stub(),
       getWidgetConfig: sandbox.stub(),
+      isWidgetOriginAllowed: sandbox.stub().callsFake(
+        (cal: Calendar, origin: string) => domainService.isOriginAllowed(cal, origin),
+      ),
     } as any;
-    mockWidgetService = new WidgetDomainService();
 
     // Install widget routes
-    const widgetRoutes = new WidgetRoutes(mockInterface, mockWidgetService);
+    const widgetRoutes = new WidgetRoutes(mockInterface);
     widgetRoutes.installHandlers(app, '/api/widget/v1');
 
     // Stub the calendar lookup
@@ -176,8 +181,8 @@ describe('Widget Integration Tests', () => {
   describe('Unauthorized domain blocking with clear error', () => {
     it('should block unauthorized domain and return clear error message', async () => {
       // Stub origin validation to reject the domain
-      const isOriginAllowedStub = sandbox.stub(mockWidgetService, 'isOriginAllowed');
-      isOriginAllowedStub.resolves(false);
+      const isOriginAllowedStub = mockInterface.isWidgetOriginAllowed as sinon.SinonStub;
+      isOriginAllowedStub.returns(false);
 
       const response = await supertest(app)
         .get('/api/widget/v1/calendars/my-calendar')

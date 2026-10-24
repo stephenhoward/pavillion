@@ -1,6 +1,8 @@
 import { Calendar } from '@/common/model/calendar';
 import { CalendarNotFoundError, InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { isResolvableCalendarUrlName } from '@/common/validation/calendarUrlName';
+import { isValidWidgetDomain } from '@/common/validation/widgetDomain';
 import type CalendarService from './calendar';
 
 /**
@@ -13,16 +15,17 @@ import type CalendarService from './calendar';
 export const FRAME_ANCESTORS_CACHE_TTL_MS = 60_000;
 
 /**
- * Cap on cached policies. The shell answers any well-formed calendar name,
- * so unknown names are cached too; the cap keeps a scan of made-up names from
- * growing the map without bound.
+ * Cap on cached policies. Names failing the calendar url-name shape rule are
+ * never cached, but unknown well-formed names are; at the cap the oldest
+ * entry is evicted, so a scan of made-up names cannot grow the map without
+ * bound or flush every legitimate entry at once.
  */
-const FRAME_ANCESTORS_CACHE_MAX_ENTRIES = 1000;
+export const FRAME_ANCESTORS_CACHE_MAX_ENTRIES = 1000;
 
 /**
  * Frame sources for the localhost development exception — the CSP
- * counterpart of isLocalhost. The IPv6 loopback is absent because the CSP
- * host-source grammar has no form for an IPv6 literal.
+ * counterpart of isLocalhostHostname. The IPv6 loopback is absent because
+ * the CSP host-source grammar has no form for an IPv6 literal.
  */
 const LOCALHOST_FRAME_SOURCES = ['http://localhost:*', 'http://127.0.0.1:*', 'http://*.localhost:*'];
 
@@ -56,12 +59,26 @@ function wwwTwin(hostname: string): string | null {
 }
 
 /**
+ * Whether a hostname (as URL.hostname reports it) is a loopback host — the
+ * development exception, the Origin-check counterpart of
+ * LOCALHOST_FRAME_SOURCES.
+ */
+function isLocalhostHostname(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  return lower === 'localhost'
+    || lower === '127.0.0.1'
+    || lower === '[::1]'
+    || lower.endsWith('.localhost');
+}
+
+/**
  * Service for managing widget domain configuration.
  *
- * Owns the single matching rule for a calendar's allowed domain — used both
- * for Origin validation on the widget API and for the frame-ancestors policy
- * on the widget HTML shell — so the two can never disagree about which sites
- * may embed a calendar.
+ * Owns the single host rule and scheme rule for a calendar's allowed domain —
+ * used both for Origin validation on the widget API and for the
+ * frame-ancestors policy on the widget HTML shell — so the two can never
+ * disagree about which sites may embed a calendar: a configured domain is
+ * admitted over https only, localhost over either scheme.
  */
 class WidgetDomainService {
   private frameAncestorsCache = new Map<string, { policy: string; expiresAt: number }>();
@@ -73,44 +90,14 @@ class WidgetDomainService {
   constructor(private calendarService?: CalendarService) {}
 
   /**
-   * Validate domain format.
-   * Domain must not include protocol or path, and must be a valid domain pattern.
+   * Validate domain format: "host[:port]" with no protocol or path, per the
+   * shared widget-domain grammar.
    *
    * @param domain - Domain to validate
    * @returns True if valid, false otherwise
    */
   isValidDomain(domain: string): boolean {
-    if (!domain || domain.trim() === '') {
-      return false;
-    }
-
-    // Reject domains with protocol
-    if (domain.includes('://')) {
-      return false;
-    }
-
-    // Reject domains with path
-    if (domain.includes('/')) {
-      return false;
-    }
-
-    // Reject domains with spaces
-    if (domain.includes(' ')) {
-      return false;
-    }
-
-    // Basic domain validation: letters, numbers, dots, hyphens, and optional port
-    const domainPattern = /^[a-z0-9.-]+(:\d+)?$/i;
-    if (!domainPattern.test(domain)) {
-      return false;
-    }
-
-    // Must have at least one dot (e.g., "example.com")
-    if (!domain.includes('.')) {
-      return false;
-    }
-
-    return true;
+    return isValidWidgetDomain(domain);
   }
 
   /**
@@ -228,6 +215,12 @@ class WidgetDomainService {
    * @returns A complete Content-Security-Policy header value
    */
   async getFrameAncestors(calendarUrlName: string): Promise<string> {
+    // A name no calendar can have is answered without a lookup and never
+    // cached, so junk names cannot occupy the map.
+    if (!isResolvableCalendarUrlName(calendarUrlName)) {
+      return this.frameAncestorsFor(null);
+    }
+
     const cached = this.frameAncestorsCache.get(calendarUrlName);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.policy;
@@ -240,8 +233,13 @@ class WidgetDomainService {
     const calendar = await this.calendarService.getCalendarByName(calendarUrlName);
     const policy = this.frameAncestorsFor(calendar?.widgetAllowedDomain ?? null);
 
-    if (this.frameAncestorsCache.size >= FRAME_ANCESTORS_CACHE_MAX_ENTRIES) {
-      this.frameAncestorsCache.clear();
+    // Map iteration follows insertion order, and set() on an existing key keeps
+    // its slot; deleting first moves a refreshed entry to the back, so the
+    // first key is always the oldest.
+    this.frameAncestorsCache.delete(calendarUrlName);
+    while (this.frameAncestorsCache.size >= FRAME_ANCESTORS_CACHE_MAX_ENTRIES) {
+      const oldest = this.frameAncestorsCache.keys().next().value as string;
+      this.frameAncestorsCache.delete(oldest);
     }
     this.frameAncestorsCache.set(calendarUrlName, {
       policy,
@@ -252,72 +250,36 @@ class WidgetDomainService {
   }
 
   /**
-   * Extract domain from Origin header.
-   * Removes protocol and returns just the domain/hostname with optional port.
+   * Check if an Origin header is allowed to call the widget API.
    *
-   * @param origin - Origin header value (e.g., "https://example.com:8080")
-   * @returns Domain without protocol (e.g., "example.com:8080")
-   */
-  private extractDomain(origin: string): string {
-    try {
-      const url = new URL(origin);
-      // Return hostname with port if present
-      return url.port ? `${url.hostname}:${url.port}` : url.hostname;
-    }
-    catch {
-      // If URL parsing fails, return the original string
-      return origin;
-    }
-  }
-
-  /**
-   * Check if an origin is localhost.
-   * Localhost exception allows development testing without configuration.
-   *
-   * @param origin - Origin to check
-   * @returns True if origin is localhost or 127.0.0.1
-   */
-  private isLocalhost(origin: string): boolean {
-    try {
-      const url = new URL(origin);
-      const hostname = url.hostname.toLowerCase();
-
-      return hostname === 'localhost' ||
-             hostname === '127.0.0.1' ||
-             hostname === '[::1]' || // IPv6 localhost
-             hostname.endsWith('.localhost'); // Subdomains of localhost
-    }
-    catch {
-      // If URL parsing fails, do a simple string check
-      const lowerOrigin = origin.toLowerCase();
-      return lowerOrigin.includes('localhost') || lowerOrigin.includes('127.0.0.1');
-    }
-  }
-
-  /**
-   * Check if an Origin header is allowed to embed the widget.
-   * Includes automatic localhost exception for development.
+   * A loopback origin is allowed over either scheme (the development
+   * exception); any other origin must be https and fall within the calendar's
+   * allowed domain — the same host and scheme rule as the shell policy built
+   * by frameAncestorsFor. An unparseable Origin is refused.
    *
    * @param calendar - Calendar to check permissions for
    * @param origin - Origin header value from request
    * @returns True if origin is allowed, false otherwise
    */
   isOriginAllowed(calendar: Calendar, origin: string): boolean {
-    if (!origin) {
+    let url: URL;
+    try {
+      url = new URL(origin);
+    }
+    catch {
       return false;
     }
 
-    // Localhost exception - always allow for development
-    if (this.isLocalhost(origin)) {
+    if (isLocalhostHostname(url.hostname)) {
       return true;
     }
 
-    // If no domain is configured, disallow
-    if (!calendar.widgetAllowedDomain) {
+    if (url.protocol !== 'https:' || !calendar.widgetAllowedDomain) {
       return false;
     }
 
-    return this.matchesAllowedDomain(calendar.widgetAllowedDomain, this.extractDomain(origin));
+    const requestHost = url.port ? `${url.hostname}:${url.port}` : url.hostname;
+    return this.matchesAllowedDomain(calendar.widgetAllowedDomain, requestHost);
   }
 }
 

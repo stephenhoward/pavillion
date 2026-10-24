@@ -84,6 +84,7 @@ import { useFundingAccess } from '@/client/composables/useFundingAccess';
 import { fundingGateDenial } from '@/client/service/funding';
 import { validateAndEncodeId } from '@/client/service/utils';
 import type { FundingGatedFeature } from '@/common/model/funding-plan';
+import { isValidWidgetDomain } from '@/common/validation/widgetDomain';
 
 // Props
 const props = defineProps<{
@@ -134,43 +135,6 @@ const state = reactive<{
 let domainRefused = false;
 
 /**
- * Validate domain format
- */
-const isValidDomain = (domain: string) => {
-  if (!domain || domain.trim() === '') {
-    return false;
-  }
-
-  // Reject domains with protocol
-  if (domain.includes('://')) {
-    return false;
-  }
-
-  // Reject domains with path
-  if (domain.includes('/')) {
-    return false;
-  }
-
-  // Reject domains with spaces
-  if (domain.includes(' ')) {
-    return false;
-  }
-
-  // Basic domain validation: letters, numbers, dots, hyphens, and optional port
-  const domainPattern = /^[a-z0-9.-]+(:\d+)?$/i;
-  if (!domainPattern.test(domain)) {
-    return false;
-  }
-
-  // Must have at least one dot (e.g., "example.com")
-  if (!domain.includes('.')) {
-    return false;
-  }
-
-  return true;
-};
-
-/**
  * Clear messages with a timeout
  */
 const clearMessages = (delay = 5000) => {
@@ -208,7 +172,7 @@ const loadDomains = async () => {
 const addDomain = async () => {
   const domain = state.newDomain.trim();
 
-  if (!isValidDomain(domain)) {
+  if (!isValidWidgetDomain(domain)) {
     state.error = t('error_invalid_domain');
     clearMessages();
     return;

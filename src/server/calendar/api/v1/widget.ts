@@ -4,22 +4,20 @@ import { createLogger } from '@/server/common/helper/logger';
 const logger = createLogger('calendar');
 
 import CalendarInterface from '../../interface';
-import WidgetDomainService from '../../service/widget_domain';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { limitPublicWidgetByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
- * Widget-specific API routes with Origin validation and dynamic CSP headers.
- * These routes enable secure embedding of calendar widgets on authorized external domains.
+ * Widget-specific API routes with Origin validation and CORS headers.
+ * Framing is governed by the widget HTML shell's frame-ancestors policy
+ * (DEC-020 rule 1), not by these JSON responses.
  */
 class WidgetRoutes {
   private service: CalendarInterface;
-  private widgetDomainService: WidgetDomainService;
 
-  constructor(internalAPI: CalendarInterface, widgetDomainService?: WidgetDomainService) {
+  constructor(internalAPI: CalendarInterface) {
     this.service = internalAPI;
-    this.widgetDomainService = widgetDomainService || new WidgetDomainService();
   }
 
   installHandlers(app: Application, routePrefix: string): void {
@@ -39,7 +37,7 @@ class WidgetRoutes {
    * Validates that the requesting domain is authorized to embed the widget.
    * Automatically allows localhost for development testing.
    *
-   * Sets dynamic CSP frame-ancestors header and CORS headers for valid origins.
+   * Sets CORS headers for valid origins.
    */
   private async validateOrigin(req: Request, res: Response, next: NextFunction) {
     const origin = req.get('Origin');
@@ -87,7 +85,7 @@ class WidgetRoutes {
       }
 
       // Check if origin is allowed (includes localhost exception)
-      const isAllowed = await this.widgetDomainService.isOriginAllowed(calendar, origin);
+      const isAllowed = this.service.isWidgetOriginAllowed(calendar, origin);
 
       if (!isAllowed) {
         res.status(403).json({
@@ -96,13 +94,6 @@ class WidgetRoutes {
         });
         return;
       }
-
-      // Origin is allowed - set security headers
-      // Override helmet's frame-ancestors CSP with validated origin.
-      // X-Frame-Options: ALLOW-FROM is intentionally not set here — it was deprecated
-      // and is not supported in Chrome or Firefox. CSP frame-ancestors is the current
-      // standard and provides the actual framing control in all modern browsers.
-      res.setHeader('Content-Security-Policy', `frame-ancestors ${origin}`);
 
       // CORS headers for validated domain
       res.setHeader('Access-Control-Allow-Origin', origin);

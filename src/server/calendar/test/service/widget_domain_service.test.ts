@@ -5,7 +5,7 @@ import { Calendar } from '@/common/model/calendar';
 import { InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
-import WidgetDomainService from '@/server/calendar/service/widget_domain';
+import WidgetDomainService, { FRAME_ANCESTORS_CACHE_MAX_ENTRIES } from '@/server/calendar/service/widget_domain';
 
 /** The localhost sources every widget-shell policy carries (the dev exception). */
 const LOCALHOST_SOURCES = 'http://localhost:* http://127.0.0.1:* http://*.localhost:*';
@@ -81,6 +81,34 @@ describe('WidgetDomainService', () => {
     });
   });
 
+  describe('isValidDomain', () => {
+    it.each([
+      'example.com',
+      'www.example.com.',
+      'blog.example.org:8080',
+      '192.168.1.5:3000',
+      'xn--bcher-kva.example',
+    ])('should accept %s', (domain) => {
+      expect(service.isValidDomain(domain)).toBe(true);
+    });
+
+    it.each([
+      '..',
+      '.example.com',
+      '-a.com',
+      'a..b',
+      'example-.com',
+      'example',
+      'a'.repeat(64) + '.com',
+      'example.com:0',
+      'example.com:70000',
+      '*.example.com',
+      'example.com\r\n',
+    ])('should reject %j', (domain) => {
+      expect(service.isValidDomain(domain)).toBe(false);
+    });
+  });
+
   describe('matchesAllowedDomain', () => {
     it.each([
       ['identical hosts', 'example.com', 'example.com'],
@@ -132,6 +160,38 @@ describe('WidgetDomainService', () => {
 
       expect(service.isOriginAllowed(calendar, 'http://localhost:8080')).toBe(true);
     });
+
+    it('should admit a configured domain over https', () => {
+      const calendar = calendarWithDomain('cal', 'example.com');
+
+      expect(service.isOriginAllowed(calendar, 'https://example.com')).toBe(true);
+    });
+
+    it('should refuse a configured domain over http, as the shell policy does', () => {
+      const calendar = calendarWithDomain('cal', 'example.com');
+
+      expect(service.isOriginAllowed(calendar, 'http://example.com')).toBe(false);
+    });
+
+    it.each([
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
+      'http://[::1]:3000',
+      'http://app.localhost',
+    ])('should allow the loopback origin %s over http', (origin) => {
+      const calendar = calendarWithDomain('cal', 'example.com');
+
+      expect(service.isOriginAllowed(calendar, origin)).toBe(true);
+    });
+
+    it.each([
+      'not a url',
+      'null',
+    ])('should refuse the unparseable origin %j', (origin) => {
+      const calendar = calendarWithDomain('cal', 'example.com');
+
+      expect(service.isOriginAllowed(calendar, origin)).toBe(false);
+    });
   });
 
   describe('frameAncestorsFor', () => {
@@ -169,6 +229,13 @@ describe('WidgetDomainService', () => {
 
     it('should treat a stored value that fails validation as unconfigured', () => {
       expect(service.frameAncestorsFor('evil.com; script-src *')).toBe(UNCONFIGURED_POLICY);
+    });
+
+    it.each([
+      'example.com\r\nX-Injected: 1',
+      '*.example.com',
+    ])('should treat the stored value %j as unconfigured', (domain) => {
+      expect(service.frameAncestorsFor(domain)).toBe(service.frameAncestorsFor(null));
     });
 
     it('should never emit a bare wildcard source', () => {
@@ -225,6 +292,46 @@ describe('WidgetDomainService', () => {
 
       expect(getCalendarByName.callCount).toBe(2);
       expect(policy).toContain('https://other.org:*');
+    });
+
+    it.each(['..', 'a'])('should answer the shape-invalid name %j as unconfigured without a lookup or a cache entry', async (name) => {
+      const cache = (service as any).frameAncestorsCache as Map<string, unknown>;
+
+      expect(await service.getFrameAncestors(name)).toBe(UNCONFIGURED_POLICY);
+      expect(getCalendarByName.called).toBe(false);
+      expect(cache.size).toBe(0);
+    });
+
+    it('should evict only the oldest entry when the cache is full', async () => {
+      getCalendarByName.resolves(null);
+      const cache = (service as any).frameAncestorsCache as Map<string, unknown>;
+
+      for (let i = 0; i < FRAME_ANCESTORS_CACHE_MAX_ENTRIES; i++) {
+        await service.getFrameAncestors(`cal${i}`);
+      }
+      await service.getFrameAncestors('overflow');
+
+      expect(cache.size).toBe(FRAME_ANCESTORS_CACHE_MAX_ENTRIES);
+      expect(cache.has('cal0')).toBe(false);
+      expect(cache.has('cal1')).toBe(true);
+      expect(cache.has('overflow')).toBe(true);
+    });
+
+    it('should not evict next an entry refreshed after its TTL expired', async () => {
+      vi.useFakeTimers();
+      getCalendarByName.resolves(null);
+      const cache = (service as any).frameAncestorsCache as Map<string, unknown>;
+
+      for (let i = 0; i < FRAME_ANCESTORS_CACHE_MAX_ENTRIES; i++) {
+        await service.getFrameAncestors(`cal${i}`);
+      }
+      vi.advanceTimersByTime(61_000);
+      await service.getFrameAncestors('cal0');
+      await service.getFrameAncestors('overflow');
+
+      expect(cache.has('cal0')).toBe(true);
+      expect(cache.has('cal1')).toBe(false);
+      expect(cache.size).toBe(FRAME_ANCESTORS_CACHE_MAX_ENTRIES);
     });
 
     it('should drop the cached policy when the calendar\'s domain changes', async () => {

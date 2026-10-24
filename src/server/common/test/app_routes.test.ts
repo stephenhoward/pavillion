@@ -923,6 +923,20 @@ describe('app_routes', () => {
       expect(res.headers['content-security-policy']).toBe("frame-ancestors 'self'");
     });
 
+    // Node's setHeader throws on CR/LF; the write sits inside the try so a bad
+    // value fails closed rather than leaving the async middleware hanging.
+    it('should permit only self framing when the policy is not a valid header value', async () => {
+      const stub = sinon.stub().resolves('frame-ancestors a\r\nX: y');
+      const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
+
+      const res = await request(app).get('/widget/mycalendar');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-security-policy']).toBe("frame-ancestors 'self'");
+      expect(res.headers['x-frame-options']).toBeUndefined();
+      expect(res.headers['x']).toBeUndefined();
+    });
+
     it('should leave the widget script unaffected', async () => {
       const stub = sinon.stub().resolves(CONFIGURED_POLICY);
       const app = buildTestApp('en', undefined, createRouter, holderWith(stub));
