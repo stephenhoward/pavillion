@@ -1535,6 +1535,14 @@ class EventService {
       throw new EventNotFoundError(`Remote event ${eventParams.id} not found for update`);
     }
 
+    // SECURITY: a locally-owned event may only be written through the
+    // calendar that owns it. Remote copies (calendar_id null) are updated
+    // through whichever local calendar received the federated Update, so
+    // they are not held to this check.
+    if (eventEntity.calendar_id !== null && eventEntity.calendar_id !== calendar.id) {
+      throw new InsufficientCalendarPermissionsError(`Event ${eventParams.id} does not belong to calendar ${calendar.id}`);
+    }
+
     // Use the local calendar that is receiving this update (same pattern as addRemoteEvent)
 
     let event = eventEntity.toModel();
