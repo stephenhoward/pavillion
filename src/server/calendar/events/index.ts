@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import { guardEventHandler } from '@/server/common/helper/guard-event-handler';
+import { logError } from '@/server/common/helper/error-logger';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '../interface';
@@ -119,6 +120,22 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     this.service = service;
   }
 
+  /**
+   * Rebuilds an event's instance rows, logging a failure with the event id.
+   * A failed rebuild never leaves the event without its future rows (see
+   * EventInstanceService.buildEventInstances) and must never escape the
+   * handler; the wrapper's generic log line alone would not say which
+   * event's instances went stale.
+   */
+  private async rebuildInstances(event: CalendarEvent): Promise<void> {
+    try {
+      await this.service.buildEventInstances(event);
+    }
+    catch (error) {
+      logError(error, `[Calendar] Instance rebuild failed for event ${event?.id}`);
+    }
+  }
+
   install(eventBus: EventEmitter): void {
     // Every registration goes through the failure-catching wrapper: the bus
     // never awaits a listener, so a bare rejection would be an unhandled
@@ -135,7 +152,7 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
     // buildEventInstances so the canonical row(s) for the remote event are
     // materialized at receive time. Without this, list views on follower
     // calendars would miss freshly-federated remote events (pv-13xg).
-    eventBus.on('eventCreated', guard(async (e: EventCreatedPayload) => this.service.buildEventInstances(e.event)));
+    eventBus.on('eventCreated', guard(async (e: EventCreatedPayload) => this.rebuildInstances(e.event)));
 
     eventBus.on('eventUpdated', guard(async (e: EventUpdatedPayload) => {
       // Cancel / restore handlers re-emit eventUpdated with skipRebuild:true
@@ -155,7 +172,7 @@ export default class CalendarEventHandlers implements DomainEventHandlers {
       // the new schedule. Repost-display calendars derive visibility through
       // the listing-time union (EventService.listEventIdsForCalendar) and
       // need no per-calendar fan-out.
-      await this.service.buildEventInstances(e.event);
+      await this.rebuildInstances(e.event);
     }));
 
     eventBus.on('eventDeleted', guard(async (e: EventDeletedPayload) => this.service.removeEventInstances(e.event)));

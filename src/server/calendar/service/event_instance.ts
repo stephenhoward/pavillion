@@ -892,9 +892,23 @@ export default class EventInstanceService {
     return instance;
   }
 
+  /**
+   * Regenerates the event's materialised instance rows from its schedules.
+   *
+   * Two statements, deliberately not in a transaction: on in-memory SQLite
+   * the one shared connection cannot hold this rebuild's transaction while
+   * the ActivityPub handlers fired by the same emit hold theirs. They are
+   * ordered so either failure is safe instead:
+   *
+   * 1. Upsert the generated rows on the unique (event_id, start_time) index.
+   *    A surviving start time keeps its row id and takes the new end time.
+   *    If this fails nothing has changed.
+   * 2. Prune this event's rows at or after `now` that were not generated.
+   *    Rows before `now` are the event's history in listings and are never
+   *    deleted. If this fails, occurrences the edit removed linger until the
+   *    next rebuild; the event is never left without its future rows.
+   */
   async buildEventInstances(event: CalendarEvent, now: Date = new Date()): Promise<void> {
-
-    await this.removeEventInstances(event);
 
     if ( ! event.schedules || ! event.schedules.length ) {
       const schedules = await EventScheduleEntity.findAll({
@@ -904,12 +918,25 @@ export default class EventInstanceService {
       event.schedules = schedules.map(schedule => schedule.toModel());
     }
 
-    const instances = this.generateInstances(event, now);
-    for ( let instance of instances ) {
-      const instanceEntity = EventInstanceEntity.fromModel(instance);
-      instanceEntity.event_id = event.id;
-      await instanceEntity.save();
+    const rows = this.generateInstances(event, now).map(instance => ({
+      ...EventInstanceEntity.fromModel(instance).get({ plain: true }),
+      event_id: event.id,
+    }));
+
+    if ( rows.length ) {
+      await EventInstanceEntity.bulkCreate(rows, {
+        conflictAttributes: ['event_id', 'start_time'],
+        updateOnDuplicate: ['calendar_id', 'end_time', 'updatedAt'],
+      });
     }
+
+    const startTimeFilter: Record<symbol, unknown> = { [Op.gte]: now };
+    if ( rows.length ) {
+      startTimeFilter[Op.notIn] = rows.map(row => row.start_time);
+    }
+    await EventInstanceEntity.destroy({
+      where: { event_id: event.id, start_time: startTimeFilter },
+    });
   }
   async removeEventInstances(event: CalendarEvent): Promise<void> {
     const eventInstances = await EventInstanceEntity.findAll({

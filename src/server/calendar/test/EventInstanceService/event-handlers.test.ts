@@ -314,5 +314,16 @@ describe('CalendarEventHandlers (single-producer model)', () => {
       expect(unhandled).toEqual([]);
       expect(mockLogError).toHaveBeenCalledWith(failure, expect.stringContaining('[Calendar]'));
     });
+
+    it.each(['eventCreated', 'eventUpdated'])('logs a failed %s rebuild with the event id', async (busEvent) => {
+      const failure = new Error('buildEventInstances failed');
+      mockService.buildEventInstances.rejects(failure);
+      const event = createTestEvent('event-42', 'calendar-1');
+
+      await dispatchAndAwait(eventBus, busEvent, { event, calendar: null });
+
+      expect(mockLogError).toHaveBeenCalledTimes(1);
+      expect(mockLogError).toHaveBeenCalledWith(failure, expect.stringContaining('event-42'));
+    });
   });
 });
