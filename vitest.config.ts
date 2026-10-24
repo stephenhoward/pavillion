@@ -77,6 +77,8 @@ export default defineConfig({
             'src/server/test/health-endpoint.test.ts',
             'src/server/test/metrics-listener.test.ts',
             'src/server/test/reserved-url-name-collisions-startup.test.ts',
+            // Imports @/server/worker, which constructs a ConfigurationInterface.
+            'src/server/housekeeping/test/worker-handlers.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',
@@ -124,6 +126,8 @@ export default defineConfig({
             'src/server/test/health-endpoint.test.ts',
             'src/server/test/metrics-listener.test.ts',
             'src/server/test/reserved-url-name-collisions-startup.test.ts',
+            // Imports @/server/worker, which constructs a ConfigurationInterface.
+            'src/server/housekeeping/test/worker-handlers.test.ts',
             // Tests that transitively import ServiceSettings (which depends on renderPolicyMarkdown)
             'src/server/accounts/test/account_service.test.ts',
             'src/server/accounts/test/admin_pagination.test.ts',

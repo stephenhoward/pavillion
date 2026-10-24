@@ -341,8 +341,8 @@ describe('Listing union for reposted events (pv-hr72.4)', () => {
     });
 
     const remoteEventId = uuidv4();
-    // Schedule must fall within the rolling GENERATION_HORIZON_MONTHS (6 months)
-    // window from "now" so generateInstances includes it. Use a near-future date
+    // Schedule must fall within the rolling generation horizon from "now"
+    // so generateInstances includes it. Use a near-future date
     // anchored from the current wall clock; building from now keeps the test
     // stable as the fixed test date drifts forward over time.
     const startDateTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // ~30 days out

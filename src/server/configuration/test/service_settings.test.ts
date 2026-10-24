@@ -56,6 +56,21 @@ describe('ServiceSettings', () => {
       expect(settings.get('registrationMode')).toBe('open');
       expect(settings.get('siteTitle')).toBe('Test Site');
     });
+
+    it.each([
+      { stored: '18', expected: 18 },
+      { stored: '0', expected: 6 },
+      { stored: '2.5', expected: 6 },
+      { stored: 'many', expected: 6 },
+    ])('loads eventInstanceMonths $stored as $expected', async ({ stored, expected }) => {
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
+        { parameter: 'eventInstanceMonths', value: stored } as unknown as ServiceSettingEntity,
+      ]);
+
+      const settings = await ServiceSettings.getInstance();
+
+      expect(settings.get('eventInstanceMonths')).toBe(expected);
+    });
   });
 
   describe('get', () => {

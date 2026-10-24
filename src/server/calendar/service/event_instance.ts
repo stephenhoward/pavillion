@@ -24,6 +24,10 @@ import { resolveSourceCalendars, type RepostContext } from '../helper/source_cal
 // The AP interface module is the only door onto ActivityPub state from this
 // domain (DEC-003); `EventSourceActor` is re-exported there for that reason.
 import type { default as ActivityPubInterface, EventSourceActor } from '@/server/activitypub/interface';
+// Type-only: the configuration module graph reaches isomorphic-dompurify,
+// so the interface is injected (setConfigurationInterface) rather than built.
+import type ConfigurationInterface from '@/server/configuration/interface';
+import { LONGEST_DEFAULT_DATE_RANGE_MONTHS } from '@/common/utils/datePresets';
 import {
   EventNotFoundError,
   InsufficientCalendarPermissionsError,
@@ -37,13 +41,18 @@ const logger = createLogger('calendar');
 const { RRule, RRuleSet, Weekday } = rrule;
 
 /**
- * Forward generation window for recurring event expansion, in months from
- * "now".
+ * Default and floor of the forward generation horizon for recurring event
+ * expansion, in months from "now".
+ *
+ * The horizon itself is the `eventInstanceMonths` service setting; this
+ * constant is what that setting is floored at, and what is used when the
+ * setting cannot be read. It is the longest option in DEFAULT_DATE_RANGES,
+ * so a calendar's default range never runs past its materialized rows.
  *
  * Recurring rrule expansions are materialized for a rolling window of
- * [now, now + HORIZON]. On each regeneration (e.g. event create/update) the
- * window shifts forward, so past recurring occurrences drop out and new
- * future ones are materialized.
+ * [now, {@link generationWindowEnd}]. On each regeneration (event
+ * create/update, or the weekly refresh) the window shifts forward and new
+ * future occurrences are materialized.
  *
  * Non-recurring single occurrences (rdates) are NOT subject to this window:
  * they are always materialized 1:1 with their schedule, regardless of
@@ -55,7 +64,18 @@ const { RRule, RRuleSet, Weekday } = rrule;
  * honored by rrule; `between()` simply intersects the bounded series with
  * the window.
  */
-export const GENERATION_HORIZON_MONTHS = 6;
+export const GENERATION_HORIZON_MONTHS = LONGEST_DEFAULT_DATE_RANGE_MONTHS;
+
+/**
+ * End of the generation window: `horizonMonths` from `now`, plus one day,
+ * counted in UTC so the result does not depend on the server's zone.
+ * A default range ends at the end of its last local day, which can fall up
+ * to a day past the same instant N months on in UTC; the extra day keeps
+ * that last day materialized in every timezone.
+ */
+export function generationWindowEnd(now: Date, horizonMonths: number): Date {
+  return DateTime.fromJSDate(now, { zone: 'utc' }).plus({ months: horizonMonths, days: 1 }).toJSDate();
+}
 
 /** Events read per query by {@link EventInstanceService.refreshAllEventInstances}. */
 export const REFRESH_PAGE_SIZE = 100;
@@ -121,6 +141,7 @@ export default class EventInstanceService {
   private calendarService: CalendarService;
   private eventService: EventService;
   private activityPubInterface?: ActivityPubInterface;
+  private configurationInterface?: ConfigurationInterface;
 
   constructor(eventBus: EventEmitter, eventService?: EventService) {
     this.eventBus = eventBus;
@@ -131,6 +152,36 @@ export default class EventInstanceService {
     // not supplied so existing callers (and tests) keep working without wiring
     // changes; CalendarInterface injects the shared instance.
     this.eventService = eventService ?? new EventService(eventBus);
+  }
+
+  /**
+   * Bind the configuration interface the generation horizon is read from.
+   * Until bound, the horizon is {@link GENERATION_HORIZON_MONTHS}.
+   */
+  setConfigurationInterface(configurationInterface: ConfigurationInterface): void {
+    this.configurationInterface = configurationInterface;
+  }
+
+  /**
+   * Resolve the generation horizon in months: the `eventInstanceMonths`
+   * setting, floored at {@link GENERATION_HORIZON_MONTHS}. Falls back to the
+   * floor when no configuration interface is bound, or the setting is unset,
+   * not a positive integer, or unreadable.
+   */
+  private async resolveGenerationHorizonMonths(): Promise<number> {
+    if (!this.configurationInterface) {
+      return GENERATION_HORIZON_MONTHS;
+    }
+    try {
+      const months = Number(await this.configurationInterface.getSetting('eventInstanceMonths'));
+      if (Number.isInteger(months) && months > 0) {
+        return Math.max(months, GENERATION_HORIZON_MONTHS);
+      }
+    }
+    catch (err) {
+      logger.warn({ err }, 'Could not read eventInstanceMonths; using the default horizon');
+    }
+    return GENERATION_HORIZON_MONTHS;
   }
 
   setActivityPubInterface(apInterface: ActivityPubInterface): void {
@@ -632,13 +683,13 @@ export default class EventInstanceService {
   private static readonly DEFAULT_MATERIALIZATION_CAP = 1000;
 
   /**
-   * Additional pre-flight horizon: an unbounded recurring schedule (no
-   * UNTIL / COUNT) cannot be probed beyond GENERATION_HORIZON_MONTHS + 12
-   * months from "now" without calling into rrule. Bounds the RRuleSet walk
-   * so a far-future timestamp against an unbounded schedule is rejected
+   * Additional pre-flight margin: an unbounded recurring schedule (no
+   * UNTIL / COUNT) cannot be probed beyond the generation horizon plus this
+   * many months from "now" without calling into rrule. Bounds the RRuleSet
+   * walk so a far-future timestamp against an unbounded schedule is rejected
    * before any expensive expansion runs.
    */
-  private static readonly UNBOUNDED_PREFLIGHT_MONTHS = GENERATION_HORIZON_MONTHS + 12;
+  private static readonly UNBOUNDED_PREFLIGHT_MARGIN_MONTHS = 12;
 
   /**
    * Resolve the per-event materialization cap. Reads from application config
@@ -742,7 +793,9 @@ export default class EventInstanceService {
     event.schedules = scheduleEntities.map(s => s.toModel());
 
     // 3. Pre-flight guard: reject far-future probes on unbounded schedules.
-    if (this.exceedsUnboundedHorizon(event, startTime)) {
+    const preflightMonths = await this.resolveGenerationHorizonMonths()
+      + EventInstanceService.UNBOUNDED_PREFLIGHT_MARGIN_MONTHS;
+    if (this.exceedsUnboundedHorizon(event, startTime, preflightMonths)) {
       return null;
     }
 
@@ -833,9 +886,9 @@ export default class EventInstanceService {
    * for unbounded schedules, an attacker probing year-distant timestamps
    * would drive O(occurrences-since-dtstart) work per request.
    */
-  private exceedsUnboundedHorizon(event: CalendarEvent, startTime: DateTime): boolean {
+  private exceedsUnboundedHorizon(event: CalendarEvent, startTime: DateTime, preflightMonths: number): boolean {
     const now = DateTime.utc();
-    const horizon = now.plus({ months: EventInstanceService.UNBOUNDED_PREFLIGHT_MONTHS });
+    const horizon = now.plus({ months: preflightMonths });
     if (startTime <= horizon) return false;
 
     // Only guard when at least one schedule is recurring-unbounded
@@ -921,7 +974,8 @@ export default class EventInstanceService {
       event.schedules = schedules.map(schedule => schedule.toModel());
     }
 
-    const rows = this.generateInstances(event, now).map(instance => ({
+    const horizonMonths = await this.resolveGenerationHorizonMonths();
+    const rows = this.generateInstances(event, now, horizonMonths).map(instance => ({
       ...EventInstanceEntity.fromModel(instance).get({ plain: true }),
       event_id: event.id,
     }));
@@ -1350,7 +1404,7 @@ export default class EventInstanceService {
    * a window of upcoming occurrences. Differs from {@link generateInstances} in
    * two ways:
    *   1. Does not persist — results are transient DTOs for UI consumption.
-   *   2. Not bound by GENERATION_HORIZON_MONTHS — the caller supplies the
+   *   2. Not bound by the generation horizon — the caller supplies the
    *      window via (afterDate, limit).
    *
    * Each occurrence is tagged with a state:
@@ -1446,7 +1500,7 @@ export default class EventInstanceService {
    * Instance materialization differentiates between two schedule kinds:
    *
    * 1. **Recurring expansions (rrule)** are materialized for a forward
-   *    rolling window of [now, now + GENERATION_HORIZON_MONTHS]. Bounded
+   *    rolling window of [now, {@link generationWindowEnd}]. Bounded
    *    schedules (with `count` or `until`) are still honored by rrule —
    *    `between()` intersects the bounded series with the window.
    *
@@ -1462,17 +1516,15 @@ export default class EventInstanceService {
    * instances receive null end times.
    *
    * @param event - The event containing schedules to generate instances from
-   * @param now - The reference "now" for window computation. Defaults to the
-   *              current wall clock; tests may inject a fixed value for
-   *              determinism.
+   * @param now - The reference "now" for window computation
+   * @param horizonMonths - The resolved generation horizon, from
+   *              {@link resolveGenerationHorizonMonths}
    * @returns Array of CalendarEventInstance with computed start and end times
    */
-  private generateInstances(event: CalendarEvent, now: Date = new Date()): CalendarEventInstance[] {
+  private generateInstances(event: CalendarEvent, now: Date, horizonMonths: number): CalendarEventInstance[] {
     const rruleSet = this.rrules(event);
 
-    const windowEnd = DateTime.fromJSDate(now)
-      .plus({ months: GENERATION_HORIZON_MONTHS })
-      .toJSDate();
+    const windowEnd = generationWindowEnd(now, horizonMonths);
 
     // Recurring expansions + any rdates that happen to fall inside the window.
     const windowedDates = rruleSet.between(now, windowEnd, true);

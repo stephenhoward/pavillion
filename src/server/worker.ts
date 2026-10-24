@@ -12,6 +12,7 @@ import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import ActivityPubInterface from '@/server/activitypub/interface';
@@ -76,6 +77,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const ipCleanupService = new IpCleanupService();
   const eventBus = new EventEmitter();
   const calendarInterface = new CalendarInterface(eventBus);
+  calendarInterface.setConfigurationInterface(new ConfigurationInterface());
   const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
   const followBackfillService = new FollowBackfillService({
     activityPubInterface,
