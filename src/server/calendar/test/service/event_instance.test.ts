@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,6 +12,11 @@ import EventInstanceService from '@/server/calendar/service/event_instance';
 import EventService from '@/server/calendar/service/events';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import CalendarEventHandlers from '@/server/calendar/events/index';
+import CalendarInterface from '@/server/calendar/interface';
+import db from '@/server/common/entity/db';
+import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 
 /**
  * Tests for instance generation duration logic in EventInstanceService.
@@ -1847,5 +1852,178 @@ describe('EventInstanceService.listEventInstancesWithFilters — search predicat
       expect(pattern.endsWith('%')).toBe(true);
       expect(pattern.slice(1, -1)).toBe('a'.repeat(200));
     }
+  });
+});
+
+/**
+ * DB-backed coverage for EventInstanceService.buildEventInstances.
+ *
+ * A rebuild upserts the generated rows, then prunes this event's rows at
+ * or after `now` that it did not generate: materialised past occurrences
+ * are the event's history in listings and must survive an edit, and a
+ * failed upsert leaves the previous rows in place.
+ */
+describe('EventInstanceService.buildEventInstances', () => {
+  let service: EventInstanceService;
+  let calendarId: string;
+
+  // Weekly on Mondays from 2026-01-05 at 10:00 UTC.
+  const SERIES_START = DateTime.fromISO('2026-01-05T10:00:00.000Z', { zone: 'utc' });
+  const FIRST_BUILD_AT = new Date('2026-01-01T00:00:00.000Z');
+  const REBUILD_AT = new Date('2026-02-01T00:00:00.000Z');
+
+  function weeklyEvent(eventId: string, startDate: DateTime): CalendarEvent {
+    const event = new CalendarEvent(eventId, calendarId);
+    const schedule = new CalendarEventSchedule(uuidv4(), startDate);
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.count = 0;
+    schedule.isExclusion = false;
+    schedule.byDay = [];
+    event.schedules = [schedule];
+    return event;
+  }
+
+  function oneOffEvent(eventId: string, startDate: DateTime): CalendarEvent {
+    const event = new CalendarEvent(eventId, calendarId);
+    const schedule = new CalendarEventSchedule(uuidv4(), startDate);
+    schedule.frequency = null;
+    schedule.interval = 0;
+    schedule.count = 0;
+    schedule.isExclusion = false;
+    schedule.byDay = [];
+    event.schedules = [schedule];
+    return event;
+  }
+
+  async function createEventRow(): Promise<string> {
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: calendarId });
+    return eventId;
+  }
+
+  async function rowsFor(eventId: string): Promise<EventInstanceEntity[]> {
+    return EventInstanceEntity.findAll({
+      where: { event_id: eventId },
+      order: [['start_time', 'ASC']],
+    });
+  }
+
+  beforeAll(async () => {
+    await db.sync({ force: true });
+    calendarId = uuidv4();
+    await CalendarEntity.create({ id: calendarId, url_name: 'instance-rebuild-cal' });
+  });
+
+  beforeEach(() => {
+    service = new EventInstanceService(new EventEmitter());
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it('keeps materialised rows before now and replaces rows from now on', async () => {
+    const eventId = await createEventRow();
+    await service.buildEventInstances(weeklyEvent(eventId, SERIES_START), FIRST_BUILD_AT);
+
+    const before = await rowsFor(eventId);
+    const pastBefore = before.filter(r => r.start_time < REBUILD_AT);
+    // Jan 5, 12, 19, 26.
+    expect(pastBefore).toHaveLength(4);
+
+    // Edit: the series moves to 11:00.
+    const edited = weeklyEvent(eventId, SERIES_START.set({ hour: 11 }));
+    await service.buildEventInstances(edited, REBUILD_AT);
+
+    const after = await rowsFor(eventId);
+    const pastAfter = after.filter(r => r.start_time < REBUILD_AT);
+    const futureAfter = after.filter(r => r.start_time >= REBUILD_AT);
+
+    // Past rows are the same rows, untouched by the edit.
+    expect(pastAfter.map(r => r.id)).toEqual(pastBefore.map(r => r.id));
+    expect(pastAfter.every(r => r.start_time.getUTCHours() === 10)).toBe(true);
+
+    // Every row from now on reflects the edited schedule; none of the old
+    // 10:00 rows remain in that range.
+    expect(futureAfter.length).toBeGreaterThan(0);
+    expect(futureAfter.every(r => r.start_time.getUTCHours() === 11)).toBe(true);
+    const beforeIds = new Set(before.map(r => r.id));
+    expect(futureAfter.some(r => beforeIds.has(r.id))).toBe(false);
+  });
+
+  it('does not duplicate a past row that the rebuild generates again', async () => {
+    // A one-off event whose date has passed: the prune keeps its row, and
+    // generateInstances emits it again as a past rdate. The upsert must
+    // update it in place rather than violate the (event_id, start_time)
+    // index.
+    const eventId = await createEventRow();
+    const event = oneOffEvent(eventId, SERIES_START);
+    await service.buildEventInstances(event, FIRST_BUILD_AT);
+    const [original] = await rowsFor(eventId);
+
+    await service.buildEventInstances(event, REBUILD_AT);
+
+    const after = await rowsFor(eventId);
+    expect(after).toHaveLength(1);
+    expect(after[0].id).toBe(original.id);
+  });
+
+  it('updates a surviving row in place when an edit keeps its start time but changes its end time', async () => {
+    const eventId = await createEventRow();
+    const event = weeklyEvent(eventId, SERIES_START);
+    event.schedules[0].eventEndTime = SERIES_START.plus({ hours: 1 });
+    await service.buildEventInstances(event, FIRST_BUILD_AT);
+    const before = await rowsFor(eventId);
+    const futureBefore = before.filter(r => r.start_time >= REBUILD_AT);
+    expect(futureBefore.length).toBeGreaterThan(0);
+
+    // Edit: same start times, the event now runs two hours.
+    const edited = weeklyEvent(eventId, SERIES_START);
+    edited.schedules[0].eventEndTime = SERIES_START.plus({ hours: 2 });
+    await service.buildEventInstances(edited, REBUILD_AT);
+
+    // The generation window advances with `now`, so the rebuild may add rows
+    // past the old horizon; every start time that survived keeps its row.
+    const afterByStart = new Map((await rowsFor(eventId)).map(r => [r.start_time.getTime(), r]));
+    for (const row of futureBefore) {
+      const survivor = afterByStart.get(row.start_time.getTime());
+      expect(survivor?.id).toBe(row.id);
+      expect(survivor!.end_time!.getTime() - survivor!.start_time.getTime()).toBe(2 * 60 * 60 * 1000);
+    }
+  });
+
+  it('a failing upsert leaves prior rows intact', async () => {
+    const eventId = await createEventRow();
+    await service.buildEventInstances(weeklyEvent(eventId, SERIES_START), FIRST_BUILD_AT);
+    const before = await rowsFor(eventId);
+
+    sinon.stub(EventInstanceEntity, 'bulkCreate').rejects(new Error('insert failed'));
+    const edited = weeklyEvent(eventId, SERIES_START.set({ hour: 11 }));
+
+    await expect(service.buildEventInstances(edited, REBUILD_AT)).rejects.toThrow('insert failed');
+
+    const after = await rowsFor(eventId);
+    expect(after.map(r => r.id)).toEqual(before.map(r => r.id));
+  });
+
+  it('a failed rebuild in the eventUpdated handler resolves and leaves prior rows intact', async () => {
+    const eventId = await createEventRow();
+    await service.buildEventInstances(weeklyEvent(eventId, SERIES_START), FIRST_BUILD_AT);
+    const before = await rowsFor(eventId);
+
+    sinon.stub(EventInstanceEntity, 'bulkCreate').rejects(new Error('insert failed'));
+    const eventBus = new EventEmitter();
+    const calendarInterface = {
+      buildEventInstances: (event: CalendarEvent) => service.buildEventInstances(event),
+    } as unknown as CalendarInterface;
+    new CalendarEventHandlers(calendarInterface).install(eventBus);
+
+    const edited = weeklyEvent(eventId, SERIES_START.set({ hour: 11 }));
+    // Rejects if the handler lets the rebuild failure escape.
+    await dispatchAndAwait(eventBus, 'eventUpdated', { calendar: null, event: edited });
+
+    const after = await rowsFor(eventId);
+    expect(after.map(r => r.id)).toEqual(before.map(r => r.id));
   });
 });
