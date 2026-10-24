@@ -87,6 +87,18 @@ costs a failed call plus a forced re-read.
 Do NOT run `npm test` or the full test suite — the build-guardian handles that
 once per wave after all beads complete. Do NOT close the bead if lint or
 targeted tests are failing. If blocked, report back.
+
+Watch for `[budget]` lines (AGENTS.md "Budget Signals"). At 75% context or 90%
+five-hour or seven-day: write the handoff on the bead (`bd note {bead_id} "..."`),
+make a WIP commit on the current branch (`wip: {bead_id} <what is done>`), and
+return PARTIAL. Never continue to auto-compact.
+
+End your report with the STATUS block:
+
+    STATUS: DONE | PARTIAL | BLOCKED
+    BEAD: {bead_id}
+    BUDGET: context <N>% | session five-hour <N>% | none seen
+    HANDOFF: on bead | not needed
 ```
 
 ## Behavioral rules the prompt encodes
@@ -211,6 +223,67 @@ orchestrator. It must not close the bead, and it must not paper over the
 issue. The orchestrating agent decides whether to retry, investigate, or
 escalate (`npx tsx .agents/tools/bead.ts escalate <id> "<reason>"` — the
 needs-human protocol in [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md)).
+
+### 8. Budget bands, the PARTIAL handoff, and the STATUS block
+
+The `[budget]` line format and the general-session bands are defined in
+AGENTS.md "Budget Signals"; this rule is the implementer's refinement of
+them. An implementer that runs low on context or session budget hands its
+bead to a **fresh implementer through the bead record**, and the
+orchestrator tells a finished bead from a partial one from the last four
+lines of the report, without reading the transcript.
+
+**Context (the implementer's own loop):**
+
+- 60%: finish the current unit; do not open a new file group. Plan the
+  exit.
+- 75%: write the handoff on the bead (`bd note <id>`), make a WIP commit on
+  the orchestrator-prepared branch (`wip: <bead-id> <what is done>` — the
+  orchestrator or next implementer squashes it before submit), and return
+  PARTIAL. Never continue to auto-compact: mid-implementation reasoning does
+  not survive a summary, and a fresh implementer reading the bead does
+  better than a compacted one.
+
+**Session (five-hour window):**
+
+- 80%: write the handoff and the WIP commit now, then continue only if the
+  current unit fits the burn-rate clause.
+- 90%: stop at the next clean point and return PARTIAL.
+
+**Seven-day window:** 90% means handoff, WIP commit, return PARTIAL.
+
+**Structured return contract.** The last lines of every implementer report,
+in this shape:
+
+```
+STATUS: DONE | PARTIAL | BLOCKED
+BEAD: <id>
+BUDGET: context <N>% | session five-hour <N>% | none seen
+HANDOFF: on bead | not needed
+```
+
+- `DONE`: pre-close checklist passed, bead closed.
+- `PARTIAL`: bead left `in_progress`, handoff on the bead, WIP commit on the
+  branch. The orchestrator spawns a fresh implementer with the bead id only —
+  the handoff is in the bead, never in the spawn message (rule 1 applies to
+  handoffs as much as to the original context).
+- `BLOCKED`: the rule 7 semantics, unchanged.
+- `BUDGET` is the last `[budget]` line the implementer saw, so the
+  orchestrator knows whether a `DONE` came in close to a limit. The
+  implementer learns it from the lines in its own loop; there is no other
+  source. `none seen` when no line arrived (the mod is inert or the loop
+  stayed under 40%).
+
+**Handoff content (forward-only).** Write it as a briefing for the next
+implementer: which acceptance criteria are met, which file is mid-edit and
+what state it is in, the next concrete step, any trap discovered (a test
+that must run with the integration config, a flag that breaks the dev
+server). No narrative of what was tried. A past defect earns a line only as
+a rule.
+
+The canonical prompt carries only the trigger, the three actions and the
+STATUS block; this rule is where the band table lives. No tooling is
+involved: `bd note` and `git commit` are enough.
 
 ## Variants
 

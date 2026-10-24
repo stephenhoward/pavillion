@@ -364,6 +364,10 @@ Dispatch a **general-purpose** subagent per bead. The prompt MUST include:
   leaf chore (real ripples, ambiguous scope, premise doesn't match current
   code, a needed dependency is missing), STOP: leave the bead open with no PR
   note, leave the tree recoverable, and report the blocker. Do not expand scope to make it work.
+- **Budget bands and the STATUS block**: inherited unchanged from
+  `implementer-prompt-template` rule 8 — the prompt carries its `[budget]`
+  lines and ends the report with the STATUS block (here `DONE` means the PR is
+  open and noted, since this variant never closes the bead).
 - **Report back**: PR URL, branch, files changed, lint/test results, and
   confirmation the bead is `in_progress` with the PR noted (not closed); for
   stylesheet/token beads, flag any intentional hue/contrast shift and any
