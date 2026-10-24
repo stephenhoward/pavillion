@@ -421,6 +421,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   fundingDomain.setAccountsInterface(accountsDomain.interface);
 
   const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface, fundingDomain.interface);
+  calendarDomain.interface.setConfigurationInterface(configurationDomain.interface);
   calendarDomain.initialize(app);
 
   // Inject CalendarInterface into FundingDomain after CalendarDomain is constructed

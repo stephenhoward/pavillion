@@ -9,6 +9,8 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import EventInstanceService from '@/server/calendar/service/event_instance';
+import type ConfigurationInterface from '@/server/configuration/interface';
+import { getDefaultDateRange } from '@/common/utils/datePresets';
 import EventService from '@/server/calendar/service/events';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
@@ -16,7 +18,23 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarEventHandlers from '@/server/calendar/events/index';
 import CalendarInterface from '@/server/calendar/interface';
 import db from '@/server/common/entity/db';
+import { InvalidOccurrenceDateError } from '@/common/exceptions/calendar';
 import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
+
+/**
+ * A configuration interface whose `eventInstanceMonths` setting reads as
+ * `value`; `'throw'` makes the lookup fail.
+ */
+function settingsWithInstanceMonths(value: string | undefined | 'throw'): ConfigurationInterface {
+  return {
+    getSetting: async (key: string) => {
+      if (value === 'throw') {
+        throw new Error('settings unavailable');
+      }
+      return key === 'eventInstanceMonths' ? value : undefined;
+    },
+  } as unknown as ConfigurationInterface;
+}
 
 /**
  * Tests for instance generation duration logic in EventInstanceService.
@@ -25,6 +43,9 @@ import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
  * to test the pure computation without requiring database access.
  */
 describe('EventInstanceService.generateInstances', () => {
+  // The horizon these expectations were written against; the service
+  // resolves the real one from settings before calling generateInstances.
+  const HORIZON_MONTHS = 6;
   let service: EventInstanceService;
 
   function createEvent(schedules: CalendarEventSchedule[]): CalendarEvent {
@@ -69,7 +90,7 @@ describe('EventInstanceService.generateInstances', () => {
       createSchedule({ startDate: start, eventEndTime: endTime }),
     ]);
 
-    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
     expect(instances).toHaveLength(1);
     expect(instances[0].start.toISO()).toBe(start.toISO());
@@ -93,7 +114,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
     expect(instances.length).toBeGreaterThanOrEqual(2);
 
@@ -116,7 +137,7 @@ describe('EventInstanceService.generateInstances', () => {
       createSchedule({ startDate: start }),
     ]);
 
-    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
     expect(instances).toHaveLength(1);
     expect(instances[0].start.toISO()).toBe(start.toISO());
@@ -136,7 +157,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
     expect(instances.length).toBeGreaterThanOrEqual(2);
     for (const instance of instances) {
@@ -165,7 +186,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
     // All instances should use the 2-hour duration from the non-exclusion schedule
     for (const instance of instances) {
@@ -196,7 +217,7 @@ describe('EventInstanceService.generateInstances', () => {
         createSchedule({ startDate: start, eventEndTime: endTime }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
       expect(instances).toHaveLength(1);
       expect(instances[0].start.second).toBe(0);
@@ -221,7 +242,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
 
       expect(instances.length).toBeGreaterThanOrEqual(2);
       for (const instance of instances) {
@@ -245,7 +266,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // With a 6-month window from now=2025-08-15, we expect the first Monday
@@ -276,7 +297,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       // Every generated instance must be a Monday (Luxon weekday 1)
       expect(instances.length).toBeGreaterThan(0);
       for (const inst of instances) {
@@ -295,7 +316,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // Feb 2026's last Friday is the 27th, which is past the 2026-02-15
@@ -320,7 +341,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // Assert the first 6 expansions (the full 6-month window contains many
@@ -346,7 +367,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // Garbage entry is filtered out; "1MO" yields first-Monday-of-month
@@ -375,7 +396,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       expect(dates).toEqual([
@@ -406,12 +427,12 @@ describe('EventInstanceService.generateInstances', () => {
       ]);
 
       const now = new Date('2025-08-15T00:00:00Z');
-      const instances = (service as any).generateInstances(event, now);
+      const instances = (service as any).generateInstances(event, now, HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // None of the historical occurrences (2024-01 through 2025-07) should
       // appear. First expected instance is 2025-09-01 (first monthly anchor
-      // on or after now). Horizon covers through 2026-02-15 so we get six.
+      // on or after now). Horizon covers through 2026-02-16 so we get six.
       expect(dates).toEqual([
         '2025-09-01',
         '2025-10-01',
@@ -433,7 +454,7 @@ describe('EventInstanceService.generateInstances', () => {
       ]);
 
       // 6 months ≈ 26 weeks; allow a narrow tolerance for month-length drift.
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       expect(instances.length).toBeGreaterThanOrEqual(24);
       expect(instances.length).toBeLessThanOrEqual(28);
     });
@@ -449,7 +470,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       // Exactly 3 from the bounded rule; between() intersects with the window
       // but all 3 are well inside [2025-08-15, 2026-02-15].
       expect(instances).toHaveLength(3);
@@ -467,7 +488,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       expect(dates).toEqual(['2025-09-01', '2025-09-08', '2025-09-15', '2025-09-22']);
@@ -479,7 +500,7 @@ describe('EventInstanceService.generateInstances', () => {
         createSchedule({ startDate: start }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       expect(instances).toHaveLength(1);
       expect(instances[0].start.toUTC().toISODate()).toBe('2025-10-10');
     });
@@ -496,7 +517,7 @@ describe('EventInstanceService.generateInstances', () => {
         createSchedule({ startDate: start }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       expect(instances).toHaveLength(1);
       expect(instances[0].start.toUTC().toISODate()).toBe('2024-05-01');
     });
@@ -510,7 +531,7 @@ describe('EventInstanceService.generateInstances', () => {
         createSchedule({ startDate: start, isExclusion: true }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       expect(instances).toHaveLength(0);
     });
   });
@@ -536,7 +557,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // The cancelled 2025-09-08 occurrence is suppressed; only 3 remain.
@@ -563,7 +584,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       // The cancelled occurrence is still materialized.
@@ -611,7 +632,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
       expect(dates).toEqual(['2025-09-01', '2025-09-08']);
@@ -686,7 +707,7 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
       (service as any).markShownCancellations(instances);
 
       for (const inst of instances) {
@@ -1438,6 +1459,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     service = new EventInstanceService(new EventEmitter());
+    service.setConfigurationInterface(settingsWithInstanceMonths('6'));
 
     // Neutralize cross-domain side-effects. These paths are covered by the
     // getEventInstanceWithDetails tests elsewhere; here we want to exercise
@@ -1611,8 +1633,9 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
   });
 
   it('lets a probe just outside the unbounded horizon hit the guard, not RRule', async () => {
-    // Boundary case: UNBOUNDED_PREFLIGHT_MONTHS = GENERATION_HORIZON_MONTHS + 12.
-    // A probe a few months past the horizon must short-circuit at the guard.
+    // Boundary case: the pre-flight bound is the generation horizon + 12
+    // months. With the setting at 6 the horizon is floored at 12, so the
+    // bound is 24 months and a probe at 30 must short-circuit at the guard.
     const eventEntity = buildUnboundedDailyEvent(
       DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
     );
@@ -1621,15 +1644,39 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
       .throws(new Error('RRule should not be called past horizon'));
 
-    const justOutside = DateTime.utc().plus({ months: 30 }); // > 18 months
+    const justOutside = DateTime.utc().plus({ months: 30 }); // > 24 months
     const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, justOutside);
 
     expect(result).toBeNull();
     expect(assertStub.called).toBe(false);
   });
 
+  it.each([
+    { setting: '6', inside: 23, outside: 25 },
+    { setting: '24', inside: 35, outside: 37 },
+  ])('bounds the unbounded pre-flight at horizon + 12 months (setting $setting)', async ({ setting, inside, outside }) => {
+    service = new EventInstanceService(new EventEmitter());
+    service.setConfigurationInterface(settingsWithInstanceMonths(setting));
+    sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
+    const eventEntity = buildUnboundedDailyEvent(
+      DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
+    );
+    sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+    sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
+    // Rejecting the date keeps the probe from materialising; reaching the
+    // check at all is what proves the guard let the probe through.
+    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+      .throws(new InvalidOccurrenceDateError());
+
+    await service.findOrMaterializeInstanceWithDetails(EVENT_ID, DateTime.utc().plus({ months: outside }));
+    expect(assertStub.called).toBe(false);
+
+    await service.findOrMaterializeInstanceWithDetails(EVENT_ID, DateTime.utc().plus({ months: inside }));
+    expect(assertStub.called).toBe(true);
+  });
+
   it('lets a probe just inside the unbounded horizon reach RRule validation', async () => {
-    // Boundary case: a probe inside the 18-month window must NOT be filtered
+    // Boundary case: a probe inside the 24-month window must NOT be filtered
     // by the pre-flight guard. The RRule-membership step then decides.
     const eventEntity = buildUnboundedDailyEvent(
       DateTime.fromISO('2020-01-01T00:00:00Z', { zone: 'utc' }),
@@ -2025,5 +2072,82 @@ describe('EventInstanceService.buildEventInstances', () => {
 
     const after = await rowsFor(eventId);
     expect(after.map(r => r.id)).toEqual(before.map(r => r.id));
+  });
+
+  describe('generation horizon', () => {
+    function dailyEvent(eventId: string, eventCalendarId: string, startDate: DateTime): CalendarEvent {
+      const event = weeklyEvent(eventId, startDate);
+      event.calendarId = eventCalendarId;
+      event.schedules[0].frequency = EventFrequency.DAILY;
+      return event;
+    }
+
+    // `now` sits on a daily 10:00 occurrence, so the window end does too and
+    // the last row is the occurrence exactly at the boundary.
+    const NOW = new Date('2026-03-01T10:00:00.000Z');
+
+    it.each([
+      { setting: '18', lastStart: '2027-09-02T10:00:00.000Z', why: 'above the floor' },
+      { setting: '12', lastStart: '2027-03-02T10:00:00.000Z', why: 'at the floor' },
+      { setting: '6', lastStart: '2027-03-02T10:00:00.000Z', why: 'below the floor' },
+      { setting: '0', lastStart: '2027-03-02T10:00:00.000Z', why: 'not a positive integer' },
+      { setting: '7.5', lastStart: '2027-03-02T10:00:00.000Z', why: 'not an integer' },
+      { setting: undefined, lastStart: '2027-03-02T10:00:00.000Z', why: 'unset' },
+      { setting: 'throw', lastStart: '2027-03-02T10:00:00.000Z', why: 'unreadable' },
+    ] as const)('materialises through $lastStart when the setting is $setting ($why)', async ({ setting, lastStart }) => {
+      service = new EventInstanceService(new EventEmitter());
+      service.setConfigurationInterface(settingsWithInstanceMonths(setting));
+      const eventId = await createEventRow();
+      await service.buildEventInstances(dailyEvent(eventId, calendarId, DateTime.fromJSDate(NOW, { zone: 'utc' })), NOW);
+
+      const rows = await rowsFor(eventId);
+      // Horizon months plus one day: the inclusive boundary row is present
+      // and the next day's occurrence is not.
+      expect(rows[rows.length - 1].start_time.toISOString()).toBe(lastStart);
+    });
+
+    it('materialises through the floor when no configuration interface is bound', async () => {
+      const eventId = await createEventRow();
+      await service.buildEventInstances(dailyEvent(eventId, calendarId, DateTime.fromJSDate(NOW, { zone: 'utc' })), NOW);
+
+      const rows = await rowsFor(eventId);
+      expect(rows[rows.length - 1].start_time.toISOString()).toBe('2027-03-02T10:00:00.000Z');
+    });
+
+    it('covers every day of a calendar\'s 12-month default range after a rebuild', async () => {
+      // The setting's default is below the longest range, so the floor is what
+      // keeps the range covered.
+      service = new EventInstanceService(new EventEmitter());
+      service.setConfigurationInterface(settingsWithInstanceMonths('6'));
+      const rangeCalendarId = uuidv4();
+      await CalendarEntity.create({
+        id: rangeCalendarId,
+        url_name: 'twelve-month-range-cal',
+        default_date_range: '12months',
+      });
+      const eventId = uuidv4();
+      await EventEntity.create({ id: eventId, calendar_id: rangeCalendarId });
+
+      // Daily at 20:00, rebuilt at noon: the range's last day has an
+      // occurrence later in the day than `now` does.
+      const event = dailyEvent(eventId, rangeCalendarId, DateTime.fromISO('2026-01-01T20:00:00.000Z', { zone: 'utc' }));
+      await service.buildEventInstances(event, new Date('2026-01-01T12:00:00.000Z'));
+      const rebuildAt = new Date('2026-03-01T12:00:00.000Z');
+      await service.buildEventInstances(event, rebuildAt);
+
+      const calendar = (await CalendarEntity.findByPk(rangeCalendarId))!.toModel();
+      const range = getDefaultDateRange(calendar.defaultDateRange!, DateTime.fromJSDate(rebuildAt, { zone: 'utc' }));
+      const rowDays = new Set((await rowsFor(eventId)).map(r => DateTime.fromJSDate(r.start_time, { zone: 'utc' }).toISODate()));
+
+      const missing: string[] = [];
+      const lastDay = DateTime.fromISO(range.endDate, { zone: 'utc' });
+      for (let day = DateTime.fromISO(range.startDate, { zone: 'utc' }); day <= lastDay; day = day.plus({ days: 1 })) {
+        if (!rowDays.has(day.toISODate())) {
+          missing.push(day.toISODate()!);
+        }
+      }
+      expect(range.endDate).toBe('2027-03-01');
+      expect(missing).toEqual([]);
+    });
   });
 });

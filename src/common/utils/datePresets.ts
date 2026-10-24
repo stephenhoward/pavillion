@@ -1,5 +1,5 @@
-import { DateTime, type DurationLike } from 'luxon';
-import type { DefaultDateRange } from '@/common/model/calendar';
+import { DateTime, Duration, type DurationLike } from 'luxon';
+import { DEFAULT_DATE_RANGES, type DefaultDateRange } from '@/common/model/calendar';
 
 /**
  * Interface for date range with ISO date strings
@@ -23,6 +23,15 @@ const rangeDurationMap: Record<DefaultDateRange, DurationLike> = {
   '9months': { months: 9 },
   '12months': { months: 12 },
 };
+
+/**
+ * Months spanned by the longest option in {@link DEFAULT_DATE_RANGES},
+ * rounded up. The server never materialises fewer months of event instances
+ * than this, so no calendar's default range runs past its stored rows.
+ */
+export const LONGEST_DEFAULT_DATE_RANGE_MONTHS = Math.max(
+  ...DEFAULT_DATE_RANGES.map(range => Math.ceil(Duration.fromDurationLike(rangeDurationMap[range]).as('months'))),
+);
 
 /**
  * Get the start of the week (Sunday) for a given date

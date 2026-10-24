@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DateTime } from 'luxon';
-import { getThisWeek, getNextWeek, getDefaultDateRange } from '@/common/utils/datePresets';
+import { getThisWeek, getNextWeek, getDefaultDateRange, LONGEST_DEFAULT_DATE_RANGE_MONTHS } from '@/common/utils/datePresets';
 
 describe('Date Preset Utilities', () => {
   describe('getThisWeek', () => {
@@ -219,6 +219,12 @@ describe('Date Preset Utilities', () => {
 
       expect(defaultResult.startDate).toBe(explicitResult.startDate);
       expect(defaultResult.endDate).toBe(explicitResult.endDate);
+    });
+  });
+
+  describe('LONGEST_DEFAULT_DATE_RANGE_MONTHS', () => {
+    it('is the month span of the longest default range option', () => {
+      expect(LONGEST_DEFAULT_DATE_RANGE_MONTHS).toBe(12);
     });
   });
 });

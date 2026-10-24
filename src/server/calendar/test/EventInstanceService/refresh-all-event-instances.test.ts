@@ -4,7 +4,8 @@ import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
-import EventInstanceService, { GENERATION_HORIZON_MONTHS } from '@/server/calendar/service/event_instance';
+import EventInstanceService, { generationWindowEnd } from '@/server/calendar/service/event_instance';
+import type ConfigurationInterface from '@/server/configuration/interface';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
@@ -28,8 +29,12 @@ describe('EventInstanceService.refreshAllEventInstances', () => {
   const SERIES_START = DateTime.fromISO('2026-01-05T10:00:00.000Z', { zone: 'utc' });
   const FIRST_BUILD_AT = new Date('2026-01-01T00:00:00.000Z');
   const REFRESH_AT = new Date('2026-06-01T00:00:00.000Z');
-  const REFRESH_HORIZON = DateTime.fromJSDate(REFRESH_AT, { zone: 'utc' })
-    .plus({ months: GENERATION_HORIZON_MONTHS }).toJSDate();
+  // The eventInstanceMonths setting reads 6, below the 12-month floor.
+  const HORIZON_MONTHS = 12;
+  const settings = {
+    getSetting: async (key: string) => (key === 'eventInstanceMonths' ? '6' : undefined),
+  } as unknown as ConfigurationInterface;
+  const REFRESH_HORIZON = generationWindowEnd(REFRESH_AT, HORIZON_MONTHS);
   const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
   /**
@@ -77,6 +82,7 @@ describe('EventInstanceService.refreshAllEventInstances', () => {
     await CalendarEntity.create({ id: calendarId, url_name: 'instance-refresh-cal' });
     eventBus = new EventEmitter();
     service = new EventInstanceService(eventBus);
+    service.setConfigurationInterface(settings);
   });
 
   afterEach(() => {
@@ -85,8 +91,8 @@ describe('EventInstanceService.refreshAllEventInstances', () => {
 
   it('extends a local recurring event whose rows end inside the window out to the horizon', async () => {
     const eventId = await createStaleWeeklyEvent(calendarId);
-    // Built from Jan 1, the rows stop around Jul 1: inside the window that
-    // a refresh on Jun 1 should cover through Dec 1.
+    // Built from Jan 1, the rows stop around Jan 1 next year: inside the
+    // window that a refresh on Jun 1 should cover through Jun 2 next year.
     expect((await lastStartFor(eventId)).getTime()).toBeLessThan(REFRESH_HORIZON.getTime() - ONE_WEEK_MS);
 
     const result = await service.refreshAllEventInstances(REFRESH_AT);
