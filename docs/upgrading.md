@@ -34,6 +34,9 @@ Before running `bin/deploy.sh` for a major upgrade:
 
 Read the [release notes](https://github.com/stephenhoward/pavillion/releases)
 for breaking changes, new configuration options, or deprecations.
+A release whose notes describe it as a security-only refresh of the
+container image changes nothing in the application; see
+[Security refreshes](security-refreshes.md).
 
 ### 2. Back up your database
 

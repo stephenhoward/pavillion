@@ -77,3 +77,28 @@ The agent drafts; the user approves.
    ```
 
    This tags `main` at HEAD.
+
+## Security-only patch releases
+
+A published tag is never rebuilt in place. When a released image needs a
+fix that lives only in its OS packages (the weekly health report shows a
+fixable Debian CVE against `latest`), cut a new patch release from the
+**same source commit** as the release being refreshed — the image build
+re-resolves apt packages on every release, so no other change is needed:
+
+```bash
+gh release create <new patch tag> --target <commit of the release being refreshed> --notes-file <draft.md>
+```
+
+`--target` matters when `main` has moved on: tagging HEAD would ship
+unreleased application changes under a "security-only" label. The notes
+are one **Fixes & Updates** bullet saying the release refreshes the
+container image's operating-system packages and changes nothing in the
+application, so an operator can tell it apart from a regular release.
+
+What warrants one is a judgement, not a threshold: a finding with no
+upstream fix, or in a package the container never executes, waits for the
+next regular release. The operator-facing side (how a refresh is announced,
+how it is installed, what the health-report findings do and do not mean) is
+`docs/security-refreshes.md`; the public-disclosure boundary for anything
+said about a CVE is DEC-016.
