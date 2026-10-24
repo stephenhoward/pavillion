@@ -46,6 +46,7 @@ export default defineConfig({
     'deployment.md': 'guides/instance-administrators/deployment.md',
     'email-configuration.md': 'guides/instance-administrators/email.md',
     'secret-rotation.md': 'guides/instance-administrators/secret-rotation.md',
+    'security-refreshes.md': 'guides/instance-administrators/security-refreshes.md',
     'upgrading.md': 'guides/instance-administrators/upgrading.md',
   },
   themeConfig: {
@@ -91,6 +92,7 @@ export default defineConfig({
             { text: 'Monitoring and logs', link: '/guides/instance-administrators/monitoring-and-logs' },
             { text: 'Backups', link: '/guides/instance-administrators/backups' },
             { text: 'Upgrading', link: '/guides/instance-administrators/upgrading' },
+            { text: 'Security refreshes', link: '/guides/instance-administrators/security-refreshes' },
             { text: 'Rotating secrets', link: '/guides/instance-administrators/secret-rotation' },
             { text: 'Troubleshooting', link: '/guides/instance-administrators/troubleshooting' },
           ],
