@@ -455,7 +455,7 @@ export default class CalendarInterface {
     return this.eventInstanceService.removeEventInstances(event);
   }
 
-  async refreshAllEventInstances(): Promise<void> {
+  async refreshAllEventInstances(): Promise<{ refreshed: number; failed: number }> {
     return this.eventInstanceService.refreshAllEventInstances();
   }
 

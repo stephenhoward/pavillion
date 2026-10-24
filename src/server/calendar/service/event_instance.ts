@@ -57,6 +57,9 @@ const { RRule, RRuleSet, Weekday } = rrule;
  */
 export const GENERATION_HORIZON_MONTHS = 6;
 
+/** Events read per query by {@link EventInstanceService.refreshAllEventInstances}. */
+export const REFRESH_PAGE_SIZE = 100;
+
 /**
  * State tag for an entry in {@link UpcomingOccurrencesResult}:
  *   - 'active': produced by the rrule, no matching exclusion row
@@ -1145,39 +1148,59 @@ export default class EventInstanceService {
     }
   }
 
-  // TODO: retrieving all events won't scale. Need a paging/incremental strategy
-  async refreshAllEventInstances() {
-    // Get all local calendars and build a map of calendar ID -> Calendar
-    const localCalendars = await CalendarEntity.findAll();
-    const calendarMap = new Map<string, Calendar>();
+  /**
+   * Rebuilds the instance rows of every event against `now`, advancing each
+   * event's materialised window to the generation horizon. Body of the
+   * weekly `instances:refresh` worker job, and of the dev/e2e startup
+   * refresh.
+   *
+   * Covers remote-origin events (`calendar_id` null) as well as local ones:
+   * their rows are otherwise built only when the event is received.
+   *
+   * Calls buildEventInstances directly rather than emitting `eventUpdated`,
+   * which would also reach the ActivityPub handler and announce an Update to
+   * followers for what is only a local regeneration.
+   *
+   * Events are read in pages keyed on id. One event's failure is logged with
+   * its id and counted; it does not stop the run.
+   *
+   * @param now - the instant the generation window is anchored at
+   * @param pageSize - number of events read per query
+   * @returns how many events were rebuilt and how many failed
+   */
+  async refreshAllEventInstances(
+    now: Date = new Date(),
+    pageSize: number = REFRESH_PAGE_SIZE,
+  ): Promise<{ refreshed: number; failed: number }> {
+    let refreshed = 0;
+    let failed = 0;
+    let lastId: string | null = null;
 
-    for (const calendarEntity of localCalendars) {
-      const calendar = calendarEntity.toModel();
-      calendarMap.set(calendar.id, calendar);
-    }
+    for (;;) {
+      const page: EventEntity[] = await EventEntity.findAll({
+        where: lastId ? { id: { [Op.gt]: lastId } } : {},
+        order: [['id', 'ASC']],
+        limit: pageSize,
+      });
 
-    // Only get events for local calendars (not remote federated events).
-    // `calendar_id` is a uuid column with an FK to `calendar`, so calendar
-    // UUIDs are the only values it can hold; mixing AP actor URLs into this
-    // list makes postgres reject the whole statement (22P02).
-    const events = await EventEntity.findAll({
-      where: {
-        calendar_id: {
-          [Op.in]: [...calendarMap.keys()],
-        },
-      },
-    });
-
-    // Emit eventUpdated for each local event to rebuild instances
-    for (const event of events) {
-      const calendar = calendarMap.get(event.calendar_id);
-      if (calendar) {
-        this.eventBus.emit('eventUpdated', {
-          calendar: calendar,
-          event: event.toModel(),
-        });
+      for (const eventEntity of page) {
+        try {
+          await this.buildEventInstances(eventEntity.toModel(), now);
+          refreshed++;
+        }
+        catch (error) {
+          failed++;
+          logger.error({ err: error, eventId: eventEntity.id }, 'Event instance refresh failed');
+        }
       }
+
+      if (page.length < pageSize) {
+        break;
+      }
+      lastId = page[page.length - 1].id;
     }
+
+    return { refreshed, failed };
   }
 
   /**
