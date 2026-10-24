@@ -22,7 +22,7 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -1532,6 +1532,67 @@ describe('Structured Logging for Activity Rejections', () => {
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('unauthorized_editor');
       expect(logEntry.activity_type).toBe('Delete');
+    });
+  });
+
+  describe('Remote editor Delete scoped to the receiving calendar', () => {
+    const OTHER_CALENDAR_ID = 'other-calendar-id';
+    const TARGET_EVENT_ID = 'target-event-id';
+
+    /**
+     * Resolves the event the way the Person-actor path does when the AP id
+     * does not match: by the local UUID in the Tombstone's eventId. Both
+     * EventObjectEntity lookups miss, so no AP object row is destroyed.
+     */
+    function stubEventLookup(eventCalendarId: string) {
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+      sandbox.stub(service.calendarInterface, 'getEventById')
+        .resolves({ id: TARGET_EVENT_ID, calendarId: eventCalendarId } as any);
+    }
+
+    function buildEditorDelete() {
+      return createMockDeleteActivity(REMOTE_ACTOR_URL, {
+        id: REMOTE_EVENT_URL,
+        type: 'Tombstone',
+        formerType: 'Event',
+        eventId: TARGET_EVENT_ID,
+      });
+    }
+
+    it('rejects an editor Delete for an event owned by another calendar and deletes nothing', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      stubEventLookup(OTHER_CALENDAR_ID);
+      sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+      const deleteRemoteEvent = sandbox.stub(service.calendarInterface, 'deleteRemoteEvent').resolves();
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await expect(service.processDeleteEvent(calendar, buildEditorDelete() as any)).rejects.toThrow();
+
+      expect(deleteRemoteEvent.called).toBe(false);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('misdirected_activity');
+      expect(logEntry.activity_type).toBe('Delete');
+      expect(logEntry.calendar_id).toBe(TEST_CALENDAR_ID);
+    });
+
+    it('applies an editor Delete for an event owned by the receiving calendar', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      stubEventLookup(TEST_CALENDAR_ID);
+      sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+      const deleteRemoteEvent = sandbox.stub(service.calendarInterface, 'deleteRemoteEvent').resolves();
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await service.processDeleteEvent(calendar, buildEditorDelete() as any);
+
+      expect(deleteRemoteEvent.calledOnce).toBe(true);
+      expect(deleteRemoteEvent.firstCall.args[0]).toBe(calendar);
+      expect(deleteRemoteEvent.firstCall.args[1]).toBe(TARGET_EVENT_ID);
+      expect(mockLogActivityRejection).not.toHaveBeenCalled();
     });
   });
 
