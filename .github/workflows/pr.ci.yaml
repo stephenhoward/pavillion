@@ -24,6 +24,30 @@ jobs:
     uses: ./.github/workflows/manifest_lint.yaml
   lint:
     uses: ./.github/workflows/lint.yaml
+  # Overlap guard: reports where the PR branch and its base have both changed
+  # since they forked (see bin/check-branch-overlap.sh). It FAILS rather than
+  # annotating: an advisory check that is usually green teaches people to merge
+  # past it, and the remedy — rebase onto the base — is cheap. It is a git
+  # computation, not a build, so it installs nothing and needs no test job.
+  branch_overlap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR head itself, not the pull_request merge commit the action
+          # checks out by default: a merge commit already contains the base, so
+          # the script would see nothing on the base side and never overlap.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history: `git merge-base` needs the fork point, which the
+          # default depth-1 fetch never contains. The pack is small (~15 MiB),
+          # so this costs seconds.
+          fetch-depth: 0
+      - name: Check for overlap with the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          bash bin/check-branch-overlap.sh "origin/${BASE_REF}" HEAD
   arm_e2e:
     needs: arm_tests
     uses: ./.github/workflows/run_e2e_tests.yaml
