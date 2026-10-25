@@ -5,11 +5,9 @@
  * `ap_inbox` with the correct `auth_source` and `auth_origin` columns:
  *   - `auth_source === 'http_signature'` for every row admitted via the live
  *     inbox POST (set unconditionally by the route handler).
- *   - `auth_origin === <scheme+host of the keyId URL>` when the keyId parses,
- *     or `null` when keyId is unparseable (e.g., the value is not a URL). The
- *     null case proves the degraded path: the middleware accepted the
- *     signature upstream, the row still writes, but the verified-origin
- *     breadcrumb is lost.
+ *   - `auth_origin === <scheme+host of the keyId URL>`. A keyId that does not
+ *     parse leaves no verified origin, and the activity is refused before any
+ *     row is written — see `inbox-activity-id-origin.integration.test.ts`.
  *
  * Uses the same scaffolding as `inbox-security.test.ts`: TestEnvironment, real
  * supertest POSTs against the inbox route, and `SKIP_SIGNATURES=true` to bypass
@@ -114,45 +112,5 @@ describe('ActivityPub Inbox Auth Columns (DEC-013)', () => {
     expect(row).not.toBeNull();
     expect(row!.auth_source).toBe('http_signature');
     expect(row!.auth_origin).toBe(`https://${remoteDomain}`);
-  });
-
-  it('writes auth_source=http_signature and auth_origin=null when the keyId cannot be parsed as a URL', async () => {
-    const activityId = 'https://remote.example.com/activities/auth-malformed-keyid';
-
-    const announceActivity = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      id: activityId,
-      type: 'Announce',
-      actor: 'https://remote.example.com/calendars/anotheractor',
-      object: 'https://remote.example.com/events/auth-malformed-keyid',
-    };
-
-    // The Signature header value is structurally well-formed (bare params, no
-    // "Signature " prefix — which would belong on the Authorization header,
-    // not on the Signature header), so http-signature.parseRequest extracts a
-    // keyId successfully. The keyId VALUE is then not a valid URL, so
-    // `new URL(keyId)` throws inside extractKeyIdOrigin and the helper returns
-    // null. Signature verification is upstream of this; the row still persists
-    // because the middleware (SKIP_SIGNATURES) accepted the request.
-    const malformedSignature =
-      'keyId="not-a-valid-url",algorithm="rsa-sha256",' +
-      'headers="(request-target) host date content-type digest",' +
-      'signature="fakeSignature"';
-
-    const response = await request(env.app)
-      .post(`/calendars/${testCalendar.urlName}/inbox`)
-      .set('Content-Type', 'application/activity+json')
-      .set('Date', new Date().toUTCString())
-      .set('Host', 'localhost')
-      .set('Signature', malformedSignature)
-      .set('Digest', `SHA-256=${crypto.createHash('sha256').update(JSON.stringify(announceActivity)).digest('base64')}`)
-      .send(announceActivity);
-
-    expect(response.status).toBe(200);
-
-    const row = await ActivityPubInboxMessageEntity.findByPk(activityId);
-    expect(row).not.toBeNull();
-    expect(row!.auth_source).toBe('http_signature');
-    expect(row!.auth_origin).toBeNull();
   });
 });
