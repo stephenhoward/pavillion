@@ -35,6 +35,12 @@ jobs:
         run: npm run lint:theme
         if: ${{ !cancelled() }}
 
+      # Migration guard: no two migrations share a numeric prefix (see scripts/check-migration-prefixes.ts).
+      # A pull_request checkout is the merge commit, so this sees both sides of the merge.
+      - name: Migration prefix guard
+        run: npm run lint:migrations
+        if: ${{ !cancelled() }}
+
       # Report-only duplication measurement (see .jscpd.json); never fails the job.
       - name: Duplication report
         run: npm run lint:dup
