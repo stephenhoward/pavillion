@@ -245,7 +245,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
         'complete': isComplete,
         'failed': isFailed
       }"
-      :aria-label="t('accessibility.drag_drop_zone')"
       role="button"
       tabindex="0"
       @click="!hasFiles && triggerFileBrowser()"

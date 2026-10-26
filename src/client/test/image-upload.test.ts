@@ -52,7 +52,10 @@ describe('ImageUpload Integration', () => {
     const dropZone = wrapper.find('.upload-zone');
     expect(dropZone.attributes('role')).toBe('button');
     expect(dropZone.attributes('tabindex')).toBe('0');
-    expect(dropZone.attributes('aria-label')).toBe('File upload drag and drop zone');
+    // WCAG 2.5.3 Label in Name: the button is named by its visible
+    // instructions, so no aria-label may replace them.
+    expect(dropZone.attributes('aria-label')).toBeUndefined();
+    expect(dropZone.text()).toContain('Drag and drop an image here');
 
     const fileInput = wrapper.find('.file-input');
     expect(fileInput.attributes('aria-label')).toBe('Select files to upload');

@@ -52,7 +52,6 @@
     "cancelled": "Annulé"
   },
   "accessibility": {
-    "drag_drop_zone": "Zone de glisser-déposer pour le téléversement de fichiers",
     "file_input": "Sélectionner les fichiers à téléverser",
     "file_preview": "Aperçu de {{filename}}",
     "upload_progress": "Progression du téléversement de {{filename}} : {{percentage}}%",
