@@ -52,7 +52,6 @@
     "cancelled": "Cancelado"
   },
   "accessibility": {
-    "drag_drop_zone": "Zona de arrastrar y soltar para subir archivos",
     "file_input": "Selecciona archivos para subir",
     "file_preview": "Vista previa de {{filename}}",
     "upload_progress": "Progreso de subida de {{filename}}: {{percentage}}%",
