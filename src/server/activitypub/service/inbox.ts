@@ -1725,6 +1725,23 @@ class ProcessInboxService {
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
+      // SECURITY: editor membership was checked against the receiving
+      // calendar, so the event must belong to that calendar. The event may
+      // have been resolved by eventParams.id, which is not scoped to it.
+      if (existingEvent.calendarId !== calendar.id) {
+        logger.warn(`Person actor ${actorUri} sent an Update to calendar ${calendar.urlName} for an event it does not own`);
+        logActivityRejection({
+          rejection_type: 'misdirected_activity',
+          activity_type: 'Update',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Update delivered to calendar ${calendar.urlName}, which does not own the target event`,
+        });
+        throw new Error('Event does not belong to this calendar');
+      }
+
       logger.info(`Processing Update from authorized remote editor: ${actorUri}`);
     }
     else {
