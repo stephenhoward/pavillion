@@ -646,8 +646,8 @@
     },
     "list": {
       "title": "Instances actuellement bloquées",
-      "count": "{{count}} instance bloquée",
-      "count_plural": "{{count}} instances bloquées",
+      "count_one": "{{count}} instance bloquée",
+      "count_other": "{{count}} instances bloquées",
       "empty": "Aucune instance n’est actuellement bloquée",
       "domain_column": "Domaine",
       "reason_column": "Motif",

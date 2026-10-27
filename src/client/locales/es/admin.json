@@ -646,8 +646,8 @@
     },
     "list": {
       "title": "Instancias bloqueadas actualmente",
-      "count": "{{count}} instancia bloqueada",
-      "count_plural": "{{count}} instancias bloqueadas",
+      "count_one": "{{count}} instancia bloqueada",
+      "count_other": "{{count}} instancias bloqueadas",
       "empty": "No hay instancias bloqueadas actualmente",
       "domain_column": "Dominio",
       "reason_column": "Motivo",
