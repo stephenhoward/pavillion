@@ -301,6 +301,7 @@ chmod 600 secrets/*.txt
 |------|---------|-------------|
 | 3000 | Application | HTTP application server (map to 80/443 via reverse proxy) |
 | 3001 | Worker | Health check endpoint (container-internal only, not exposed to host) |
+| 9464 | Application | OpenMetrics listener at `/metrics` for a scraper on the Compose network (not published to the host, no built-in authentication; see [Monitoring and logs](./monitoring-and-logs.md#metrics-for-an-external-monitor)) |
 | 80 | Caddy | HTTP (standalone mode only, redirects to HTTPS) |
 | 443 | Caddy | HTTPS (standalone mode only, automatic Let's Encrypt) |
 | 5432 | PostgreSQL | Database (internal only, not exposed by default) |
@@ -393,9 +394,9 @@ docker compose ps
 
 The `STATUS` column will show `healthy`, `unhealthy`, or `health: starting` for containers with healthchecks configured.
 
-### No External Alerting
+### Alerting Is External
 
-Autoheal is a self-healing mechanism, not a monitoring or alerting system. Restart events are logged to the container's stdout and are visible through `docker compose logs`, but no external notifications are sent. If you need alerting for persistent failures, consider adding an external monitoring tool that watches container health status.
+Autoheal is a self-healing mechanism, not a monitoring or alerting system. Restart events are logged to the container's stdout and are visible through `docker compose logs`, but Pavillion sends no external notifications of its own. Alerting comes from a monitoring tool you run: point an external uptime check at `/health`, and point a scraper on the Compose network at the metrics listener on port 9464 for backup, disk, database, and job-queue health. [Monitoring and logs](./monitoring-and-logs.md#metrics-for-an-external-monitor) walks through a companion-container example and what to alert on first.
 
 ### Docker Socket Security Note
 
