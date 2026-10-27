@@ -1642,19 +1642,34 @@ class EventService {
 
           existingScheduleIds = existingScheduleIds.filter(id => id !== schedule.id);
 
-          const byDayValue = schedule.byDay !== undefined
-            ? (Array.isArray(schedule.byDay) ? schedule.byDay.join(',') : (schedule.byDay || ''))
+          // Wire schedule keys are the model's own (start/end/eventEndTime/
+          // isException); read them only through fromObject, as the
+          // new-schedule branch (createEventSchedule) does.
+          const parsed = CalendarEventSchedule.fromObject(schedule);
+
+          // For non-recurring events, sync endDate to eventEndTime (same as createEventSchedule)
+          if (!parsed.frequency && parsed.eventEndTime) {
+            parsed.endDate = parsed.eventEndTime;
+          }
+
+          const byDayValue = parsed.byDay !== undefined
+            ? (Array.isArray(parsed.byDay) ? parsed.byDay.join(',') : (parsed.byDay || ''))
             : scheduleEntity.by_day;
 
+          // end and eventEndTime are clearable: toObject() always emits them
+          // (null when unset), so presence of the key, not its value, decides
+          // whether to overwrite.
+          const toStorage = EventScheduleEntity.toStorageDate;
           await scheduleEntity.update({
-            start_date: schedule.startDate ?? scheduleEntity.start_date,
-            end_date: schedule.endDate ?? scheduleEntity.end_date,
-            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
-            frequency: schedule.frequency ?? scheduleEntity.frequency,
-            interval: schedule.interval ?? scheduleEntity.interval,
-            count: schedule.count ?? scheduleEntity.count,
+            timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
+            start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
+            end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
+            event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
+            frequency: (parsed.frequency as string) ?? scheduleEntity.frequency,
+            interval: parsed.interval ?? scheduleEntity.interval,
+            count: parsed.count ?? scheduleEntity.count,
             by_day: byDayValue,
-            is_exclusion: schedule.isExclusion ?? scheduleEntity.is_exclusion,
+            is_exclusion: parsed.isExclusion ?? scheduleEntity.is_exclusion,
           });
           event.addSchedule(scheduleEntity.toModel());
         }
