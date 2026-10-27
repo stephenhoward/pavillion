@@ -1,6 +1,6 @@
 # Pavillion Configuration Reference
 
-This document provides a complete reference for all Pavillion configuration options.
+This document provides a complete reference for all Pavillion configuration options. Every top-level key in `config/default.yaml` has a section under [YAML Configuration Options](#yaml-configuration-options), and every environment variable mapped in `config/custom-environment-variables.yaml` is listed under [Environment Variables](#environment-variables). Defaults quoted here are the values in `config/default.yaml`; that file stays the authoritative source if the two ever disagree.
 
 ## Configuration Sources
 
@@ -124,6 +124,7 @@ Environment variables are the recommended way to pass secrets to the container.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `DB_DIALECT` | No | `postgres` in production | Overrides `database.dialect` (`postgres` or `sqlite`) |
 | `DB_HOST` | Yes* | `db` | PostgreSQL server hostname |
 | `DB_PORT` | No | `5432` | PostgreSQL server port |
 | `DB_NAME` | No | `pavillion` | Database name |
@@ -155,6 +156,9 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 | `SMTP_PORT` | No | `587` | SMTP server port |
 | `SMTP_USER` | No | - | SMTP authentication username |
 | `SMTP_PASSWORD` | No | - | SMTP authentication password |
+| `SMTP_SECURE` | No | - | Overrides `mail.settings.secure`; `true` for port 465 |
+| `MAIL_TRANSPORT` | No | `smtp` in production | Overrides `mail.transport` (`smtp`, `development`, `testing`, `mailpit`, `sendmail`) |
+| `MAIL_FROM` | No | `noreply@example.com` | Overrides `mail.from`, the sender address on outgoing email |
 
 ### Application Configuration
 
@@ -162,6 +166,23 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 |----------|----------|---------|-------------|
 | `NODE_ENV` | No | `production` | Runtime environment |
 | `APP_PORT` | No | `3000` | Host port for Docker Compose mapping |
+| `HOST_PORT` | No | `3000` | Overrides `host.port`, the port the application listens on inside the container |
+| `LOCAL_DOMAIN` | No | `localhost:3000` | Overrides `domain`, the instance's public domain |
+
+### Metrics Listener
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `METRICS_PORT` | No | `9464` | Overrides `housekeeping.monitoring.metrics.port` |
+| `METRICS_BIND_ADDRESS` | No | `0.0.0.0` | Overrides `housekeeping.monitoring.metrics.bindAddress` |
+
+Changing either never publishes the port to the host. See [Housekeeping](#housekeeping) below.
+
+### Development and Testing
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SKIP_SIGNATURES` | No | - | `true` disables HTTP signature verification on inbound federation requests, for local federation testing. Refused when `NODE_ENV=production`: verification raises an error rather than being skipped. Also settable as `federation.skipSignatures: 'true'` in YAML. |
 
 ## YAML Configuration Options
 
@@ -185,6 +206,7 @@ database:
   username: pavillion     # Database user
   # password: (use environment variable DB_PASSWORD)
   logging: false          # Set to true to log SQL queries
+  storage: null           # SQLite file path; default.yaml uses ':memory:', production.yaml clears it
 ```
 
 #### Connection pool and session limits
@@ -203,15 +225,17 @@ database:
   dialectOptions:         # PostgreSQL only; ignored by SQLite
     statement_timeout: 60000                      # Max ms for a single query
     idle_in_transaction_session_timeout: 60000    # Max ms a transaction may sit idle
+    lock_timeout: 5000                            # Max ms a statement waits on a row lock
 ```
 
 The pool is shared by the whole application, so these values decide how many
-requests can be in flight against the database at once. The two `dialectOptions`
+requests can be in flight against the database at once. The three `dialectOptions`
 timeouts bound how long any one request can hold its connection: `statement_timeout`
-caps a query blocked on a row lock, and `idle_in_transaction_session_timeout` caps a
-transaction parked on a slow outbound call such as a payment provider request.
-Database migrations clear both for the duration of their own transaction, so schema
-changes on large tables are not cut short.
+caps a running query, `lock_timeout` fails a statement that has waited too long on a
+row lock so it gives its connection back, and `idle_in_transaction_session_timeout`
+caps a transaction parked on a slow outbound call such as a payment provider request.
+Database migrations clear all three for the duration of their own transaction, so
+schema changes on large tables are not cut short.
 
 ### Host Configuration
 
@@ -294,19 +318,232 @@ mail:
     # pass: your_password
 ```
 
-### Event Instance Refresh
+### Authentication Secrets
 
-Pavillion stores each event's upcoming occurrences up to six months ahead,
-calculated when the event is created, edited or received from another
-instance. The worker rebuilds them on a schedule so an event nobody edits
-keeps occurrences out to six months. This covers events from other instances
-too, and sends nothing to followers.
+```yaml
+jwt:
+  # secret: (use environment variable JWT_SECRET)
+  expiresIn: '7d'
+session:
+  # secret: (use environment variable SESSION_SECRET)
+```
+
+`jwt.secret` signs API authentication tokens and `session.secret` signs
+browser session cookies. Set both through their environment variables (see
+[Secrets Management](#secrets-management)); production startup refuses the
+development defaults. `jwt.expiresIn` is present in `default.yaml` but is not
+read by the application, so changing it has no effect.
+
+### Calendar Configuration
+
+```yaml
+calendar:
+  materializationCap: 1000        # Max stored occurrence rows per event
+  import:
+    # hmacSecret: (use environment variable CALENDAR_IMPORT_HMAC_SECRET)
+    dohResolvers:                 # DNS-over-HTTPS resolvers for ownership checks
+      - 'https://1.1.1.1/dns-query'
+      - 'https://8.8.8.8/resolve'
+    maxSourcesPerCalendar: 10     # Max URL import sources per calendar
+```
+
+- **`materializationCap`** bounds how many occurrence rows a single event may
+  store. It protects the public event-occurrence path, which creates rows on
+  demand, from being driven to write an unbounded recurring schedule.
+- **`import.hmacSecret`** derives the per-source verification tokens a calendar
+  owner publishes to prove they control an import source. Set it with
+  `CALENDAR_IMPORT_HMAC_SECRET`; production startup refuses an empty or
+  development-only value.
+- **`import.dohResolvers`** lists the DNS-over-HTTPS resolvers used to check
+  an import source's DNS verification record. At least two are required and
+  they must agree. Each must speak the JSON DNS API: Cloudflare serves it at
+  `/dns-query`, Google at `/resolve`.
+- **`import.maxSourcesPerCalendar`** limits each calendar to **ten import
+  sources** by default. Only URL sources that sync from a feed count toward
+  the limit; one-off file uploads do not. A calendar owner who reaches it
+  cannot add another URL source until they remove one, and a file upload is
+  refused while the calendar's URL sources fill the limit.
+
+### Funding Configuration
+
+```yaml
+funding:
+  # encryptionKey: (use environment variable ENCRYPTION_KEY)
+```
+
+`funding.encryptionKey` encrypts the payment provider API keys an instance
+administrator stores. Set it with `ENCRYPTION_KEY` (generate with
+`openssl rand -hex 32`). Rotating it breaks decryption of keys already stored.
+
+### Moderation Configuration
+
+```yaml
+moderation:
+  # emailHashSecret: (use environment variable EMAIL_HASH_SECRET)
+  retention:
+    ipHash: 30      # Days a report keeps its reporter's full IP hash
+    ipSubnet: 90    # Days a report keeps its reporter's IP subnet
+```
+
+`moderation.emailHashSecret` keys the hashes of reporter email addresses and
+IP addresses. Set it with `EMAIL_HASH_SECRET`.
+
+The `retention` values decide how long reporter IP data stays on a report.
+A daily job clears each report's IP hash once the report is older than
+`ipHash` days, and its IP subnet once older than `ipSubnet` days. The coarse
+region recorded with a report is kept. Shorter values hold less reporter data;
+longer ones give moderators more time to spot repeated reports from one
+source.
+
+### Rate Limiting
+
+```yaml
+rateLimit:
+  enabled: true     # false turns off the HTTP rate limiters
+  store: memory
+  login:
+    byIp:
+      windowMs: 900000   # Window length in milliseconds
+      max: 10            # Requests allowed per window
+  # ...one block per limiter, listed below
+```
+
+Every limiter has the same shape: `windowMs` (window length in milliseconds)
+and `max` (requests allowed per key in that window). Override any of them in
+`config/local.yaml` by repeating the path down to the value you change.
+
+`enabled: false` turns off the HTTP rate limiters; test and end-to-end
+configurations do this. It does not turn off the federated-report cap, which
+is enforced by the moderation service rather than an HTTP limiter.
+Counters are held in each process's memory and reset when it restarts.
+`store` is present in `default.yaml` but is not read; `memory` is the only
+behaviour.
+
+| Limiter | Keyed on | Default |
+|---------|----------|---------|
+| `passwordReset.byIp` | IP address | 5 per 15 minutes |
+| `passwordReset.byEmail` | Email address | 3 per hour |
+| `passwordReset.confirm.byIp` | IP address | 20 per 15 minutes |
+| `login.byIp` | IP address | 10 per 15 minutes |
+| `login.byEmail` | Email address | 5 per hour |
+| `register.byIp` | IP address | 5 per 15 minutes |
+| `register.byEmail` | Email address | 3 per hour |
+| `application.byIp` | IP address | 5 per 15 minutes |
+| `application.byEmail` | Email address | 3 per hour |
+| `application.confirm.byIp` | IP address | 20 per 15 minutes |
+| `invitation.accept.byIp` | IP address | 20 per 15 minutes |
+| `emailChange.byAccount` | Account | 10 per hour |
+| `emailChange.byDestination` | New email address, across all accounts | 2 per 24 hours |
+| `emailChange.confirm.byIp` | IP address | 20 per 15 minutes |
+| `activitypub.actor` | Remote actor | 60 per minute |
+| `activitypub.calendar` | Receiving calendar | 120 per minute |
+| `activitypub.user` | Receiving user inbox | 120 per minute |
+| `moderation.reportByIp` | IP address | 10 report submissions per 15 minutes |
+| `moderation.verifyByIp` | IP address | 20 verification requests per 15 minutes |
+| `moderation.byEmail` | Email address | 3 verification emails per 24 hours |
+| `moderation.byAccount` | Account | 20 report submissions per hour |
+| `moderation.federatedReportByInstance` | Event and reporting instance | 5 federated reports per 24 hours |
+| `publicWidget.byIp` | IP address | 300 per 15 minutes |
+| `publicEventInstance.byIp` | IP address | 120 per 15 minutes |
+| `publicCalendarList.byIp` | IP address | 60 per minute |
+| `configSite.byIp` | IP address | 60 per minute |
+| `widgetConfig.byAccount` | Account | 100 per 15 minutes |
+| `calendarFundingPlan.byAccount` | Account | 30 per 15 minutes |
+| `checkoutSession.byAccount` | Account | 10 per 15 minutes |
+| `fundingWebhook.byIp` | IP address | 300 per minute |
+| `importSource.createByAccount` | Account | 15 new import sources per hour |
+| `importSource.verifyBySource` | Import source | 3 verification attempts per hour |
+| `importSource.syncBySource` | Import source | 4 sync attempts per hour |
+
+### Housekeeping
+
+The worker container runs Pavillion's scheduled maintenance: database
+backups, disk checks, inbox cleanup and event occurrence refresh.
 
 ```yaml
 housekeeping:
+  enabled: true
+  backup:
+    schedule: '0 2 * * *'     # Daily at 2 AM
+    retention:
+      daily: 7                # Daily backups kept
+      weekly: 4               # Weekly backups kept
+      monthly: 6              # Monthly backups kept
+    path: '/backups'          # Where backups are written
+  monitoring:
+    disk:
+      enabled: true
+      warning_threshold: 80   # Percent used that sends a warning alert
+      critical_threshold: 90  # Percent used that sends a critical alert
+      check_interval: '0 * * * *'
+    metrics:
+      enabled: true
+      port: 9464              # METRICS_PORT
+      bindAddress: '0.0.0.0'  # METRICS_BIND_ADDRESS
+  inbox:
+    retentionDays: 30         # Days a processed federation inbox message is kept
+    batchSize: 1000           # Rows deleted per batch
+    schedule: '0 5 * * *'     # Daily at 5 AM
   instances:
-    schedule: '0 6 * * 0'                   # Cron expression; default weekly, Sunday at 6 AM
+    schedule: '0 6 * * 0'     # Weekly, Sunday at 6 AM
 ```
+
+#### Backups
+
+After each backup the worker prunes old ones on a grandfather-father-son
+policy, keeping the most recent `retention.daily` daily, `retention.weekly`
+weekly and `retention.monthly` monthly backups. `path` is the directory the
+backups are written to, and the filesystem the disk check measures. See
+[Backups](./guides/instance-administrators/backups.md) for what to back up
+beyond the database and how to test a restore.
+
+The backup job runs daily at 2 AM regardless of `backup.schedule`. That key
+is shown in the admin status panel and the housekeeping status command but
+does not change when the backup runs.
+
+#### Disk monitoring
+
+Every hour the worker measures usage of the backup filesystem and emails an
+alert when it passes `warning_threshold` or `critical_threshold` percent.
+`housekeeping.enabled`, `monitoring.disk.enabled` and
+`monitoring.disk.check_interval` are reported by the housekeeping status
+command but do not change what runs: the disk check always runs hourly.
+
+#### Metrics listener
+
+`monitoring.metrics` controls the OpenMetrics listener: `enabled: false`
+turns it off, `port` and `bindAddress` set where it listens. The port is never
+published to the host by Docker Compose and has no authentication of its own.
+If you run Pavillion directly on a host rather than in a container, set
+`bindAddress` to `127.0.0.1`. See
+[Monitoring and logs](./guides/instance-administrators/monitoring-and-logs.md)
+for scraping it and for exposing it deliberately.
+
+#### Inbox cleanup
+
+Pavillion records every inbound federation activity in its inbox. On
+`inbox.schedule` the worker deletes processed messages older than
+`inbox.retentionDays`, `inbox.batchSize` rows at a time.
+
+#### Event instance refresh
+
+Pavillion stores each event's upcoming occurrences up to six months ahead,
+calculated when the event is created, edited or received from another
+instance. On `instances.schedule` the worker rebuilds them so an event nobody
+edits keeps occurrences out to six months. This covers events from other
+instances too, and sends nothing to followers.
+
+### Federation Configuration
+
+```yaml
+federation:
+  skipSignatures: 'true'    # Local federation testing only
+```
+
+Not set in `default.yaml`. Setting it to the string `'true'` (or setting
+`SKIP_SIGNATURES=true`) disables HTTP signature verification on inbound
+federation requests. It exists for local multi-instance testing; with
+`NODE_ENV=production` verification raises an error instead of being skipped.
 
 ## Complete Configuration Example
 
