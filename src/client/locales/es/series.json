@@ -32,8 +32,8 @@
     "language_label": "Idioma",
     "add_language": "Agregar Idioma",
     "remove_language": "Eliminar traducción de {{language}}",
-    "event_count": "{{count}} evento",
-    "event_count_plural": "{{count}} eventos"
+    "event_count_one": "{{count}} evento",
+    "event_count_other": "{{count}} eventos"
   },
   "editor": {
     "name": "Nombre de la Serie",

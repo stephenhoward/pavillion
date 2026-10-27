@@ -646,8 +646,8 @@
     },
     "list": {
       "title": "Currently Blocked Instances",
-      "count": "{{count}} instance blocked",
-      "count_plural": "{{count}} instances blocked",
+      "count_one": "{{count}} instance blocked",
+      "count_other": "{{count}} instances blocked",
       "empty": "No instances are currently blocked",
       "domain_column": "Domain",
       "reason_column": "Reason",

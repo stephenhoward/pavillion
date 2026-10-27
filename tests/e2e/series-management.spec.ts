@@ -103,7 +103,7 @@ test.describe('Series management', () => {
     await expect(editor).toBeHidden({ timeout: 10000 });
     const createdCard = page.locator('.series-card').filter({ hasText: seriesName });
     await expect(createdCard).toBeVisible({ timeout: 10000 });
-    await expect(createdCard.locator('.series-info__meta')).toHaveText(/^0 event/);
+    await expect(createdCard.locator('.series-info__meta')).toHaveText('0 events');
 
     // Rename
     await createdCard.getByRole('button', { name: 'Edit' }).click();
@@ -161,12 +161,11 @@ test.describe('Series management', () => {
     await page.waitForSelector('#event-form', { timeout: 10000 });
     await expect(page.locator('#series-select option:checked')).toHaveText(INLINE_SERIES_NAME, { timeout: 10000 });
 
-    // The series page counts the assigned event (the count prefix, not the
-    // plural suffix: i18next JSON-v4 plurals ignore this file's legacy `_plural` key)
+    // The series page counts the assigned event
     await gotoSeriesTab(page);
     const seriesCard = page.locator('.series-card').filter({ hasText: INLINE_SERIES_NAME });
     await expect(seriesCard).toBeVisible({ timeout: 10000 });
-    await expect(seriesCard.locator('.series-info__meta')).toHaveText(/^1 event/);
+    await expect(seriesCard.locator('.series-info__meta')).toHaveText('1 event');
   });
 
   test('shows the duplicate URL-name error inside the inline dialog', async ({ page }) => {
