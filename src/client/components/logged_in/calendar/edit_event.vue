@@ -980,6 +980,7 @@ form {
                   class="schedule-item"
                 >
                   <EventRecurrenceView
+                    ref="recurrenceViews"
                     :schedule="schedule"
                     :index="index"
                     :can-remove="editorState.event.schedules.length > 1"
@@ -1267,6 +1268,9 @@ const errorContainer = ref(null);
 
 // Modal refs
 const locationPickerRef = ref(null);
+
+// One schedule editor per schedule (v-for ref, so an array)
+const recurrenceViews = ref([]);
 
 // The dropdown shows 'more_info' when the event has no prompt set; the
 // value is only persisted as urlPrompt when the user actually provides a
@@ -1566,14 +1570,23 @@ const handleSaveEvent = async () => {
   await saveEvent(t, () => {
     resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
   });
+  // With no valid schedule, a partially typed time input is the likely
+  // cause: its value reads as empty. Let each schedule editor mark any such
+  // input at field level, alongside the group message.
+  if (fieldErrors.schedule) {
+    recurrenceViews.value.forEach((view) => view?.checkTimeInputs());
+  }
   // Move focus to first errored field for keyboard/screen reader users.
   // The schedule error marks its non-focusable group wrapper invalid, so
-  // focus the first control inside it; inputs have no descendants and are
-  // focused directly. (This script block is plain JS: no TS generics here.)
+  // focus the first control inside it that is itself marked invalid, else
+  // its first control; inputs have no descendants and are focused directly.
+  // (This script block is plain JS: no TS generics here.)
   await nextTick();
   if (Object.keys(fieldErrors).length > 0) {
     const firstInvalid = document.querySelector('[aria-invalid="true"]');
-    const target = firstInvalid?.querySelector('input, select, textarea') ?? firstInvalid;
+    const target = firstInvalid?.querySelector('[aria-invalid="true"]')
+      ?? firstInvalid?.querySelector('input, select, textarea')
+      ?? firstInvalid;
     target?.focus();
   }
 };

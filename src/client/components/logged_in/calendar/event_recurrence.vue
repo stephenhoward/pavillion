@@ -76,6 +76,24 @@
       outline: none;
       border-color: var(--pav-color-orange-500);
     }
+
+    // The shared `.field-input--error` rule in _translatable-form.scss is
+    // scoped to `.translatable-form-fields` and loses to the `border`
+    // shorthand above, so the grid input carries the same treatment here.
+    &.field-input--error,
+    &.field-input--error:focus {
+      border-color: var(--pav-border-error);
+    }
+
+    &.field-input--error:focus {
+      box-shadow: var(--pav-focus-ring-error);
+    }
+  }
+
+  .form-error {
+    margin: 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-text-error);
   }
 
   .recurrence-summary {
@@ -121,10 +139,18 @@
       <div class="grid-field">
         <label class="grid-label">{{ t('start_time_label') }}</label>
         <input type="time"
+               ref="startTimeInput"
                v-model="state.time"
-               @input="updateStartDate()"
+               @input="updateStartDate(); recheckTimeInput('start')"
+               @blur="checkTimeInput('start')"
                class="grid-input"
+               :class="{ 'field-input--error': state.timeIncomplete.start }"
+               :aria-invalid="state.timeIncomplete.start ? 'true' : undefined"
+               :aria-describedby="state.timeIncomplete.start ? startTimeErrorId : undefined"
                required />
+        <p v-if="state.timeIncomplete.start" :id="startTimeErrorId" class="form-error">
+          {{ t('error_time_incomplete') }}
+        </p>
       </div>
 
       <div class="grid-field">
@@ -138,9 +164,17 @@
       <div class="grid-field">
         <label class="grid-label">{{ t('end_time_label') }}</label>
         <input type="time"
+               ref="endTimeInput"
                v-model="state.eventEndTime"
-               @input="syncScheduleFromDateTime()"
-               class="grid-input" />
+               @input="syncScheduleFromDateTime(); recheckTimeInput('end')"
+               @blur="checkTimeInput('end')"
+               class="grid-input"
+               :class="{ 'field-input--error': state.timeIncomplete.end }"
+               :aria-invalid="state.timeIncomplete.end ? 'true' : undefined"
+               :aria-describedby="state.timeIncomplete.end ? endTimeErrorId : undefined" />
+        <p v-if="state.timeIncomplete.end" :id="endTimeErrorId" class="form-error">
+          {{ t('error_time_incomplete') }}
+        </p>
       </div>
 
       <div class="grid-field grid-field--full">
@@ -179,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, ref, useId } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
@@ -361,7 +395,50 @@ const state = reactive({
   eventEndDateManuallySet: initialEndDateManuallySet,
   previousStartDate: initialDate,
   timezone: getLocalTimezone(),
+  timeIncomplete: { start: false, end: false },
 });
+
+type TimeField = 'start' | 'end';
+
+const startTimeInput = ref<HTMLInputElement | null>(null);
+const endTimeInput = ref<HTMLInputElement | null>(null);
+const timeInputs = { start: startTimeInput, end: endTimeInput };
+
+const fieldIdBase = useId();
+const startTimeErrorId = `${fieldIdBase}-start-time-error`;
+const endTimeErrorId = `${fieldIdBase}-end-time-error`;
+
+/**
+ * Marks a time input invalid while the browser reports it as partially
+ * entered (validity.badInput: e.g. hour and minutes typed, AM/PM missing).
+ * The value is empty in that state, so v-model alone cannot detect it, and
+ * the browser does not say which segment is missing. Clears the mark once
+ * the input is valid or empty.
+ */
+const checkTimeInput = (field: TimeField) => {
+  state.timeIncomplete[field] = timeInputs[field].value?.validity.badInput ?? false;
+};
+
+/**
+ * Re-checks a time input that is already marked, so the error clears as
+ * soon as the entry becomes complete rather than waiting for blur.
+ */
+const recheckTimeInput = (field: TimeField) => {
+  if (state.timeIncomplete[field]) {
+    checkTimeInput(field);
+  }
+};
+
+/**
+ * Runs the incomplete-time check on both time inputs. Called by the event
+ * editor's save path when validation finds no valid schedule.
+ */
+const checkTimeInputs = () => {
+  checkTimeInput('start');
+  checkTimeInput('end');
+};
+
+defineExpose({ checkTimeInputs });
 
 /**
  * Builds a timezone-aware DateTime from the user-entered date and time fields,
