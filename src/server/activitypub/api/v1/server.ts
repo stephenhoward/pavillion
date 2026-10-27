@@ -22,6 +22,7 @@ import { AP_CONTEXT } from '@/server/activitypub/model/base';
 
 const logger = createLogger('activitypub');
 import { verifyHttpSignature, extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
+import { activityJsonBodyParser } from '@/server/activitypub/helper/inbox-body-parser';
 import { logInboxActivityAccepted, logInboxActivityArrival } from '@/server/activitypub/helper/inbox-acceptance-log';
 import { ActivityIdOriginMismatchError } from '@/server/activitypub/helper/activity-id-origin';
 import type { InboxAuthContext } from '@/server/activitypub/interface';
@@ -58,13 +59,9 @@ export default class ActivityPubServerRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    // Enable JSON body parsing for ActivityPub endpoints. ActivityPub names
-    // both activity+json and ld+json with the ActivityStreams profile as
-    // request types a server must accept; type matching ignores the profile
-    // parameter, so ld+json is parsed with or without it.
-    router.use(express.json({
-      type: ['application/json', 'application/activity+json', 'application/ld+json'],
-    }));
+    // JSON body parsing for ActivityPub endpoints; also captures the raw
+    // bytes the inbox's Digest check hashes.
+    router.use(activityJsonBodyParser());
 
     // Public endpoints (no signature verification required)
     router.get('/.well-known/webfinger', this.lookupUser.bind(this));

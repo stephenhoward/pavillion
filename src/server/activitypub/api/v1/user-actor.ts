@@ -2,6 +2,7 @@ import express, { Request, Response, Application, RequestHandler } from 'express
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { activityJsonBodyParser } from '@/server/activitypub/helper/inbox-body-parser';
 import { logInboxActivityAccepted, logInboxActivityArrival } from '@/server/activitypub/helper/inbox-acceptance-log';
 import {
   createActorRateLimiter,
@@ -33,13 +34,9 @@ export default class UserActorRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    // Enable JSON body parsing for ActivityPub endpoints. ActivityPub names
-    // both activity+json and ld+json with the ActivityStreams profile as
-    // request types a server must accept; type matching ignores the profile
-    // parameter, so ld+json is parsed with or without it.
-    router.use(express.json({
-      type: ['application/json', 'application/activity+json', 'application/ld+json'],
-    }));
+    // JSON body parsing for ActivityPub endpoints; also captures the raw
+    // bytes the inbox's Digest check hashes.
+    router.use(activityJsonBodyParser());
 
     // Public endpoint - Person actor discovery
     router.get('/users/:username', this.getUserActor.bind(this));
