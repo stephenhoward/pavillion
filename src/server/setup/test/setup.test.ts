@@ -8,6 +8,7 @@ import SetupService from '@/server/setup/service/setup';
 import SetupRouteHandlers from '@/server/setup/api/v1/setup';
 import SetupInterface from '@/server/setup/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import { SetupAlreadyCompletedError } from '@/server/setup/exceptions';
 
 /**
  * Creates a minimal mock ConfigurationInterface for setup tests.
@@ -123,6 +124,23 @@ describe('Setup API', () => {
         .expect(404);
 
       expect(response.body.error).toBe('Setup already completed');
+    });
+
+    it('should return the same 404 when a concurrent setup completed first', async () => {
+      sandbox.stub(SetupService.prototype, 'isSetupModeActive').resolves(true);
+      sandbox.stub(SetupService.prototype, 'completeSetup').rejects(new SetupAlreadyCompletedError());
+
+      const response = await request(app)
+        .post('/api/v1/setup')
+        .send({
+          email: 'admin@test.com',
+          password: 'password123',
+          siteTitle: 'Test Site',
+          registrationMode: 'closed',
+        })
+        .expect(404);
+
+      expect(response.body).toEqual({ error: 'Setup already completed', errorName: 'NotFoundError' });
     });
 
     it('should create admin account with correct role', async () => {
