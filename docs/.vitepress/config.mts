@@ -57,8 +57,22 @@ export default defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Calendar owners', link: '/guides/calendar-owners/' },
       { text: 'Instance administrators', link: '/guides/instance-administrators/' },
+      { text: 'Developers', link: '/guides/developers/' },
     ],
     sidebar: {
+      '/guides/developers/': [
+        {
+          text: 'For contributing developers',
+          link: '/guides/developers/',
+        },
+        {
+          text: 'How Pavillion is built',
+          items: [
+            { text: 'Architecture', link: '/guides/developers/architecture' },
+            { text: 'Tech stack', link: '/guides/developers/tech-stack' },
+          ],
+        },
+      ],
       '/guides/instance-administrators/': [
         {
           text: 'For instance administrators',
