@@ -190,4 +190,4 @@ The contracts below describe what each pattern should announce. Deviations indic
 ### When to verify announcements
 
 - The auditor verifies announcements automatically during per-PR review (see `.agents/agents/accessibility-auditor.md` Step 5).
-- For load-bearing components, Phase 2 of the screen-reader testing rollout adds a small set of Vitest and Playwright tests using the same helper; see [`docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md`](../../../docs/superpowers/specs/2026-05-13-screen-reader-testing-design.md) for the planned scope.
+- For load-bearing components, Phase 2 of the screen-reader testing rollout adds a small set of Vitest and Playwright tests using the same helper.

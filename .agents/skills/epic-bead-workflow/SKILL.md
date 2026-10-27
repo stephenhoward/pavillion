@@ -222,17 +222,6 @@ again.
 **Wrong:** Single bead for "implement entire feature"
 **Right:** Break into leaf beads sized for single-agent completion
 
-## Integration with Agent OS Specs
+## Where the Spec Lives
 
-When a spec exists in `agent-os/specs/`:
-
-1. The spec provides the WHAT and WHY
-2. Beads provide the HOW and WHEN (execution order)
-3. Link epics to specs via bead description or notes
-4. Reference spec.md in subagent context
-
-```bash
-# Create epic linked to spec
-bd create --title="Implement [Feature Name]" --type=epic \
-  --description="Implementation of agent-os/specs/2026-02-05-feature-name/spec.md"
-```
+The spec lives on the epic's own fields (description, design, acceptance) — there is no separate spec file to link.

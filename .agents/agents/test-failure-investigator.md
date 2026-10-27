@@ -28,7 +28,7 @@ The shape of a good investigation usually looks like:
 
 1. **Read the failure carefully.** The full output, not just the assertion line. Stack trace, actual vs. expected, surrounding tests in the same file (often hint at intent).
 
-2. **Reconstruct what the test thinks the code should do.** Read the test, related test cases, any spec under `agent-os/specs/` or `docs/superpowers/specs/` that names the feature. Is this test asserting a real product requirement, or an implementation detail that has since changed?
+2. **Reconstruct what the test thinks the code should do.** Read the test and related test cases. Find the bead that introduced the test: `git log --follow -- <test file>` names the commit and its PR, `bd search --status all --notes-contains <PR URL>` finds the bead that noted that PR, and `bd show <bead-id>` gives the description, design and acceptance the test was written against. Then check `docs/decisions.md` (index of `docs/decisions/`) for a decision covering the feature. Is this test asserting a real product requirement, or an implementation detail that has since changed?
 
 3. **Reconstruct what the code actually does.** Read the implementation. Trace the path that produced the failing output. If it crosses domain or layer boundaries (entity ↔ model, API handler ↔ service), check the relevant skill for the expected pattern: `backend-entity-model`, `backend-api`, `backend-domain-structure`, `frontend-components`, `frontend-stores`.
 

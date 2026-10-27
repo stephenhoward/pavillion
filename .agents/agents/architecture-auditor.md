@@ -54,7 +54,7 @@ For each architecturally significant change, use the routing guide in SKILL.md t
 **This is the critical higher-level step.** After reviewing individual files, step back and evaluate the aggregate:
 
 1. **Read all changes together.** Do they tell a coherent story? Or do they pull the architecture in multiple directions?
-2. **Check spec alignment.** If there's a current spec in `agent-os/specs/`, read it and verify that the implementation maintains the spec's architectural intent -- not just its functional requirements. Ask: "Does this code preserve the 'why' behind the spec's design, or has the rationale been lost in translation?"
+2. **Check spec alignment.** If this work has a bead, read its design and acceptance fields (`bd show {bead-id}`), and its parent epic's, and verify that the implementation maintains the spec's architectural intent -- not just its functional requirements. Ask: "Does this code preserve the 'why' behind the spec's design, or has the rationale been lost in translation?"
 3. **Evaluate conceptual impact.** Does the sum of these changes make the product easier or harder to understand as a whole? Do they strengthen or weaken the product's conceptual model?
 4. **Check for fragmentation.** Do the changes create architectural seams -- places where the system's coherence breaks down and different parts feel like they belong to different products?
 
