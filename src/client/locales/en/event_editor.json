@@ -161,6 +161,7 @@
     "start_time_label": "Time",
     "end_date_label": "End Date",
     "end_time_label": "End Time",
+    "error_time_incomplete": "Time is incomplete — check the hour, minutes and AM/PM",
     "timezone_label": "Timezone",
     "schedule_header": "Schedule {{n}}",
     "every_day": "Every day",

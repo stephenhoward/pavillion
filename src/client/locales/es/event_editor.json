@@ -161,6 +161,7 @@
     "start_time_label": "Hora",
     "end_date_label": "Fecha de finalización",
     "end_time_label": "Hora de finalización",
+    "error_time_incomplete": "La hora está incompleta: revisa la hora, los minutos y AM/PM",
     "timezone_label": "Zona horaria",
     "schedule_header": "Horario {{n}}",
     "every_day": "Todos los días",
