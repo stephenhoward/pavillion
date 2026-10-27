@@ -41,6 +41,15 @@ jobs:
         run: npm run lint:migrations
         if: ${{ !cancelled() }}
 
+      # Open-PR guard: this PR may not add a migration prefix another open PR adds (see scripts/check-migration-open-prs.ts).
+      - name: Migration prefix vs open PRs
+        run: npm run lint:migrations:open-prs
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
       # Report-only duplication measurement (see .jscpd.json); never fails the job.
       - name: Duplication report
         run: npm run lint:dup
