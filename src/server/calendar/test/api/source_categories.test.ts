@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
 import { EventEmitter } from 'events';
 import axios from 'axios';
+import http from 'http';
+import { AddressInfo } from 'net';
 
 import { Calendar } from '@/common/model/calendar';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
@@ -12,6 +14,20 @@ import CalendarInterface from '@/server/calendar/interface';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { EventCategoryEntity, EventCategoryContentEntity } from '@/server/calendar/entity/event_category';
+import { REMOTE_OBJECT_MAX_BYTES } from '@/server/common/constants';
+
+// Mock the ip-validation module so the remote-actor tests perform no live DNS
+// lookups. Defaults to resolving safely; individual tests reject once.
+vi.mock('@/server/common/helper/ip-validation', () => ({
+  validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+  isPrivateIP: vi.fn().mockReturnValue(false),
+}));
+
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+
+// Captured before any test stubs axios.get, so a stub can forward to the real
+// implementation against a loopback server.
+const realAxiosGet = axios.get;
 
 describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/source-categories', () => {
   let routes: CategoryMappingRoutes;
@@ -342,6 +358,124 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
       const response = await request(testApp(router)).get('/handler');
       expect(response.status).toBe(200);
       expect(response.body[0].name).toBe('');
+    });
+
+    describe('outbound fetch guards', () => {
+      const categoriesPath = '/api/public/v1/calendar/remotecal/categories';
+
+      function stubRemoteFollow() {
+        const mockCalendar = new Calendar(calendarId, 'test-calendar');
+        sandbox.stub(calendarInterface, 'getCalendar').resolves(mockCalendar);
+        sandbox.stub(calendarInterface, 'userCanModifyCalendar').resolves(true);
+
+        const mockActor = CalendarActorEntity.build({
+          id: actorId,
+          actor_type: 'remote',
+          calendar_id: null,
+          actor_uri: 'https://remote.example.com/calendars/remotecal',
+        });
+        sandbox.stub(CalendarActorEntity, 'findByPk').resolves(mockActor);
+
+        const mockFollow = FollowingCalendarEntity.build({
+          id: 'follow-1',
+          calendar_actor_id: actorId,
+          calendar_id: calendarId,
+        });
+        sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
+
+        router.get('/handler', addRequestUser, (req, res) => {
+          req.params.calendarId = calendarId;
+          req.params.actorId = actorId;
+          routes.getSourceCategories(req, res);
+        });
+      }
+
+      /**
+       * Starts a loopback server and reroutes axios.get to it, keeping the
+       * handler's own request config intact. The unit-test environment would
+       * otherwise select axios's XHR adapter; maxRedirects and
+       * maxContentLength are enforced by the Node http adapter, which is what
+       * production uses.
+       */
+      async function startLoopback(handler: http.RequestListener) {
+        const server = http.createServer(handler);
+        await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+        const { port } = server.address() as AddressInfo;
+        const axiosGetStub = sandbox.stub(axios, 'get').callsFake((url: string, config) => {
+          const target = new URL(url);
+          return realAxiosGet(`http://127.0.0.1:${port}${target.pathname}`, { ...config, adapter: 'http' });
+        });
+        const close = () => new Promise<void>(resolve => server.close(() => resolve()));
+        return { port, axiosGetStub, close };
+      }
+
+      it('should answer 502 and never follow a redirect from the remote categories path', async () => {
+        stubRemoteFollow();
+        const requested: string[] = [];
+        let port = 0;
+        const loopback = await startLoopback((incoming, outgoing) => {
+          requested.push(incoming.url ?? '');
+          if (incoming.url === categoriesPath) {
+            outgoing.writeHead(302, { Location: `http://127.0.0.1:${port}/private` });
+            outgoing.end();
+            return;
+          }
+          outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+          outgoing.end(JSON.stringify([{ id: 'private-cat', content: { en: { name: 'Secret' } } }]));
+        });
+        port = loopback.port;
+
+        let response;
+        try {
+          response = await request(testApp(router)).get('/handler');
+        }
+        finally {
+          await loopback.close();
+        }
+
+        expect(response.status).toBe(502);
+        expect(response.body.error).toBe('Could not reach source calendar');
+        expect(requested).toEqual([categoriesPath]);
+        expect(loopback.axiosGetStub.firstCall.args[1].maxRedirects).toBe(0);
+      });
+
+      it('should answer 502 when the remote categories body exceeds the shared cap', async () => {
+        stubRemoteFollow();
+        const oversized = JSON.stringify([
+          { id: 'x', content: { en: { name: 'a'.repeat(REMOTE_OBJECT_MAX_BYTES + 1024) } } },
+        ]);
+        const loopback = await startLoopback((_incoming, outgoing) => {
+          outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+          outgoing.end(oversized);
+        });
+
+        let response;
+        try {
+          response = await request(testApp(router)).get('/handler');
+        }
+        finally {
+          await loopback.close();
+        }
+
+        expect(response.status).toBe(502);
+        expect(response.body.error).toBe('Could not reach source calendar');
+        expect(loopback.axiosGetStub.firstCall.args[1].maxContentLength).toBe(REMOTE_OBJECT_MAX_BYTES);
+      });
+
+      it('should answer 502 without fetching when the categories URL resolves to a private address', async () => {
+        stubRemoteFollow();
+        vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(new Error('private address'));
+        const axiosGetStub = sandbox.stub(axios, 'get').resolves({ data: [] });
+
+        const response = await request(testApp(router)).get('/handler');
+
+        expect(response.status).toBe(502);
+        expect(response.body.error).toBe('Could not reach source calendar');
+        expect(vi.mocked(validateUrlNotPrivate)).toHaveBeenCalledWith(
+          'https://remote.example.com/api/public/v1/calendar/remotecal/categories',
+        );
+        expect(axiosGetStub.called).toBe(false);
+      });
     });
   });
 });

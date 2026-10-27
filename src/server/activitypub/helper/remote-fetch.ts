@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { logError } from '@/server/common/helper/error-logger';
-import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/common/constants';
+import { REMOTE_OBJECT_FETCH_TIMEOUT_MS, REMOTE_OBJECT_MAX_BYTES } from '@/server/common/constants';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from '@/common/model/calendar';
@@ -93,28 +93,6 @@ async function buildSignedGetHeaders(
     return null;
   }
 }
-
-/**
- * Default response-body byte cap for a single fetched ActivityPub object
- * (1 MiB), applied whenever a caller omits `maxContentLength`.
- *
- * SECURITY: the fetch is reachable from an inbound `Announce`, whose object
- * URI is peer-controlled and whose fetched body is normalized into an event
- * row and rendered on a public calendar page. Without a default, a caller
- * that omits the option accepts a body of any size, and every new call site
- * would have to remember to pass one. A default makes an omitted option
- * bounded rather than unlimited; the explicit option remains an override.
- *
- * 1 MiB matches the cap already applied to the other outbound GETs
- * (`ACTOR_PROFILE_MAX_BYTES` for actor profiles, `MAX_PAGE_BYTES` for
- * backfill collection pages), so one number governs every peer-facing fetch.
- * It is an order of magnitude above the 100 KiB express.json default that
- * bounds an activity POSTed to the inbox — an embedded Event with several
- * languages of content and a few attachments is a few tens of KiB — while
- * still preventing a hostile peer from streaming an unbounded body into
- * memory.
- */
-export const REMOTE_OBJECT_MAX_BYTES = 1_048_576;
 
 /**
  * Optional fetch tuning for {@link fetchRemoteObject}. Currently exposes only
