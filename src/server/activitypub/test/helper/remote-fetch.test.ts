@@ -1,8 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// SSRF validation resolves hostnames through dns.lookup. Mocking it keeps
+// these tests off the network and lets the rebinding test answer differently
+// on successive resolutions. vi.mock is hoisted, so ip-validation captures
+// the mock when it promisifies dns.lookup at load time.
+vi.mock('dns', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('dns') & { default: typeof import('dns') }>();
+  return { ...actual, default: { ...actual.default, lookup: vi.fn() } };
+});
+
+import dns from 'dns';
+import https from 'https';
 import axios from 'axios';
 import sinon from 'sinon';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS, REMOTE_OBJECT_MAX_BYTES } from '@/server/common/constants';
+import { mockDnsLookup, pinnedAddressOf, PUBLIC_IP, PRIVATE_IP } from '@/server/activitypub/test/helper/pinned-dns';
 
 describe('fetchRemoteObject', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -10,6 +23,7 @@ describe('fetchRemoteObject', () => {
 
   beforeEach(() => {
     axiosGetStub = sandbox.stub(axios, 'get');
+    mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP]);
   });
 
   afterEach(() => {
@@ -310,6 +324,51 @@ describe('fetchRemoteObject', () => {
 
       expect(result).not.toBeNull();
       expect(axiosGetStub.called).toBe(true);
+      expect(await pinnedAddressOf(axiosGetStub.firstCall.args[1].httpsAgent)).toBe('8.8.8.8');
+    });
+  });
+
+  describe('connection pinning (DNS rebinding)', () => {
+    it('connects to the address that passed validation, not a second resolution', async () => {
+      // First resolution is public, every later one private: a rebinding name.
+      const lookup = mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP, PRIVATE_IP]);
+      axiosGetStub.resolves({ status: 200, data: { type: 'Note' } });
+
+      const result = await fetchRemoteObject('https://rebind.example/notes/1');
+
+      expect(result).not.toBeNull();
+      const agent = axiosGetStub.firstCall.args[1].httpsAgent;
+      expect(agent).toBeInstanceOf(https.Agent);
+      expect(await pinnedAddressOf(agent)).toBe(PUBLIC_IP);
+      // The pinned agent answers without consulting DNS again, even though a
+      // fresh resolution of the name would now return the private address.
+      expect(lookup.resolutions()).toBe(1);
+    });
+
+    it('pins with the remote-object fetch timeout', async () => {
+      axiosGetStub.resolves({ status: 200, data: { type: 'Note' } });
+
+      await fetchRemoteObject('https://remote.example/notes/1');
+
+      expect(axiosGetStub.firstCall.args[1].httpsAgent.options.timeout).toBe(REMOTE_OBJECT_FETCH_TIMEOUT_MS);
+    });
+
+    it('refuses to fetch a hostname that does not resolve', async () => {
+      mockDnsLookup(vi.mocked(dns.lookup), []);
+
+      const result = await fetchRemoteObject('https://nowhere.example/notes/1');
+
+      expect(result).toBeNull();
+      expect(axiosGetStub.called).toBe(false);
+    });
+
+    it('refuses to fetch a hostname whose first resolution is private', async () => {
+      mockDnsLookup(vi.mocked(dns.lookup), [PRIVATE_IP]);
+
+      const result = await fetchRemoteObject('https://internal.example/notes/1');
+
+      expect(result).toBeNull();
+      expect(axiosGetStub.called).toBe(false);
     });
   });
 });

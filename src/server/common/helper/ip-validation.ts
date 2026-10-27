@@ -153,28 +153,7 @@ export async function resolvesToPrivateIP(hostname: string): Promise<boolean> {
   }
 
   try {
-    // Resolve both IPv4 and IPv6 addresses
-    const addresses: string[] = [];
-
-    try {
-      const ipv4Result = await dnsLookup(hostname, { family: 4, all: true });
-      if (Array.isArray(ipv4Result)) {
-        addresses.push(...ipv4Result.map((result: any) => result.address));
-      }
-    }
-    catch {
-      // IPv4 resolution failed, continue
-    }
-
-    try {
-      const ipv6Result = await dnsLookup(hostname, { family: 6, all: true });
-      if (Array.isArray(ipv6Result)) {
-        addresses.push(...ipv6Result.map((result: any) => result.address));
-      }
-    }
-    catch {
-      // IPv6 resolution failed, continue
-    }
+    const addresses = await resolveAllAddresses(hostname);
 
     // Check if any resolved address is private
     return addresses.some(ip => isPrivateIP(ip));
@@ -184,6 +163,37 @@ export async function resolvesToPrivateIP(hostname: string): Promise<boolean> {
     logger.error({ err: error, hostname }, 'DNS resolution failed');
     return true;
   }
+}
+
+/**
+ * Resolves a hostname to every IPv4 address followed by every IPv6 address.
+ * A family that fails to resolve contributes nothing; an empty array means
+ * the hostname did not resolve at all.
+ */
+async function resolveAllAddresses(hostname: string): Promise<string[]> {
+  const addresses: string[] = [];
+
+  try {
+    const ipv4Result = await dnsLookup(hostname, { family: 4, all: true });
+    if (Array.isArray(ipv4Result)) {
+      addresses.push(...ipv4Result.map((result: any) => result.address));
+    }
+  }
+  catch {
+    // IPv4 resolution failed, continue
+  }
+
+  try {
+    const ipv6Result = await dnsLookup(hostname, { family: 6, all: true });
+    if (Array.isArray(ipv6Result)) {
+      addresses.push(...ipv6Result.map((result: any) => result.address));
+    }
+  }
+  catch {
+    // IPv6 resolution failed, continue
+  }
+
+  return addresses;
 }
 
 /**
@@ -204,12 +214,58 @@ export async function resolvesToPrivateIP(hostname: string): Promise<boolean> {
  * private-IP URLs and http:// URLs remain rejected regardless of that
  * flag.
  *
+ * Callers that go on to open a connection should use
+ * {@link resolvePublicAddress} instead and pin the socket to the address it
+ * returns; this boolean form discards the addresses it checked, so the
+ * connection would resolve the hostname a second time.
+ *
  * @param url - The URL to validate
  * @returns Promise resolving to true if the URL is safe to fetch
  * @throws Error if the URL points to a private IP address or uses a rejected
  *   scheme or encoding
  */
 export async function validateUrlNotPrivate(url: string): Promise<boolean> {
+  await validatedAddresses(url);
+  return true;
+}
+
+/**
+ * Runs the same checks as {@link validateUrlNotPrivate} and returns the
+ * address that passed them, so the caller can pin its connection to that
+ * address (see `createPinnedHttpsAgent` / `createPinnedAgent` in
+ * `pinned-agent.ts`) rather than letting the transport resolve the hostname
+ * again. A hostname that resolves to a public address at validation time and
+ * a private one at connect time is the DNS-rebinding attack this closes.
+ *
+ * - An IP-literal hostname returns the literal (unbracketed for IPv6).
+ * - Under `ALLOW_PRIVATE_FEDERATION`, the hostname is resolved and its first
+ *   address returned without the private-address check.
+ * - Otherwise every resolved address must be public, and the first is
+ *   returned.
+ *
+ * Unlike {@link validateUrlNotPrivate}, a hostname that resolves to nothing
+ * is rejected: there is no validated address to pin the connection to.
+ *
+ * @param url - The URL to validate
+ * @returns Promise resolving to the validated address to connect to
+ * @throws Error if the URL points to a private IP address, uses a rejected
+ *   scheme or encoding, or its hostname does not resolve
+ */
+export async function resolvePublicAddress(url: string): Promise<string> {
+  const { hostname, addresses } = await validatedAddresses(url);
+  if (addresses.length === 0) {
+    throw new Error(`Hostname ${hostname} did not resolve to any address`);
+  }
+  return addresses[0];
+}
+
+/**
+ * The checks behind {@link validateUrlNotPrivate} and
+ * {@link resolvePublicAddress}. Returns the URL's hostname and the addresses
+ * that passed — the literal itself for an IP-literal hostname, otherwise every
+ * resolved address, which is empty when the hostname did not resolve.
+ */
+async function validatedAddresses(url: string): Promise<{ hostname: string; addresses: string[] }> {
   try {
     const parsedUrl = new URL(url);
 
@@ -236,7 +292,7 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
       if (isPrivateIP(hostname)) {
         throw new Error(`Access to private IP address ${hostname} is not allowed`);
       }
-      return true;
+      return { hostname, addresses: [hostname] };
     }
 
     // If the hostname looks numeric but is not valid as a literal, reject it
@@ -256,16 +312,21 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
         throw new Error('ALLOW_PRIVATE_FEDERATION cannot be used in production');
       }
       logger.warn('SECURITY WARNING: ALLOW_PRIVATE_FEDERATION is set - skipping DNS-based private IP check. Never use in production.');
-      return true;
+      return { hostname, addresses: await resolveAllAddresses(hostname) };
     }
 
-    // Resolve hostname to IP and check
-    const resolvesPrivate = await resolvesToPrivateIP(hostname);
-    if (resolvesPrivate) {
+    // localhost always resolves to loopback
+    if (hostname === 'localhost') {
       throw new Error(`Hostname ${hostname} resolves to a private IP address`);
     }
 
-    return true;
+    // Resolve hostname to IP and check every address it resolves to
+    const addresses = await resolveAllAddresses(hostname);
+    if (addresses.some(ip => isPrivateIP(ip))) {
+      throw new Error(`Hostname ${hostname} resolves to a private IP address`);
+    }
+
+    return { hostname, addresses };
   }
   catch (error) {
     if (error instanceof Error) {

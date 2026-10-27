@@ -49,7 +49,7 @@ import {
   createIcsUrlValidator,
   isLocalhostIcsImportAllowed,
 } from '@/server/common/helper/test-ssrf-gate';
-import { createPinnedAgent } from '@/server/calendar/service/import/pinned_agent';
+import { createPinnedAgent } from '@/server/common/helper/pinned-agent';
 import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 
 const logger = createLogger('calendar.import.fetcher');
