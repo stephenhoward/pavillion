@@ -3,8 +3,18 @@ import SetupInterface from '@/server/setup/interface';
 import { validatePassword } from '@/common/validation/password';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { createLogger } from '@/server/common/helper/logger';
+import { SetupAlreadyCompletedError } from '@/server/setup/exceptions';
 
 const logger = createLogger('setup');
+
+/**
+ * The one response for "setup already completed", shared by the route's
+ * pre-check and the service's in-chain re-check so the two cannot drift.
+ * The client keys on the 404 status.
+ */
+function sendSetupAlreadyCompleted(res: Response): void {
+  res.status(404).json({ error: 'Setup already completed', errorName: 'NotFoundError' });
+}
 
 /**
  * API route handlers for first-run setup.
@@ -64,7 +74,7 @@ export default class SetupRouteHandlers {
       // Check if setup is still required
       const setupRequired = await this.service.isSetupModeActive();
       if (!setupRequired) {
-        res.status(404).json({ error: 'Setup already completed', errorName: 'NotFoundError' });
+        sendSetupAlreadyCompleted(res);
         return;
       }
 
@@ -126,6 +136,10 @@ export default class SetupRouteHandlers {
       });
     }
     catch (error) {
+      if (error instanceof SetupAlreadyCompletedError) {
+        sendSetupAlreadyCompleted(res);
+        return;
+      }
       logger.error({ err: error }, 'Error completing setup');
       res.status(500).json({ error: 'Failed to complete setup' });
     }

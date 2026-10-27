@@ -3,9 +3,12 @@ import { scryptSync, randomBytes } from 'crypto';
 import { readFile } from 'fs/promises';
 import path from 'path';
 
+import db from '@/server/common/entity/db';
 import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from '@/server/common/entity/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import { validatePassword } from '@/common/validation/password';
+import { normalizeEmail } from '@/common/validation/email';
+import { SetupAlreadyCompletedError } from '@/server/setup/exceptions';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('setup');
@@ -23,6 +26,12 @@ export default class SetupService {
    * Set to null when cache needs to be invalidated.
    */
   private static setupModeCache: boolean | null = null;
+
+  /**
+   * Tail of the in-process single-flight chain that serializes setup. The
+   * deployment runs one web process, which the cache above already assumes.
+   */
+  private static setupChain: Promise<unknown> = Promise.resolve();
 
   private readonly configInterface: ConfigurationInterface;
 
@@ -61,6 +70,7 @@ export default class SetupService {
    * @param registrationMode - Registration mode (open, apply, invitation)
    * @param defaultLanguage - Default UI language code (e.g., 'en', 'es')
    * @returns Promise resolving to true if setup completed successfully
+   * @throws SetupAlreadyCompletedError if an admin account already exists
    */
   async completeSetup(
     email: string,
@@ -69,39 +79,75 @@ export default class SetupService {
     registrationMode: string,
     defaultLanguage: string,
   ): Promise<boolean> {
-    // Validate password using shared utility
+    // Validate password using shared utility. Done before joining the chain
+    // so a bad-password request never queues behind a real setup.
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
       throw new Error(`Invalid password: ${passwordValidation.errors.join(', ')}`);
     }
 
-    // Create the admin account
-    const accountEntity = AccountEntity.build({
-      id: uuidv4(),
-      email: email,
-      username: '',
-    });
-    await accountEntity.save();
+    // Single-flight: setups run one at a time in this process. A failed setup
+    // is swallowed on the chain so it never blocks the next attempt.
+    const run = SetupService.setupChain
+      .catch(() => undefined)
+      .then(() => this.performSetup(email, password, siteTitle, registrationMode, defaultLanguage));
+    SetupService.setupChain = run.catch(() => undefined);
+    return run;
+  }
 
-    // Create account secrets and set password
-    const accountSecretsEntity = AccountSecretsEntity.build({
-      account_id: accountEntity.id,
-    });
-    await accountSecretsEntity.save();
+  /**
+   * Creates the admin account and saves settings. Only ever runs inside the
+   * single-flight chain in `completeSetup`.
+   *
+   * @throws SetupAlreadyCompletedError if an admin account already exists
+   */
+  private async performSetup(
+    email: string,
+    password: string,
+    siteTitle: string,
+    registrationMode: string,
+    defaultLanguage: string,
+  ): Promise<boolean> {
+    // Re-check against the database, never the cached isSetupModeActive():
+    // a concurrent request may have created the admin since the route's
+    // pre-check populated the cache.
+    const existingAdmin = await AccountRoleEntity.findOne({ where: { role: 'admin' } });
+    if (existingAdmin) {
+      throw new SetupAlreadyCompletedError();
+    }
 
-    // Hash and save the password
-    const salt = randomBytes(16).toString('hex');
-    const hashedPassword = scryptSync(password, salt, 64).toString('hex');
-    accountSecretsEntity.salt = salt;
-    accountSecretsEntity.password = hashedPassword;
-    await accountSecretsEntity.save();
+    // The account, its secrets row, the password and the admin role are
+    // written in one transaction, so a failed write never leaves an account
+    // without the admin role (which would keep setup mode open).
+    await db.transaction(async (transaction) => {
+      const accountEntity = AccountEntity.build({
+        id: uuidv4(),
+        email: normalizeEmail(email),
+        username: '',
+      });
+      await accountEntity.save({ transaction });
 
-    // Assign admin role
-    const roleEntity = AccountRoleEntity.build({
-      account_id: accountEntity.id,
-      role: 'admin',
+      const accountSecretsEntity = AccountSecretsEntity.build({
+        account_id: accountEntity.id,
+      });
+      await accountSecretsEntity.save({ transaction });
+
+      const salt = randomBytes(16).toString('hex');
+      const hashedPassword = scryptSync(password, salt, 64).toString('hex');
+      accountSecretsEntity.salt = salt;
+      accountSecretsEntity.password = hashedPassword;
+      await accountSecretsEntity.save({ transaction });
+
+      const roleEntity = AccountRoleEntity.build({
+        account_id: accountEntity.id,
+        role: 'admin',
+      });
+      await roleEntity.save({ transaction });
     });
-    await roleEntity.save();
+
+    // Settings and the policy seed stay outside the transaction: they cross
+    // into the Configuration domain, which may open its own transaction, and
+    // SQLite rejects a nested BEGIN.
 
     // Save settings via ConfigurationInterface (respects DDD domain boundary)
     await this.configInterface.setSetting('siteTitle', siteTitle);
