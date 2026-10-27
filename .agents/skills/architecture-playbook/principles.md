@@ -15,7 +15,7 @@ These principles reference product-level documents, not code-level conventions:
 
 - `docs/mission.md` — the product mission
 - `.agents/reference/stakeholders.md` — the stakeholder personas the product serves
-- `agent-os/product/decisions.md` — the index of documented architectural decisions, each linking to a file under `agent-os/product/decisions/`
+- `docs/decisions.md` — the index of documented architectural decisions, each linking to a file under `docs/decisions/`
 
 ---
 
@@ -56,7 +56,7 @@ Are documented architectural decisions being respected? If overridden, is it ack
 
 ### What to Check
 
-- Read `agent-os/product/decisions.md` for all accepted decisions
+- Read `docs/decisions.md` for all accepted decisions
 - For each relevant decision, verify the spec or code follows its stated direction
 - Key decisions to watch:
   - **DEC-001**: Federated, privacy-first, community-controlled — not centralized or commercial
@@ -192,7 +192,7 @@ Does this advance the product's mission within its accepted decisions, or does i
 
 - Does the feature serve a problem or user named in `docs/mission.md`?
 - Does it serve a stakeholder described in `.agents/reference/stakeholders.md`, or a persona the product does not serve?
-- Is it consistent with the accepted decisions in `agent-os/product/decisions.md`, or does it presume a direction no decision supports?
+- Is it consistent with the accepted decisions in `docs/decisions.md`, or does it presume a direction no decision supports?
 - Does it avoid introducing scope or complexity the mission does not call for?
 
 ### Red Flags

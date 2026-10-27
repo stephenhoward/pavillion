@@ -22,7 +22,7 @@
  *   non-member and nonexistent calendars non-disclosing.
  *
  * These rules are recorded in DEC-021, client settings information
- * architecture (agent-os/product/decisions/dec-021-client-settings-information-architecture.md).
+ * architecture (docs/decisions/dec-021-client-settings-information-architecture.md).
  */
 import type { Component } from 'vue';
 import type { RouteLocationNamedRaw, RouteLocationNormalizedLoaded } from 'vue-router';

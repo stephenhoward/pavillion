@@ -107,7 +107,7 @@ import type { NotificationVerb } from '@/server/notifications/types';
  * only supplies the url name for the owner variant's link. "This row has a
  * calendar id, therefore the viewer is an owner" is never a valid inference
  * here. Recorded as DEC-015
- * (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`).
+ * (`docs/decisions/dec-015-activity-log-routing-keys.md`).
  *
  * ## NULL and unresolvable calendars are ordinary states
  *
@@ -124,7 +124,7 @@ import type { NotificationVerb } from '@/server/notifications/types';
  * public event information and places organizers, curators and instance
  * admins outside its guarantee. Every surface a routing key can reach is an
  * authenticated organizer/admin surface. See DEC-015
- * (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`,
+ * (`docs/decisions/dec-015-activity-log-routing-keys.md`,
  * Consequences), which records the earlier mis-citation.
  */
 

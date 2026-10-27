@@ -29,7 +29,7 @@ export type ProviderType = 'stripe' | 'paypal';
  * src/server/funding/service/funding.ts hard-codes Stripe whatever the UI
  * offers. Re-enabling a provider means adding it here AND revisiting that
  * resolver together — see DEC-007
- * (agent-os/product/decisions/dec-007-community-funding-model.md).
+ * (docs/decisions/dec-007-community-funding-model.md).
  */
 export const SUPPORTED_PROVIDER_TYPES: readonly ProviderType[] = ['stripe'];
 

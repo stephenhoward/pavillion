@@ -81,7 +81,7 @@ export const MAX_URL_CANDIDATES = 10;
  *
  * The rule is restated on the render path in the calendar domain's
  * `parseAttributedToUri`, which cannot import this module across the
- * [DEC-003](../../../../agent-os/product/decisions/dec-003-domain-driven-architecture.md)
+ * [DEC-003](../../../../docs/decisions/dec-003-domain-driven-architecture.md)
  * boundary; this function is the rule of record, and
  * `src/server/activitypub/test/helper/url-sanitizer.test.ts` holds the
  * table-driven test that keeps the two in step on every axis — scheme (pinned

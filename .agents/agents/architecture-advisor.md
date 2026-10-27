@@ -35,7 +35,7 @@ Read `.agents/skills/review-mode-advisor/SKILL.md` — resolved from the root of
 
 ### Step 2: Load Architecture Context
 
-Read `.agents/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read `docs/mission.md`, `.agents/reference/stakeholders.md`, and `agent-os/product/decisions.md` plus the decision files it indexes that are relevant to the spec under review.
+Read `.agents/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read `docs/mission.md`, `.agents/reference/stakeholders.md`, and `docs/decisions.md` plus the decision files it indexes that are relevant to the spec under review.
 
 ### Step 3: Read the Spec
 

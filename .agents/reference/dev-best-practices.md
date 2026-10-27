@@ -102,4 +102,4 @@ This decision tree prevents the "CategorySelectionDialog problem" where engineer
 - **Style System Documentation**: `src/client/assets/style/README.md`
 - **Component Library**: `src/client/assets/style/components/`
 - **Project Skills & Standards**: `.claude/skills/`
-- **Technical Stack Details**: `@.agent-os/product/tech-stack.md`
+- **Technical Stack Details**: `.agents/reference/tech-stack.md`

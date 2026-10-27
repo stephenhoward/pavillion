@@ -39,7 +39,6 @@ logs
 *.md
 !README.md
 docs
-agent-os
 
 # Development tooling
 .eslintrc*
