@@ -1,7 +1,7 @@
 import { expect, describe, it, vi, beforeEach, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import { VueWrapper } from '@vue/test-utils';
+import { VueWrapper, flushPromises } from '@vue/test-utils';
 import sinon from 'sinon';
 
 import { mountComponent } from '@/client/test/lib/vue';
@@ -59,6 +59,7 @@ const mountSetup = async (setupService?: any, skipLanguageSelection = true) => {
  * Helper to fill in all form fields with valid data
  */
 async function fillValidForm(wrapper: VueWrapper) {
+  await wrapper.find('input#setup-token').setValue(' 0123456789abcdef0123456789abcdef ');
   await wrapper.find('input[type="email"]').setValue('admin@example.com');
   await wrapper.find('input#setup-password').setValue('password123');
   await wrapper.find('input#setup-password-confirm').setValue('password123');
@@ -80,6 +81,14 @@ describe('Setup Component', () => {
   describe('Form Rendering', () => {
     it('should render form with all required fields', async () => {
       const { wrapper } = await mountSetup();
+
+      // Check for the setup token field, described by its help line
+      const tokenInput = wrapper.find('input#setup-token');
+      expect(tokenInput.exists()).toBe(true);
+      expect(wrapper.find('label[for="setup-token"]').exists()).toBe(true);
+      const helpId = tokenInput.attributes('aria-describedby');
+      expect(helpId).toContain('setup-token-description');
+      expect(wrapper.find('#setup-token-description').text().length).toBeGreaterThan(0);
 
       // Check for email field
       expect(wrapper.find('input[type="email"]').exists()).toBe(true);
@@ -176,6 +185,7 @@ describe('Setup Component', () => {
         password: 'password123',
         siteTitle: 'My Calendar',
         registrationMode: 'closed',
+        setupToken: '0123456789abcdef0123456789abcdef',
       });
 
       // Clean up - unmount before resolving to avoid DOM update issues
@@ -210,6 +220,36 @@ describe('Setup Component', () => {
 
       // Clean up
       wrapper.unmount();
+    });
+  });
+
+  describe('Setup Token', () => {
+    it('should not submit without a setup token', async () => {
+      const { wrapper, setupService } = await mountSetup();
+
+      await fillValidForm(wrapper);
+      await wrapper.find('input#setup-token').setValue('   ');
+      await wrapper.find('form').trigger('submit.prevent');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('.error-alert').exists()).toBe(true);
+      expect(setupService.completeSetup).not.toHaveBeenCalled();
+    });
+
+    it('should show a specific message when the server rejects the token', async () => {
+      const mockSetupService = {
+        completeSetup: vi.fn().mockRejectedValue(new Error('setup_token_invalid')),
+        checkSetupStatus: vi.fn().mockResolvedValue({ setupRequired: true }),
+      };
+      const { wrapper } = await mountSetup(mockSetupService);
+
+      await fillValidForm(wrapper);
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      const alert = wrapper.find('.error-alert');
+      expect(alert.exists()).toBe(true);
+      expect(alert.text()).toContain('setup token is not valid');
     });
   });
 

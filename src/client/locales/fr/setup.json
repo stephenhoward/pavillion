@@ -9,6 +9,9 @@
   "subtitle": "Configurons votre instance",
   "description": "Créez votre compte administrateur et configurez votre serveur Pavillion.",
 
+  "setup_token_label": "Jeton de configuration",
+  "setup_token_description": "Au démarrage, Pavillion a écrit un jeton de configuration à usage unique dans le journal du serveur. Exécutez « docker compose logs app » sur votre serveur et cherchez « Setup token ». Redémarrer le serveur génère un nouveau jeton.",
+
   "email_label": "E-mail de l'administrateur",
   "email_placeholder": "admin@exemple.com",
 
@@ -45,6 +48,8 @@
   "error_missing_site_title": "Un titre de site est requis",
   "error_passwords_mismatch": "Les mots de passe ne correspondent pas",
   "error_setup_already_completed": "La configuration a déjà été effectuée",
+  "error_missing_setup_token": "Le jeton de configuration est obligatoire",
+  "error_setup_token_invalid": "Ce jeton de configuration n'est pas valide. Copiez le plus récent depuis le journal du serveur ; redémarrer le serveur génère un nouveau jeton.",
   "error_unknown": "Une erreur inattendue s'est produite. Veuillez réessayer.",
 
   "password_too_short": "Le mot de passe doit contenir au moins 8 caractères",

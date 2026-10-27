@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { scryptSync, randomBytes } from 'crypto';
+import { scryptSync, randomBytes, timingSafeEqual } from 'crypto';
 import { readFile } from 'fs/promises';
 import path from 'path';
 
@@ -8,7 +8,7 @@ import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from '@/server
 import ConfigurationInterface from '@/server/configuration/interface';
 import { validatePassword } from '@/common/validation/password';
 import { normalizeEmail } from '@/common/validation/email';
-import { SetupAlreadyCompletedError } from '@/server/setup/exceptions';
+import { SetupAlreadyCompletedError, SetupTokenInvalidError } from '@/server/setup/exceptions';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('setup');
@@ -26,6 +26,13 @@ export default class SetupService {
    * Set to null when cache needs to be invalidated.
    */
   private static setupModeCache: boolean | null = null;
+
+  /**
+   * The token a setup request must carry, issued at boot while no admin
+   * exists and logged for the operator. Held in memory only, so a restart
+   * issues a new one; null once setup completes or when none was issued.
+   */
+  private static setupToken: string | null = null;
 
   /**
    * Tail of the in-process single-flight chain that serializes setup. The
@@ -62,6 +69,50 @@ export default class SetupService {
   }
 
   /**
+   * Issues a fresh setup token if no admin exists, and logs it once at warn
+   * for the operator to read from the server log. Called at boot once the
+   * database is ready. Replaces any earlier token; clears it when an admin
+   * already exists.
+   *
+   * Queries the database directly rather than through isSetupModeActive(),
+   * so issuing the token never populates the setup-mode cache.
+   *
+   * @returns The issued token, or null when setup is already complete
+   */
+  static async issueSetupToken(): Promise<string | null> {
+    const existingAdmin = await AccountRoleEntity.findOne({ where: { role: 'admin' } });
+    if (existingAdmin) {
+      SetupService.setupToken = null;
+      return null;
+    }
+
+    const token = randomBytes(16).toString('hex');
+    SetupService.setupToken = token;
+    logger.warn(
+      `Setup token: ${token} — enter it on the /setup page to create the administrator account. Restarting the server issues a new token.`,
+    );
+    return token;
+  }
+
+  /**
+   * Compares a candidate against the issued setup token in constant time.
+   * The length guard runs first because timingSafeEqual throws on unequal
+   * lengths; the token's length is fixed, so it reveals nothing.
+   */
+  private static isSetupTokenValid(candidate: unknown): boolean {
+    const expected = SetupService.setupToken;
+    if (expected === null || typeof candidate !== 'string') {
+      return false;
+    }
+    const candidateBytes = Buffer.from(candidate);
+    const expectedBytes = Buffer.from(expected);
+    if (candidateBytes.length !== expectedBytes.length) {
+      return false;
+    }
+    return timingSafeEqual(candidateBytes, expectedBytes);
+  }
+
+  /**
    * Completes the initial setup by creating an admin account and saving settings.
    *
    * @param email - Email address for the admin account
@@ -69,7 +120,9 @@ export default class SetupService {
    * @param siteTitle - Title for the site
    * @param registrationMode - Registration mode (open, apply, invitation)
    * @param defaultLanguage - Default UI language code (e.g., 'en', 'es')
+   * @param setupToken - The token issued at boot and logged for the operator
    * @returns Promise resolving to true if setup completed successfully
+   * @throws SetupTokenInvalidError if the token is missing, wrong or retired
    * @throws SetupAlreadyCompletedError if an admin account already exists
    */
   async completeSetup(
@@ -78,7 +131,13 @@ export default class SetupService {
     siteTitle: string,
     registrationMode: string,
     defaultLanguage: string,
+    setupToken: string,
   ): Promise<boolean> {
+    // Checked first: without the token, nothing else about the request matters.
+    if (!SetupService.isSetupTokenValid(setupToken)) {
+      throw new SetupTokenInvalidError();
+    }
+
     // Validate password using shared utility. Done before joining the chain
     // so a bad-password request never queues behind a real setup.
     const passwordValidation = validatePassword(password);
@@ -158,8 +217,9 @@ export default class SetupService {
     // This MUST NEVER throw or block setup completion / admin login.
     await this.seedDefaultInstancePolicy();
 
-    // Invalidate the setup mode cache
+    // Invalidate the setup mode cache and retire the token
     SetupService.clearCache();
+    SetupService.setupToken = null;
 
     return true;
   }

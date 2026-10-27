@@ -23,6 +23,16 @@ export default class SetupInterface {
   }
 
   /**
+   * Issues a fresh setup token if no admin exists and logs it for the
+   * operator. Called once at boot, after the database is ready.
+   *
+   * @returns The issued token, or null when setup is already complete
+   */
+  async issueSetupToken(): Promise<string | null> {
+    return SetupService.issueSetupToken();
+  }
+
+  /**
    * Completes the initial setup by creating an admin account and saving settings.
    *
    * @param email - Email address for the admin account
@@ -30,6 +40,7 @@ export default class SetupInterface {
    * @param siteTitle - Title for the site
    * @param registrationMode - Registration mode (open, apply, invitation)
    * @param defaultLanguage - Default UI language code (e.g., 'en', 'es')
+   * @param setupToken - The token issued at boot and logged for the operator
    * @returns Promise resolving to true if setup completed successfully
    */
   async completeSetup(
@@ -38,8 +49,9 @@ export default class SetupInterface {
     siteTitle: string,
     registrationMode: string,
     defaultLanguage: string,
+    setupToken: string,
   ): Promise<boolean> {
-    return this.setupService.completeSetup(email, password, siteTitle, registrationMode, defaultLanguage);
+    return this.setupService.completeSetup(email, password, siteTitle, registrationMode, defaultLanguage, setupToken);
   }
 
   /**

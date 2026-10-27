@@ -9,6 +9,9 @@
   "subtitle": "Vamos a configurar tu instancia",
   "description": "Crea tu cuenta de administrador y configura tu servidor de Pavillion.",
 
+  "setup_token_label": "Token de configuración",
+  "setup_token_description": "Pavillion escribió un token de configuración de un solo uso en el registro del servidor al iniciarse. Ejecuta \"docker compose logs app\" en tu servidor y busca \"Setup token\". Reiniciar el servidor genera un token nuevo.",
+
   "email_label": "Correo del Administrador",
   "email_placeholder": "admin@ejemplo.com",
 
@@ -45,6 +48,8 @@
   "error_missing_site_title": "Se requiere un título del sitio",
   "error_passwords_mismatch": "Las contraseñas no coinciden",
   "error_setup_already_completed": "La configuración ya ha sido completada",
+  "error_missing_setup_token": "El token de configuración es obligatorio",
+  "error_setup_token_invalid": "Ese token de configuración no es válido. Copia el más reciente del registro del servidor; reiniciar el servidor genera un token nuevo.",
   "error_unknown": "Ocurrió un error inesperado. Por favor intenta de nuevo.",
 
   "password_too_short": "La contraseña debe tener al menos 8 caracteres",

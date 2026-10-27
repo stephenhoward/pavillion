@@ -131,6 +131,12 @@ rateLimit:
     byIp:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 requests per IP per 15 minutes
+  setup:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      # POST /api/v1/setup. The setup token is 128 bits, so this is an abuse
+      # cap on the scrypt work each attempt costs, not a guessing wall.
+      max: 10  # 10 setup attempts per IP per 15 minutes
     byEmail:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 5  # 5 requests per email per hour
