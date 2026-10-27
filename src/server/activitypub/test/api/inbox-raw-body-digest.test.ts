@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import express from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import crypto from 'crypto';
 import httpSignature from 'http-signature';
 
-import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
-import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { INBOX_BODY_MAX_BYTES } from '@/server/activitypub/helper/inbox-body-parser';
+import { buildCalendarInboxApp, buildUserInboxApp } from './inbox-test-apps';
 
 /**
  * Router-level proof that both inbox routers capture the request bytes for
@@ -23,33 +21,6 @@ import { INBOX_BODY_MAX_BYTES } from '@/server/activitypub/helper/inbox-body-par
 
 const REMOTE_ACTOR = 'https://remote.example/calendars/sender';
 const KEY_ID = `${REMOTE_ACTOR}#main-key`;
-
-function buildCalendarInboxApp(): express.Application {
-  const app = express();
-  const activityPubInterface: any = {
-    isPersonActorUri: () => false,
-    addToInbox: async () => undefined,
-  };
-  const calendarInterface: any = {
-    getCalendarByName: async (urlName: string) => ({ id: `calendar-${urlName}`, urlName }),
-  };
-  new ActivityPubServerRoutes(activityPubInterface, calendarInterface).installHandlers(app, '/');
-  return app;
-}
-
-function buildUserInboxApp(): express.Application {
-  const app = express();
-  const userActorService: any = {
-    getActorByUsername: async (username: string) => ({
-      actorUri: `https://local.example/users/${username}`,
-      publicKey: 'stub-public-key',
-    }),
-    processAddActivity: async () => true,
-    processRemoveActivity: async () => true,
-  };
-  new UserActorRoutes(userActorService).installHandlers(app, '/');
-  return app;
-}
 
 /**
  * A valid activity serialized the way a non-V8 encoder might: padded

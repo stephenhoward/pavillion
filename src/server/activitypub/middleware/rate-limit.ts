@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import config from 'config';
 import { createLogger } from '@/server/common/helper/logger';
+import { extractKeyIdOrigin } from '@/server/activitypub/helper/http_signature';
 
 const logger = createLogger('activitypub');
 
@@ -14,7 +15,7 @@ interface RateLimitEntry {
 
 /**
  * Generic in-memory store for rate limiting with LRU eviction.
- * Can be used for any string-based key (actor ID, calendar name, IP address, etc.)
+ * Can be used for any string-based key (peer origin, calendar name, username, etc.)
  */
 class RateLimitStore<TKey extends string = string> {
   private store: Map<TKey, RateLimitEntry> = new Map();
@@ -30,7 +31,7 @@ class RateLimitStore<TKey extends string = string> {
   /**
    * Check if a key has exceeded the rate limit and increment counter
    *
-   * @param key - The identifier to rate limit (actor URI, calendar name, etc.)
+   * @param key - The identifier to rate limit (peer origin, calendar name, etc.)
    * @param maxRequests - Maximum requests allowed in the window
    * @returns Object with allowed status and current count
    */
@@ -235,32 +236,6 @@ function getUserStore(windowMs: number): UserRateLimitStore {
 }
 
 /**
- * Extracts the actor identifier from an ActivityPub request.
- * The actor can be in the request body as a string or object with 'id' property.
- *
- * @param req - Express request object
- * @returns The actor identifier string or null if not found
- */
-function extractActorFromRequest(req: Request): string | null {
-  const body = req.body;
-
-  if (!body) {
-    return null;
-  }
-
-  // Actor can be a string (URI) or an object with 'id' property
-  if (typeof body.actor === 'string') {
-    return body.actor;
-  }
-
-  if (body.actor && typeof body.actor === 'object' && typeof body.actor.id === 'string') {
-    return body.actor.id;
-  }
-
-  return null;
-}
-
-/**
  * Extracts the calendar URL name from the request parameters.
  *
  * @param req - Express request object
@@ -321,25 +296,35 @@ function markAsApRateLimiter(handler: RequestHandler): RequestHandler {
 }
 
 /**
- * Creates an Express middleware for per-actor rate limiting on ActivityPub inbox endpoints.
+ * Creates an Express middleware for per-peer rate limiting on ActivityPub inbox endpoints.
  *
- * This middleware limits the number of requests from each unique actor (identified by
- * their ActivityPub actor URI) within a sliding time window.
+ * This middleware limits the number of requests from each remote peer within a sliding
+ * time window. The peer is identified by the origin (scheme + host) of the HTTP
+ * signature's keyId, via `extractKeyIdOrigin` — the same derivation that produces the
+ * inbox row's `auth_origin` (DEC-013). It must be mounted AFTER `verifyHttpSignature`:
+ * before verification the keyId is as attacker-chosen as the body `actor`, and an
+ * unsigned request could spend a named peer's budget. Keying on the origin rather than
+ * the actor URI means a peer cannot mint a fresh bucket per actor path. (Origin
+ * normalisation to eTLD+1, when it lands in `extractKeyIdOrigin`, applies here too.)
+ *
+ * A request with no parseable keyId is allowed with a warning, like the sibling limiters'
+ * no-key branches; after verification that only happens under the dev/test-only
+ * SKIP_SIGNATURES bypass, and the per-calendar or per-user limiter has already bounded it.
  *
  * Default values are loaded from config (rateLimit.activitypub.actor.*). The global
  * rateLimit.enabled flag should be checked before installing this middleware on routes.
  *
- * @param maxRequests - Maximum number of requests allowed per actor in the time window (default from config)
+ * @param maxRequests - Maximum number of requests allowed per peer origin in the time window (default from config)
  * @param windowMs - Time window in milliseconds (default from config)
  * @returns Express middleware function that enforces rate limiting
  *
  * @example
  * // Use defaults from config
- * router.post('/inbox', createActorRateLimiter(), inboxHandler);
+ * router.post('/inbox', verifyHttpSignature, createActorRateLimiter(), inboxHandler);
  *
  * @example
  * // Custom limits: 30 requests per 30 seconds
- * router.post('/inbox', createActorRateLimiter(30, 30000), inboxHandler);
+ * router.post('/inbox', verifyHttpSignature, createActorRateLimiter(30, 30000), inboxHandler);
  */
 export function createActorRateLimiter(
   maxRequests?: number,
@@ -351,22 +336,22 @@ export function createActorRateLimiter(
   const store = getActorStore(finalWindowMs);
 
   return markAsApRateLimiter((req: Request, res: Response, next: NextFunction) => {
-    const actorId = extractActorFromRequest(req);
+    const origin = extractKeyIdOrigin(req);
 
-    // If no actor can be identified, allow the request but log a warning
+    // If no signer origin can be identified, allow the request but log a warning
     // The downstream handler should validate the request anyway
-    if (!actorId) {
-      logger.warn('Could not extract actor from request, allowing request');
+    if (!origin) {
+      logger.warn('Could not extract signer origin from request, allowing request');
       return next();
     }
 
-    const result = store.check(actorId, finalMaxRequests);
+    const result = store.check(origin, finalMaxRequests);
 
     if (!result.allowed) {
-      const retryAfterMs = store.getRetryAfter(actorId);
+      const retryAfterMs = store.getRetryAfter(origin);
       const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
 
-      logger.warn({ actorId, count: result.count, max: finalMaxRequests }, 'Rate limit exceeded for actor');
+      logger.warn({ origin, count: result.count, max: finalMaxRequests }, 'Rate limit exceeded for peer origin');
 
       res.setHeader('Retry-After', String(retryAfterSeconds));
       res.status(429).json({
