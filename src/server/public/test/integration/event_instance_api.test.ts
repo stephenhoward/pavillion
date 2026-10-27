@@ -586,4 +586,95 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     expect(instanceResponse.body.event.space.placeId).toBeUndefined();
     expect(instanceResponse.body.event.space.originUri).toBeUndefined();
   });
+
+  /**
+   * The instance detail page links to the event's series. Every detail-path
+   * query must eager-load the parent event's series so the public response
+   * carries it, projected through the series allow-list.
+   */
+  describe('parent event series on the instance detail endpoint', () => {
+    let seriesId: string;
+
+    async function attachSeries(eventId: string): Promise<void> {
+      const res = await request(env.app)
+        .post(`/api/v1/events/${eventId}/series/${seriesId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      if (res.status !== 204) {
+        throw new Error(`Failed to attach series: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+    }
+
+    function expectPublicSeries(series: any): void {
+      expect(series).toBeTruthy();
+      expect(series.id).toBe(seriesId);
+      expect(series.urlName).toBe('instance-series');
+      expect(series.content.en.name).toBe('Instance Series');
+      // Internal foreign keys must not leak through toPublicSeriesObject.
+      expect(series).not.toHaveProperty('calendarId');
+      expect(series).not.toHaveProperty('mediaId');
+    }
+
+    beforeAll(async () => {
+      const res = await request(env.app)
+        .post(`/api/v1/calendars/${calendarId}/series`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ urlName: 'instance-series', content: { en: { name: 'Instance Series' } } });
+      if (res.status !== 201) {
+        throw new Error(`Failed to create series: ${res.status} ${JSON.stringify(res.body)}`);
+      }
+      seriesId = res.body.id;
+    });
+
+    it('returns the series for a one-shot event (cache-hit path)', async () => {
+      const eventId = await createOneShotEvent(
+        '2033-02-10T18:00:00Z',
+        '2033-02-10T19:00:00Z',
+        'Series Cache Hit',
+      );
+      await attachSeries(eventId);
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20330210-1800`);
+
+      expect(response.status).toBe(200);
+      expectPublicSeries(response.body.event.series);
+    });
+
+    it('returns the series for an uncached occurrence (materialize path)', async () => {
+      const eventId = await createRecurringEvent(
+        '2033-03-03T18:00:00Z',
+        '2033-03-03T19:00:00Z',
+        '2034-03-03T18:00:00Z',
+        'Series Materialize',
+      );
+      await attachSeries(eventId);
+
+      // 2033-09-29 is 30 weeks after 2033-03-03 (Thursday → Thursday).
+      const startTime = new Date('2033-09-29T18:00:00Z');
+      const before = await EventInstanceEntity.findOne({
+        where: { event_id: eventId, start_time: startTime },
+      });
+      expect(before).toBeNull();
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20330929-1800`);
+
+      expect(response.status).toBe(200);
+      expectPublicSeries(response.body.event.series);
+    });
+
+    it('returns a null series for a standalone event', async () => {
+      const eventId = await createOneShotEvent(
+        '2033-04-10T18:00:00Z',
+        '2033-04-10T19:00:00Z',
+        'Standalone No Series',
+      );
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20330410-1800`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.series).toBeNull();
+    });
+  });
 });
