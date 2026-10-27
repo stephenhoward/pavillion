@@ -1,75 +1,167 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
-import EventInstanceService from '../../service/event_instance';
-import { CalendarEntity } from '../../entity/calendar';
-import { EventEntity } from '../../entity/event';
-import { Op } from 'sequelize';
+import { DateTime } from 'luxon';
+import { v4 as uuidv4 } from 'uuid';
+import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import EventInstanceService, { generationWindowEnd } from '@/server/calendar/service/event_instance';
+import type ConfigurationInterface from '@/server/configuration/interface';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
+import db from '@/server/common/entity/db';
 
 /**
- * Minimal CalendarEntity stand-in: refreshAllEventInstances only reads the
- * model's id and hands the model to the ActivityPub interface.
+ * DB-backed coverage for EventInstanceService.refreshAllEventInstances, the
+ * body of the weekly `instances:refresh` worker job.
+ *
+ * Instance rows are materialised up to a rolling horizon at build time, so an
+ * event nobody edits stops gaining rows once `now` approaches that horizon.
+ * A refresh rebuilds every event — local and remote-origin — against the
+ * current `now` so each one's rows reach the horizon again.
  */
-function buildMockCalendarEntity(id: string, urlName: string): any {
-  return {
-    id,
-    url_name: urlName,
-    toModel: () => ({ id, urlName }),
-  };
-}
-
 describe('EventInstanceService.refreshAllEventInstances', () => {
-  let sandbox: sinon.SinonSandbox;
   let service: EventInstanceService;
   let eventBus: EventEmitter;
+  let calendarId: string;
 
-  beforeEach(() => {
-    sandbox = sinon.createSandbox();
+  // Weekly on Mondays from 2026-01-05 at 10:00 UTC.
+  const SERIES_START = DateTime.fromISO('2026-01-05T10:00:00.000Z', { zone: 'utc' });
+  const FIRST_BUILD_AT = new Date('2026-01-01T00:00:00.000Z');
+  const REFRESH_AT = new Date('2026-06-01T00:00:00.000Z');
+  // The eventInstanceMonths setting reads 6, below the 12-month floor.
+  const HORIZON_MONTHS = 12;
+  const settings = {
+    getSetting: async (key: string) => (key === 'eventInstanceMonths' ? '6' : undefined),
+  } as unknown as ConfigurationInterface;
+  const REFRESH_HORIZON = generationWindowEnd(REFRESH_AT, HORIZON_MONTHS);
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /**
+   * Persists a weekly recurring event (event row plus schedule row) and
+   * materialises its instances as of FIRST_BUILD_AT, so its rows stop
+   * well short of the horizon measured from REFRESH_AT.
+   */
+  async function createStaleWeeklyEvent(eventCalendarId: string | null): Promise<string> {
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: eventCalendarId });
+
+    const schedule = new CalendarEventSchedule(uuidv4(), SERIES_START);
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.count = 0;
+    schedule.isExclusion = false;
+    schedule.byDay = [];
+    const scheduleEntity = EventScheduleEntity.fromModel(schedule);
+    scheduleEntity.event_id = eventId;
+    await scheduleEntity.save();
+
+    const event = new CalendarEvent(eventId, eventCalendarId);
+    event.schedules = [schedule];
+    await service.buildEventInstances(event, FIRST_BUILD_AT);
+    return eventId;
+  }
+
+  async function lastStartFor(eventId: string): Promise<Date> {
+    const last = await EventInstanceEntity.findOne({
+      where: { event_id: eventId },
+      order: [['start_time', 'DESC']],
+    });
+    return last!.start_time;
+  }
+
+  function expectReachesHorizon(lastStart: Date): void {
+    // A weekly series has an occurrence in the final week before the horizon.
+    expect(lastStart.getTime()).toBeGreaterThan(REFRESH_HORIZON.getTime() - ONE_WEEK_MS);
+    expect(lastStart.getTime()).toBeLessThanOrEqual(REFRESH_HORIZON.getTime());
+  }
+
+  beforeEach(async () => {
+    await db.sync({ force: true });
+    calendarId = uuidv4();
+    await CalendarEntity.create({ id: calendarId, url_name: 'instance-refresh-cal' });
     eventBus = new EventEmitter();
     service = new EventInstanceService(eventBus);
+    service.setConfigurationInterface(settings);
   });
 
   afterEach(() => {
-    sandbox.restore();
+    sinon.restore();
   });
 
-  it('queries events by calendar UUID only, never by ActivityPub actor URL', async () => {
-    // event.calendar_id is a uuid column: an actor URL in the Op.in list makes
-    // postgres reject the whole statement with 22P02, taking down dev boot.
-    sandbox.stub(CalendarEntity, 'findAll').resolves([
-      buildMockCalendarEntity('c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3', 'test_calendar'),
-    ]);
-    const eventFindAll = sandbox.stub(EventEntity, 'findAll').resolves([]);
-    service.setActivityPubInterface({
-      actorUrl: sandbox.stub().resolves('https://events.example.org/calendars/test_calendar'),
-    } as any);
+  it('extends a local recurring event whose rows end inside the window out to the horizon', async () => {
+    const eventId = await createStaleWeeklyEvent(calendarId);
+    // Built from Jan 1, the rows stop around Jan 1 next year: inside the
+    // window that a refresh on Jun 1 should cover through Jun 2 next year.
+    expect((await lastStartFor(eventId)).getTime()).toBeLessThan(REFRESH_HORIZON.getTime() - ONE_WEEK_MS);
 
-    await service.refreshAllEventInstances();
+    const result = await service.refreshAllEventInstances(REFRESH_AT);
 
-    const calendarIds = eventFindAll.firstCall.args[0]!.where!['calendar_id'][Op.in];
-    expect(calendarIds).toEqual(['c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3']);
+    expect(result).toEqual({ refreshed: 1, failed: 0 });
+    expectReachesHorizon(await lastStartFor(eventId));
   });
 
-  it('emits eventUpdated for each event with its owning calendar', async () => {
-    const calendarId = 'cbe74815-939e-48b3-af44-1cd4eb3671bb';
-    sandbox.stub(CalendarEntity, 'findAll').resolves([
-      buildMockCalendarEntity(calendarId, 'testuser_calendar'),
-    ]);
-    const eventModel = { id: 'evt-1' };
-    sandbox.stub(EventEntity, 'findAll').resolves([
-      { id: 'evt-1', calendar_id: calendarId, toModel: () => eventModel } as any,
-    ]);
-    service.setActivityPubInterface({
-      actorUrl: sandbox.stub().resolves('https://events.example.org/calendars/testuser_calendar'),
-    } as any);
+  it('refreshes a remote-origin event (calendar_id null)', async () => {
+    const eventId = await createStaleWeeklyEvent(null);
 
-    const updates: any[] = [];
-    eventBus.on('eventUpdated', payload => updates.push(payload));
+    const result = await service.refreshAllEventInstances(REFRESH_AT);
 
-    await service.refreshAllEventInstances();
+    expect(result).toEqual({ refreshed: 1, failed: 0 });
+    expectReachesHorizon(await lastStartFor(eventId));
+  });
 
-    expect(updates).toHaveLength(1);
-    expect(updates[0].calendar.id).toBe(calendarId);
-    expect(updates[0].event).toBe(eventModel);
+  it('pages through every event when there are more events than one page', async () => {
+    const eventIds = [
+      await createStaleWeeklyEvent(calendarId),
+      await createStaleWeeklyEvent(null),
+      await createStaleWeeklyEvent(calendarId),
+    ];
+    const findAll = sinon.spy(EventEntity, 'findAll');
+
+    const result = await service.refreshAllEventInstances(REFRESH_AT, 2);
+
+    expect(result).toEqual({ refreshed: 3, failed: 0 });
+    // Two full-or-partial pages, each bounded by the page size.
+    expect(findAll.callCount).toBe(2);
+    expect(findAll.getCalls().every(call => call.args[0]!.limit === 2)).toBe(true);
+    for (const eventId of eventIds) {
+      expectReachesHorizon(await lastStartFor(eventId));
+    }
+  });
+
+  it('keeps going when one event fails to rebuild', async () => {
+    const failingId = await createStaleWeeklyEvent(calendarId);
+    const healthyId = await createStaleWeeklyEvent(calendarId);
+    const failingLastStart = await lastStartFor(failingId);
+
+    const build = service.buildEventInstances.bind(service);
+    sinon.stub(service, 'buildEventInstances').callsFake(async (event: CalendarEvent, now?: Date) => {
+      if (event.id === failingId) {
+        throw new Error('rebuild failed');
+      }
+      return build(event, now);
+    });
+
+    const result = await service.refreshAllEventInstances(REFRESH_AT);
+
+    expect(result).toEqual({ refreshed: 1, failed: 1 });
+    expectReachesHorizon(await lastStartFor(healthyId));
+    expect((await lastStartFor(failingId)).getTime()).toBe(failingLastStart.getTime());
+  });
+
+  it('rebuilds directly without emitting eventUpdated', async () => {
+    // The bus path would also reach the ActivityPub handler and announce an
+    // Update to followers for what is only a local regeneration.
+    await createStaleWeeklyEvent(calendarId);
+    const emitted: string[] = [];
+    const emit = eventBus.emit.bind(eventBus);
+    sinon.stub(eventBus, 'emit').callsFake((name: string | symbol, ...args: any[]) => {
+      emitted.push(String(name));
+      return emit(name, ...args);
+    });
+
+    await service.refreshAllEventInstances(REFRESH_AT);
+
+    expect(emitted).toEqual([]);
   });
 });

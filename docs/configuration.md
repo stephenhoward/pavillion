@@ -294,6 +294,20 @@ mail:
     # pass: your_password
 ```
 
+### Event Instance Refresh
+
+Pavillion stores each event's upcoming occurrences up to six months ahead,
+calculated when the event is created, edited or received from another
+instance. The worker rebuilds them on a schedule so an event nobody edits
+keeps occurrences out to six months. This covers events from other instances
+too, and sends nothing to followers.
+
+```yaml
+housekeeping:
+  instances:
+    schedule: '0 6 * * 0'                   # Cron expression; default weekly, Sunday at 6 AM
+```
+
 ## Complete Configuration Example
 
 Here's a complete `config/local.yaml` example:

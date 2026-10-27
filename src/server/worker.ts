@@ -12,6 +12,7 @@ import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import ActivityPubInterface from '@/server/activitypub/interface';
@@ -76,6 +77,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const ipCleanupService = new IpCleanupService();
   const eventBus = new EventEmitter();
   const calendarInterface = new CalendarInterface(eventBus);
+  calendarInterface.setConfigurationInterface(new ConfigurationInterface());
   const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
   const followBackfillService = new FollowBackfillService({
     activityPubInterface,
@@ -244,6 +246,25 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     },
   );
 
+  // Event instance refresh job handler (runs weekly). Rebuilds every
+  // event's instance rows so the materialised window keeps reaching the
+  // generation horizon for events nobody edits, remote-origin ones included.
+  await queue.schedule(
+    'instances:refresh',
+    config.get<string>('housekeeping.instances.schedule'),
+    async () => {
+      logger.info('Executing instances:refresh job');
+      try {
+        const { refreshed, failed } = await calendarInterface.refreshAllEventInstances();
+        logger.info({ refreshed, failed }, 'Event instance refresh completed');
+      }
+      catch (error) {
+        logger.error({ err: error }, 'Event instance refresh failed');
+        throw error;
+      }
+    },
+  );
+
   // ActivityPub follow-backfill job handler. Published by
   // ActivityPubEventHandlers#handleFollowAccepted whenever a remote
   // Accept(Follow) confirms a follow the local instance initiated.
@@ -302,6 +323,17 @@ function getNextRunTime(cronExpression: string): string {
     const next = DateTime.now().plus({ hours: 1 }).set({ minute: 0, second: 0 });
     return next.toFormat('MMM dd, yyyy h:mm a');
   }
+  const weekly = cronExpression.match(/^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/);
+  if (weekly) {
+    const [minute, hour, cronWeekday] = weekly.slice(1).map(Number);
+    const now = DateTime.now();
+    // cron counts Sunday as 0; luxon counts it as 7.
+    let next = now.set({ weekday: cronWeekday === 0 ? 7 : cronWeekday, hour, minute, second: 0, millisecond: 0 });
+    if (next <= now) {
+      next = next.plus({ weeks: 1 });
+    }
+    return next.toFormat('MMM dd, yyyy h:mm a');
+  }
   return 'scheduled';
 }
 
@@ -318,6 +350,7 @@ function logStartupMessages(): void {
       'disk:check': `next: ${getNextRunTime('0 * * * *')}`,
       'notifications:cleanup': `next: ${getNextRunTime('0 4 * * *')}`,
       'inbox:cleanup': `next: ${getNextRunTime('0 5 * * *')}`,
+      'instances:refresh': `next: ${getNextRunTime(config.get<string>('housekeeping.instances.schedule'))}`,
       'backup:create': 'manual',
       'activitypub:follow:backfill': 'on-demand',
     },

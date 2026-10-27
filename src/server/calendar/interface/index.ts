@@ -30,6 +30,7 @@ import FundingInterface from '@/server/funding/interface';
 import type MediaInterface from '@/server/media/interface';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 import type ModerationInterface from '@/server/moderation/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
@@ -147,6 +148,17 @@ export default class CalendarInterface {
    */
   setModerationInterface(moderationInterface: ModerationInterface): void {
     this.calendarService.setModerationInterface(moderationInterface);
+  }
+
+  /**
+   * Injects ConfigurationInterface so instance generation reads its horizon
+   * from the `eventInstanceMonths` setting. Unbound, the horizon is the
+   * GENERATION_HORIZON_MONTHS floor.
+   *
+   * @param configurationInterface - The ConfigurationInterface instance from the configuration domain
+   */
+  setConfigurationInterface(configurationInterface: ConfigurationInterface): void {
+    this.eventInstanceService.setConfigurationInterface(configurationInterface);
   }
 
   // Calendar operations
@@ -455,7 +467,7 @@ export default class CalendarInterface {
     return this.eventInstanceService.removeEventInstances(event);
   }
 
-  async refreshAllEventInstances(): Promise<void> {
+  async refreshAllEventInstances(): Promise<{ refreshed: number; failed: number }> {
     return this.eventInstanceService.refreshAllEventInstances();
   }
 

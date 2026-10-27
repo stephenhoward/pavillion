@@ -51,6 +51,12 @@ class ServiceSettings {
       if( entity.parameter == 'siteTitle' ) {
         this.config.siteTitle = entity.value;
       }
+      if ( entity.parameter == 'eventInstanceMonths' ) {
+        const months = Number(entity.value);
+        if ( Number.isInteger(months) && months > 0 ) {
+          this.config.eventInstanceMonths = months;
+        }
+      }
       if ( entity.parameter == 'defaultDateRange' ) {
         if ( isDefaultDateRange(entity.value) ) {
           this.config.defaultDateRange = entity.value;

@@ -324,3 +324,8 @@ housekeeping:
     retentionDays: 30
     batchSize: 1000
     schedule: '0 5 * * *'  # Daily at 5 AM
+  # Weekly rebuild of every event's materialised instance rows, so an event
+  # nobody edits keeps rows out to the generation horizon. Local and
+  # remote-origin events alike; no federation traffic is sent.
+  instances:
+    schedule: '0 6 * * 0'  # Weekly, Sunday at 6 AM
