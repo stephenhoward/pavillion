@@ -38,6 +38,24 @@ import { parseByDayEntry } from '@/common/utils/recurrence-by-day';
 
 const logger = createLogger('calendar');
 
+/**
+ * Associations eager-loaded onto the parent `EventEntity` by every
+ * instance detail-path query (getEventInstanceWithDetails and the three
+ * queries in findOrMaterializeInstanceWithDetails). Shared so the paths
+ * cannot drift: each must yield the same detail shape, including the
+ * series the public instance page links to. Sequelize deep-clones query
+ * options, so reusing this array across queries is safe.
+ */
+const EVENT_DETAIL_INCLUDES = [
+  EventContentEntity,
+  { model: LocationEntity, include: [LocationContentEntity] },
+  { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
+  EventScheduleEntity,
+  MediaEntity,
+  CalendarEntity,
+  { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
+];
+
 const { RRule, RRuleSet, Weekday } = rrule;
 
 /**
@@ -567,17 +585,7 @@ export default class EventInstanceService {
       include: [{
         model: EventEntity,
         as: 'event',
-        include: [
-          EventContentEntity,
-          {
-            model: LocationEntity,
-            include: [LocationContentEntity],
-          },
-          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
-          EventScheduleEntity,
-          MediaEntity,
-          CalendarEntity,
-        ],
+        include: EVENT_DETAIL_INCLUDES,
       }],
     });
 
@@ -751,14 +759,7 @@ export default class EventInstanceService {
       include: [{
         model: EventEntity,
         as: 'event',
-        include: [
-          EventContentEntity,
-          { model: LocationEntity, include: [LocationContentEntity] },
-          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
-          EventScheduleEntity,
-          MediaEntity,
-          CalendarEntity,
-        ],
+        include: EVENT_DETAIL_INCLUDES,
       }],
     });
     if (cached) {
@@ -776,14 +777,7 @@ export default class EventInstanceService {
     //    the cancelled-shown path — every branch from here on works from the
     //    same entity.
     const eventEntity = await EventEntity.findByPk(eventId, {
-      include: [
-        EventContentEntity,
-        { model: LocationEntity, include: [LocationContentEntity] },
-        { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
-        EventScheduleEntity,
-        MediaEntity,
-        CalendarEntity,
-      ],
+      include: EVENT_DETAIL_INCLUDES,
     });
     if (!eventEntity) {
       return null;
@@ -865,14 +859,7 @@ export default class EventInstanceService {
       include: [{
         model: EventEntity,
         as: 'event',
-        include: [
-          EventContentEntity,
-          { model: LocationEntity, include: [LocationContentEntity] },
-          { model: LocationSpaceEntity, include: [LocationSpaceContentEntity] },
-          EventScheduleEntity,
-          MediaEntity,
-          CalendarEntity,
-        ],
+        include: EVENT_DETAIL_INCLUDES,
       }],
     });
     if (!persisted) return null;
