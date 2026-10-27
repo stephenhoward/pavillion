@@ -183,6 +183,38 @@ describe('Remote-editor envelope — inbound sanitization (integration)', () => 
     expect(emitted.content).not.toMatch(/<script|<b>/i);
   });
 
+  it('persists a Person-actor Update that moves an existing schedule\'s start and end', async () => {
+    asAuthorizedEditor();
+    const apObjectId = `https://editor.example/events/${uuidv4()}`;
+    const eventId = await editorCreate(apObjectId, {
+      content: { en: { name: 'Remote Event' } },
+      schedules: [{ start: '2030-01-01T10:00:00Z', eventEndTime: '2030-01-01T11:00:00Z' }],
+    });
+    const scheduleId = (await calendarInterface.getEventById(eventId)).schedules[0].id;
+
+    // The schedule shape our own instance ships: CalendarEventSchedule.toObject()
+    // always emits `end`, null when the schedule is non-recurring.
+    await editorUpdate(apObjectId, eventId, {
+      content: { en: { name: 'Remote Event' } },
+      schedules: [{
+        id: scheduleId,
+        start: '2030-01-02T14:00:00Z',
+        end: null,
+        eventEndTime: '2030-01-02T15:00:00Z',
+        isException: false,
+      }],
+    });
+
+    const stored = await calendarInterface.getEventById(eventId);
+    expect(stored.schedules).toHaveLength(1);
+    const schedule = stored.schedules[0];
+    expect(schedule.id).toBe(scheduleId);
+    expect(schedule.startDate!.toUTC().toISO()).toBe('2030-01-02T14:00:00.000Z');
+    expect(schedule.eventEndTime!.toUTC().toISO()).toBe('2030-01-02T15:00:00.000Z');
+    // Non-recurring: endDate follows eventEndTime.
+    expect(schedule.endDate!.toUTC().toISO()).toBe('2030-01-02T15:00:00.000Z');
+  });
+
   it('never links a Person-actor Create to a local media or series row named in the envelope', async () => {
     const media = await MediaEntity.create({
       id: uuidv4(),
