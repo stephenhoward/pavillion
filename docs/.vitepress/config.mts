@@ -36,6 +36,8 @@ export default defineConfig({
   srcExclude: [
     'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',
+    'decisions.md',
+    'decisions/**',
     'federation-testing.md',
     'internationalization.md',
     'mission.md',

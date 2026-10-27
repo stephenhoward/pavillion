@@ -3,7 +3,7 @@
 > This is the reference statement for everyone working on Pavillion, human or agent.
 > When a piece of work, a review, or a ranking decision conflicts with something
 > here, this document wins unless a recorded decision says otherwise. Recorded
-> decisions are in [the product decision log](../agent-os/product/decisions.md).
+> decisions are in [the product decision log](decisions.md).
 
 ## Mission
 

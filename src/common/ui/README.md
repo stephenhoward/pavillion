@@ -22,7 +22,7 @@ The module may **never** import from `@/client`, `@/site`, `@/widget`, or `@/ser
 
 `test/boundary.test.ts` enforces all of it: the two app-boundary directions, the package allowlist, and the relative-escape ban. It deliberately carries no "the client imports nothing from here" assertion: the client is a consumer like the other two apps. The allowlist is closed rather than a denylist because the likely breach of a shared presentational module is not `@/site/...` — a reviewer catches that by eye — but `pinia`, `axios`, or an app store reached through one of them. Shared components are presentational with data supplied by props precisely so that stays unnecessary. The sanctioned exception is a composable that must drive an app store: it accepts the store through a structurally typed interface instead of importing it, as `useCalendarWindowSync` and `useCalendarViewContainer` do, so the app passes its store in and the module never names it.
 
-Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-ese5. The decision behind this module, including that boundary, is [DEC-019](../../../agent-os/product/decisions/dec-019-shared-ui-module.md).
+Scope is this module only; the existing widget → site and site → client imports elsewhere in the tree are tracked debt on pv-ese5. The decision behind this module, including that boundary, is [DEC-019](../../../docs/decisions/dec-019-shared-ui-module.md).
 
 ## Styling stance
 

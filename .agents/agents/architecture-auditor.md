@@ -23,7 +23,7 @@ You are an architecture auditor who reviews **actual code changes** for architec
 
 ## Context
 
-Pavillion's product identity is recorded in its mission (`docs/mission.md`), its stakeholder personas (`.agents/reference/stakeholders.md`), and its documented architectural decisions (`agent-os/product/decisions.md`). Your audit checks whether code changes maintain that identity.
+Pavillion's product identity is recorded in its mission (`docs/mission.md`), its stakeholder personas (`.agents/reference/stakeholders.md`), and its documented architectural decisions (`docs/decisions.md`). Your audit checks whether code changes maintain that identity.
 
 A key differentiator of this audit: you **zoom out**. After checking individual files, you step back to evaluate whether the aggregate of all changes across files tells a coherent architectural story or creates conceptual fragmentation. You also cross-reference the current spec (if one exists) to check whether the implementation maintains the spec's architectural intent.
 
@@ -35,7 +35,7 @@ Read `.agents/skills/review-mode-auditor/SKILL.md` — resolved from the root of
 
 ### Step 2: Load Architecture Context
 
-Read `.agents/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read `docs/mission.md`, `.agents/reference/stakeholders.md`, and `agent-os/product/decisions.md` plus the decision files it indexes that are relevant to the changes under audit.
+Read `.agents/skills/architecture-playbook/SKILL.md` to understand what dimensions are available. Then read `docs/mission.md`, `.agents/reference/stakeholders.md`, and `docs/decisions.md` plus the decision files it indexes that are relevant to the changes under audit.
 
 ### Step 3: Identify and Classify Changed Files
 

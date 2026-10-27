@@ -1073,7 +1073,7 @@ class EventObject extends ActivityPubObject {
    * so does their cap: EventService normalizes federated content through
    * sanitizeImageAlt on the way into storage. That split — this layer strips
    * markup and closes the key set, the calendar domain owns the cap — is
-   * recorded in DEC-014 (agent-os/product/decisions/dec-014-create-original-
+   * recorded in DEC-014 (docs/decisions/dec-014-create-original-
    * announce-repost.md), which is also where the version-skew consequence of
    * closing the key set here is written down.
    */

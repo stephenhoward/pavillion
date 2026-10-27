@@ -18,7 +18,7 @@ import { AccountEntity } from '@/server/common/entity/account';
 // Sequelize @ForeignKey() and @BelongsTo() decorators require entity class references
 // at class-definition time. These imports cannot be replaced with interface methods
 // because the ORM needs the actual model class for schema registration.
-// See: agent-os/product/decisions.md DEC-003
+// See: docs/decisions.md DEC-003
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { CalendarMember } from '@/common/model/calendar_member';

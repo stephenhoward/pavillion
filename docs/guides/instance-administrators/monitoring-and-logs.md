@@ -49,7 +49,7 @@ Two settings in `config/local.yaml` (or their environment variables) shape the l
 
 `0.0.0.0` is correct inside the container: a companion scraper on the Compose network has to be able to reach it, and the unpublished port is what keeps it private. If you run Pavillion directly on a host instead of in Docker, set the bind address to `127.0.0.1` — there, `0.0.0.0` puts an unauthenticated endpoint on every network the machine is attached to. Changing either setting never publishes the port. `housekeeping.monitoring.metrics.enabled: false` turns the listener off.
 
-The project's reasoning for this posture is recorded in [DEC-017: Operational Telemetry Exposure](https://github.com/stephenhoward/pavillion/blob/main/agent-os/product/decisions/dec-017-operational-telemetry-exposure.md).
+The project's reasoning for this posture is recorded in [DEC-017: Operational Telemetry Exposure](https://github.com/stephenhoward/pavillion/blob/main/docs/decisions/dec-017-operational-telemetry-exposure.md).
 
 ### When to use `/health` or the metrics port
 

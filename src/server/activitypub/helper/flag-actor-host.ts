@@ -10,7 +10,7 @@
  * The canonical statement of this rule is `anonymizeFlagActor` in the
  * notifications domain, which applies it to the `notification_activity` row.
  * That module cannot be imported here — domain boundaries forbid it
- * ([DEC-003](../../../../agent-os/product/decisions/dec-003-domain-driven-architecture.md))
+ * ([DEC-003](../../../../docs/decisions/dec-003-domain-driven-architecture.md))
  * — so this helper restates the reduction for the ActivityPub domain's own
  * inbox paths. Keep the two consistent: `anonymizeFlagActor` is the rule of
  * record.

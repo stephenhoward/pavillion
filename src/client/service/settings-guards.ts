@@ -35,7 +35,7 @@ import {
  * address bar (Back/Forward, a first load). withHistoryMode is that one
  * form. Every target is a fixed named route: no URL input is echoed into
  * one. See DEC-021, client settings information
- * architecture (agent-os/product/decisions/dec-021-client-settings-information-architecture.md).
+ * architecture (docs/decisions/dec-021-client-settings-information-architecture.md).
  */
 
 /**

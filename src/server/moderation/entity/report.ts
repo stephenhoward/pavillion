@@ -47,7 +47,7 @@ class ReportEntity extends Model {
    * as a *live routing key*, so a stale copy routes a calendar owner to a
    * different calendar's reports page. Adding a report-reassignment path
    * therefore requires a write-through to that column, not just a comment.
-   * See DEC-015 (`agent-os/product/decisions/dec-015-activity-log-routing-keys.md`).
+   * See DEC-015 (`docs/decisions/dec-015-activity-log-routing-keys.md`).
    */
   @Column({ type: DataType.UUID, allowNull: true })
   declare calendar_id: string | null;
