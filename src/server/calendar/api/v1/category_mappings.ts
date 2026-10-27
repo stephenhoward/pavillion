@@ -7,6 +7,8 @@ import CalendarInterface from '../../interface';
 import CategoryMappingService from '@/server/calendar/service/category_mapping';
 import { EventCategoryEntity, EventCategoryContentEntity } from '@/server/calendar/entity/event_category';
 import { logError } from '@/server/common/helper/error-logger';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { REMOTE_OBJECT_FETCH_TIMEOUT_MS, REMOTE_OBJECT_MAX_BYTES } from '@/server/common/constants';
 
 interface ActorInfo {
   actorType: 'local' | 'remote';
@@ -261,7 +263,11 @@ class CategoryMappingRoutes {
 
   /**
    * Handle remote actor branch: proxy to the stored actor_uri public API.
-   * SSRF protection: URL is derived from actor.actor_uri (stored field), never from request input.
+   *
+   * SSRF protection: the URL is derived from actor.actor_uri (stored field),
+   * never from request input; it is checked against private addresses before
+   * the request, redirects are refused, and the response body is capped at
+   * REMOTE_OBJECT_MAX_BYTES. Any failure answers 502.
    */
   private async handleRemoteActor(
     actor: ActorInfo,
@@ -275,7 +281,15 @@ class CategoryMappingRoutes {
       const calName = actorUrl.pathname.split('/').filter(Boolean).pop();
       const remoteCategoriesUrl = `${actorUrl.origin}/api/public/v1/calendar/${calName}/categories`;
 
-      const response = await axios.get(remoteCategoriesUrl, { timeout: 5000 });
+      await validateUrlNotPrivate(remoteCategoriesUrl);
+
+      const response = await axios.get(remoteCategoriesUrl, {
+        timeout: REMOTE_OBJECT_FETCH_TIMEOUT_MS,
+        maxRedirects: 0,
+        // maxContentLength caps the response body; axios maxBodyLength
+        // applies to the request body only.
+        maxContentLength: REMOTE_OBJECT_MAX_BYTES,
+      });
 
       const result = response.data.map((c: any) => ({
         id: c.id,
