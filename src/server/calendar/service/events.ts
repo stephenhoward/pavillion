@@ -464,6 +464,9 @@ class EventService {
    * - Reposted by the calendar (via EventRepostEntity)
    * - Shared by the calendar (via SharedEventEntity - auto-repost or manual share)
    *
+   * Each event is returned with its location, schedules, media, series,
+   * categories and content eager-loaded.
+   *
    * @param calendar - the calendar to retrieve events for
    * @param options - optional search and filter parameters
    * @returns a promise that resolves to the list of events
@@ -494,6 +497,7 @@ class EventService {
         LocationEntity,
         EventScheduleEntity,
         MediaEntity,
+        { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
         {
           model: EventCategoryAssignmentEntity,
           as: 'categoryAssignments',
