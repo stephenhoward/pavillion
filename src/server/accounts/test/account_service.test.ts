@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import { Op } from 'sequelize';
+import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
@@ -239,6 +240,10 @@ describe('applyForNewAccount', () => {
   let accountService: AccountService;
   let emailInterface: EmailInterface;
 
+  // The confirmation window is 7 calendar days in local time, not 7×24h.
+  const sevenCalendarDaysAfter = (ms: number): number =>
+    DateTime.fromMillis(ms).plus({ days: 7 }).toMillis();
+
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
@@ -299,14 +304,13 @@ describe('applyForNewAccount', () => {
     // Token primitive: randomBytes(16).toString('hex') = 32 hex chars
     expect(buildArgs.confirmation_token).toMatch(/^[0-9a-f]{32}$/);
 
-    // Expiration is ~7 days from now (within a few seconds tolerance)
+    // Expiration is 7 calendar days from now in local time (a DST transition
+    // inside the window makes that 7×24h ± 1h), within a few seconds tolerance
     const expiration = buildArgs.confirmation_token_expiration as Date;
     expect(expiration).toBeInstanceOf(Date);
     const expirationMs = expiration.getTime();
-    const expectedMin = before + 7 * 24 * 60 * 60 * 1000 - 5000;
-    const expectedMax = after + 7 * 24 * 60 * 60 * 1000 + 5000;
-    expect(expirationMs).toBeGreaterThanOrEqual(expectedMin);
-    expect(expirationMs).toBeLessThanOrEqual(expectedMax);
+    expect(expirationMs).toBeGreaterThanOrEqual(sevenCalendarDaysAfter(before) - 5000);
+    expect(expirationMs).toBeLessThanOrEqual(sevenCalendarDaysAfter(after) + 5000);
 
     // The confirmation email must be addressed to the applicant
     const sentMail = emailStub.firstCall.args[0];
@@ -369,11 +373,11 @@ describe('applyForNewAccount', () => {
     expect(existing.confirmation_token).not.toBe(originalToken);
     expect(existing.confirmation_token).toMatch(/^[0-9a-f]{32}$/);
 
-    // Expiration is reset to ~7 days from now (not the old 1hr expiration)
+    // Expiration is reset to 7 calendar days from now (not the old 1hr expiration)
     expect(existing.confirmation_token_expiration).not.toBe(originalExpiration);
     const newExpirationMs = (existing.confirmation_token_expiration as Date).getTime();
-    expect(newExpirationMs).toBeGreaterThanOrEqual(before + 7 * 24 * 60 * 60 * 1000 - 5000);
-    expect(newExpirationMs).toBeLessThanOrEqual(after + 7 * 24 * 60 * 60 * 1000 + 5000);
+    expect(newExpirationMs).toBeGreaterThanOrEqual(sevenCalendarDaysAfter(before) - 5000);
+    expect(newExpirationMs).toBeLessThanOrEqual(sevenCalendarDaysAfter(after) + 5000);
 
     // Message refreshed
     expect(existing.message).toBe('Refreshed message');
