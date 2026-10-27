@@ -22,15 +22,20 @@ import {
  * two inbox routes:
  *
  *   POST /users/:username/inbox (UserActorRoutes.installHandlers)
- *     createActorRateLimiter() -> createUserRateLimiter() -> verifyHttpSignature -> handler
+ *     createUserRateLimiter() -> verifyHttpSignature -> createActorRateLimiter() -> handler
  *
  *   POST /calendars/:urlname/inbox (ActivityPubServerRoutes.installHandlers)
- *     createActorRateLimiter() -> createCalendarRateLimiter() -> verifyHttpSignature -> handler
+ *     createCalendarRateLimiter() -> verifyHttpSignature -> createActorRateLimiter() -> handler
  *
- * The limiters run BEFORE HTTP signature verification, matching the DEC-013
- * ingest-boundary posture. Signature verification is bypassed here (SKIP_SIGNATURES) so requests
- * reach the limiters and the terminal handler without managing certificates;
- * this isolates limiter behavior while still proving the wiring and ordering.
+ * The per-user and per-calendar limiters bound signature work before
+ * verification; the per-peer (actor) limiter runs after it and keys on the
+ * verified keyId origin (DEC-013). Signature verification is bypassed here
+ * (SKIP_SIGNATURES) so requests reach the limiters and the terminal handler
+ * without managing certificates; this isolates limiter behavior while still
+ * proving the wiring. Requests meant to count against the per-peer limiter
+ * carry a parseable Signature header (`signedBy`); unsigned requests have no
+ * keyId origin and pass it uncounted. The ordering relative to verification is
+ * proved with signatures enforced in test/api/inbox-rate-limit-order.test.ts.
  *
  * The federation-identity limiters use the AP-domain in-memory LRU store
  * (rateLimit.activitypub.{actor,user}) and assert on 429 status, not on the
@@ -87,6 +92,17 @@ function buildCalendarServer(): http.Server {
   return http.createServer(app);
 }
 
+/**
+ * Signature and Date headers naming `actor`'s key. Under SKIP_SIGNATURES the
+ * signature is never checked; the per-peer limiter only needs a parseable keyId.
+ */
+function signedBy(actor: string): Record<string, string> {
+  return {
+    Signature: `keyId="${actor}#main-key",algorithm="rsa-sha256",headers="(request-target) host date",signature="fake"`,
+    Date: new Date().toUTCString(),
+  };
+}
+
 function followActivity(calendar: string, actor: string, n: number | string) {
   return {
     '@context': 'https://www.w3.org/ns/activitystreams',
@@ -115,9 +131,8 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
   let server: http.Server;
 
   beforeAll(async () => {
-    // Bypass HTTP signature verification so requests reach the limiters and the
-    // terminal handler. The limiters run before verifyHttpSignature, so this
-    // lets us assert end-to-end limiter behavior without valid signatures.
+    // Bypass HTTP signature verification so requests reach both limiters and
+    // the terminal handler without valid signatures.
     process.env.SKIP_SIGNATURES = 'true';
 
     server = buildServer();
@@ -149,8 +164,8 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       // Config default: rateLimit.activitypub.user.max = 120 per minute.
       const max = config.get<number>('rateLimit.activitypub.user.max');
 
-      // Vary the actor each request so the actor limiter (max 60) does not fire
-      // first; this isolates the per-user limiter as the cause of the 429.
+      // Requests are unsigned, so the per-peer limiter (max 60) has no keyId
+      // origin to count; this isolates the per-user limiter as the cause of the 429.
       for (let i = 0; i < max; i++) {
         const response = await request(server)
           .post('/users/alice/inbox')
@@ -170,7 +185,7 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
     it('keeps per-user limits isolated: exhausting user A does not affect user B', async () => {
       const max = config.get<number>('rateLimit.activitypub.user.max');
 
-      // Exhaust user A's per-user budget, varying actors to avoid the actor cap.
+      // Exhaust user A's per-user budget; unsigned requests skip the per-peer cap.
       for (let i = 0; i < max; i++) {
         const response = await request(server)
           .post('/users/alice/inbox')
@@ -211,17 +226,18 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
     });
   });
 
-  describe('per-actor limiter', () => {
-    it('returns 429 once the per-actor threshold is exceeded', async () => {
+  describe('per-peer limiter', () => {
+    it('returns 429 once the per-peer threshold is exceeded', async () => {
       // Config default: rateLimit.activitypub.actor.max = 60 per minute.
       const max = config.get<number>('rateLimit.activitypub.actor.max');
       const actor = 'https://remote.example/users/aggressor';
 
       // Vary the username each request so the per-user limiter (max 120) does
-      // not fire first; this isolates the actor limiter as the cause of the 429.
+      // not fire first; this isolates the per-peer limiter as the cause of the 429.
       for (let i = 0; i < max; i++) {
         const response = await request(server)
           .post(`/users/target${i}/inbox`)
+          .set(signedBy(actor))
           .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
@@ -229,21 +245,23 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
 
       const blocked = await request(server)
         .post('/users/targetN/inbox')
+        .set(signedBy(actor))
         .send({ type: 'Add', actor });
 
       expect(blocked.status).toBe(429);
       expect(blocked.headers['retry-after']).toBeDefined();
     });
 
-    it('keeps per-actor limits isolated: exhausting actor A does not affect actor B', async () => {
+    it('keeps per-peer limits isolated: exhausting peer A does not affect peer B', async () => {
       const max = config.get<number>('rateLimit.activitypub.actor.max');
       const actorA = 'https://remote.example/users/actorA';
-      const actorB = 'https://remote.example/users/actorB';
+      const actorB = 'https://other.example/users/actorB';
 
-      // Exhaust actor A across distinct usernames to avoid the per-user cap.
+      // Exhaust peer A across distinct usernames to avoid the per-user cap.
       for (let i = 0; i < max; i++) {
         const response = await request(server)
           .post(`/users/target${i}/inbox`)
+          .set(signedBy(actorA))
           .send({ type: 'Add', actor: actorA });
 
         expect(response.status).toBe(200);
@@ -251,13 +269,15 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
 
       const aBlocked = await request(server)
         .post('/users/targetN/inbox')
+        .set(signedBy(actorA))
         .send({ type: 'Add', actor: actorA });
 
       expect(aBlocked.status).toBe(429);
 
-      // Actor B is unaffected by actor A's exhaustion.
+      // Peer B (a different origin) is unaffected by peer A's exhaustion.
       const bAllowed = await request(server)
         .post('/users/freshtarget/inbox')
+        .set(signedBy(actorB))
         .send({ type: 'Add', actor: actorB });
 
       expect(bAllowed.status).toBe(200);
@@ -270,11 +290,13 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
       for (let i = 0; i < max; i++) {
         await request(server)
           .post(`/users/target${i}/inbox`)
+          .set(signedBy(actor))
           .send({ type: 'Add', actor });
       }
 
       const blocked = await request(server)
         .post('/users/targetN/inbox')
+        .set(signedBy(actor))
         .send({ type: 'Add', actor });
 
       expect(blocked.status).toBe(429);
@@ -283,16 +305,17 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
   });
 
   describe('chain ordering', () => {
-    it('runs limiters before signature verification (both limits enforced on the same route)', async () => {
-      // The actor cap (60) is lower than the per-user cap (120). Holding both the
-      // username and actor constant, the actor limiter must trip first, proving
-      // the actor limiter is installed and reached on the user-inbox route.
+    it('installs both limiters on the user inbox, and the per-peer limiter trips first', async () => {
+      // The per-peer cap (60) is lower than the per-user cap (120). Holding both
+      // the username and signer constant, the per-peer limiter must trip first,
+      // proving it is installed and reached on the user-inbox route.
       const actorMax = config.get<number>('rateLimit.activitypub.actor.max');
       const actor = 'https://remote.example/users/steady';
 
       for (let i = 0; i < actorMax; i++) {
         const response = await request(server)
           .post('/users/alice/inbox')
+          .set(signedBy(actor))
           .send({ type: 'Add', actor });
 
         expect(response.status).toBe(200);
@@ -300,11 +323,11 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
 
       const blocked = await request(server)
         .post('/users/alice/inbox')
+        .set(signedBy(actor))
         .send({ type: 'Add', actor });
 
-      // 429 (not 401) confirms the limiter shed the request before signature
-      // verification ran, matching the calendar-inbox chain ordering.
       expect(blocked.status).toBe(429);
+      expect(blocked.body.error).toBe('Too many requests from this actor, please try again later.');
     });
   });
 });
@@ -340,8 +363,8 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
     it('returns 429 once the per-calendar threshold is exceeded', async () => {
       const max = config.get<number>('rateLimit.activitypub.calendar.max');
 
-      // Vary the actor each request so the actor limiter (lower cap) does not
-      // fire first; this isolates the per-calendar limiter as the cause of the 429.
+      // Requests are unsigned, so the per-peer limiter (lower cap) has no keyId
+      // origin to count; this isolates the per-calendar limiter as the cause of the 429.
       for (let i = 0; i < max; i++) {
         const sender = `https://remote.example/users/sender${i}`;
         const response = await request(server)
@@ -390,10 +413,10 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
   });
 
   describe('chain ordering', () => {
-    it('runs the actor limiter on the calendar inbox before signature verification', async () => {
-      // The actor cap is lower than the per-calendar cap. Holding both the
-      // calendar and actor constant, the actor limiter must trip first, proving
-      // it is installed and reached on the calendar-inbox route.
+    it('installs both limiters on the calendar inbox, and the per-peer limiter trips first', async () => {
+      // The per-peer cap is lower than the per-calendar cap. Holding both the
+      // calendar and signer constant, the per-peer limiter must trip first,
+      // proving it is installed and reached on the calendar-inbox route.
       const actorMax = config.get<number>('rateLimit.activitypub.actor.max');
       const calendarMax = config.get<number>('rateLimit.activitypub.calendar.max');
       expect(actorMax).toBeLessThan(calendarMax);
@@ -403,6 +426,7 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
       for (let i = 0; i < actorMax; i++) {
         const response = await request(server)
           .post('/calendars/alpha/inbox')
+          .set(signedBy(actor))
           .send(followActivity('alpha', actor, i));
 
         expect(response.status).toBe(200);
@@ -410,10 +434,9 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
 
       const blocked = await request(server)
         .post('/calendars/alpha/inbox')
+        .set(signedBy(actor))
         .send(followActivity('alpha', actor, 'N'));
 
-      // 429 (not 401) confirms the limiter shed the request before signature
-      // verification ran.
       expect(blocked.status).toBe(429);
       expect(blocked.body.error).toBe('Too many requests from this actor, please try again later.');
     });

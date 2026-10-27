@@ -134,8 +134,8 @@ const HIGH_ABUSE_RISK_ROUTES: { method: string; path: string }[] = [
   { method: 'POST', path: '/api/public/v1/events/:eventId/reports' },
   // Authenticated moderation report submission — IP + account limiters.
   { method: 'POST', path: '/api/v1/reports' },
-  // ActivityPub federation inboxes — actor + calendar/user limiters (run before
-  // signature verification per DEC-013 ingest-boundary posture).
+  // ActivityPub federation inboxes — calendar/user limiter before signature
+  // verification, per-peer limiter after it, keyed on the verified origin (DEC-013).
   { method: 'POST', path: '/calendars/:urlname/inbox' },
   { method: 'POST', path: '/users/:username/inbox' },
   // ICS file upload — buffers a 10 MiB body into memory then CPU-parses it and

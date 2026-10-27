@@ -42,13 +42,14 @@ export default class UserActorRoutes {
     router.get('/users/:username', this.getUserActor.bind(this));
 
     // Secure endpoint - User inbox requires HTTP signature.
-    // Rate limiters run BEFORE signature verification, mirroring the calendar
-    // inbox chain (activitypub/api/v1/server.ts), so abusive senders are shed
-    // at the ingest boundary before any signature work (DEC-013).
+    // Mirrors the calendar inbox chain (activitypub/api/v1/server.ts): the
+    // user limiter bounds signature work per inbox before verification, and
+    // the per-peer limiter runs after it, keyed on the verified signer origin
+    // (DEC-013), so an unsigned request cannot spend a named peer's budget.
     router.post('/users/:username/inbox',
-      createActorRateLimiter(),
       createUserRateLimiter(),
       verifyHttpSignature as RequestHandler,
+      createActorRateLimiter(),
       this.postToInbox.bind(this));
 
     // Outbox endpoint - basic implementation (no auth for now, as it returns empty collection)

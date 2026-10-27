@@ -73,10 +73,12 @@ export default class ActivityPubServerRoutes {
     router.get('/calendars/:urlname/series', this.getSeriesCollection.bind(this));
     router.get('/calendars/:urlname/series/:seriesid', this.getSeries.bind(this));
     router.get('/calendars/:urlname/outbox', this.readOutbox.bind(this));
+    // The calendar limiter bounds signature work per inbox before verification;
+    // the per-peer limiter runs after it so its key is the verified signer.
     router.post('/calendars/:urlname/inbox',
-      createActorRateLimiter(),
       createCalendarRateLimiter(),
       verifyHttpSignature as RequestHandler,
+      createActorRateLimiter(),
       this.addToInbox.bind(this));
 
     app.use(routePrefix, router);

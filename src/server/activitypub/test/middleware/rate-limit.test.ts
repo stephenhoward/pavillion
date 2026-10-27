@@ -10,6 +10,18 @@ import {
   getCalendarRateLimitStore,
 } from '@/server/activitypub/middleware/rate-limit';
 
+/**
+ * Signature and Date headers whose keyId belongs to `actor`. The actor limiter
+ * keys on the keyId's origin and is mounted after `verifyHttpSignature` in
+ * production, so these unit tests only need the header to be parseable, not valid.
+ */
+function signedBy(actor: string): Record<string, string> {
+  return {
+    Signature: `keyId="${actor}#main-key",algorithm="rsa-sha256",headers="(request-target) host date",signature="fake"`,
+    Date: new Date().toUTCString(),
+  };
+}
+
 describe('createActorRateLimiter', () => {
   beforeEach(() => {
     // Reset the store before each test
@@ -34,6 +46,7 @@ describe('createActorRateLimiter', () => {
       for (let i = 0; i < 3; i++) {
         const response = await request(app)
           .post('/inbox')
+          .set(signedBy('https://remote.example/users/alice'))
           .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
         expect(response.status).toBe(200);
@@ -54,6 +67,7 @@ describe('createActorRateLimiter', () => {
       for (let i = 0; i < 2; i++) {
         const response = await request(app)
           .post('/inbox')
+          .set(signedBy('https://remote.example/users/alice'))
           .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
         expect(response.status).toBe(200);
@@ -62,6 +76,7 @@ describe('createActorRateLimiter', () => {
       // Third request should be blocked
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(429);
@@ -81,11 +96,13 @@ describe('createActorRateLimiter', () => {
       // First request succeeds
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       // Second request should be rate limited
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(429);
@@ -93,7 +110,7 @@ describe('createActorRateLimiter', () => {
       expect(parseInt(response.headers['retry-after'])).toBeGreaterThan(0);
     });
 
-    it('should track limits per actor separately', async () => {
+    it('should track limits per peer origin separately', async () => {
       const app = express();
       app.use(express.json());
 
@@ -102,25 +119,28 @@ describe('createActorRateLimiter', () => {
         res.json({ success: true });
       });
 
-      // Actor 1: Make 2 requests
+      // remote.example: Make 2 requests
       for (let i = 0; i < 2; i++) {
         const response = await request(app)
           .post('/inbox')
+          .set(signedBy('https://remote.example/users/alice'))
           .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
         expect(response.status).toBe(200);
       }
 
-      // Actor 2: Can still make requests (separate limit)
+      // A different origin can still make requests (separate limit)
       const response = await request(app)
         .post('/inbox')
-        .send({ actor: 'https://remote.example/users/bob', type: 'Follow' });
+        .set(signedBy('https://other.example/users/bob'))
+        .send({ actor: 'https://other.example/users/bob', type: 'Follow' });
 
       expect(response.status).toBe(200);
 
-      // Actor 1: Should now be rate limited
+      // The first origin should now be rate limited
       const rateLimitedResponse = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(rateLimitedResponse.status).toBe(429);
@@ -139,6 +159,7 @@ describe('createActorRateLimiter', () => {
       for (let i = 0; i < 60; i++) {
         const response = await request(app)
           .post('/inbox')
+          .set(signedBy('https://remote.example/users/alice'))
           .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
         expect(response.status).toBe(200);
@@ -147,94 +168,90 @@ describe('createActorRateLimiter', () => {
       // 61st request should be blocked
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(429);
     });
   });
 
-  describe('actor extraction', () => {
-    it('should extract actor from string in request body', async () => {
+  describe('origin extraction', () => {
+    function buildApp() {
       const app = express();
       app.use(express.json());
-
-      const limiter = createActorRateLimiter(1, 60000);
-      app.post('/inbox', limiter, (req, res) => {
+      app.post('/inbox', createActorRateLimiter(1, 60000), (req, res) => {
         res.json({ success: true });
       });
+      return app;
+    }
 
-      // First request succeeds
+    it('should key on the keyId origin, not the body actor', async () => {
+      const app = buildApp();
+
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
-      // Second request should be rate limited
+      // Same signer origin, different body actor: same bucket
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
+        .send({ actor: 'https://elsewhere.example/users/carol', type: 'Follow' });
+
+      expect(response.status).toBe(429);
+      expect(getActorRateLimitStore().size).toBe(1);
+    });
+
+    it('should share one bucket between actors on the same origin', async () => {
+      const app = buildApp();
+
+      await request(app)
+        .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
+
+      const response = await request(app)
+        .post('/inbox')
+        .set(signedBy('https://remote.example/calendars/events'))
+        .send({ actor: 'https://remote.example/calendars/events', type: 'Follow' });
 
       expect(response.status).toBe(429);
     });
 
-    it('should extract actor from object with id property', async () => {
-      const app = express();
-      app.use(express.json());
+    it('should not count a body actor when there is no Signature header', async () => {
+      const app = buildApp();
 
-      const limiter = createActorRateLimiter(1, 60000);
-      app.post('/inbox', limiter, (req, res) => {
-        res.json({ success: true });
-      });
+      for (let i = 0; i < 2; i++) {
+        const response = await request(app)
+          .post('/inbox')
+          .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
-      // First request with actor as object
-      await request(app)
-        .post('/inbox')
-        .send({
-          actor: { id: 'https://remote.example/users/alice', type: 'Person' },
-          type: 'Follow',
-        });
-
-      // Second request should be rate limited
-      const response = await request(app)
-        .post('/inbox')
-        .send({
-          actor: { id: 'https://remote.example/users/alice', type: 'Person' },
-          type: 'Follow',
-        });
-
-      expect(response.status).toBe(429);
+        expect(response.status).toBe(200);
+      }
+      expect(getActorRateLimitStore().size).toBe(0);
     });
 
-    it('should allow request when actor cannot be extracted', async () => {
-      const app = express();
-      app.use(express.json());
+    it('should allow request when the keyId is not a URL', async () => {
+      const app = buildApp();
 
-      const limiter = createActorRateLimiter(1, 60000);
-      app.post('/inbox', limiter, (req, res) => {
-        res.json({ success: true });
-      });
-
-      // Request without actor should be allowed (downstream validation will handle it)
       const response = await request(app)
         .post('/inbox')
-        .send({ type: 'Follow' });
+        .set('Date', new Date().toUTCString())
+        .set('Signature', 'keyId="not-a-url",algorithm="rsa-sha256",headers="(request-target) host date",signature="fake"')
+        .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(200);
       expect(getActorRateLimitStore().size).toBe(0);
     });
 
-    it('should allow request when body is empty', async () => {
-      const app = express();
-      app.use(express.json());
+    it('should allow request when body is empty and unsigned', async () => {
+      const app = buildApp();
 
-      const limiter = createActorRateLimiter(1, 60000);
-      app.post('/inbox', limiter, (req, res) => {
-        res.json({ success: true });
-      });
-
-      // Request without body should be allowed
       const response = await request(app).post('/inbox');
 
       expect(response.status).toBe(200);
+      expect(getActorRateLimitStore().size).toBe(0);
     });
   });
 
@@ -252,6 +269,7 @@ describe('createActorRateLimiter', () => {
       // First request succeeds
       const response1 = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response1.status).toBe(200);
@@ -259,6 +277,7 @@ describe('createActorRateLimiter', () => {
       // Second request immediately should be blocked
       const response2 = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response2.status).toBe(429);
@@ -269,6 +288,7 @@ describe('createActorRateLimiter', () => {
       // Third request should succeed after window reset
       const response3 = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response3.status).toBe(200);
@@ -288,11 +308,13 @@ describe('createActorRateLimiter', () => {
       // First request succeeds
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       // Second request is rate limited
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(429);
@@ -349,10 +371,12 @@ describe('createActorRateLimiter', () => {
       // Exhaust the limit
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       const blockedResponse = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(blockedResponse.status).toBe(429);
@@ -371,6 +395,7 @@ describe('createActorRateLimiter', () => {
       // Should be able to make request again
       const response = await request(newApp)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(200);
@@ -389,6 +414,7 @@ describe('createActorRateLimiter', () => {
 
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Follow',
@@ -398,6 +424,7 @@ describe('createActorRateLimiter', () => {
 
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Follow',
@@ -419,6 +446,7 @@ describe('createActorRateLimiter', () => {
 
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/calendars/events'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Create',
@@ -428,6 +456,7 @@ describe('createActorRateLimiter', () => {
 
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/calendars/events'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Create',
@@ -449,6 +478,7 @@ describe('createActorRateLimiter', () => {
 
       await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/calendars/events'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Announce',
@@ -458,6 +488,7 @@ describe('createActorRateLimiter', () => {
 
       const response = await request(app)
         .post('/inbox')
+        .set(signedBy('https://remote.example/calendars/events'))
         .send({
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Announce',
@@ -849,6 +880,7 @@ describe('createCalendarRateLimiter', () => {
       // First request from alice should succeed
       const response1 = await request(app)
         .post('/calendars/my-calendar/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response1.status).toBe(200);
@@ -856,16 +888,18 @@ describe('createCalendarRateLimiter', () => {
       // Second request from alice should be blocked by actor limiter (not calendar)
       const response2 = await request(app)
         .post('/calendars/my-calendar/inbox')
+        .set(signedBy('https://remote.example/users/alice'))
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response2.status).toBe(429);
       expect(response2.body.error).toBe('Too many requests from this actor, please try again later.');
 
-      // Request from bob should succeed (different actor, calendar still under limit)
-      // bob has not been rate limited by the actor limiter, and the calendar is still under its limit
+      // Request from another origin should succeed: it has not been rate limited
+      // by the actor limiter, and the calendar is still under its limit
       const response3 = await request(app)
         .post('/calendars/my-calendar/inbox')
-        .send({ actor: 'https://remote.example/users/bob', type: 'Follow' });
+        .set(signedBy('https://other.example/users/bob'))
+        .send({ actor: 'https://other.example/users/bob', type: 'Follow' });
 
       expect(response3.status).toBe(200);
     });
