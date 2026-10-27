@@ -505,3 +505,30 @@ export function readAlphaOutboxRowForObject(
 ): InboxRow | null {
   return readMessageRowForObject(ALPHA_DB_CONTAINER, ALPHA_DB_NAME, 'ap_outbox', activityType, objectId);
 }
+
+/**
+ * Read the PEM private key of a local calendar actor on ALPHA.
+ *
+ * Lets a spec sign a request as a real alpha calendar without going through
+ * alpha's outbox, so it can put on the wire a request alpha itself would never
+ * send (e.g. one whose body names a different actor than the signing key).
+ * Read from the database because no HTTP surface exposes a private key.
+ *
+ * @param actorUri - The calendar actor URI (e.g. https://alpha.federation.local/calendars/foo)
+ * @returns The PEM-encoded private key
+ * @throws Error when no local actor with that URI has a private key
+ */
+export function readAlphaCalendarPrivateKey(actorUri: string): string {
+  const uri = actorUri.replace(/'/g, "''");
+  const sql = `select private_key from calendar_actor where actor_uri = '${uri}' and actor_type = 'local'`;
+
+  const key = execSync(
+    `docker exec ${ALPHA_DB_CONTAINER} psql -U ${DB_USER} -d ${ALPHA_DB_NAME} -t -A -c "${sql}"`,
+    { encoding: 'utf8' },
+  ).trim();
+
+  if (!key) {
+    throw new Error(`No local calendar actor private key on alpha for ${actorUri}`);
+  }
+  return key;
+}

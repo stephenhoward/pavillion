@@ -31,12 +31,17 @@
  *     a syntactically valid but cryptographically invalid Signature header is
  *     rejected with 401 (signature parses, then fails cryptographic
  *     verification).
+ *   - Negative (actor/signer mismatch): a POST correctly signed with one alpha
+ *     calendar's real key, whose body `actor` names a different alpha
+ *     calendar, is rejected with 403 (signature verifies, then
+ *     verifyActorPermission refuses the actor the key does not belong to).
  *
- * In both negative cases, "rejected" means the inbox refuses to process the
+ * In every negative case, "rejected" means the inbox refuses to process the
  * activity before any business logic runs. The exact status code differs by
  * branch: 400 for missing-header (parse never starts), 401 for
- * invalid-signature (parse succeeds, verification fails). Both prove the
- * signature gate works.
+ * invalid-signature (parse succeeds, verification fails), 403 for
+ * actor/signer mismatch (verification succeeds, the actor check fails). All
+ * prove the signature gate works.
  *
  * What this proves (and what it does NOT prove):
  *   The positive case proves the full cross-container path -- alpha signs
@@ -79,6 +84,7 @@ import {
   INSTANCE_BETA,
   formatRemoteCalendarId,
   generateCalendarName,
+  readAlphaCalendarPrivateKey,
 } from './helpers/instances';
 import {
   getToken,
@@ -297,5 +303,67 @@ test.describe.serial('Strict-Receive HTTP Signature Verification', () => {
       response.status,
       'Forged Signature header must be rejected with 401 (invalid digest or invalid signature)',
     ).toBe(401);
+  });
+
+  test('POST signed by one alpha actor but naming another in the body is rejected with 403', async () => {
+    // The signature is genuine: alpha calendar A's real private key signs the
+    // request and keyId points at A, so beta fetches A's public key and
+    // verification passes. Only the body's `actor` lies -- it names alpha
+    // calendar B. verifyActorPermission must refuse an actor the key does not
+    // belong to (http_signature.ts, 403). A 401 here would mean the signature
+    // never verified, so the actor check was never reached.
+    const signerActorUrl = `${INSTANCE_ALPHA.baseUrl}/calendars/${alphaCalendar.urlName}`;
+
+    // B's URL extends A's ("<A>x"), so a regression from exact match back to
+    // a prefix comparison would accept this request and fail the test.
+    const claimedCalendar = await createCalendar(INSTANCE_ALPHA, alphaToken, {
+      urlName: `${alphaCalendar.urlName}x`,
+      content: { en: { name: 'Alpha StrictReceive Claimed Actor' } },
+    });
+    const claimedActorUrl = `${INSTANCE_ALPHA.baseUrl}/calendars/${claimedCalendar.urlName}`;
+    expect(claimedActorUrl.startsWith(signerActorUrl)).toBe(true);
+
+    const inboxPath = `/calendars/${betaCalendar.urlName}/inbox`;
+    const inboxUrl = `${INSTANCE_BETA.baseUrl}${inboxPath}`;
+    const bodyText = JSON.stringify(buildPlaceholderActivity(claimedActorUrl));
+    const digest = `SHA-256=${crypto.createHash('sha256').update(bodyText).digest('base64')}`;
+    const date = new Date().toUTCString();
+
+    // Same signing string the outbound path builds
+    // (CalendarActorService.signActivity).
+    const signingString = [
+      `(request-target): post ${inboxPath}`,
+      `host: ${INSTANCE_BETA.domain}`,
+      `date: ${date}`,
+      `digest: ${digest}`,
+    ].join('\n');
+    const signature = crypto
+      .createSign('RSA-SHA256')
+      .update(signingString)
+      .sign(readAlphaCalendarPrivateKey(signerActorUrl), 'base64');
+
+    const response = await fetch(inboxUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/activity+json',
+        Host: INSTANCE_BETA.domain,
+        Date: date,
+        Signature: [
+          `keyId="${signerActorUrl}#main-key"`,
+          'algorithm="rsa-sha256"',
+          'headers="(request-target) host date digest"',
+          `signature="${signature}"`,
+        ].join(','),
+        Digest: digest,
+      },
+      body: bodyText,
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    });
+
+    expect(
+      response.status,
+      'A validly signed POST whose body actor is not the signing key\'s actor must be rejected with 403 by verifyActorPermission',
+    ).toBe(403);
   });
 });
