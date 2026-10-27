@@ -123,6 +123,91 @@ const SENDER_SIGNATURE_ERRORS = new Set([
   'InvalidAlgorithmError',
 ]);
 
+/** The SHA-256 a digest header claims for the body, or why it cannot be used. */
+type ClaimedDigest = { hash: string } | { error: string };
+
+/**
+ * Reads a legacy RFC 3230 `Digest: SHA-256=<base64>` header. The algorithm
+ * token is case-insensitive.
+ */
+function parseLegacyDigest(header: string): ClaimedDigest {
+  const match = header.trim().match(/^([a-zA-Z0-9-]+)=(.+)$/);
+  if (!match) {
+    return { error: 'Invalid digest' };
+  }
+  if (match[1].toLowerCase() !== 'sha-256') {
+    return { error: 'Unsupported digest algorithm' };
+  }
+  return { hash: match[2] };
+}
+
+/**
+ * Reads an RFC 9530 `Content-Digest` header, a structured-field dictionary of
+ * byte sequences such as `sha-256=:<base64>:`. Members for other algorithms
+ * are ignored; without a `sha-256` member the header is unsupported.
+ */
+function parseContentDigest(header: string): ClaimedDigest {
+  let sha256: string | null = null;
+  for (const member of header.split(',')) {
+    const match = member.trim().match(/^([a-z0-9_.*-]+)=:([A-Za-z0-9+/]*={0,2}):(?:;.*)?$/i);
+    if (!match) {
+      return { error: 'Invalid digest' };
+    }
+    if (match[1].toLowerCase() === 'sha-256') {
+      sha256 = match[2];
+    }
+  }
+  return sha256 === null ? { error: 'Unsupported digest algorithm' } : { hash: sha256 };
+}
+
+/**
+ * Checks the `Digest` and `Content-Digest` headers, whichever are present,
+ * against a SHA-256 of `req.rawBody`, the bytes as received. Every header
+ * present must parse and match. A digest is optional: with neither header
+ * the check passes.
+ *
+ * Fails closed when a digest is sent but no raw body was captured (a
+ * Content-Type the body parser does not take, or a route mounted without
+ * `activityJsonBodyParser`): hashing a re-serialization of the parsed body
+ * instead would reject peers whose encoder differs from V8's.
+ *
+ * @returns null when the body digest is absent or verified, else the error
+ *   message for the 401 response
+ */
+function checkBodyDigest(req: Request): string | null {
+  const claims: ClaimedDigest[] = [];
+  const legacy = req.headers.digest;
+  const contentDigest = req.headers['content-digest'];
+  if (typeof legacy === 'string') {
+    claims.push(parseLegacyDigest(legacy));
+  }
+  if (typeof contentDigest === 'string') {
+    claims.push(parseContentDigest(contentDigest));
+  }
+  if (claims.length === 0) {
+    return null;
+  }
+
+  if (!Buffer.isBuffer(req.rawBody)) {
+    logger.warn(
+      { path: req.path, contentType: req.headers['content-type'] },
+      'Rejected inbound request with a digest header: no raw body was captured to verify it against',
+    );
+    return 'Invalid digest';
+  }
+
+  const actual = crypto.createHash('sha256').update(req.rawBody).digest('base64');
+  for (const claim of claims) {
+    if ('error' in claim) {
+      return claim.error;
+    }
+    if (claim.hash !== actual) {
+      return 'Invalid digest';
+    }
+  }
+  return null;
+}
+
 /**
  * Express middleware for verifying HTTP signatures in ActivityPub requests.
  * Implements the HTTP Signature verification spec for securing ActivityPub interactions.
@@ -171,27 +256,10 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
       }
     }
 
-    // Verify digest header if present to ensure body integrity
-    if (req.headers.digest && req.body) {
-      const digest = req.headers.digest as string;
-      const parsedDisgest = digest.match(/^([a-zA-Z0-9-]+)=(.+)$/);
-
-      if ( ! parsedDisgest ) {
-        return res.status(401).json({ error: 'Invalid digest' });
-      }
-
-      const algorithm = parsedDisgest[1];
-      const encodedHash = parsedDisgest[2];
-
-      if (algorithm !== 'SHA-256') {
-        return res.status(401).json({ error: 'Unsupported digest algorithm' });
-      }
-
-      const calculatedHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('base64');
-
-      if (encodedHash !== calculatedHash) {
-        return res.status(401).json({ error: 'Invalid digest' });
-      }
+    // Verify the body digest, if one is sent, against the bytes received
+    const digestError = checkBodyDigest(req);
+    if (digestError) {
+      return res.status(401).json({ error: digestError });
     }
 
     // Fetch the public key from the keyId URL (with caching)

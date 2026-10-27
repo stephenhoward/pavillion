@@ -34,13 +34,16 @@ describe('HTTP Signature Verification', () => {
     originalNodeEnv = process.env.NODE_ENV;
     originalSkipSignatures = process.env.SKIP_SIGNATURES;
 
-    // Set up request and response objects
+    // Set up request and response objects. rawBody is what the inbox body
+    // parser captures from the wire; body is its parsed form.
+    const wireBody = JSON.stringify({ actor: 'https://example.com/users/someactor' });
     req = {
       headers: {
         'date': new Date().toUTCString(),
         'host': 'example.com',
       },
-      body: { actor: 'https://example.com/users/someactor' },
+      body: JSON.parse(wireBody),
+      rawBody: Buffer.from(wireBody),
     };
 
     res = {
@@ -163,7 +166,7 @@ describe('HTTP Signature Verification', () => {
     await verifyHttpSignature(req as Request, res as Response, next as any);
 
     expect(hashStub.calledWith('sha256')).toBe(true);
-    expect(mockDigest.update.calledWith(JSON.stringify(req.body))).toBe(true);
+    expect(mockDigest.update.calledWith(req.rawBody)).toBe(true);
     expect(res.status.calledWith(401)).toBe(true);
     expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
     expect(next.called).toBe(false);
@@ -205,6 +208,134 @@ describe('HTTP Signature Verification', () => {
     expect(res.status.calledWith(401)).toBe(true);
     expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
     expect(next.called).toBe(false);
+  });
+
+  describe('digest verification against the received bytes', () => {
+    // Valid JSON that V8 would re-serialize differently: padded whitespace,
+    // a \u escape, and a non-ASCII character. A digest over these bytes only
+    // matches if the verifier hashes the bytes as received.
+    const WIRE_BODY = '{ "actor": "https://example.com/users/someactor",\n  "type": "Cr\\u0065ate", "name": "Café" }';
+    const sha256 = (bytes: string | Buffer) => crypto.createHash('sha256').update(bytes).digest('base64');
+
+    beforeEach(() => {
+      req.body = JSON.parse(WIRE_BODY);
+      req.rawBody = Buffer.from(WIRE_BODY);
+      parseRequestStub.returns({
+        params: {
+          keyId: 'https://example.com/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date', 'digest'],
+        },
+      } as any);
+      cacheGetStub.returns('cached-public-key');
+      verifySignatureStub.returns(true);
+    });
+
+    it('accepts a Digest computed over wire bytes that differ from JSON.stringify of the parsed body', async () => {
+      expect(JSON.stringify(req.body), 'fixture must not be V8-canonical').not.toBe(WIRE_BODY);
+      req.headers.digest = `SHA-256=${sha256(WIRE_BODY)}`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.called).toBe(false);
+      expect(next.calledOnce).toBe(true);
+    });
+
+    it('accepts the legacy algorithm name in any case', async () => {
+      req.headers.digest = `sha-256=${sha256(WIRE_BODY)}`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(next.calledOnce).toBe(true);
+    });
+
+    it('fails closed when a Digest header is present but no raw body was captured', async () => {
+      req.headers.digest = `SHA-256=${sha256(JSON.stringify(req.body))}`;
+      delete req.rawBody;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('fails closed when a Content-Digest header is present but no raw body was captured', async () => {
+      req.headers['content-digest'] = `sha-256=:${sha256(JSON.stringify(req.body))}:`;
+      delete req.rawBody;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('accepts an RFC 9530 Content-Digest header', async () => {
+      req.headers['content-digest'] = `sha-256=:${sha256(WIRE_BODY)}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.called).toBe(false);
+      expect(next.calledOnce).toBe(true);
+    });
+
+    it('ignores other Content-Digest members when a sha-256 member is present', async () => {
+      req.headers['content-digest'] = `sha-512=:${crypto.createHash('sha512').update(WIRE_BODY).digest('base64')}:, sha-256=:${sha256(WIRE_BODY)}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(next.calledOnce).toBe(true);
+    });
+
+    it('rejects a Content-Digest whose sha-256 does not match the received bytes', async () => {
+      req.headers['content-digest'] = `sha-256=:${sha256('{"actor":"https://example.com/users/other"}')}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('rejects a Content-Digest with no sha-256 member as unsupported', async () => {
+      req.headers['content-digest'] = `sha-512=:${crypto.createHash('sha512').update(WIRE_BODY).digest('base64')}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Unsupported digest algorithm' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('rejects a Content-Digest that is not a byte-sequence value', async () => {
+      req.headers['content-digest'] = `sha-256=${sha256(WIRE_BODY)}`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('accepts both headers when both match', async () => {
+      req.headers.digest = `SHA-256=${sha256(WIRE_BODY)}`;
+      req.headers['content-digest'] = `sha-256=:${sha256(WIRE_BODY)}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(next.calledOnce).toBe(true);
+    });
+
+    it('rejects when both headers are present and one does not match', async () => {
+      req.headers.digest = `SHA-256=${sha256(WIRE_BODY)}`;
+      req.headers['content-digest'] = `sha-256=:${sha256('tampered')}:`;
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Invalid digest' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
   });
 
   it('should reject when public key cannot be retrieved', async () => {
@@ -970,13 +1101,13 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
 
   /**
    * Construct the Express request that mirrors what an inbound POST looks like
-   * after Express has parsed headers and body. http-signature's parseRequest
+   * after the inbox body parser has run: `rawBody` holds the bytes as
+   * received and `body` their parsed form. http-signature's parseRequest
    * needs `method`, `url`, and `httpVersion` in addition to `headers`.
    */
   function buildIncomingRequest(
     targetUrl: string,
-    actorUri: string,
-    body: any,
+    wireBody: string,
     signedHeaders: { Signature: string; Date: string; Digest: string },
   ): Request {
     const url = new URL(targetUrl);
@@ -991,7 +1122,8 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
         signature: signedHeaders.Signature,
         'content-type': 'application/activity+json',
       },
-      body,
+      body: JSON.parse(wireBody),
+      rawBody: Buffer.from(wireBody),
     } as unknown as Request;
   }
 
@@ -1030,12 +1162,10 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
     sandbox.stub(Cache.prototype, 'set');
     const axiosGetStub = sandbox.stub(axios, 'get');
 
-    // Body is parsed back to an object because Express body-parser delivers
-    // it that way to the inbox handler. The verifier re-stringifies via
-    // JSON.stringify(req.body) for digest comparison, so the structural shape
-    // (and key order) must match what we hashed above. JSON.parse/stringify
-    // round-trip preserves key order for plain objects in V8.
-    const incomingReq = buildIncomingRequest(TARGET_URL, ACTOR_URI, JSON.parse(body), signed!);
+    // The verifier hashes the bytes as received (rawBody), so the digest
+    // matches whatever encoding the sender chose; see the non-canonical
+    // encoding case below.
+    const incomingReq = buildIncomingRequest(TARGET_URL, body, signed!);
     const res: any = {
       status: sandbox.stub().returnsThis(),
       json: sandbox.stub().returnsThis(),
@@ -1051,6 +1181,51 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
     expect(res.status.called, 'no error status should be emitted').toBe(false);
     expect(cacheGetStub.calledWith(`${ACTOR_URI}#main-key`)).toBe(true);
     expect(axiosGetStub.called, 'no network fetch should be needed when cache is primed').toBe(false);
+  });
+
+  it('accepts a signed request whose wire encoding differs from V8 JSON.stringify output', async () => {
+    const { buildSignedHeaders } = await import('@/server/activitypub/service/http-signing');
+
+    // A peer's encoder may pretty-print, escape non-ASCII, or otherwise emit
+    // bytes that JSON.stringify(JSON.parse(bytes)) would not reproduce. The
+    // digest covers the bytes the peer sent, and so must the verifier.
+    const body = [
+      '{',
+      `  "@context": "https://www.w3.org/ns/activitystreams",`,
+      '  "type": "Create",',
+      `  "actor": "${ACTOR_URI}",`,
+      '  "object": { "type": "Event", "name": "F\\u00eate du quartier" }',
+      '}',
+    ].join('\n');
+    expect(JSON.stringify(JSON.parse(body)), 'fixture must not be V8-canonical').not.toBe(body);
+    const digest = 'SHA-256=' + crypto.createHash('sha256').update(body).digest('base64');
+
+    const { calendarActorService, userActorService } = buildActorServices();
+    const signed = await buildSignedHeaders(
+      ACTOR_URI,
+      body,
+      TARGET_URL,
+      digest,
+      calendarActorService as any,
+      userActorService as any,
+    );
+    expect(signed).not.toBeNull();
+
+    sandbox.stub(Cache.prototype, 'get').returns(publicKeyPem);
+    sandbox.stub(Cache.prototype, 'set');
+    sandbox.stub(axios, 'get');
+
+    const incomingReq = buildIncomingRequest(TARGET_URL, body, signed!);
+    const res: any = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub().returnsThis(),
+    };
+    const next = sandbox.spy();
+
+    await verifyHttpSignature(incomingReq, res as Response, next as any);
+
+    expect(res.status.called, 'no error status should be emitted').toBe(false);
+    expect(next.calledOnce).toBe(true);
   });
 
   it('rejects a request whose body is tampered after signing (digest mismatch)', async () => {
@@ -1086,12 +1261,13 @@ describe('HTTP Signature Cryptographic Round-Trip', () => {
     sandbox.stub(Cache.prototype, 'set');
     sandbox.stub(axios, 'get');
 
-    // Mutate the body AFTER signing. The Signature and Digest headers still
-    // refer to the original body. The verifier hashes the tampered body and
+    // Mutate the bytes AFTER signing. The Signature and Digest headers still
+    // refer to the original body. The verifier hashes the tampered bytes and
     // compares against the original digest -- mismatch must trigger 401.
-    const tamperedBody = { ...JSON.parse(body), object: { ...activity.object, name: 'Malicious payload' } };
+    const tamperedBody = body.replace('Round-trip test event', 'Malicious payload');
+    expect(tamperedBody).not.toBe(body);
 
-    const incomingReq = buildIncomingRequest(TARGET_URL, ACTOR_URI, tamperedBody, signed!);
+    const incomingReq = buildIncomingRequest(TARGET_URL, tamperedBody, signed!);
     const res: any = {
       status: sandbox.stub().returnsThis(),
       json: sandbox.stub().returnsThis(),

@@ -5,8 +5,8 @@
  * accept: `application/activity+json` and
  * `application/ld+json; profile="https://www.w3.org/ns/activitystreams"`.
  * Mastodon and others deliver with the latter. Without `application/ld+json`
- * in the router's `express.json({ type })` list the body is never parsed, so
- * the Digest check in `verifyHttpSignature` hashes an empty body and the
+ * in `activityJsonBodyParser`'s type list the body is never parsed or
+ * captured, so the Digest check in `verifyHttpSignature` fails closed and the
  * signed request is rejected with 401 before any handler runs.
  *
  * Mirrors the signed Create(Event) flow in `receive_create_activity.test.ts`
