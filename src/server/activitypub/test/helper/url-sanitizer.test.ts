@@ -3,6 +3,7 @@ import {
   MAX_EXTERNAL_URL_LENGTH,
   MAX_URL_CANDIDATES,
   sanitizeExternalUrlHref,
+  sanitizePeerInboxUrl,
   sanitizePeerPageUrl,
 } from '@/server/activitypub/helper/url-sanitizer';
 // Cross-domain import, in a test only: this file owns the equivalence test
@@ -287,6 +288,49 @@ describe('sanitizePeerPageUrl', () => {
     // A throwing candidate is skipped, not fatal: a usable sibling still wins.
     expect(sanitizePeerPageUrl([throwingHref, 'https://remote.example.com/x'], ACTOR_URI))
       .toBe('https://remote.example.com/x');
+  });
+});
+
+describe('sanitizePeerInboxUrl', () => {
+  const INBOX_URL = 'https://remote.example.com/calendars/remote-cal/inbox';
+
+  it('accepts an https inbox on the actor URI\'s host', () => {
+    expect(sanitizePeerInboxUrl(INBOX_URL, ACTOR_URI)).toBe(INBOX_URL);
+  });
+
+  /**
+   * The pin is hostname-exact and nothing more: the port is not compared, so a
+   * peer serving its inbox on a different port of its own host is accepted.
+   * This matches the outbox's binding of a fetched actor document's inbox,
+   * which this function is the rule of record for.
+   */
+  it('pins on hostname only, not on port', () => {
+    expect(sanitizePeerInboxUrl('https://remote.example.com:8443/inbox', ACTOR_URI))
+      .toBe('https://remote.example.com:8443/inbox');
+  });
+
+  it.each([
+    ['a different host', 'https://victim.example/collect'],
+    ['a subdomain of the actor host', 'https://inbox.remote.example.com/inbox'],
+    ['a lookalike suffix of the actor host', 'https://remote.example.com.evil.example/inbox'],
+    ['an http inbox on the actor host', 'http://remote.example.com/calendars/remote-cal/inbox'],
+    ['a non-http(s) scheme', 'javascript:alert(1)'],
+    ['userinfo on the actor host', 'https://admin:secret@remote.example.com/inbox'],
+    ['a username alone on the actor host', 'https://admin@remote.example.com/inbox'],
+    ['an over-length inbox on the actor host', 'https://remote.example.com/' + 'a'.repeat(MAX_EXTERNAL_URL_LENGTH)],
+    ['an inbox whose normalized form exceeds the cap', 'https://remote.example.com/' + '<'.repeat(700)],
+    ['a malformed value', 'not a url'],
+    ['an empty string', ''],
+    ['a non-string', { href: 'https://remote.example.com/inbox' }],
+    ['undefined', undefined],
+  ])('rejects %s', (_label, raw) => {
+    expect(sanitizePeerInboxUrl(raw, ACTOR_URI)).toBeNull();
+  });
+
+  it('rejects every inbox when the actor URI itself is unusable', () => {
+    expect(sanitizePeerInboxUrl(INBOX_URL, 'not a url')).toBeNull();
+    expect(sanitizePeerInboxUrl(INBOX_URL, 'javascript:alert(1)')).toBeNull();
+    expect(sanitizePeerInboxUrl(INBOX_URL, '')).toBeNull();
   });
 });
 

@@ -137,3 +137,48 @@ export function sanitizePeerPageUrl(raw: unknown, actorUri: string): string | nu
 
   return null;
 }
+
+/**
+ * Sanitizes an inbox URL a peer declared for an actor, or null when it may not
+ * be delivered to.
+ *
+ * Security-critical, and stricter in consequence than `sanitizePeerPageUrl`:
+ * the result is stored on `calendar_actor.inbox_url` or used directly as an
+ * **outbound delivery target** — we POST signed activities to it. Callers
+ * verify the actor (HTTP-signature signer, same-origin and private-IP guards),
+ * but the inbox is a separate value the peer controls; without a pin a peer
+ * can direct our signed Create/Update/Delete traffic at any third party. So an
+ * inbox is bound to the actor that declared it:
+ *
+ * - **https only.** A cleartext inbox is refused even on the actor's host.
+ * - **Hostname-exact pin** to the actor URI — no subdomain or suffix
+ *   allowance. The port is deliberately not compared: this is the rule the
+ *   outbox has always applied to a fetched actor document's inbox, and it is
+ *   kept rather than tightened to origin equality.
+ * - **No userinfo**, whose visible authority disagrees with the host we
+ *   pinned.
+ * - **Length-bounded** after normalization via `sanitizeExternalUrlHref`, since
+ *   the column is a `varchar(2048)`.
+ *
+ * Two callers, one rule: the outbox, binding the `inbox` of an actor document
+ * it fetched, and the user inbox's `Add` handler, binding the
+ * `calendarInboxUrl` a calendar asserts in the activity body to that
+ * activity's `actor` (which signature verification has already pinned to the
+ * signer). NEVER throws; logging a rejection is the caller's job.
+ *
+ * @param raw - The declared inbox, in whatever shape the peer sent
+ * @param actorUri - The actor URI that declared it; pins the hostname
+ * @returns The normalized inbox URL, or null if it may not be delivered to
+ */
+export function sanitizePeerInboxUrl(raw: unknown, actorUri: string): string | null {
+  const sanitizedActorUri = sanitizeExternalUrlHref(actorUri);
+  if (!sanitizedActorUri) return null;
+  const sanitized = sanitizeExternalUrlHref(raw);
+  if (!sanitized) return null;
+
+  const parsed = new URL(sanitized);
+  if (parsed.protocol !== 'https:') return null;
+  if (parsed.hostname !== new URL(sanitizedActorUri).hostname) return null;
+  if (parsed.username || parsed.password) return null;
+  return sanitized;
+}
