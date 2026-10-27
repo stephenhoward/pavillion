@@ -26,7 +26,7 @@ bin/deploy.sh
 docker compose ps
 ```
 
-The application will be available at `http://localhost:3000` (configure your reverse proxy for production).
+The application will be available at `http://127.0.0.1:3000` on the host itself (configure your reverse proxy for production).
 
 ## Step-by-Step First Deployment
 
@@ -108,12 +108,12 @@ You should see four containers running:
 Test the health endpoint:
 
 ```bash
-curl http://localhost:3000/health
+curl http://127.0.0.1:3000/health
 ```
 
 ### Step 5: Configure Reverse Proxy
 
-Pavillion should be served behind a reverse proxy that handles SSL termination. Example configurations:
+Pavillion should be served behind a reverse proxy that handles SSL termination. By default the app is published on `127.0.0.1:3000` only, so a proxy on the same host reaches it there and nothing off the host can bypass the proxy. Example configurations:
 
 **Nginx:**
 ```nginx
@@ -125,7 +125,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -141,7 +141,7 @@ server {
 **Caddy:**
 ```caddy
 calendar.example.org {
-    reverse_proxy localhost:3000
+    reverse_proxy 127.0.0.1:3000
 }
 ```
 
@@ -166,10 +166,7 @@ docker compose --profile standalone up -d
 
 1. **Set `DOMAIN`** in `.env` to your public domain name. This must match the `domain:` value in `config/local.yaml`.
 
-2. **Restrict direct app access** (recommended) so traffic goes through Caddy:
-   ```bash
-   APP_PORT=127.0.0.1:3000
-   ```
+2. **Leave `APP_PORT` at its default.** Caddy reaches the app as `app:3000` over the Compose network, and the default `127.0.0.1:3000` keeps direct app access on the host only, so all outside traffic goes through Caddy.
 
 3. **Ensure ports 80 and 443 are available** on your host. If another service already uses these ports, standalone mode won't work — use the default mode with your existing reverse proxy instead.
 
@@ -280,7 +277,7 @@ chmod 600 secrets/*.txt
 | `DB_PASSWORD` | Yes | - | PostgreSQL database password |
 | `DB_USER` | No | `pavillion` | PostgreSQL username |
 | `DB_NAME` | No | `pavillion` | PostgreSQL database name |
-| `APP_PORT` | No | `3000` | Host port to expose the application |
+| `APP_PORT` | No | `127.0.0.1:3000` | Host address to publish the application on, as `host:port` or a bare port. The default binds loopback only; a bare port binds every interface, and Docker-published ports are not filtered by UFW |
 | `DB_WAIT_TIMEOUT` | No | `30` | Seconds to wait for database on startup |
 | `S3_BUCKET` | No | - | S3 bucket name (if using S3 storage) |
 | `S3_REGION` | No | - | S3 region (e.g., `us-east-1`) |
@@ -299,7 +296,7 @@ chmod 600 secrets/*.txt
 
 | Port | Service | Description |
 |------|---------|-------------|
-| 3000 | Application | HTTP application server (map to 80/443 via reverse proxy) |
+| 3000 | Application | HTTP application server, published on `127.0.0.1` only by default (map to 80/443 via reverse proxy) |
 | 3001 | Worker | Health check endpoint (container-internal only, not exposed to host) |
 | 9464 | Application | OpenMetrics listener at `/metrics` for a scraper on the Compose network (not published to the host, no built-in authentication; see [Monitoring and logs](./monitoring-and-logs.md#metrics-for-an-external-monitor)) |
 | 80 | Caddy | HTTP (standalone mode only, redirects to HTTPS) |

@@ -447,13 +447,21 @@ run_docker_up() {
   return 0
 }
 
-# poll_health <timeout_seconds>: poll http://localhost:${APP_PORT:-3000}/health
-# until curl returns success or the timeout expires. Returns 0 on success,
-# 4 on timeout.
+# poll_health <timeout_seconds>: poll the app's /health on the address
+# docker-compose.yml publishes it at until curl returns success or the timeout
+# expires. APP_PORT may be a bare port (polled on localhost) or host:port
+# (polled on that host); unset, it matches the compose default of
+# 127.0.0.1:3000. Returns 0 on success, 4 on timeout.
 poll_health() {
   local timeout="$1"
-  local port="${APP_PORT:-3000}"
-  local url="http://localhost:${port}/health"
+  local bind="${APP_PORT:-127.0.0.1:3000}"
+  local host="localhost"
+  local port="$bind"
+  if [[ "$bind" == *:* ]]; then
+    host="${bind%:*}"
+    port="${bind##*:}"
+  fi
+  local url="http://${host}:${port}/health"
   log_info "Polling ${url} for up to ${timeout}s..."
 
   local elapsed=0

@@ -24,7 +24,7 @@ Two paths through this step, depending on what's on the server.
 
 ### Fresh server: use the provisioning script
 
-If the server is a freshly-imaged Debian or Ubuntu box with nothing else on it, `bin/provision.sh` does the rest of the setup in one shot: creates a non-root deploy user, hardens SSH, configures the firewall (UFW, allowing only 22/80/443), installs Docker, clones the repo into `/opt/pavillion`, brings up the app, and enables the bundled standalone Caddy so your domain answers on 443 with a Let's Encrypt cert. Run it from your local machine — the provisioning script fetches itself onto the server via curl, so you don't need the Pavillion repo cloned locally first:
+If the server is a freshly-imaged Debian or Ubuntu box with nothing else on it, `bin/provision.sh` does the rest of the setup in one shot: creates a non-root deploy user, hardens SSH, configures the firewall (UFW, allowing only 22/80/443), installs Docker, clones the repo into `/opt/pavillion`, brings up the app, and enables the bundled standalone Caddy so your domain answers on 443 with a Let's Encrypt cert. Docker-published ports aren't filtered by UFW — Docker writes its own rules ahead of the firewall's — which is why the app's port 3000 is bound to `127.0.0.1` by default rather than left to the firewall to close. Run it from your local machine — the provisioning script fetches itself onto the server via curl, so you don't need the Pavillion repo cloned locally first:
 
 ```bash
 ssh -i ~/.ssh/YOUR_SSH_KEY root@YOUR_SERVER "curl -fsSL https://raw.githubusercontent.com/stephenhoward/pavillion/main/bin/provision.sh | bash -s -- --standalone --domain=yourdomain.example.org"

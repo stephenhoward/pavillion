@@ -37,7 +37,11 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "${APP_PORT:-3000}:3000"
+      # Loopback by default: Docker-published ports are not filtered by UFW,
+      # so a bare port would be reachable from the internet. The standalone
+      # Caddy reaches app:3000 over the Compose network, not through this
+      # mapping. Set APP_PORT to override (a bare port binds all interfaces).
+      - "${APP_PORT:-127.0.0.1:3000}:3000"
     environment:
       - NODE_ENV=production
       - DB_DIALECT=postgres

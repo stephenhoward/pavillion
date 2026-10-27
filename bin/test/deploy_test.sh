@@ -418,6 +418,23 @@ output=$(cd "$tmp4" && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-inte
 exit_code="${output##*EXIT:}"
 assert_eq "0" "$exit_code" "health check succeeds after initial failures"
 
+echo "test: health check URL follows APP_PORT (bare port, host:port, default)"
+cat > "${tmp4}/shim/curl" <<EOF
+#!/usr/bin/env bash
+echo "curl \$*" >> "${CURL_LOG}"
+exit 0
+EOF
+chmod +x "${tmp4}/shim/curl"
+rm -f "${CURL_LOG}"
+(cd "$tmp4" && APP_PORT=8080 PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=5 >/dev/null 2>&1)
+assert_contains "$(cat "${CURL_LOG}")" "http://localhost:8080/health" "bare APP_PORT polls localhost on that port"
+rm -f "${CURL_LOG}"
+(cd "$tmp4" && APP_PORT=127.0.0.1:3000 PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=5 >/dev/null 2>&1)
+assert_contains "$(cat "${CURL_LOG}")" "http://127.0.0.1:3000/health" "host:port APP_PORT polls that host and port"
+rm -f "${CURL_LOG}"
+(cd "$tmp4" && unset APP_PORT && PATH="${tmp4}/shim:${PATH}" bash bin/deploy.sh --non-interactive --docker-only --health-timeout=5 >/dev/null 2>&1)
+assert_contains "$(cat "${CURL_LOG}")" "http://127.0.0.1:3000/health" "unset APP_PORT polls the loopback default"
+
 echo "test: health check times out with exit 4"
 cat > "${tmp4}/shim/curl" <<'EOF'
 #!/usr/bin/env bash

@@ -116,8 +116,10 @@ describe('Docker Configuration', () => {
       const config = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
 
       // The app container runs the metrics listener alongside the web server;
-      // only the web port may reach the host.
-      expect(config.services.app.ports).toEqual(['${APP_PORT:-3000}:3000']);
+      // only the web port may reach the host, and by default only on loopback:
+      // Docker-published ports bypass UFW, so a bare 3000 would be open to the
+      // internet whatever the firewall says. APP_PORT stays the override.
+      expect(config.services.app.ports).toEqual(['${APP_PORT:-127.0.0.1:3000}:3000']);
     });
 
     it('should not publish the metrics port from the development compose file', () => {
