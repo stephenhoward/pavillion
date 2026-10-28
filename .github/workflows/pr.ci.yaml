@@ -27,6 +27,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+  docs_build:
+    uses: ./.github/workflows/docs_build.yaml
   arm_e2e:
     needs: arm_tests
     uses: ./.github/workflows/run_e2e_tests.yaml

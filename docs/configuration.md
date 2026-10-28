@@ -494,7 +494,7 @@ After each backup the worker prunes old ones on a grandfather-father-son
 policy, keeping the most recent `retention.daily` daily, `retention.weekly`
 weekly and `retention.monthly` monthly backups. `path` is the directory the
 backups are written to, and the filesystem the disk check measures. See
-[Backups](./guides/instance-administrators/backups.md) for what to back up
+[Backups](./backups.md) for what to back up
 beyond the database and how to test a restore.
 
 The backup job runs daily at 2 AM regardless of `backup.schedule`. That key
@@ -516,7 +516,7 @@ turns it off, `port` and `bindAddress` set where it listens. The port is never
 published to the host by Docker Compose and has no authentication of its own.
 If you run Pavillion directly on a host rather than in a container, set
 `bindAddress` to `127.0.0.1`. See
-[Monitoring and logs](./guides/instance-administrators/monitoring-and-logs.md)
+[Monitoring and logs](./monitoring-and-logs.md)
 for scraping it and for exposing it deliberately.
 
 #### Inbox cleanup
