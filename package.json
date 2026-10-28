@@ -170,7 +170,7 @@
     "vite-tsconfig-paths": "^5.1.4",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.12",
-    "vue-tsc": "^2.2.10",
+    "vue-tsc": "^3.0.0",
     "yaml": "^2.8.2"
   }
 }
