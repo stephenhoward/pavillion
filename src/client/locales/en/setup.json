@@ -9,6 +9,9 @@
   "subtitle": "Let's set up your instance",
   "description": "Create your administrator account and set up your Pavillion server.",
 
+  "setup_token_label": "Setup Token",
+  "setup_token_description": "Pavillion wrote a one-time setup token to the server log when it started. Run \"docker compose logs app\" on your server and look for \"Setup token\". Restarting the server issues a new token.",
+
   "email_label": "Admin Email",
   "email_placeholder": "admin@example.com",
 
@@ -45,6 +48,8 @@
   "error_missing_site_title": "Site title is required",
   "error_passwords_mismatch": "Passwords do not match",
   "error_setup_already_completed": "Setup has already been completed",
+  "error_missing_setup_token": "Setup token is required",
+  "error_setup_token_invalid": "That setup token is not valid. Copy the latest one from the server log; restarting the server issues a new token.",
   "error_unknown": "An unexpected error occurred. Please try again.",
 
   "password_too_short": "Password must be at least 8 characters",

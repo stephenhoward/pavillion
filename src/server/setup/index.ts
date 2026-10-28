@@ -32,4 +32,13 @@ export default class SetupDomain {
   public installAPI(app: Application): void {
     SetupApiV1.install(app, this.interface);
   }
+
+  /**
+   * Issues the setup token while no admin exists, logging it for the
+   * operator. Runs at boot once the database is ready — not in initialize(),
+   * which runs before the schema exists.
+   */
+  public async issueSetupToken(): Promise<void> {
+    await this.interface.issueSetupToken();
+  }
 }

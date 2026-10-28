@@ -68,7 +68,15 @@ Either path writes the same files: a `.env` file (your secrets, mode 600), a `se
 
 The first time a browser hits your instance, it gets redirected to `/setup`. This page only exists when the database has no admin accounts yet — once you create the first one, the route returns 404 forever.
 
-Pick an email address you actually read and a strong password. The setup page creates an account with admin role and signs you in. You land on the dashboard.
+Until that first account exists, anyone who reaches your domain can load the setup page — so it asks for a setup token, which only someone who can read your server's logs has. Pavillion generates the token each time it starts and writes it to the app log. On the server, from the Pavillion directory (`/opt/pavillion` if you used the provisioning script):
+
+```bash
+docker compose logs app | grep "Setup token"
+```
+
+Copy the 32-character token into the **Setup Token** field. The token lives only in memory: restarting the app issues a new one and the old one stops working, so if the page rejects a token, check the log again and use the most recent line. Once setup completes, the token is retired.
+
+Then pick an email address you actually read and a strong password. The setup page creates an account with admin role; sign in with it on the next screen and you land on the dashboard.
 
 ::: tip <Lightbulb /> A note on the first email address.
 Use a mailbox you check daily. Password resets, account applications, and moderation and federation-incident notifications go there.

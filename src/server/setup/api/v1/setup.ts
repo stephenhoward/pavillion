@@ -3,7 +3,8 @@ import SetupInterface from '@/server/setup/interface';
 import { validatePassword } from '@/common/validation/password';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { createLogger } from '@/server/common/helper/logger';
-import { SetupAlreadyCompletedError } from '@/server/setup/exceptions';
+import { SetupAlreadyCompletedError, SetupTokenInvalidError } from '@/server/setup/exceptions';
+import { limitSetupByIp } from '@/server/common/middleware/rate-limiters';
 
 const logger = createLogger('setup');
 
@@ -36,7 +37,7 @@ export default class SetupRouteHandlers {
     const router = express.Router();
 
     router.get('/setup/status', this.getSetupStatus.bind(this));
-    router.post('/setup', this.completeSetup.bind(this));
+    router.post('/setup', limitSetupByIp, this.completeSetup.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -68,6 +69,7 @@ export default class SetupRouteHandlers {
    * - siteTitle: Site title (required)
    * - registrationMode: Registration mode - open, apply, invitation (required)
    * - defaultLanguage: Default UI language code (optional, defaults to 'en')
+   * - setupToken: The token logged at boot (required; missing or wrong is 403)
    */
   async completeSetup(req: Request, res: Response): Promise<void> {
     try {
@@ -78,7 +80,7 @@ export default class SetupRouteHandlers {
         return;
       }
 
-      const { email, password, siteTitle, registrationMode } = req.body;
+      const { email, password, siteTitle, registrationMode, setupToken } = req.body;
       // Default to English if not provided
       const defaultLanguage = req.body.defaultLanguage || DEFAULT_LANGUAGE_CODE;
 
@@ -127,7 +129,7 @@ export default class SetupRouteHandlers {
       }
 
       // Complete the setup
-      await this.service.completeSetup(email, password, siteTitle, registrationMode, defaultLanguage);
+      await this.service.completeSetup(email, password, siteTitle, registrationMode, defaultLanguage, setupToken);
 
       res.json({
         success: true,
@@ -136,6 +138,10 @@ export default class SetupRouteHandlers {
       });
     }
     catch (error) {
+      if (error instanceof SetupTokenInvalidError) {
+        res.status(403).json({ error: error.message, errorName: error.name });
+        return;
+      }
       if (error instanceof SetupAlreadyCompletedError) {
         sendSetupAlreadyCompleted(res);
         return;

@@ -16,6 +16,7 @@ export interface SetupRequestData {
   siteTitle: string;
   registrationMode: string;
   defaultLanguage: string;
+  setupToken: string;
 }
 
 /**
@@ -45,8 +46,8 @@ export default class SetupService {
   /**
    * Completes the initial setup by creating the admin account and configuring settings.
    *
-   * @param data - Setup request data including email, password, site title, and registration mode
-   * @throws Error if setup fails or has already been completed
+   * @param data - Setup request data including email, password, site title, registration mode and the setup token
+   * @throws Error if setup fails, the setup token is rejected, or setup has already been completed
    */
   async completeSetup(data: SetupRequestData): Promise<void> {
     try {
@@ -56,6 +57,9 @@ export default class SetupService {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
           throw new Error('setup_already_completed');
+        }
+        if (error.response?.data?.errorName === 'SetupTokenInvalidError') {
+          throw new Error('setup_token_invalid');
         }
         if (error.response?.data?.error) {
           throw new Error(error.response.data.error);

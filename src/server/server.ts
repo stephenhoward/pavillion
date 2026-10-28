@@ -486,6 +486,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   try {
     await initializeDatabase();
 
+    // Needs the schema, so it runs here rather than in setupDomain.initialize().
+    await setupDomain.issueSetupToken();
+
     await reportReservedUrlNameCollisionsSafely(
       () => calendarDomain.interface.findReservedUrlNameCollisions(),
     );

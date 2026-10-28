@@ -118,6 +118,8 @@ const HIGH_ABUSE_RISK_ROUTES: { method: string; path: string }[] = [
   { method: 'POST', path: '/api/v1/applications/confirm/:token' },
   // Calendar-editor invitation acceptance (noUserOnly) — IP limiter.
   { method: 'POST', path: '/api/v1/invitations/:code' },
+  // First-run setup (setup-token guessing surface) — IP limiter.
+  { method: 'POST', path: '/api/v1/setup' },
   // Login — IP + email limiters.
   { method: 'POST', path: '/api/auth/v1/login' },
   // Password reset initiate — IP + email limiters.
@@ -179,9 +181,6 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
 
   // --- Configuration ---
   { method: 'POST', path: '/api/config/v1/site', reason: 'admin-only' },
-
-  // --- Setup (first-run only) ---
-  { method: 'POST', path: '/api/v1/setup', reason: 'setup-only (gated by setup-mode middleware)' },
 
   // --- Funding (admin + per-account limited) ---
   { method: 'POST', path: '/api/funding/v1/admin/settings', reason: 'admin-only' },

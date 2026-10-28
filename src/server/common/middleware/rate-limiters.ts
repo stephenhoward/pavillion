@@ -59,6 +59,18 @@ export const limitPasswordResetByEmail: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * First-run setup rate limiter by IP address.
+ * Limits: 10 requests per IP per 15 minutes (default config).
+ */
+export const limitSetupByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.setup.byIp.max'),
+    config.get<number>('rateLimit.setup.byIp.windowMs'),
+    'setup',
+  )
+  : noOpMiddleware;
+
+/**
  * Login rate limiter by IP address.
  * Limits: 10 requests per IP per 15 minutes (default config).
  */

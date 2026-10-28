@@ -57,6 +57,21 @@
       />
 
       <div class="form-stack">
+        <div class="form-field">
+          <label for="setup-token">{{ t('setup_token_label') }}</label>
+          <input
+            type="text"
+            id="setup-token"
+            v-model="state.setupToken"
+            :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
+            :aria-describedby="(state.passwordError || state.formError) ? 'setup-token-description setup-error' : 'setup-token-description'"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+          <div id="setup-token-description" class="field-description">{{ t('setup_token_description') }}</div>
+        </div>
+
         <label for="setup-email" class="sr-only">{{ t('email_label') }}</label>
         <input
           type="email"
@@ -157,6 +172,7 @@ const { t } = useTranslation('setup');
 const detectedLanguage = getBrowserLanguage();
 
 const state = reactive({
+  setupToken: '',
   email: '',
   password: '',
   passwordConfirm: '',
@@ -225,6 +241,7 @@ function translateError(errorKey) {
     'password_too_short': 'password_too_short',
     'password_needs_variety': 'password_needs_variety',
     'setup_already_completed': 'error_setup_already_completed',
+    'setup_token_invalid': 'error_setup_token_invalid',
   };
 
   const translationKey = errorMap[errorKey] || errorKey;
@@ -240,6 +257,11 @@ function translateError(errorKey) {
  */
 function validateForm() {
   // Required field validation
+  if (!state.setupToken.trim()) {
+    state.formError = 'error_missing_setup_token';
+    return false;
+  }
+
   if (!state.email) {
     state.formError = 'error_missing_email';
     return false;
@@ -304,6 +326,7 @@ async function handleSubmit() {
       siteTitle: state.siteTitle,
       registrationMode: state.registrationMode,
       defaultLanguage: state.defaultLanguage,
+      setupToken: state.setupToken.trim(),
     });
 
     // Show success state
