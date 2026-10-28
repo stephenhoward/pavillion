@@ -35,13 +35,19 @@
  *     calendar's real key, whose body `actor` names a different alpha
  *     calendar, is rejected with 403 (signature verifies, then
  *     verifyActorPermission refuses the actor the key does not belong to).
+ *   - Negative (stale Date): a POST correctly signed with an alpha calendar's
+ *     real key over a Date header older than the 5-minute freshness window
+ *     is rejected with 401 and the parse-failure error body, proving the
+ *     replay window holds across nginx (the Date header reaches beta as
+ *     sent).
  *
  * In every negative case, "rejected" means the inbox refuses to process the
  * activity before any business logic runs. The exact status code differs by
  * branch: 400 for missing-header (parse never starts), 401 for
  * invalid-signature (parse succeeds, verification fails), 403 for
- * actor/signer mismatch (verification succeeds, the actor check fails). All
- * prove the signature gate works.
+ * actor/signer mismatch (verification succeeds, the actor check fails), 401
+ * for a stale Date (parse itself refuses the request). All prove the
+ * signature gate works.
  *
  * What this proves (and what it does NOT prove):
  *   The positive case proves the full cross-container path -- alpha signs
@@ -365,5 +371,64 @@ test.describe.serial('Strict-Receive HTTP Signature Verification', () => {
       response.status,
       'A validly signed POST whose body actor is not the signing key\'s actor must be rejected with 403 by verifyActorPermission',
     ).toBe(403);
+  });
+
+  test('correctly signed POST with a stale Date header is rejected with 401', async () => {
+    // A replay: alpha calendar's real private key signs the request over a
+    // Date ten minutes in the past, twice the 5-minute window
+    // (MAX_REQUEST_AGE_MS, and http-signature's default clockSkew of 300s).
+    // Only freshness can fail. http-signature's parseRequest throws
+    // ExpiredRequestError, which the middleware answers with 401
+    // 'Unparseable HTTP signature' -- before the key fetch, so a bad signature
+    // could not produce this body. If nginx rewrote the Date header to a
+    // fresh one, parsing would pass and verification of the signature over
+    // the original date would fail with 'Invalid signature' instead.
+    const actorUrl = `${INSTANCE_ALPHA.baseUrl}/calendars/${alphaCalendar.urlName}`;
+    const inboxPath = `/calendars/${betaCalendar.urlName}/inbox`;
+    const inboxUrl = `${INSTANCE_BETA.baseUrl}${inboxPath}`;
+    const bodyText = JSON.stringify(buildPlaceholderActivity(actorUrl));
+    const digest = `SHA-256=${crypto.createHash('sha256').update(bodyText).digest('base64')}`;
+    const staleDate = new Date(Date.now() - 10 * 60 * 1000).toUTCString();
+
+    // Same signing string the outbound path builds
+    // (CalendarActorService.signActivity).
+    const signingString = [
+      `(request-target): post ${inboxPath}`,
+      `host: ${INSTANCE_BETA.domain}`,
+      `date: ${staleDate}`,
+      `digest: ${digest}`,
+    ].join('\n');
+    const signature = crypto
+      .createSign('RSA-SHA256')
+      .update(signingString)
+      .sign(readAlphaCalendarPrivateKey(actorUrl), 'base64');
+
+    const response = await fetch(inboxUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/activity+json',
+        Host: INSTANCE_BETA.domain,
+        Date: staleDate,
+        Signature: [
+          `keyId="${actorUrl}#main-key"`,
+          'algorithm="rsa-sha256"',
+          'headers="(request-target) host date digest"',
+          `signature="${signature}"`,
+        ].join(','),
+        Digest: digest,
+      },
+      body: bodyText,
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    });
+
+    expect(
+      response.status,
+      'A correctly signed POST with a stale Date header must be rejected with 401 by the replay window',
+    ).toBe(401);
+    expect(
+      await response.json(),
+      'The rejection must come from the freshness check at parse time (ExpiredRequestError), not from signature verification',
+    ).toEqual({ error: 'Unparseable HTTP signature' });
   });
 });
