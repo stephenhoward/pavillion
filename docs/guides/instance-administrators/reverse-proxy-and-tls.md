@@ -13,6 +13,6 @@ Pavillion's app container listens on plain HTTP. Something else has to terminate
 - When standalone Caddy is the right pick: a dedicated server for Pavillion, you don't already run a proxy, you want automatic Let's Encrypt, you're willing to give Caddy ports 80 and 443
 - When bringing your own proxy is the right pick: you already run nginx/Caddy/Traefik, the server hosts other apps, you have a separate TLS strategy, the bundled Caddy can't co-exist with what's there
 - Example configs for nginx and Caddy (the WebSocket headers, the forwarded-proto, the X-Forwarded-For)
-- Enabling standalone mode: `COMPOSE_PROFILES=standalone`, the `DOMAIN` requirement, restricting the app port to localhost
+- Enabling standalone mode: `COMPOSE_PROFILES=standalone`, the `DOMAIN` requirement, the app port's loopback-only default and when to override `APP_PORT`
 - The `caddy-extras.d/` extension point — what it's for, what's allowed inside a snippet, how to validate
 - The "don't `docker compose down -v` your Caddy data volume" warning, with the rate-limit consequence spelled out

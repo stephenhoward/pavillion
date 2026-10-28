@@ -38,7 +38,7 @@ Operators — including the reference deployment — learn of a failed backup or
 Three facts about the actual deployment shaped rule 1, and each of them contradicts an intuition that was held before the work started:
 
 - **There is no internal Docker network.** `docker-compose.yml` has no `networks:` key at all. The compose project's implicit default network *is* the boundary; a companion container joins it by name, and nothing is segmented from anything else on it.
-- **Caddy is not the only door.** The `app` service publishes `${APP_PORT:-3000}:3000` on the host, and the bundled Caddy sits behind `profiles: ["standalone"]` — it is opt-in. In the default bring-your-own-proxy posture, anything on the main listener is reachable on the host regardless of what any Caddyfile says.
+- **Caddy is not the only door.** The `app` service publishes `${APP_PORT:-127.0.0.1:3000}:3000` on the host, and the bundled Caddy sits behind `profiles: ["standalone"]` — it is opt-in. In the default bring-your-own-proxy posture, anything on the main listener is reachable on the host regardless of what any Caddyfile says.
 - **The main listener has middleware of its own** — setup-mode handling, an SPA catch-all — that a metrics route would have to be reasoned about against on every future change. A separate listener makes that reasoning unnecessary rather than repeated.
 
 This decision is recorded ahead of the code it governs: the `/health` trim has shipped, but the metrics listener, its bind and port configuration, and the exposition itself land with the endpoint work in flight alongside this record. The posture binds that work rather than describing it, which is the point of writing it down first.

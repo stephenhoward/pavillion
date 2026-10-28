@@ -165,7 +165,7 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `NODE_ENV` | No | `production` | Runtime environment |
-| `APP_PORT` | No | `3000` | Host port for Docker Compose mapping |
+| `APP_PORT` | No | `127.0.0.1:3000` | Host address for the Docker Compose mapping, as `host:port` or a bare port. The default binds loopback only; a bare port binds every interface, and Docker-published ports are not filtered by UFW |
 | `HOST_PORT` | No | `3000` | Overrides `host.port`, the port the application listens on inside the container |
 | `LOCAL_DOMAIN` | No | `localhost:3000` | Overrides `domain`, the instance's public domain |
 
@@ -607,8 +607,8 @@ CALENDAR_IMPORT_HMAC_SECRET=your_import_hmac_secret_here
 DB_NAME=pavillion
 DB_USER=pavillion
 
-# Optional application port
-APP_PORT=3000
+# Optional host address for the app (default: loopback only)
+APP_PORT=127.0.0.1:3000
 
 # Optional S3 storage (if using S3 driver)
 # S3_BUCKET=your-bucket-name
