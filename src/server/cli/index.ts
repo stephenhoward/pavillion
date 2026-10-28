@@ -10,6 +10,7 @@ import chalk from 'chalk';
 import { EventEmitter } from 'events';
 import db from '../common/entity/db.js';
 import HousekeepingInterface from '../housekeeping/interface/index.js';
+import { formatDrillStatus } from './drill-status.js';
 import EmailInterface from '../email/interface/index.js';
 import AccountsInterface from '../accounts/interface/index.js';
 import * as readline from 'readline';
@@ -168,6 +169,9 @@ async function handleBackupStatus() {
     // Get last successful backup
     const lastBackup = await housekeepingInterface.getLastVerifiedBackup();
 
+    // Get last successful restore drill — the only proof a backup restores
+    const lastDrill = await housekeepingInterface.getLastSuccessfulDrill();
+
     console.log(chalk.bold('\n📊 Backup System Status\n'));
 
     // Storage statistics
@@ -197,6 +201,9 @@ async function handleBackupStatus() {
     else {
       console.log(chalk.yellow('  No backups found'));
     }
+
+    // Last restore drill
+    console.log('\n' + formatDrillStatus(lastDrill).join('\n'));
 
     // Retention policy
     console.log('\n' + chalk.cyan('Retention Policy:'));

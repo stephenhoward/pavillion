@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFile } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { stripVTControlCharacters } from 'util';
 import sinon from 'sinon';
 import HousekeepingInterface from '@/server/housekeeping/interface';
 import EmailInterface from '@/server/email/interface';
@@ -11,6 +12,7 @@ import StorageService from '@/server/housekeeping/service/storage';
 import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
+import { formatDrillStatus } from '@/server/cli/drill-status';
 
 /**
  * CLI Commands Test Suite
@@ -166,6 +168,43 @@ describe('CLI Commands (HousekeepingInterface)', () => {
       const lastBackup = await housekeeping.getLastVerifiedBackup();
 
       expect(lastBackup).toBeNull();
+    });
+
+    /**
+     * The drill section is what keeps an operator from reading the Last Backup
+     * "Verified" mark — a write-time size check — as proof of restorability.
+     */
+    describe('last successful restore drill section', () => {
+      const plain = (lines: string[]) => lines.map((line) => stripVTControlCharacters(line));
+
+      it('should print the drill timestamp and the backup it restored', () => {
+        const lines = plain(formatDrillStatus({
+          id: '323e4567-e89b-12d3-a456-426614174002',
+          backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+          // Local-time constructor: the CLI prints local time, as for backups.
+          ranAt: new Date(2026, 8, 1, 3, 0, 0),
+          passed: true,
+          detail: null,
+        }));
+
+        expect(lines).toEqual([
+          'Last Successful Restore Drill:',
+          '  Date: 2026-09-01 03:00:00',
+          '  Restored backup: pavillion_20260901_020000_scheduled.dump',
+          '  ("Verified" on a backup means its file was written; only a drill proves it restores)',
+        ]);
+      });
+
+      it('should say plainly when no drill has ever passed', () => {
+        const lines = plain(formatDrillStatus(null));
+
+        expect(lines).toEqual([
+          'Last Successful Restore Drill:',
+          '  No successful restore drill recorded — no backup has been proven restorable',
+          '  (Run scripts/restore-drill.sh to prove one)',
+          '  ("Verified" on a backup means its file was written; only a drill proves it restores)',
+        ]);
+      });
     });
   });
 
