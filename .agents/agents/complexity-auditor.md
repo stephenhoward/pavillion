@@ -44,22 +44,15 @@ Read the applicable sections of `.agents/skills/complexity-playbook/principles.m
 
 ### Step 4: Find the Spec
 
-Locate the spec or task definition that scoped this work, so you can calibrate scope creep checks. **If a spec path was provided in your prompt, read it directly and skip this cascade.**
+Locate the spec that scoped this work, so you can calibrate scope creep checks. The spec lives on the bead and its parent epic, not in a spec folder. **If a spec was provided inline in your prompt, use it directly and skip this lookup.**
 
 Otherwise, follow this lookup:
 
-1. Get current branch name: `git branch --show-current`
-2. **Extract bead ID** -- look for `pv-[a-z0-9]+` pattern in branch name (e.g., `fix/widget-config-pv-qgk1` -> `pv-qgk1`)
-3. **If bead ID found:**
-   - Read bead details: `bd show {bead-id}` (gets title, description, status, dependencies)
-   - Check for epic parent: if bead has a parent epic, read the epic too: `bd show {epic-id}`
-   - Check for linked spec folder: look for `agent-os/specs/{bead-id}/` (e.g., `agent-os/specs/pv-9efm/`)
-4. **If no bead ID**, try matching branch name to a date-based spec:
-   - Look for `agent-os/specs/*-{branch-name}/` (e.g., branch `rate-limiting` -> `agent-os/specs/2026-02-03-rate-limiting-auth-endpoints/`)
-5. **If a spec folder is found** (from either path):
-   - Read `spec.md` for scope and user stories
-   - Read `tasks.md` for task breakdown
-6. **If nothing found:** note this in the report and rely on generic scope creep heuristics only
+1. **Find the bead ID** -- use the one named in your prompt; failing that, look for a `pv-[a-z0-9]+` pattern in `git branch --show-current`
+2. **If bead ID found:**
+   - Read the bead: `bd show {bead-id}` -- its description, design and acceptance fields define the scope
+   - Check for epic parent: if the bead has a parent epic, read the epic too: `bd show {epic-id}` -- its description, design and acceptance give the wider scope the bead sits in
+3. **If no bead ID:** note this in the report and rely on generic scope creep heuristics only
 
 ### Step 5: Run Complexity Checks
 
@@ -73,12 +66,12 @@ Beyond individual file checks, look at the overall change set:
 - Were any "while we're here" improvements added beyond scope?
 - Are there backwards-compatibility shims for unreleased code?
 
-**If a spec was found in Step 4**, compare the change set against the defined scope. Flag files or functionality that fall outside the spec's scope, user stories, or task breakdown.
+**If a spec was found in Step 4**, compare the change set against the defined scope. Flag files or functionality that fall outside the bead's description, design, or acceptance criteria.
 
 ### Step 7: Report
 
 Use the base auditor report structure, extended with:
-- **Spec Context** -- spec path if found, or "No spec found -- using generic scope heuristics"
+- **Spec Context** -- bead (and parent epic) read if found, or "No bead found -- using generic scope heuristics"
 - **Complexity Standards Consulted** -- list of complexity dimensions evaluated
 
 Per-finding fields:

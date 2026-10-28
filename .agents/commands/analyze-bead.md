@@ -372,7 +372,6 @@ Repeat for each leaf bead in the hierarchy.
 ## Bead Analysis Complete
 
 **Bead:** beads-<id> - [Title]
-**Spec:** agent-os/specs/[spec-folder]/spec.md (if linked)
 
 ### Dependency Graph
 
@@ -508,21 +507,4 @@ Options:
 1. Remove one dependency: `bd dep remove <id> <dep-id>`
 2. Split one bead to break the cycle
 3. Review if these truly depend on each other
-```
-
-### Missing Spec Reference
-
-If the bead has no linked spec:
-
-```
-**No spec linked to this bead.**
-
-The bead description doesn't reference a spec document.
-Context enrichment will rely solely on bead descriptions.
-
-If a spec exists, consider updating the bead description:
-`bd update <bead-id> --description="...existing description...
-
-## Spec
-agent-os/specs/[path]/spec.md"`
 ```
