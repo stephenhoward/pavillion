@@ -35,5 +35,5 @@ Two ways to read this section:
 ## What's not here
 
 - **Running a calendar on Pavillion.** That belongs to the [calendar-owner guides](/guides/calendar-owners/).
-- **Contributing to Pavillion itself.** That belongs to the developer guides.
+- **Contributing to Pavillion itself.** That belongs to the [developer guides](/guides/developers/).
 - **The ActivityPub protocol.** Referenced where you need it, not taught here. You don't need to read the spec to administer a federating server — but knowing what protocol your instance uses to talk to others helps when something goes wrong, and the guides will tell you where to look.

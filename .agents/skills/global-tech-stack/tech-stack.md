@@ -13,7 +13,7 @@ Define your technical stack below. This serves as a reference for all team membe
 - **UI Components:** custom components
 
 ### Database & Storage
-- **Database:** SQLite for testing, PostgreSQL for deployment
+- **Database:** SQLite (in-memory) for development and testing, PostgreSQL for deployment
 - **ORM/Query Builder:** Sequelize
 
 ### Testing & Quality
