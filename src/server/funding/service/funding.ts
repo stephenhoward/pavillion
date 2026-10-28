@@ -1294,16 +1294,28 @@ export default class FundingService {
     // webhooks never arrive without `stripe listen --forward-to`).
     // The idempotency check in processCheckoutCompleted prevents duplicate
     // creation if the webhook has already arrived or arrives later.
+    //
+    // A failure here is not the returning user's error: the payment went
+    // through, nothing was written, and the webhook path will create the plan
+    // (it lets the same failure propagate, so the provider retries). Report
+    // the session as 'open' — the value the client already reads as "no
+    // outcome yet" — rather than 'complete' with no plan behind it.
     if (sessionStatus.status === 'complete' && sessionStatus.subscriptionId) {
-      await this.processCheckoutCompleted({
-        eventId: `session_return_${sessionId}`,
-        eventType: 'checkout.session.completed',
-        subscriptionId: sessionStatus.subscriptionId,
-        customerId: sessionStatus.customerId,
-        accountId: sessionStatus.metadata.accountId,
-        calendarIds: sessionStatus.metadata.calendarIds,
-        rawPayload: { source: 'session_verification', sessionId },
-      }, stripeEntity.id);
+      try {
+        await this.processCheckoutCompleted({
+          eventId: `session_return_${sessionId}`,
+          eventType: 'checkout.session.completed',
+          subscriptionId: sessionStatus.subscriptionId,
+          customerId: sessionStatus.customerId,
+          accountId: sessionStatus.metadata.accountId,
+          calendarIds: sessionStatus.metadata.calendarIds,
+          rawPayload: { source: 'session_verification', sessionId },
+        }, stripeEntity.id);
+      }
+      catch (error) {
+        logError(error, 'getCheckoutSessionStatus: eager plan creation failed, deferring to webhook');
+        return { status: 'open' };
+      }
     }
 
     return {
