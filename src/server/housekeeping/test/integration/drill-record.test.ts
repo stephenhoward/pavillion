@@ -11,7 +11,7 @@ import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import HousekeepingInterface from '@/server/housekeeping/interface';
-import migration from '../../../../../migrations/0044_create_backup_drill';
+import migration from '../../../../../migrations/0046_create_backup_drill';
 
 /**
  * Round-trip tests for the durable restore-drill record, against a real

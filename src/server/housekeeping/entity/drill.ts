@@ -19,7 +19,7 @@ import db from '@/server/common/entity/db';
  *
  * `backup_filename` deliberately carries no association to {@link BackupEntity}.
  * GFS retention prunes backup_metadata rows, and a drill record must outlive the
- * backup it proved — see migrations/0044_create_backup_drill.ts for the full
+ * backup it proved — see migrations/0046_create_backup_drill.ts for the full
  * reasoning.
  *
  * `timestamps: false` because `ran_at` is the meaningful time; a Sequelize
