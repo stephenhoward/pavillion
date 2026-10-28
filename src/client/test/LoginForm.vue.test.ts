@@ -219,7 +219,7 @@ describe('LoginForm Behavior', () => {
     expect(wrapper.emitted('success')).toBeUndefined();
   });
 
-  it('successful retry clears both the red field class and the alert element', async () => {
+  it('successful retry clears both the red field class and the alert text', async () => {
     const { wrapper, authn } = mountedLoginForm();
     const loginStub = sandbox.stub(authn, 'login');
 
@@ -238,7 +238,7 @@ describe('LoginForm Behavior', () => {
     await wrapper.find('form').trigger('submit.prevent');
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').text()).toBe('');
     expect(wrapper.find('input[type="email"]').classes()).not.toContain('form-control--error');
     expect(wrapper.find('input[type="email"]').attributes('aria-describedby')).toBeUndefined();
     expect(wrapper.find('input[type="password"]').attributes('aria-describedby')).toBeUndefined();
@@ -261,13 +261,39 @@ describe('LoginForm Behavior', () => {
     expect(loginStub.called).toBe(true);
   });
 
-  it('empty-string error on ErrorAlert renders no alert element', () => {
+  it('empty-string error on ErrorAlert keeps an empty, unstyled live region mounted', () => {
     const wrapper = mountComponent(
       { components: { ErrorAlert }, template: '<ErrorAlert id="test-error" error="" />' },
       createRouter({ history: createMemoryHistory(), routes }),
       {},
     );
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    // A live region inserted together with its text is not announced, so
+    // the region must already be in the document before the first error.
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.attributes('id')).toBe('test-error');
+    expect(alert.attributes('aria-live')).toBe('polite');
+    expect(alert.text()).toBe('');
+    expect(alert.classes()).not.toContain('error-alert');
+  });
+
+  it('first failed login writes its error into the live region that was already mounted', async () => {
+    const { wrapper, authn } = mountedLoginForm();
+    sandbox.stub(authn, 'login').resolves(false);
+
+    const regionBefore = wrapper.find('[role="alert"]');
+    expect(regionBefore.exists()).toBe(true);
+    expect(regionBefore.text()).toBe('');
+
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+    await wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    const regionAfter = wrapper.find('[role="alert"]');
+    expect(regionAfter.element).toBe(regionBefore.element);
+    expect(regionAfter.text()).toBe('bad sign in');
+    expect(regionAfter.classes()).toContain('error-alert');
   });
 
   it('emits success event on valid login', async () => {
@@ -282,7 +308,7 @@ describe('LoginForm Behavior', () => {
     await wrapper.find('form').trigger('submit.prevent');
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').text()).toBe('');
     expect(wrapper.emitted('success')).toBeDefined();
     expect(wrapper.emitted('success')!.length).toBe(1);
     expect(loginStub.called).toBe(true);
@@ -363,7 +389,11 @@ describe('LoginForm', () => {
 
       const phrases = await walk(wrapper.element);
 
+      // The leading 'alert' is the empty live region, kept mounted so the
+      // first error is announced; the virtual screen reader names it even
+      // with no content.
       expect(phrases).toEqual([
+        'alert',
         'email',
         'textbox, email, not invalid, placeholder email, required',
         'password',
