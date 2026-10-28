@@ -1,25 +1,29 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
-import { useWidgetStore } from '../stores/widgetStore';
 import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import EmptyState from '@/common/ui/components/EmptyState.vue';
 
 const { t } = useTranslation('system');
+const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
-const widgetStore = useWidgetStore();
 
 // Events are loaded by WidgetContainer/SearchFilterPublic; this component
 // just displays them via the day-grouped EventCard list pattern shared
 // with the site (src/site/components/calendar.vue).
 const filteredEventsByDay = computed(() => publicStore.getFilteredEventsByDay);
 const defaultEventImage = computed(() => publicStore.defaultEventImage);
+
+// The calendar this list is rendered for. Read from the route rather than the
+// widget store: the router guard switches the store's calendar before a
+// cross-calendar navigation resolves, while this list still shows the old one.
+const calendarUrlName = computed(() => route.params.urlName as string);
 
 /**
  * Builds the widget-router-resolved href for an event instance.
@@ -32,7 +36,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
   return router.resolve({
     name: 'widget-event-detail',
     params: {
-      urlName: widgetStore.calendarUrlName!,
+      urlName: calendarUrlName.value,
       eventId: instance.event.id,
       startTime: formatInstanceSlug(instance.start),
     },
@@ -66,7 +70,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
           >
             <EventCard
               :instance="instance"
-              :calendar-url-name="widgetStore.calendarUrlName!"
+              :calendar-url-name="calendarUrlName"
               :calendar="publicStore.currentCalendar"
               :default-image="defaultEventImage"
               :detail-href="buildDetailHref(instance)"
