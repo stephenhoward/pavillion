@@ -322,10 +322,4 @@ onMounted(loadDomains);
 .update-button {
   width: 100%;
 }
-
-// Error/success variants come from the shared admin-alert mixin
-// (semantic error tokens; the colorblind-safe blue success palette).
-.alert {
-  @include admin-alert;
-}
 </style>

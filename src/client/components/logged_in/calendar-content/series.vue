@@ -386,8 +386,4 @@ onMounted(async () => {
 :global(.delete-series-modal > div) {
   max-width: 500px !important;
 }
-
-.alert {
-  @include admin-alert;
-}
 </style>
