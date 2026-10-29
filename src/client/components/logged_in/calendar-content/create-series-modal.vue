@@ -1,49 +1,3 @@
-<template>
-  <ModalLayout
-    :title="t('add_series_title')"
-    size="lg"
-    @close="$emit('close')"
-  >
-    <div class="create-series">
-      <div
-        v-if="state.error"
-        class="alert alert--error"
-        role="alert"
-        aria-live="polite"
-      >
-        {{ state.error }}
-      </div>
-
-      <SeriesDetailsForm
-        ref="detailsForm"
-        :series="series"
-        :disabled="state.isSaving"
-        @submit="saveSeries"
-      />
-
-      <div class="form-actions">
-        <button
-          type="button"
-          class="btn btn--ghost"
-          data-test="create-series-cancel"
-          @click="$emit('close')"
-          :disabled="state.isSaving"
-        >
-          {{ t('cancel_button') }}
-        </button>
-        <PillButton
-          variant="primary"
-          data-test="create-series-submit"
-          @click="saveSeries"
-          :disabled="state.isSaving || !canSave()"
-        >
-          {{ state.isSaving ? t('creating') : t('create_button') }}
-        </PillButton>
-      </div>
-    </div>
-  </ModalLayout>
-</template>
-
 <script setup>
 import { reactive, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
@@ -108,6 +62,52 @@ async function saveSeries() {
 }
 </script>
 
+<template>
+  <ModalLayout
+    :title="t('add_series_title')"
+    size="lg"
+    @close="$emit('close')"
+  >
+    <div class="create-series">
+      <div
+        v-if="state.error"
+        class="alert alert--error"
+        role="alert"
+        aria-live="polite"
+      >
+        {{ state.error }}
+      </div>
+
+      <SeriesDetailsForm
+        ref="detailsForm"
+        :series="series"
+        :disabled="state.isSaving"
+        @submit="saveSeries"
+      />
+
+      <div class="form-actions">
+        <button
+          type="button"
+          class="btn btn--ghost"
+          data-test="create-series-cancel"
+          @click="$emit('close')"
+          :disabled="state.isSaving"
+        >
+          {{ t('cancel_button') }}
+        </button>
+        <PillButton
+          variant="primary"
+          data-test="create-series-submit"
+          @click="saveSeries"
+          :disabled="state.isSaving || !canSave()"
+        >
+          {{ state.isSaving ? t('creating') : t('create_button') }}
+        </PillButton>
+      </div>
+    </div>
+  </ModalLayout>
+</template>
+
 <style lang="scss" scoped>
 .create-series {
   display: flex;
@@ -121,7 +121,7 @@ async function saveSeries() {
   justify-content: flex-end;
   margin-top: var(--pav-space-4);
   padding-top: var(--pav-space-4);
-  border-top: 1px solid var(--pav-border-primary);
+  border-block-start: var(--pav-border-width-1) solid var(--pav-border-primary);
 }
 
 </style>
