@@ -8,8 +8,9 @@
 
 import { useId } from 'vue';
 import { Plus } from 'lucide-vue-next';
-import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { useTabScroll } from '@/client/composables/useTabScroll';
 
 const { t } = useTranslation('system', {
@@ -99,10 +100,10 @@ defineExpose({ panelId, tabId });
         @click="selectLanguage(lang)"
         @keydown="onTabKeydown"
         :aria-label="erroredTabs.includes(lang)
-          ? t('edit_content_error', { language: iso6391.getName(lang) })
-          : t('edit_content', { language: iso6391.getName(lang) })"
+          ? t('edit_content_error', { language: languageDisplayName(lang, i18next.language) })
+          : t('edit_content', { language: languageDisplayName(lang, i18next.language) })"
       >
-        {{ iso6391.getName(lang) }}
+        {{ languageDisplayName(lang, i18next.language) }}
         <span
           v-if="erroredTabs.includes(lang)"
           class="error-dot"

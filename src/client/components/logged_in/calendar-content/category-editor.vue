@@ -1,8 +1,10 @@
 <script setup>
 import { reactive, ref, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import { DuplicateCategoryNameError } from '@/common/exceptions/category';
@@ -171,7 +173,7 @@ onMounted(() => {
           :key="lang"
           class="language-field"
         >
-          <label class="language-label">{{ iso6391.getNativeName(lang) }}:</label>
+          <label class="language-label">{{ languageDisplayName(lang, i18next.language) }}:</label>
           <div class="language-input-wrapper">
             <input
               type="text"

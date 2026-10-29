@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
@@ -183,7 +185,7 @@ defineExpose({ canSave });
         class="remove-translation-link"
         @click="removeLanguage(currentLanguage)"
       >
-        {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+        {{ t('remove_language', { language: languageDisplayName(currentLanguage, i18next.language) }) }}
       </button>
     </div>
 

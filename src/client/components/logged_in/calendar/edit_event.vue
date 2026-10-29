@@ -815,7 +815,7 @@ form {
                   class="remove-translation-link"
                   @click="handleRemoveLanguage(currentLanguage)"
                 >
-                  {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+                  {{ t('remove_language', { language: languageDisplayName(currentLanguage, i18next.language) }) }}
                 </button>
               </div>
             </div>
@@ -1135,6 +1135,7 @@ form {
 import { ref, onBeforeMount, onMounted, computed, watch, nextTick } from 'vue';
 import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
 import EventCancellationsPanel from './EventCancellationsPanel.vue';
@@ -1157,6 +1158,7 @@ import AddSpaceSheet from '@/client/components/common/add-space-sheet.vue';
 import { ValidationError } from '@/common/exceptions';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 
 // Composables
 import { useEventEditor } from '@/client/composables/useEventEditor';
@@ -1538,7 +1540,7 @@ const handleAddLanguage = (language) => {
  */
 const handleRemoveLanguage = (language) => {
   if (!editorState.event) return;
-  const languageName = iso6391.getName(language);
+  const languageName = languageDisplayName(language, i18next.language);
   const message = t(
     'remove_translation_confirm',
     `Remove the ${languageName} translation? This will permanently delete all ${languageName} content for this event.`,

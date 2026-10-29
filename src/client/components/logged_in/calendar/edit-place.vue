@@ -591,7 +591,7 @@ form {
                   class="remove-translation-link"
                   @click="removeLanguage(currentLanguage)"
                 >
-                  {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+                  {{ t('remove_language', { language: languageDisplayName(currentLanguage, i18next.language) }) }}
                 </button>
               </div>
             </div>
@@ -739,7 +739,7 @@ import { useLanguageManagement } from '@/client/composables/useLanguageManagemen
 import { cloneLocationForBuffer } from '@/client/composables/location-helpers';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocation, EventLocationSpace, validateLocationHierarchy } from '@/common/model/location';
-import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 
 const props = defineProps({
   placeId: {

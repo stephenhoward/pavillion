@@ -16,12 +16,13 @@
  */
 import { ref, reactive, computed, onBeforeMount, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import languagePicker from '@/client/components/common/language-picker.vue';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
-import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 
 const props = defineProps<{
   /**
@@ -256,7 +257,7 @@ onBeforeMount(() => {
           class="remove-translation-link"
           @click="removeLanguage(currentLanguage)"
         >
-          {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+          {{ t('remove_language', { language: languageDisplayName(currentLanguage, i18next.language) }) }}
         </button>
       </div>
 
