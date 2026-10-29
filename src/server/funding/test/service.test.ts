@@ -26,6 +26,7 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
+import logger from '@/server/common/helper/logger';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -500,6 +501,27 @@ describe('FundingService', () => {
         expect(plan.cancelled_at).toBe(cancelledAt);
         expect(reactivated.called).toBe(false);
       });
+    });
+
+    it('should propagate a checkout plan-creation failure so the provider retries', async () => {
+      // The session-return path degrades this failure to a still-open status;
+      // the webhook path must not, or the provider would never redeliver.
+      const providerConfigId = uuidv4();
+      sandbox.stub(FundingEventEntity, 'findOne').resolves(null);
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves({ id: providerConfigId } as any);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns({
+        getSubscription: sandbox.stub().rejects(new Error('no resolvable billing period')),
+      } as any);
+
+      await expect(service.processWebhookEvent({
+        eventId: 'evt_checkout_unbuildable',
+        eventType: 'checkout.session.completed',
+        subscriptionId: 'sub_unbuildable',
+        customerId: 'cus_unbuildable',
+        accountId: uuidv4(),
+        rawPayload: {},
+      }, providerConfigId)).rejects.toThrow('no resolvable billing period');
     });
   });
 
@@ -2463,6 +2485,54 @@ describe('FundingService', () => {
           provider_subscription_id: 'sub_eager_123',
           provider_config_id: providerConfigId,
         },
+      });
+    });
+
+    describe('when eager plan creation throws', () => {
+      function stubCompleteSessionWhosePlanCannotBeBuilt() {
+        stubEnabledStripeProvider();
+        const getSubscription = sandbox.stub().rejects(
+          new Error('Stripe subscription sub_eager_fail has no resolvable billing period'),
+        );
+        sandbox.stub(ProviderFactory, 'getAdapter').returns({
+          getCheckoutSessionStatus: sandbox.stub().resolves({
+            status: 'complete',
+            subscriptionId: 'sub_eager_fail',
+            customerId: 'cus_eager_fail',
+            metadata: {
+              accountId: accountId,
+              calendarIds: JSON.stringify([uuidv4()]),
+            },
+          }),
+          getSubscription,
+        } as any);
+        // No plan yet, so processCheckoutCompleted goes on to fetch the
+        // subscription — which is where it fails
+        sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+        sandbox.stub(ProviderConfigEntity, 'findByPk').resolves({ id: providerConfigId } as any);
+        return { getSubscription };
+      }
+
+      it('should report the session as still open rather than failing', async () => {
+        const { getSubscription } = stubCompleteSessionWhosePlanCannotBeBuilt();
+        sandbox.stub(logger, 'error');
+
+        const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_eagerfail');
+
+        expect(getSubscription.calledOnce).toBe(true);
+        expect(result).toEqual({ status: 'open' });
+      });
+
+      it('should log the failure', async () => {
+        stubCompleteSessionWhosePlanCannotBeBuilt();
+        const errorStub = sandbox.stub(logger, 'error');
+
+        await service.getCheckoutSessionStatus(accountId, 'cs_test_eagerfail');
+
+        expect(errorStub.calledOnce).toBe(true);
+        const [fields] = errorStub.firstCall.args as unknown as [{ err: Error; context: string }];
+        expect(fields.err.message).toMatch(/no resolvable billing period/);
+        expect(fields.context).toMatch(/getCheckoutSessionStatus/);
       });
     });
 
