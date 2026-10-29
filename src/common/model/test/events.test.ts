@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { EventLocationSpace } from '@/common/model/location';
 
 /**
@@ -99,6 +99,51 @@ describe('CalendarEvent model', () => {
 
       expect(restored.space).toBeNull();
       expect(restored.locationId).toBeNull();
+    });
+  });
+
+  describe('dropped-language tombstones', () => {
+    it('serializes a dropped language as null so the server deletes it', () => {
+      const event = new CalendarEvent('evt-1', 'cal-1');
+      event.addContent(new CalendarEventContent('en', 'Concert'));
+      event.addContent(new CalendarEventContent('fr', 'Concert FR'));
+
+      event.dropContent('fr');
+
+      const obj = event.toObject();
+      expect(obj.content).toHaveProperty('fr', null);
+      expect(obj.content.en.name).toBe('Concert');
+    });
+
+    it('emits no tombstone for an event that has not been saved yet', () => {
+      const event = new CalendarEvent('', 'cal-1');
+      event.addContent(new CalendarEventContent('en', 'Concert'));
+      event.addContent(new CalendarEventContent('fr', 'Concert FR'));
+
+      event.dropContent('fr');
+
+      expect(event.toObject().content).not.toHaveProperty('fr');
+    });
+
+    it('clears the tombstone when the language is added back', () => {
+      const event = new CalendarEvent('evt-1', 'cal-1');
+      event.addContent(new CalendarEventContent('fr', 'Concert FR'));
+      event.dropContent('fr');
+
+      event.content('fr').name = 'Concert encore';
+
+      expect(event.toObject().content.fr.name).toBe('Concert encore');
+    });
+
+    it('round-trips a tombstone to an event without that language', () => {
+      const event = new CalendarEvent('evt-1', 'cal-1');
+      event.addContent(new CalendarEventContent('en', 'Concert'));
+      event.addContent(new CalendarEventContent('fr', 'Concert FR'));
+      event.dropContent('fr');
+
+      const restored = CalendarEvent.fromObject(event.toObject());
+
+      expect(restored.getLanguages()).toEqual(['en']);
     });
   });
 });

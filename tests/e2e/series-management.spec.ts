@@ -188,4 +188,51 @@ test.describe('Series management', () => {
     await expect(select).toHaveValue('');
     await expect(select.locator('option', { hasText: `Another Series ${STAMP}` })).toHaveCount(0);
   });
+
+  test('removing a translation from a series persists across a reload', async ({ page }) => {
+    const urlName = `xlate-${STAMP}`;
+    const seriesName = `Translated Series ${STAMP}`;
+    const frenchName = `Série traduite ${STAMP}`;
+    const frenchTab = page.getByRole('tab', { name: 'Edit French content' });
+
+    await gotoSeriesTab(page);
+
+    // Create the series with English and French content
+    await page.getByRole('button', { name: /add series/i }).click();
+    const editor = page.locator('.series-editor-page');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    await editor.locator('#series-url-name').fill(urlName);
+    await editor.locator('#name-en').fill(seriesName);
+    await editor.getByRole('button', { name: 'Add language' }).click();
+    await expect(page.getByRole('heading', { name: 'Select a Language' })).toBeVisible();
+    await page.getByRole('searchbox', { name: /search for a language/i }).fill('French');
+    await page.getByRole('button', { name: /^Français\s+French$/ }).click();
+    await expect(frenchTab).toHaveAttribute('aria-selected', 'true');
+    await editor.locator('#name-fr').fill(frenchName);
+    await editor.getByRole('button', { name: 'Create Series' }).click();
+
+    await expect(editor).toBeHidden({ timeout: 10000 });
+    const card = page.locator('.series-card').filter({ hasText: seriesName });
+    await expect(card).toBeVisible({ timeout: 10000 });
+
+    // Remove the French translation and save
+    await card.getByRole('button', { name: 'Edit' }).click();
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await frenchTab.click();
+    await expect(editor.locator('#name-fr')).toHaveValue(frenchName);
+    await editor.getByRole('button', { name: 'Remove French translation' }).click();
+    await expect(frenchTab).toHaveCount(0);
+    await editor.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(editor).toBeHidden({ timeout: 10000 });
+
+    // After a reload the series still has no French translation
+    await gotoSeriesTab(page);
+    const reloadedCard = page.locator('.series-card').filter({ hasText: seriesName });
+    await expect(reloadedCard).toBeVisible({ timeout: 10000 });
+    await reloadedCard.getByRole('button', { name: 'Edit' }).click();
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator('#name-en')).toHaveValue(seriesName);
+    await expect(frenchTab).toHaveCount(0);
+  });
 });

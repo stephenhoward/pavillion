@@ -292,10 +292,13 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       urlPrompt: this.urlPrompt,
       isRecurring: this.isRecurring,
       recurrenceSummary: this.recurrenceSummary,
-      content: Object.fromEntries(
-        Object.entries(this._content)
-          .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()]),
-      ),
+      content: {
+        ...this.droppedContentTombstones(),
+        ...Object.fromEntries(
+          Object.entries(this._content)
+            .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()]),
+        ),
+      },
       schedules: this.schedules.map(schedule => schedule.toObject()),
       categories: this.categories.map(category => category.toObject() ),
       series: this.series?.toObject() ?? null,

@@ -63,10 +63,13 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
       mediaFocalPointY: this.mediaFocalPointY,
       mediaZoom: this.mediaZoom,
       media: this.media?.toObject() ?? null,
-      content: Object.fromEntries(
-        Object.entries(this._content)
-          .map(([language, content]: [string, EventSeriesContent]) => [language, content.toObject()]),
-      ),
+      content: {
+        ...this.droppedContentTombstones(),
+        ...Object.fromEntries(
+          Object.entries(this._content)
+            .map(([language, content]: [string, EventSeriesContent]) => [language, content.toObject()]),
+        ),
+      },
     };
   }
 

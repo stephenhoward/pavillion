@@ -653,6 +653,11 @@ class EventService {
 
     if (eventParams.content) {
       for (const [language, content] of Object.entries(eventParams.content)) {
+        // A null entry is a removed translation, forwarded to the remote
+        // calendar as-is; it has no content to reflect locally.
+        if (!content) {
+          continue;
+        }
         const contentObj = content as any;
         event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
       }
