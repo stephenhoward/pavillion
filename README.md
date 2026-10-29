@@ -1,6 +1,6 @@
 # Pavillion
 
-Pavillion is a federated events calendar. Using federation it aims to provide an easy way for organizations to share their own events with the public, and also make it simple to share and aggregate events from across multiple sources to make community calendars that can be curated by cities, chambers of commerce, tourism boards, or other community-oriented organizations.
+[Pavillion](https://pavillion.social) is a federated events calendar. Using federation it aims to provide an easy way for organizations to share their own events with the public, and also make it simple to share and aggregate events from across multiple sources to make community calendars that can be curated by cities, chambers of commerce, tourism boards, or other community-oriented organizations.
 
 ## Project Principles
 
