@@ -280,9 +280,8 @@ describe('Widget Integration Tests', () => {
 
     it('should render list view with day groups', async () => {
       const router = createMockRouter();
+      await router.push('/widget/mycal');
       const publicStore = usePublicCalendarStore();
-      const widgetStore = useWidgetStore();
-      widgetStore.setCalendarUrlName('mycal');
 
       const start = DateTime.fromISO('2026-01-06T18:00:00.000Z', { zone: 'utc' });
       // Mock an event - use allEvents property (not events).

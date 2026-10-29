@@ -24,7 +24,8 @@ export interface WidgetState {
   configLoadedForUrlName: string | null;
   // Query (filters, date range, lang) of the calendar list the visitor last
   // left for event detail; the detail's Back button restores it when it
-  // cannot simply step back to the list's own history entry.
+  // cannot simply step back to the list's own history entry. Scoped to the
+  // current calendar: the router clears it when navigation leaves it.
   lastListQuery: LocationQuery | null;
 }
 
@@ -168,6 +169,13 @@ export const useWidgetStore = defineStore('widget', {
      */
     setLastListQuery(query: LocationQuery) {
       this.lastListQuery = { ...query };
+    },
+
+    /**
+     * Forget the recorded list query, as when navigation leaves its calendar.
+     */
+    clearLastListQuery() {
+      this.lastListQuery = null;
     },
 
     /**

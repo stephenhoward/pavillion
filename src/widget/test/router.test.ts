@@ -76,7 +76,7 @@ vi.mock('@/site/components/EventDetailBody.vue', () => ({
 // ---------------------------------------------------------------------------
 // Subject under test
 // ---------------------------------------------------------------------------
-import router from '@/widget/router';
+import router, { widgetScrollBehavior } from '@/widget/router';
 import AppVue from '@/widget/components/app.vue';
 import { useWidgetStore } from '@/widget/stores/widgetStore';
 
@@ -299,5 +299,47 @@ describe('widget router list-query capture', () => {
     await router.push('/widget/onward_cal/events/evt-2');
 
     expect(store.lastListQuery).toEqual({ startDate: '2026-11-01', endDate: '2026-11-30' });
+  });
+
+  it('does not carry one calendar list query into another calendar event detail', async () => {
+    const store = useWidgetStore();
+
+    await router.push('/widget/first_list_cal?search=climate');
+    await router.push('/widget/second_list_cal/events/evt-1');
+
+    expect(store.lastListQuery).toBeNull();
+  });
+
+  it('drops the recorded list query when detail navigation moves to another calendar', async () => {
+    const store = useWidgetStore();
+
+    await router.push('/widget/origin_cal?startDate=2026-11-01&endDate=2026-11-30');
+    await router.push('/widget/origin_cal/events/evt-1');
+    await router.push('/widget/other_cal/events/evt-2');
+
+    expect(store.lastListQuery).toBeNull();
+  });
+});
+
+describe('widgetScrollBehavior', () => {
+  /**
+   * Evaluate the scroll behavior for a navigation between two widget paths,
+   * resolved against the real widget route table.
+   */
+  function scrollFor(fromPath: string, toPath: string, savedPosition: { left: number; top: number } | null = null) {
+    return widgetScrollBehavior(router.resolve(toPath), router.resolve(fromPath) as any, savedPosition);
+  }
+
+  it('starts at the top when the list opens an event detail', () => {
+    expect(scrollFor('/widget/mycal?view=list', '/widget/mycal/events/evt-1/20261105-1800')).toEqual({ top: 0 });
+  });
+
+  it('restores the saved position when going back from detail to the list', () => {
+    const saved = { left: 0, top: 196 };
+    expect(scrollFor('/widget/mycal/events/evt-1/20261105-1800', '/widget/mycal?view=list', saved)).toEqual(saved);
+  });
+
+  it('leaves scroll alone when only the list query changes', () => {
+    expect(scrollFor('/widget/mycal?search=climate', '/widget/mycal')).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory, type RouteRecordRaw, type RouterScrollBehavior } from 'vue-router';
 import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
 import { useWidgetStore } from './stores/widgetStore';
 import WidgetContainer from './components/widget-container.vue';
@@ -60,9 +60,42 @@ async function loadWidgetConfig(urlName: string): Promise<void> {
   store.setConfigLoadedForUrlName(urlName);
 }
 
+/**
+ * Where the widget's window scroll lands after an in-widget navigation.
+ *
+ * Without this, opening an event from partway down the list leaves the detail
+ * at the same scroll offset, with its title and Back link off-screen. The rule
+ * matches the site's (`siteScrollBehavior` in src/site/routes.ts):
+ *
+ * - Back/forward restores the position the browser saved for that entry.
+ * - Arriving at a different view (list → detail) starts at the top.
+ * - Staying on the same view (filter or date changes rewriting the query)
+ *   keeps the reader's place.
+ *
+ * This covers a widget loaded directly, where its own window scrolls. Embedded
+ * in an iframe that resizes to its content, the widget window never scrolls
+ * and the host page owns scrolling; that case is handled separately.
+ *
+ * @returns The saved position, the top of the page, or false to leave scroll alone
+ */
+export const widgetScrollBehavior: RouterScrollBehavior = (to, from, savedPosition) => {
+  if (savedPosition) {
+    return savedPosition;
+  }
+
+  const toView = to.matched[0]?.components?.default;
+  const fromView = from.matched[0]?.components?.default;
+  if (toView !== fromView) {
+    return { top: 0 };
+  }
+
+  return false;
+};
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
+  scrollBehavior: widgetScrollBehavior,
 });
 
 router.beforeEach(async (to) => {
@@ -79,11 +112,21 @@ router.beforeEach(async (to) => {
 // Done here rather than in each view's click handler because the list, week
 // and month views all reach detail by different means (the list through the
 // shared site event card), and this is the one place all of them pass.
+// The recorded query belongs to one calendar, so it is dropped whenever
+// navigation moves to another; Back must never apply one calendar's filters
+// to another calendar's list.
 router.afterEach((to, from, failure) => {
-  if (failure || from.name !== 'widget-calendar' || to.name !== 'widget-event-detail') {
+  if (failure) {
     return;
   }
-  useWidgetStore().setLastListQuery(from.query);
+  const store = useWidgetStore();
+  if (from.params.urlName !== to.params.urlName) {
+    store.clearLastListQuery();
+    return;
+  }
+  if (from.name === 'widget-calendar' && to.name === 'widget-event-detail') {
+    store.setLastListQuery(from.query);
+  }
 });
 
 export default router;

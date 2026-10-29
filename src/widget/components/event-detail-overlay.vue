@@ -73,7 +73,7 @@ const goBack = () => {
 function categoryHrefBuilder(category: EventCategory): string {
   return router.resolve({
     name: 'widget-calendar',
-    params: { urlName: widgetStore.calendarUrlName! },
+    params: { urlName: calendarId as string },
     query: { categories: category.id },
   }).href;
 }

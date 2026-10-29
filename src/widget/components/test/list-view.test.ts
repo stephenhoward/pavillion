@@ -9,7 +9,6 @@ import ListView from '../list-view.vue';
 import EventCard from '@/site/components/event-card.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
-import { useWidgetStore } from '../../stores/widgetStore';
 
 // Initialize i18next for tests
 i18next.init({
@@ -39,9 +38,12 @@ const createMockRouter = () => {
 describe('Widget ListView', () => {
   let router: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     setActivePinia(createPinia());
     router = createMockRouter();
+    // ListView takes its calendar from the route, so mount under a resolved one.
+    await router.push('/widget/mycal');
+    await router.isReady();
   });
   describe('rendering', () => {
     // Build a minimal instance fixture compatible with both the day-grouping
@@ -81,9 +83,6 @@ describe('Widget ListView', () => {
 
     it('adapts calendar.vue pattern for widget by rendering an EventCard per instance', async () => {
       const publicStore = usePublicCalendarStore();
-      const widgetStore = useWidgetStore();
-      widgetStore.setCalendarUrlName('mycal');
-
       const start = DateTime.fromISO('2026-01-06T18:00:00.000Z', { zone: 'utc' });
       publicStore.allEvents = [
         buildListInstance('1', 'e1', start, '2026-01-06'),
@@ -105,9 +104,6 @@ describe('Widget ListView', () => {
 
     it('renders distinct EventCards with distinct detailHref props for two instances', async () => {
       const publicStore = usePublicCalendarStore();
-      const widgetStore = useWidgetStore();
-      widgetStore.setCalendarUrlName('mycal');
-
       const start1 = DateTime.fromISO('2026-01-06T18:00:00.000Z', { zone: 'utc' });
       const start2 = DateTime.fromISO('2026-01-07T19:00:00.000Z', { zone: 'utc' });
       publicStore.allEvents = [
@@ -163,7 +159,6 @@ describe('Widget ListView', () => {
 
     it('marks only the results busy during a reload, with the status region outside them', async () => {
       const publicStore = usePublicCalendarStore();
-      useWidgetStore().setCalendarUrlName('mycal');
       publicStore.allEvents = [buildInstance()] as any;
       publicStore.isLoadingEvents = true;
 
@@ -182,7 +177,6 @@ describe('Widget ListView', () => {
 
     it('keeps the status region mounted and empty when not loading', async () => {
       const publicStore = usePublicCalendarStore();
-      useWidgetStore().setCalendarUrlName('mycal');
       publicStore.allEvents = [buildInstance()] as any;
 
       const wrapper = mount(ListView, {
@@ -236,9 +230,6 @@ describe('Widget ListView', () => {
 
     it('ListView EventCard detailHref includes the startTime slug', async () => {
       const publicStore = usePublicCalendarStore();
-      const widgetStore = useWidgetStore();
-      widgetStore.setCalendarUrlName('mycal');
-
       publicStore.allEvents = [buildInstance(fixedStart)] as any;
 
       const wrapper = mount(ListView, {
@@ -257,13 +248,7 @@ describe('Widget ListView', () => {
 
     it('ListView EventCard title click navigates in the widget router, not the document', async () => {
       const publicStore = usePublicCalendarStore();
-      const widgetStore = useWidgetStore();
-      widgetStore.setCalendarUrlName('mycal');
-
       publicStore.allEvents = [buildInstance(fixedStart)] as any;
-
-      await router.push('/widget/mycal');
-      await router.isReady();
 
       const wrapper = mount(ListView, {
         global: {
