@@ -16,18 +16,14 @@ import { MailConfig } from '../model/types';
 
 describe('MailpitTransport', () => {
   let sandbox: sinon.SinonSandbox;
-  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     vi.resetModules();
-    // Reset environment to clean state
-    process.env = { ...originalEnv };
   });
 
   afterEach(() => {
     sandbox.restore();
-    process.env = { ...originalEnv };
   });
 
   describe('instantiation', () => {
