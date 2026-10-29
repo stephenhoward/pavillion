@@ -747,7 +747,7 @@ onMounted(async () => {
 
           <!-- Show provider setup message when enabled but no providers configured -->
           <div v-if="enabled && !hasConfiguredProvider" class="alert alert--warning">
-            <svg class="alert-icon"
+            <svg class="alert__icon"
                  width="20"
                  height="20"
                  viewBox="0 0 24 24"
@@ -757,9 +757,9 @@ onMounted(async () => {
                  aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <div>
-              <p class="alert-title">{{ t("setup_provider_message") }}</p>
-              <p class="alert-description">{{ t("add_first_provider_description") }}</p>
+            <div class="alert__content">
+              <p class="alert__title">{{ t("setup_provider_message") }}</p>
+              <p class="alert__message">{{ t("add_first_provider_description") }}</p>
             </div>
           </div>
 
@@ -1226,49 +1226,6 @@ onMounted(async () => {
         outline: 2px solid var(--pav-color-brand-primary);
         outline-offset: 2px;
       }
-    }
-  }
-
-  /* Alerts */
-  .alert {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--pav-space-3);
-    padding: var(--pav-space-3) var(--pav-space-4);
-    border-radius: var(--pav-border-radius-lg);
-    font-size: var(--pav-font-size-xs);
-
-    .alert-icon {
-      flex-shrink: 0;
-      margin-top: var(--pav-space-0_5);
-    }
-
-    .alert-title {
-      margin: 0;
-      font-weight: var(--pav-font-weight-medium);
-    }
-
-    .alert-description {
-      margin: var(--pav-space-1) 0 0;
-      font-size: var(--pav-font-size-xs);
-    }
-
-    &--success {
-      background: var(--pav-color-emerald-50);
-      border: 1px solid var(--pav-color-emerald-200);
-      color: var(--pav-color-emerald-700);
-    }
-
-    &--error {
-      background: var(--pav-surface-error);
-      border: 1px solid var(--pav-border-error-subtle);
-      color: var(--pav-text-error);
-    }
-
-    &--warning {
-      background: var(--pav-color-amber-50);
-      border: 1px solid var(--pav-color-amber-200);
-      color: var(--pav-color-amber-800);
     }
   }
 

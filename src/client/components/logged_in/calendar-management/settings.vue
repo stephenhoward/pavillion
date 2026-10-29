@@ -975,9 +975,8 @@ onMounted(() => {
   gap: var(--pav-space-2);
 }
 
-// Error/success variants come from the shared admin-alert mixin
-// (semantic error tokens; the colorblind-safe blue success palette).
+// The tab is not a flex column, so the alerts carry their own spacing.
 .alert {
-  @include admin-alert;
+  margin-block-end: var(--pav-space-4);
 }
 </style>

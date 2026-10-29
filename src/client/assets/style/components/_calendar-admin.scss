@@ -223,26 +223,6 @@
   }
 }
 
-// Alert pattern
-@mixin admin-alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &--error {
-    background-color: var(--pav-surface-error);
-    border: 1px solid var(--pav-border-error-subtle);
-    color: var(--pav-text-error);
-  }
-
-  &--success {
-    background-color: var(--pav-color-alert-success-bg);
-    border: 1px solid var(--pav-color-success);
-    color: var(--pav-color-alert-success-text);
-  }
-}
-
 // Item info block pattern (info column with name and meta)
 // Usage: @include admin-item-info; then use &__name and &__meta as child classes
 @mixin admin-item-info {

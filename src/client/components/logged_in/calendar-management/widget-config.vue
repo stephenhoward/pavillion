@@ -647,15 +647,6 @@ defineExpose({
     color: var(--pav-text-error);
   }
 
-  // Error/success variants come from the shared admin-alert mixin
-  // (semantic error tokens; the colorblind-safe blue success palette).
-  // The mixin's bottom margin is reset because these alerts sit in a
-  // flex column that already provides the gap.
-  .alert {
-    @include admin-alert;
-    margin-bottom: 0;
-  }
-
   .preview-section {
     .preview-container {
       border: 1px solid var(--pav-border-primary);

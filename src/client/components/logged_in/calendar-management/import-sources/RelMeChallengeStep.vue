@@ -350,8 +350,6 @@ const onChangeMethod = (): void => {
 
 .alert {
   margin: 0;
-
-  @include admin-alert;
 }
 
 .actions {
