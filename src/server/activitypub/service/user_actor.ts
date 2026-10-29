@@ -10,6 +10,7 @@ import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_act
 import { AccountEntity } from '@/server/common/entity/account';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
+import { sanitizePeerInboxUrl } from '@/server/activitypub/helper/url-sanitizer';
 import CalendarInterface from '@/server/calendar/interface';
 import { HttpSignature } from '@/server/activitypub/types';
 
@@ -282,11 +283,18 @@ export default class UserActorService {
       );
     }
 
-    // Update inbox URL if provided
+    // Update inbox URL if provided. SECURITY: inbox_url is an outbound delivery
+    // target, so the declared inbox is bound to the sending actor's host
+    // (signature verification has already pinned `actor` to the signer). A
+    // rejected inbox leaves the stored one untouched; the grant still stands.
     if (calendarInboxUrl) {
-      await remoteCalendarService.updateMetadata(calendarActorUri, {
-        inboxUrl: calendarInboxUrl,
-      });
+      const inboxUrl = sanitizePeerInboxUrl(calendarInboxUrl, calendarActorUri);
+      if (inboxUrl) {
+        await remoteCalendarService.updateMetadata(calendarActorUri, { inboxUrl });
+      }
+      else {
+        logger.warn({ calendarActorUri }, '[SECURITY] Rejected Add calendarInboxUrl not bound to actor host');
+      }
     }
 
     // Record the editor access on the remote calendar via CalendarInterface

@@ -895,8 +895,4 @@ onMounted(async () => {
   }
 
 }
-
-.alert {
-  @include admin-alert;
-}
 </style>

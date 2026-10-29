@@ -27,7 +27,8 @@
 
 import { computed, ref, useId, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import iso6391 from 'iso-639-1-dir';
+import i18next from 'i18next';
+import { languageDisplayName } from '@/common/i18n/language-names';
 import { TranslatedModel } from '@/common/model/model';
 import {
   anyLanguageHasAlt,
@@ -75,8 +76,6 @@ const mode = ref<AltMode>(anyLanguageHasAlt(props.model) ? 'describe' : 'decorat
 const stash = ref<Record<string, string>>({});
 
 const hasStash = computed(() => Object.keys(stash.value).length > 0);
-
-const languageName = computed(() => iso6391.getName(props.language) || props.language);
 
 // A different parent model (a different event, series, or calendar) is a
 // different set of alt text: re-seed the mode from it and drop the stash, which
@@ -183,7 +182,7 @@ function setMode(next: AltMode): void {
 
     <div v-if="mode === 'describe'" class="form-field">
       <label class="field-label" :for="textareaId">
-        {{ t('description_label', { language: languageName }) }}
+        {{ t('description_label', { language: languageDisplayName(language, i18next.language) }) }}
       </label>
       <textarea :id="textareaId"
                 class="field-textarea"

@@ -39,6 +39,7 @@ import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
+import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
 
 /**
@@ -656,54 +657,20 @@ class ProcessOutboxService {
       });
 
       if ( response && response.data ) {
-        const inboxUrl = this.bindInboxToActorHost(profileUrl, response.data.inbox);
+        // SECURITY: the actor host was verified above, but the URL we POST to
+        // is the `inbox` of a document the peer controls — bind it to the
+        // actor host so a hostile document cannot redirect signed deliveries.
+        const inboxUrl = sanitizePeerInboxUrl(response.data.inbox, profileUrl);
         if ( inboxUrl ) {
           logger.info({ inboxUrl }, 'Resolved inbox URL');
           return inboxUrl;
         }
+        logger.warn({ actorHost: safeHostname(profileUrl) }, '[SECURITY] Rejected actor document inbox not bound to actor host');
       }
     }
 
     logger.info({ remote_user }, 'Failed to resolve inbox');
     return null;
-  }
-
-  /**
-   * Binds a fetched actor document's `inbox` to the actor URI it was fetched from.
-   *
-   * SECURITY: Callers verify the *actor* host (same-origin guards, private-IP
-   * checks), but the URL actually POSTed to is the `inbox` field of a document
-   * the remote instance controls. Without this check a hostile actor document
-   * can redirect signed deliveries to an arbitrary third party. The inbox must
-   * be an https: URL whose hostname exactly equals the actor URI's hostname —
-   * no subdomain or suffix allowance.
-   *
-   * @returns The inbox URL when it is bound to the actor host, otherwise null
-   */
-  private bindInboxToActorHost(actorUrl: string, inbox: unknown): string | null {
-    let actorHost: string;
-    let parsedInbox: URL;
-    try {
-      actorHost = new URL(actorUrl).hostname;
-      if ( typeof inbox !== 'string' ) {
-        throw new TypeError('inbox is not a string');
-      }
-      parsedInbox = new URL(inbox);
-    }
-    catch {
-      logger.warn({ actorHost: safeHostname(actorUrl) }, '[SECURITY] Actor document has missing or malformed inbox');
-      return null;
-    }
-
-    if ( parsedInbox.protocol !== 'https:' || parsedInbox.hostname !== actorHost ) {
-      logger.warn(
-        { actorHost, inboxHost: parsedInbox.hostname, inboxProtocol: parsedInbox.protocol },
-        '[SECURITY] Rejected inbox not bound to actor host',
-      );
-      return null;
-    }
-
-    return inbox;
   }
 
   /**

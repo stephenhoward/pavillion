@@ -42,7 +42,7 @@ import { generateVerificationToken } from '@/server/calendar/service/import/hmac
 import { hostnameFromUrl, passesPslCheck } from '@/server/calendar/service/import/hostname';
 import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/service/import/dns-verifier';
 import { MAX_BODY_BYTES, hasVcalendarSignature } from '@/server/calendar/service/import/fetcher';
-import { createPinnedAgent } from '@/server/calendar/service/import/pinned_agent';
+import { createPinnedAgent } from '@/server/common/helper/pinned-agent';
 import type SyncService from '@/server/calendar/service/import/sync';
 import type { SyncResult } from '@/server/calendar/service/import/sync';
 

@@ -1,16 +1,33 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// SSRF validation resolves hostnames through dns.lookup. Mocking it keeps
+// these tests off the network and lets the rebinding tests answer differently
+// on successive resolutions. vi.mock is hoisted, so ip-validation captures
+// the mock when it promisifies dns.lookup at load time.
+vi.mock('dns', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('dns') & { default: typeof import('dns') }>();
+  return { ...actual, default: { ...actual.default, lookup: vi.fn() } };
+});
+
+import dns from 'dns';
 import { Request, Response } from 'express';
 import httpSignature from 'http-signature';
 import axios from 'axios';
 import sinon from 'sinon';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { verifyHttpSignature, extractKeyIdOrigin, createKeyCache, KEY_CACHE_MAX_SIZE } from '@/server/activitypub/helper/http_signature';
-import { MAX_REQUEST_AGE_MS } from '@/server/common/constants';
+import { MAX_REQUEST_AGE_MS, PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/common/constants';
 import crypto from 'crypto';
 import http from 'http';
 import { AddressInfo } from 'net';
 import logger from '@/server/common/helper/logger';
 import { ACTOR_PROFILE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
+import { mockDnsLookup, pinnedAddressOf, PUBLIC_IP, PRIVATE_IP } from '@/server/activitypub/test/helper/pinned-dns';
+
+// Every hostname resolves to one public address unless a test says otherwise.
+beforeEach(() => {
+  mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP]);
+});
 
 describe('HTTP Signature Verification', () => {
   let req: Partial<Request>;
@@ -1452,6 +1469,103 @@ describe('Pre-authentication key fetch response-body cap', () => {
     expect(next.called).toBe(false);
     expect(logErrorStub.callCount).toBe(1);
     expect(logErrorStub.firstCall.args[1]).toContain('maxContentLength');
+  });
+});
+
+describe('Pre-authentication key fetch connection pinning (DNS rebinding)', () => {
+  const sandbox = sinon.createSandbox();
+
+  let req: Partial<Request>;
+  let res: Partial<Response>;
+  let next: sinon.SinonSpy;
+  let axiosGetStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    req = {
+      headers: {
+        'date': new Date().toUTCString(),
+        'host': 'example.com',
+      },
+      body: { actor: 'https://rebind.example/users/someactor' },
+    };
+    res = {
+      status: sandbox.stub().returnsThis(),
+      json: sandbox.stub().returnsThis(),
+    };
+    next = sandbox.spy();
+
+    sandbox.stub(httpSignature, 'parseRequest').returns({
+      params: {
+        keyId: 'https://rebind.example/users/someactor#main-key',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+    sandbox.stub(httpSignature, 'verifySignature').returns(true);
+    sandbox.stub(Cache.prototype, 'get').returns(undefined);
+    sandbox.stub(Cache.prototype, 'set');
+    axiosGetStub = sandbox.stub(axios, 'get');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('connects the actor fetch to the address that passed validation, not a second resolution', async () => {
+    // First resolution is public, every later one private: a rebinding name.
+    const lookup = mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP, PRIVATE_IP]);
+    axiosGetStub.resolves({
+      status: 200,
+      data: { publicKey: { publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----' } },
+    });
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.callCount).toBe(1);
+    const config = axiosGetStub.firstCall.args[1];
+    expect(config.maxRedirects).toBe(0);
+    expect(config.httpsAgent.options.timeout).toBe(PUBLIC_KEY_FETCH_TIMEOUT_MS);
+    expect(await pinnedAddressOf(config.httpsAgent)).toBe(PUBLIC_IP);
+    expect(lookup.resolutions()).toBe(1);
+    expect(next.called).toBe(true);
+  });
+
+  it('pins the follow-up key fetch to its own validated address', async () => {
+    // The actor host resolves once (public); the key host resolves next and
+    // gets its own validated address. Any later resolution would be private.
+    const lookup = mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP, '93.184.216.35', PRIVATE_IP]);
+    axiosGetStub.onFirstCall().resolves({
+      status: 200,
+      data: { publicKey: 'https://keys.example/users/someactor/key' },
+    });
+    axiosGetStub.onSecondCall().resolves({
+      status: 200,
+      data: { publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----' },
+    });
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.callCount).toBe(2);
+    const [actorCall, keyCall] = axiosGetStub.getCalls();
+    expect(await pinnedAddressOf(actorCall.args[1].httpsAgent)).toBe(PUBLIC_IP);
+    expect(keyCall.args[1].maxRedirects).toBe(0);
+    expect(await pinnedAddressOf(keyCall.args[1].httpsAgent)).toBe('93.184.216.35');
+    expect(lookup.resolutions()).toBe(2);
+    expect(next.called).toBe(true);
+  });
+
+  it('refuses the key fetch when the key host resolves to a private address', async () => {
+    mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP, PRIVATE_IP]);
+    axiosGetStub.onFirstCall().resolves({
+      status: 200,
+      data: { publicKey: 'https://keys.example/users/someactor/key' },
+    });
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.callCount).toBe(1);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(next.called).toBe(false);
   });
 });
 

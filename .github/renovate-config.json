@@ -30,6 +30,25 @@
       "matchUpdateTypes": ["minor", "patch"],
       "minimumReleaseAge": "7 days",
       "internalChecksFilter": "strict"
+    },
+    {
+      "description": "Automerge minor/patch/pin/digest past 1.0 once required checks pass",
+      "matchRepositories": ["stephenhoward/pavillion"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchCurrentVersion": "!/^v?0\\./",
+      "automerge": true
+    },
+    {
+      "description": "Payments, auth and federation stay reviewed",
+      "matchPackageNames": [
+        "stripe",
+        "@stripe/**",
+        "@paypal/**",
+        "passport**",
+        "jsonwebtoken",
+        "http-signature"
+      ],
+      "automerge": false
     }
   ]
 }

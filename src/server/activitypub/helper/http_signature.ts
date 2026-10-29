@@ -9,7 +9,8 @@ import { Cache } from '@/server/activitypub/helper/cache';
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import { ACTOR_PROFILE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
-import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { resolvePublicAddress } from '@/server/common/helper/ip-validation';
+import { createPinnedHttpsAgent } from '@/server/common/helper/pinned-agent';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -377,6 +378,10 @@ async function getPublicKey(keyId: string): Promise<string | null> {
  * SECURITY: Validates that the keyId URL does not point to private IP addresses
  * to prevent SSRF (Server-Side Request Forgery) attacks.
  *
+ * SECURITY: the connection is pinned to the address that passed validation,
+ * so a hostname that resolves differently at connect time (DNS rebinding)
+ * cannot steer the request to a private address.
+ *
  * SECURITY: maxRedirects is set to 0 to prevent redirect-based SSRF attacks
  * where a redirect could lead to a private IP address after the initial URL
  * validation has passed.
@@ -403,9 +408,11 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
     actorUrl = `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
 
     // SECURITY: Validate that the URL does not point to a private IP address
-    // This prevents SSRF attacks where an attacker could probe internal networks
+    // This prevents SSRF attacks where an attacker could probe internal networks.
+    // The address that passed is kept so the connection is pinned to it below.
+    let actorIp: string;
     try {
-      await validateUrlNotPrivate(actorUrl);
+      actorIp = await resolvePublicAddress(actorUrl);
     }
     catch (error) {
       if (error instanceof Error) {
@@ -423,6 +430,9 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
       },
       timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
       maxRedirects: 0,
+      // SECURITY: connect to the address validated above rather than letting
+      // the transport resolve the hostname a second time (DNS rebinding).
+      httpsAgent: createPinnedHttpsAgent(actorIp, PUBLIC_KEY_FETCH_TIMEOUT_MS),
       // SECURITY: This fetch runs before the signature is verified, so the
       // URL is chosen by an unauthenticated sender. `maxContentLength` caps
       // the *response* body; axios's `maxBodyLength` only caps *request*
@@ -446,8 +456,9 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
 
     if (actor.publicKey && typeof actor.publicKey === 'string') {
       // SECURITY: Validate the publicKey URL as well if it's a string
+      let keyIp: string;
       try {
-        await validateUrlNotPrivate(actor.publicKey);
+        keyIp = await resolvePublicAddress(actor.publicKey);
       }
       catch (error) {
         if (error instanceof Error) {
@@ -464,6 +475,8 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
         },
         timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
         maxRedirects: 0,
+        // SECURITY: pinned to the address validated above, as for the actor fetch.
+        httpsAgent: createPinnedHttpsAgent(keyIp, PUBLIC_KEY_FETCH_TIMEOUT_MS),
         // SECURITY: same pre-authentication response cap as the actor fetch
         // above; the key URL comes from an unverified actor document.
         maxContentLength: ACTOR_PROFILE_MAX_BYTES,

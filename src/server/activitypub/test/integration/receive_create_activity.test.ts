@@ -1,10 +1,23 @@
-import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+
+// The signed-request path resolves the remote actor's hostname before the
+// (stubbed) key fetch and pins the connection to the address it validated.
+// The remote hostnames here are fictional, so DNS is mocked to answer every
+// name with one public address. vi.mock is hoisted, so ip-validation captures
+// the mock when it promisifies dns.lookup at load time.
+vi.mock('dns', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('dns') & { default: typeof import('dns') }>();
+  return { ...actual, default: { ...actual.default, lookup: vi.fn() } };
+});
+
 import request from 'supertest';
 import sinon from 'sinon';
 import axios from 'axios';
 import httpSignature from 'http-signature';
 import express from 'express';
 import { EventEmitter } from 'events';
+import dns from 'dns';
+import { mockDnsLookup, PUBLIC_IP } from '@/server/activitypub/test/helper/pinned-dns';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -38,6 +51,11 @@ const findInboxForCalendar = async (calendarName: string, app: express.Applicati
 
   return profileResponse.body.inbox.replace('https://pavillion.dev','');
 };
+
+
+beforeEach(() => {
+  mockDnsLookup(vi.mocked(dns.lookup), [PUBLIC_IP]);
+});
 
 describe('ActivityPub Create Activity', async () => {
   let env: TestEnvironment;

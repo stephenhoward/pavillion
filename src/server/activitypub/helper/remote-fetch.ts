@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { logError } from '@/server/common/helper/error-logger';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS, REMOTE_OBJECT_MAX_BYTES } from '@/server/common/constants';
-import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { resolvePublicAddress } from '@/server/common/helper/ip-validation';
+import { createPinnedHttpsAgent } from '@/server/common/helper/pinned-agent';
 import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from '@/common/model/calendar';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
@@ -132,6 +133,10 @@ export interface FetchRemoteObjectOptions {
  * SECURITY: Validates that the URI does not point to private IP addresses
  * to prevent SSRF (Server-Side Request Forgery) attacks.
  *
+ * SECURITY: the connection is pinned to the address that passed validation,
+ * so a hostname that resolves differently at connect time (DNS rebinding)
+ * cannot steer the request to a private address.
+ *
  * SECURITY: maxRedirects is set to 0 to prevent redirect-based SSRF attacks
  * where a redirect could lead to a private IP address after the initial URL
  * validation has passed.
@@ -167,9 +172,11 @@ export async function fetchRemoteObject(
 ): Promise<Record<string, unknown> | null> {
   try {
     // SECURITY: Validate that the URL does not point to a private IP address
-    // This prevents SSRF attacks where an attacker could probe internal networks
+    // This prevents SSRF attacks where an attacker could probe internal networks.
+    // The address that passed is kept so the connection is pinned to it below.
+    let pinnedIp: string;
     try {
-      await validateUrlNotPrivate(uri);
+      pinnedIp = await resolvePublicAddress(uri);
     }
     catch (error) {
       if (error instanceof Error) {
@@ -199,6 +206,9 @@ export async function fetchRemoteObject(
       headers,
       timeout: REMOTE_OBJECT_FETCH_TIMEOUT_MS,
       maxRedirects: 0,
+      // SECURITY: connect to the address validated above rather than letting
+      // the transport resolve the hostname a second time (DNS rebinding).
+      httpsAgent: createPinnedHttpsAgent(pinnedIp, REMOTE_OBJECT_FETCH_TIMEOUT_MS),
       // axios's `maxBodyLength` guards request bodies (irrelevant for GETs)
       // while `maxContentLength` guards response bodies; we set the latter
       // here. Documented for future maintainers who confuse the two.

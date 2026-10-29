@@ -74,7 +74,7 @@
               class="remove-translation-link"
               @click="removeLanguage(currentLanguage)"
             >
-              {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
+              {{ t('remove_language', { language: languageDisplayName(currentLanguage, i18next.language) }) }}
             </button>
           </div>
         </div>
@@ -256,7 +256,9 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import iso6391 from 'iso-639-1-dir';
+import { languageDisplayName } from '@/common/i18n/language-names';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { Calendar, CalendarContent, DEFAULT_DATE_RANGES } from '@/common/model/calendar';
 import type { DefaultDateRange } from '@/common/model/calendar';
@@ -973,9 +975,8 @@ onMounted(() => {
   gap: var(--pav-space-2);
 }
 
-// Error/success variants come from the shared admin-alert mixin
-// (semantic error tokens; the colorblind-safe blue success palette).
+// The tab is not a flex column, so the alerts carry their own spacing.
 .alert {
-  @include admin-alert;
+  margin-block-end: var(--pav-space-4);
 }
 </style>

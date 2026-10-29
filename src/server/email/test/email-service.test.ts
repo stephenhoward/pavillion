@@ -54,7 +54,6 @@ beforeEach(() => {
 
 describe('EmailService Transport Selection', () => {
   let sandbox: sinon.SinonSandbox;
-  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -64,14 +63,15 @@ describe('EmailService Transport Selection', () => {
 
   afterEach(() => {
     sandbox.restore();
-    // Restore environment
-    process.env = { ...originalEnv };
+    // Restore environment in place: replacing the process.env object strands
+    // other files' vi.stubEnv restores in a shared vmThreads worker.
+    vi.unstubAllEnvs();
   });
 
   it('should select TestingTransport when NODE_ENV is test', async () => {
     // Arrange
-    process.env.NODE_ENV = 'test';
-    delete process.env.MAIL_HOST;
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('MAIL_HOST', undefined);
 
     // Act - import fresh instance
     const { createEmailService } = await import('../service/email');
@@ -149,7 +149,7 @@ describe('EmailService Transport Selection', () => {
     // 7. Default: Development transport
 
     // In test environment, should always get testing transport
-    process.env.NODE_ENV = 'test';
+    vi.stubEnv('NODE_ENV', 'test');
     const { createEmailService } = await import('../service/email');
     const service = createEmailService();
     expect(service.getTransportType()).toBe('testing');

@@ -1,10 +1,12 @@
 <template>
+  <!-- The live region stays mounted even with no error: a region inserted
+       together with its text is not announced, so the first error would be
+       silent. Only the text and the visual box change. -->
   <div
-    v-if="error"
     :id="id"
     role="alert"
     aria-live="polite"
-    class="error-alert"
+    :class="{ 'error-alert': error }"
   >
     {{ error }}
   </div>

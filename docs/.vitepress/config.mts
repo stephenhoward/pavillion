@@ -57,19 +57,26 @@ export default defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Calendar owners', link: '/guides/calendar-owners/' },
       { text: 'Instance administrators', link: '/guides/instance-administrators/' },
-      { text: 'Developers', link: '/guides/developers/' },
+      { text: 'Project contributors', link: '/guides/contributors/' },
     ],
     sidebar: {
-      '/guides/developers/': [
+      '/guides/contributors/': [
         {
-          text: 'For contributing developers',
-          link: '/guides/developers/',
+          text: 'For project contributors',
+          link: '/guides/contributors/',
+        },
+        {
+          text: 'Ways to contribute',
+          items: [
+            { text: 'Translating Pavillion', link: '/guides/contributors/translating' },
+            { text: 'Writing documentation', link: '/guides/contributors/writing-documentation' },
+          ],
         },
         {
           text: 'How Pavillion is built',
           items: [
-            { text: 'Architecture', link: '/guides/developers/architecture' },
-            { text: 'Tech stack', link: '/guides/developers/tech-stack' },
+            { text: 'Architecture', link: '/guides/contributors/architecture' },
+            { text: 'Tech stack', link: '/guides/contributors/tech-stack' },
           ],
         },
       ],
