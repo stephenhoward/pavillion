@@ -33,6 +33,7 @@
   --pav-border-radius-badge: var(--pav-border-radius-full);      /* Pill shape */
   --pav-border-radius-avatar: var(--pav-border-radius-full);     /* Circular */
   --pav-border-radius-chip: var(--pav-border-radius-lg);         /* 12px - chips/tags */
+  --pav-border-radius-alert: var(--pav-border-radius-lg);        /* 12px - alerts/toasts */
   
   /* Border Styles */
   --pav-border-style-solid: solid;
@@ -107,7 +108,8 @@ $pav-border-radius-semantic: (
   modal: xl,
   badge: full,
   avatar: full,
-  chip: lg
+  chip: lg,
+  alert: lg
 );
 
 // Border utility mixin
