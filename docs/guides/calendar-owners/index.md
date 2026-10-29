@@ -32,5 +32,5 @@ Two ways to read this section:
 ## What's not here
 
 - **Running a Pavillion server.** That belongs to the administrator guides.
-- **Contributing to Pavillion itself.** That belongs to the [developer guides](/guides/developers/).
+- **Contributing to Pavillion itself.** That belongs to the [contributor guides](/guides/contributors/).
 - **The ActivityPub protocol.** Referenced where it surfaces, but not taught here. Pavillion uses ActivityPub the way email uses SMTP — you don't need to know the protocol to send a message.

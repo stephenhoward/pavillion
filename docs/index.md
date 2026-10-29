@@ -2,7 +2,7 @@
 layout: home
 title: Pavillion — Federated events calendar documentation
 titleTemplate: false
-description: Documentation for Pavillion, a federated, privacy-first events calendar. Guides for calendar owners, instance administrators, and contributing developers.
+description: Documentation for Pavillion, a federated, privacy-first events calendar platform. Guides for calendar owners, instance administrators, and project contributors.
 
 hero:
   name: Pavillion
@@ -11,17 +11,17 @@ hero:
 
 features:
   - title: For calendar owners
-    details: Run a calendar on a Pavillion instance — create and curate events, manage editors, configure funding plans, and federate with other communities.
+    details: Run your calendar on a Pavillion instance — create and curate events, manage editors, and share events with other calendars and your community.
     link: /guides/calendar-owners
     linkText: Calendar owner guides
   - title: For instance administrators
-    details: Deploy, operate, and maintain a Pavillion server — installation, configuration, email and storage setup, secret rotation, and federation testing.
+    details: Deploy, operate, and maintain a Pavillion server — installation, maintenance, community stewardship, and covering your server's costs.
     link: /guides/instance-administrators
     linkText: Administrator guides
-  - title: For contributing developers
-    details: Contribute to Pavillion itself — local development setup, architectural patterns, internationalization, testing conventions, and the contribution workflow.
-    link: /guides/developers
-    linkText: Developer guides
+  - title: For project contributors
+    details: Help improve Pavillion itself — translate it into your language, improve the documentation, or contribute code, from development setup to the pull-request workflow.
+    link: /guides/contributors
+    linkText: Contributor guides
 ---
 
-Pavillion is a federated, community-funded events calendar. Anyone can browse public events anonymously — accounts only exist for the people who organize and steward calendars. Federation happens over ActivityPub, so calendars on different instances can share, follow, and aggregate one another.
+[Pavillion](https://pavillion.social) is an open-source federated calendar platform. Anyone can browse public events without an account. Calendars on different servers can follow, share, and repost each other's events, so an event reaches more of the people who'd want to attend.
