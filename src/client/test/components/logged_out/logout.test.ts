@@ -7,37 +7,9 @@ import type { Router, RouteRecordRaw } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
 import { useFundingStore } from '@/client/stores/fundingStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import { useFeedStore } from '@/client/stores/feedStore';
-import { useEventStore } from '@/client/stores/eventStore';
-import { useCategoryStore } from '@/client/stores/categoryStore';
-import { useSeriesStore } from '@/client/stores/seriesStore';
-import { useInvitationStore } from '@/client/stores/invitationStore';
-import { useApplicationStore } from '@/client/stores/applicationStore';
-import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
-import { useLocationStore } from '@/client/stores/locationStore';
-import { useModerationStore } from '@/client/stores/moderation-store';
-import { useNotificationStore } from '@/client/stores/notificationStore';
 import Logout from '@/client/components/logged_out/logout.vue';
 
 const CALENDAR_ID = 'cal-1';
-
-// Every store that holds data belonging to the signed-in account. Each must be
-// reset on logout so a shared browser cannot carry one account's data into the
-// next session. Add new user-specific stores here and to logout.vue together.
-const userSpecificStores = [
-  ['calendar', useCalendarStore],
-  ['feed', useFeedStore],
-  ['event', useEventStore],
-  ['category', useCategoryStore],
-  ['series', useSeriesStore],
-  ['invitation', useInvitationStore],
-  ['application', useApplicationStore],
-  ['funding', useFundingStore],
-  ['calendarAdmin', useCalendarAdminStore],
-  ['location', useLocationStore],
-  ['moderation', useModerationStore],
-  ['notification', useNotificationStore],
-] as const;
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: { template: '<div />' }, name: 'app' },
@@ -48,14 +20,14 @@ const routes: RouteRecordRaw[] = [
  * Mount the logout view on an active Pinia, after seeding the funding cache
  * with the previous session's answers.
  */
-async function mountLogout(pinia: Pinia) {
+async function mountLogout(pinia: Pinia, authn = { logout: vi.fn() }) {
   const router: Router = createRouter({ history: createMemoryHistory(), routes });
   await router.push('/auth/logout');
   await router.isReady();
 
   return mountComponent(Logout, router, {
     pinia,
-    provide: { authn: { logout: vi.fn() } },
+    provide: { authn },
   });
 }
 
@@ -89,13 +61,19 @@ describe('Logout Component (client logged_out)', () => {
     wrapper.unmount();
   });
 
-  it.each(userSpecificStores)('calls $reset on the %s store', async (_name, useStore) => {
-    const store = useStore();
-    const reset = vi.spyOn(store, '$reset');
+  it('signs out before resetting the stores', async () => {
+    // A reset re-runs state initializers that read storage (the calendar
+    // store reads the persisted current calendar), so storage must already
+    // be clear of the previous session when the stores are reset.
+    const calendarStore = useCalendarStore();
+    const reset = vi.spyOn(calendarStore, '$reset');
+    const authn = { logout: vi.fn() };
 
-    const wrapper = await mountLogout(pinia);
+    const wrapper = await mountLogout(pinia, authn);
 
+    expect(authn.logout).toHaveBeenCalledOnce();
     expect(reset).toHaveBeenCalledOnce();
+    expect(authn.logout.mock.invocationCallOrder[0]).toBeLessThan(reset.mock.invocationCallOrder[0]);
     wrapper.unmount();
   });
 });

@@ -1,13 +1,19 @@
-import { expect, describe, it, afterEach } from 'vitest';
+import { expect, describe, it, beforeEach, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
 import { ref } from 'vue';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import SessionExpiredModal from '@/client/components/common/session-expired-modal.vue';
 import Modal from '@/client/components/common/modal.vue';
 import LoginForm from '@/client/components/logged_out/LoginForm.vue';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useEventStore } from '@/client/stores/eventStore';
+import { Calendar } from '@/common/model/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
+import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
@@ -21,6 +27,22 @@ const routes: RouteRecordRaw[] = [
 interface MountedOptions {
   lastKnownEmail?: string | null;
   sandbox?: sinon.SinonSandbox;
+  pinia?: Pinia;
+}
+
+/** Store an unexpired token for `accountId`, as a successful login would. */
+function signInAs(accountId: string) {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  localStorage.setItem('jw_token', JSON.stringify({ exp, id: accountId, isAdmin: false, email: `${accountId}@example.com` }));
+}
+
+/** Load the calendar store for `accountId`, as the app does after sign-in. */
+function loadCalendarsFor(accountId: string) {
+  const calendarStore = useCalendarStore();
+  const calendar = new Calendar(`${accountId}-cal`, `${accountId}-calendar`);
+  calendarStore.setCalendarInfos([new CalendarInfo(calendar, 'owner')], accountId);
+  calendarStore.setSelectedCalendar(calendar.id);
+  return calendarStore;
 }
 
 const mountedSessionExpiredModal = (options: MountedOptions = {}) => {
@@ -47,6 +69,7 @@ const mountedSessionExpiredModal = (options: MountedOptions = {}) => {
   };
 
   const wrapper = mountComponent(SessionExpiredModal, router, {
+    pinia: options.pinia,
     provide: {
       site_config: {
         settings: () => ({}),
@@ -106,10 +129,21 @@ describe('SessionExpiredModal Rendering', () => {
 describe('SessionExpiredModal Behavior', () => {
   const sandbox = sinon.createSandbox();
 
-  afterEach(() => sandbox.restore());
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    localStorage.clear();
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    localStorage.clear();
+  });
 
   it('drains pending requests and clears sessionExpired when LoginForm emits success', async () => {
-    const { wrapper, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox });
+    const { wrapper, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox, pinia });
 
     const loginForm = wrapper.findComponent(LoginForm);
     await loginForm.vm.$emit('success');
@@ -122,7 +156,7 @@ describe('SessionExpiredModal Behavior', () => {
   });
 
   it('aborts pending requests, clears sessionExpired, and routes to /auth/login on Modal close', async () => {
-    const { wrapper, router, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox });
+    const { wrapper, router, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox, pinia });
 
     const pushSpy = sandbox.spy(router, 'push');
 
@@ -136,5 +170,43 @@ describe('SessionExpiredModal Behavior', () => {
     expect(sessionExpired.value).toBe(false);
     expect(pushSpy.calledOnce).toBe(true);
     expect(pushSpy.firstCall.args[0]).toEqual('/auth/login');
+  });
+
+  it('keeps the account\'s state and replays its requests when the same account signs back in', async () => {
+    const calendarStore = loadCalendarsFor('account-a');
+    const { wrapper, router, authn } = mountedSessionExpiredModal({ sandbox, pinia });
+    const replaceSpy = sandbox.spy(router, 'replace');
+    signInAs('account-a');
+
+    await wrapper.findComponent(LoginForm).vm.$emit('success');
+    await wrapper.vm.$nextTick();
+
+    expect(authn.drainPendingRequests.calledOnce).toBe(true);
+    expect(authn.abortPendingRequests.called).toBe(false);
+    expect(replaceSpy.called).toBe(false);
+    expect(calendarStore.accountId).toBe('account-a');
+    expect(calendarStore.selectedCalendarId).toBe('account-a-cal');
+  });
+
+  it('resets user state, aborts the previous account\'s requests and goes home when a different account signs in', async () => {
+    // Replaying account A's queued requests under account B's token would
+    // attribute A's mutations to B, so they are aborted, never drained.
+    const calendarStore = loadCalendarsFor('account-a');
+    const eventReset = sandbox.spy(useEventStore(), '$reset');
+    const { wrapper, router, authn } = mountedSessionExpiredModal({ sandbox, pinia });
+    const replaceSpy = sandbox.spy(router, 'replace');
+    signInAs('account-b');
+
+    await wrapper.findComponent(LoginForm).vm.$emit('success');
+    await wrapper.vm.$nextTick();
+
+    expect(authn.abortPendingRequests.calledOnce).toBe(true);
+    expect(authn.drainPendingRequests.called).toBe(false);
+    expect(eventReset.calledOnce).toBe(true);
+    expect(calendarStore.accountId).toBeNull();
+    expect(calendarStore.calendarInfos).toEqual([]);
+    expect(calendarStore.selectedCalendarId).toBeNull();
+    expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeNull();
+    expect(replaceSpy.calledOnceWith('/')).toBe(true);
   });
 });
