@@ -1,12 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { ReportCategory, ReportStatus } from '@/common/model/report';
-import AccountService from '@/server/accounts/service/account';
-import ConfigurationInterface from '@/server/configuration/interface';
-import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
@@ -30,13 +26,7 @@ describe('Admin Report List - calendar_id filter (integration)', () => {
     env = new TestEnvironment();
     await env.init();
 
-    const eventBus = new EventEmitter();
-    const configurationInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
-
-    // _setupAccount grants admin role in test mode
-    await accountService._setupAccount(adminEmail, password);
+    await env.createAdminAccount(adminEmail, password);
     authToken = await env.login(adminEmail, password);
   });
 

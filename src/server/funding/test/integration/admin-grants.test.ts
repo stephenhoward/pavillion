@@ -88,11 +88,8 @@ describe('Admin Grant CRUD Integration Tests', () => {
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // First account created → gets admin role
-    const adminInfo = await accountService._setupAccount(adminEmail, password);
-    adminAccount = adminInfo.account;
+    adminAccount = await env.createAdminAccount(adminEmail, password);
 
-    // Second account → no admin role
     const regularInfo = await accountService._setupAccount(regularEmail, password);
     regularAccount = regularInfo.account;
 

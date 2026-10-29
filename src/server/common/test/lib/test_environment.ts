@@ -3,7 +3,14 @@ import sinon from 'sinon';
 import request from 'supertest';
 import initPavillionServer from '@/server/server';
 import crypto from 'crypto';
+import { EventEmitter } from 'events';
 import db from '@/server/common/entity/db';
+import { Account } from '@/common/model/account';
+import { AccountRoleEntity } from '@/server/common/entity/account';
+import AccountService from '@/server/accounts/service/account';
+import ConfigurationInterface from '@/server/configuration/interface';
+import EmailInterface from '@/server/email/interface';
+import SetupInterface from '@/server/setup/interface';
 
 // Import entity modules to trigger registration with global db
 import '@/server/common/entity/account';
@@ -29,6 +36,14 @@ import '@/server/moderation/entity/blocked_reporter';
 import '@/server/moderation/entity/blocked_instance';
 import '@/server/moderation/entity/event_reporter';
 
+/**
+ * Admin the harness seeds in init() so the setup-mode middleware lets API
+ * calls through. Reserved for the harness: a test that needs to act as an
+ * admin creates its own with createAdminAccount().
+ */
+const HARNESS_ADMIN_EMAIL = 'harness-admin@pavillion.test';
+const HARNESS_ADMIN_PASSWORD = 'harness-admin-pw!1';
+
 export class TestEnvironment {
   app: express.Application;
 
@@ -47,9 +62,34 @@ export class TestEnvironment {
     // IMPORTANT: Must await this so server is fully initialized before tests run
     await initPavillionServer(this.app, 0);
 
-    // Note: Setup mode middleware is active and will initially cache "setup mode active"
-    // When tests create accounts via _setupAccount(), the cache is automatically cleared
-    // This allows the middleware to query the database fresh and find the admin account
+    // Setup-mode middleware answers every API call with 503 until an admin
+    // exists, so the harness seeds one before any test runs.
+    await this.createAdminAccount(HARNESS_ADMIN_EMAIL, HARNESS_ADMIN_PASSWORD);
+  }
+
+  /**
+   * Creates an account holding the instance admin role and clears the
+   * setup-mode cache so the middleware sees the admin on its next request.
+   *
+   * @param email - Email address for the admin account
+   * @param password - Password for the admin account
+   * @returns The created admin account
+   */
+  async createAdminAccount(email: string, password: string): Promise<Account> {
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface(configurationInterface);
+    const accountService = new AccountService(
+      new EventEmitter(),
+      configurationInterface,
+      setupInterface,
+      new EmailInterface(),
+    );
+
+    const { account } = await accountService._setupAccount(email, password);
+    await AccountRoleEntity.create({ account_id: account.id, role: 'admin' });
+    setupInterface.clearCache();
+
+    return account;
   }
 
   async cleanup() {

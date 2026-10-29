@@ -6,7 +6,6 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { ReportCategory, ReportStatus } from '@/common/model/report';
-import AccountService from '@/server/accounts/service/account';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -46,12 +45,10 @@ describe('Report queues - source=federation filter (integration)', () => {
     const setupInterface = new SetupInterface();
     const accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const calendarInterface = new CalendarInterface(eventBus, accountsInterface, configurationInterface);
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // _setupAccount grants admin role in test mode, so one account can
-    // exercise both the owner queue (as calendar owner) and the admin queue.
-    const ownerInfo = await accountService._setupAccount(ownerEmail, password);
-    ownerAccount = ownerInfo.account;
+    // An admin who also owns the calendar, so one account can exercise both
+    // the owner queue (as calendar owner) and the admin queue.
+    ownerAccount = await env.createAdminAccount(ownerEmail, password);
     testCalendar = await calendarInterface.createCalendar(ownerAccount, 'fedsourcefilter');
 
     authToken = await env.login(ownerEmail, password);

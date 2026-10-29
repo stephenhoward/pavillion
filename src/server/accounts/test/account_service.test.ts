@@ -1178,13 +1178,10 @@ describe('_setupAccount', () => {
     let accountServiceStub = setupSandbox.stub(accountService, 'getAccountByEmail');
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
-    let _accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
-    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
     passwordCodeStub.resolves('test_code');
     accountServiceStub.resolves(undefined);
-    accountRoleFindAllStub.resolves([]); // No existing admins
 
     let accountInfo = await accountService._setupAccount('test@example.com');
 
@@ -1200,13 +1197,10 @@ describe('_setupAccount', () => {
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let setPasswordStub = sinon.stub(accountService, 'setPassword');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
-    let _accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
-    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
     accountServiceStub.resolves(undefined);
     setPasswordStub.resolves(true);
-    accountRoleFindAllStub.resolves([]); // No existing admins
 
     let accountInfo = await accountService._setupAccount('test@example.com','test_password');
 
@@ -1222,13 +1216,10 @@ describe('_setupAccount', () => {
     let buildSpy = setupSandbox.spy(AccountEntity, 'build');
     setupSandbox.stub(AccountEntity.prototype, 'save');
     setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
-    setupSandbox.stub(AccountRoleEntity.prototype, 'save');
-    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
     passwordCodeStub.resolves('test_code');
     accountServiceStub.resolves(undefined);
-    accountRoleFindAllStub.resolves([]);
 
     let accountInfo = await accountService._setupAccount('  Test@Example.COM ');
 

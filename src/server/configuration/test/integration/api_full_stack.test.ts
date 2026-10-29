@@ -26,9 +26,7 @@ describe('Configuration site API — full stack', () => {
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // First account becomes admin in test mode
-    await accountService._setupAccount(adminEmail, adminPassword);
-    // Second account is non-admin
+    await env.createAdminAccount(adminEmail, adminPassword);
     await accountService._setupAccount(nonAdminEmail, nonAdminPassword);
 
     adminAuthKey = await env.login(adminEmail, adminPassword);

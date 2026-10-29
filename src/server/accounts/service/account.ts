@@ -432,9 +432,6 @@ export default class AccountService {
   /**
    * Creates a new account with optional password.
    *
-   * In test environment (NODE_ENV === 'test'), automatically assigns admin role
-   * and clears the setup mode cache to allow tests to proceed without setup blocking.
-   *
    * @param email - Email address for the new account
    * @param password - Optional password (if not provided, generates reset code)
    * @returns Promise resolving to account info with account and optional password reset code
@@ -445,9 +442,9 @@ export default class AccountService {
       throw new AccountAlreadyExistsError();
     }
 
-    // The account, its secrets row, the password (or reset code) and any role
-    // rows are written in one transaction, so a failed write rolls them all
-    // back instead of leaving an account the invitee cannot log in to or
+    // The account, its secrets row and the password (or reset code) are
+    // written in one transaction, so a failed write rolls them all back
+    // instead of leaving an account the invitee cannot log in to or
     // re-create.
     const accountInfo = await db.transaction(async (transaction): Promise<AccountInfo> => {
       const accountEntity = AccountEntity.build({
@@ -473,33 +470,8 @@ export default class AccountService {
         info.password_code = await this.generatePasswordResetCodeForAccount(accountEntity.toModel(), transaction);
       }
 
-      // In test environment, assign admin role to FIRST account only
-      // This allows tests to run without being blocked by setup mode middleware
-      // while still allowing permission testing with non-admin accounts
-      if (process.env.NODE_ENV === 'test') {
-        // Check if there are any existing admin accounts
-        const existingAdmins = await AccountRoleEntity.findAll({
-          where: { role: 'admin' },
-          transaction,
-        });
-
-        // Only assign admin role if this is the first account (no admins exist yet)
-        if (existingAdmins.length === 0) {
-          const roleEntity = AccountRoleEntity.build({
-            account_id: accountEntity.id,
-            role: 'admin',
-          });
-          await roleEntity.save({ transaction });
-        }
-      }
-
       return info;
     });
-
-    // Clear setup mode cache so middleware will query DB fresh and find the admin
-    if (process.env.NODE_ENV === 'test') {
-      this.setupInterface.clearCache();
-    }
 
     // Emit account.created event for ActivityPub domain to create UserActor
     // Only if username is set (accounts created via invitation may not have username yet)
