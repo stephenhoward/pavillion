@@ -283,6 +283,82 @@ describe('UserActorService', () => {
     });
   });
 
+  describe('processAddActivity — declared calendar inbox', () => {
+    const LOCAL_USERNAME = 'alice';
+    const LOCAL_ACCOUNT_ID = 'account-id-alice';
+    const LOCAL_ACTOR_URI = 'https://events.example/users/alice';
+    const REMOTE_CALENDAR_URI = 'https://remote.example/calendars/test';
+    const REMOTE_CALENDAR_ACTOR_ID = 'remote-calendar-actor-id';
+
+    let calendarInterfaceStub: { grantRemoteEditorAccess: sinon.SinonStub };
+    let updateMetadataStub: sinon.SinonStub;
+
+    beforeEach(() => {
+      calendarInterfaceStub = {
+        grantRemoteEditorAccess: sinon.stub().resolves(),
+      };
+      service = new UserActorService(calendarInterfaceStub as unknown as CalendarInterface);
+
+      sandbox.stub(AccountEntity, 'findOne').resolves({ id: LOCAL_ACCOUNT_ID, username: LOCAL_USERNAME } as any);
+      sandbox.stub(UserActorEntity, 'findOne').resolves({
+        toModel: () => ({
+          id: 'user-actor-id',
+          accountId: LOCAL_ACCOUNT_ID,
+          actorUri: LOCAL_ACTOR_URI,
+          publicKey: 'pk',
+          privateKey: 'sk',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      } as any);
+      sandbox.stub(RemoteCalendarService.prototype, 'findOrCreateByActorUri')
+        .resolves({ id: REMOTE_CALENDAR_ACTOR_ID, actorUri: REMOTE_CALENDAR_URI, remoteCalendarId: null } as any);
+      updateMetadataStub = sandbox.stub(RemoteCalendarService.prototype, 'updateMetadata').resolves();
+    });
+
+    function addActivity(calendarInboxUrl: unknown) {
+      return {
+        type: 'Add',
+        actor: REMOTE_CALENDAR_URI,
+        object: LOCAL_ACTOR_URI,
+        target: `${REMOTE_CALENDAR_URI}/editors`,
+        calendarInboxUrl,
+      };
+    }
+
+    it('stores an inbox declared on the sending actor\'s own host', async () => {
+      const inboxUrl = `${REMOTE_CALENDAR_URI}/inbox`;
+
+      const result = await service.processAddActivity(LOCAL_USERNAME, addActivity(inboxUrl));
+
+      expect(result).toBe(true);
+      expect(updateMetadataStub.calledOnceWith(REMOTE_CALENDAR_URI, { inboxUrl })).toBe(true);
+      expect(calendarInterfaceStub.grantRemoteEditorAccess.calledOnceWith(LOCAL_ACCOUNT_ID, REMOTE_CALENDAR_ACTOR_ID)).toBe(true);
+    });
+
+    /**
+     * `calendar_actor.inbox_url` is an outbound delivery target, so an Add may
+     * not point it at a host other than the (signature-verified) sending
+     * actor's. The grant is still recorded: the inbox is one bad field, not
+     * grounds to refuse the membership.
+     */
+    it('does not store an inbox on a host other than the sending actor\'s, and still grants access', async () => {
+      const result = await service.processAddActivity(LOCAL_USERNAME, addActivity('https://victim.example/collect'));
+
+      expect(result).toBe(true);
+      expect(updateMetadataStub.called).toBe(false);
+      expect(calendarInterfaceStub.grantRemoteEditorAccess.calledOnceWith(LOCAL_ACCOUNT_ID, REMOTE_CALENDAR_ACTOR_ID)).toBe(true);
+    });
+
+    it('does not store an http inbox on the sending actor\'s host', async () => {
+      const result = await service.processAddActivity(LOCAL_USERNAME, addActivity('http://remote.example/calendars/test/inbox'));
+
+      expect(result).toBe(true);
+      expect(updateMetadataStub.called).toBe(false);
+      expect(calendarInterfaceStub.grantRemoteEditorAccess.calledOnce).toBe(true);
+    });
+  });
+
   describe('processRemoveActivity', () => {
     const LOCAL_USERNAME = 'alice';
     const LOCAL_ACCOUNT_ID = 'account-id-alice';
