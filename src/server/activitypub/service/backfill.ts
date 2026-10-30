@@ -56,8 +56,11 @@
  *
  * `MAX_BACKFILL_BUFFER_BYTES = 8 MiB` bounds the buffer itself, since the
  * page caps alone would let a peer hold up to 50 MiB of activities in worker
- * memory. Each buffered activity counts as its serialized length (bytes, not
- * items: one activity can be close to a whole page). When the next activity
+ * memory. Each buffered activity counts as its serialized length (size, not
+ * items: one activity can be close to a whole page). That length is
+ * `JSON.stringify(...).length`, in UTF-16 code units, so the cap bounds the
+ * serialized JSON rather than the heap: the parsed objects held in the buffer
+ * can take about an order of magnitude more memory. When the next activity
  * would exceed the cap the walk stops there, emits one warn-level log line,
  * and writes the buffer as a normal end. Like the page cap, truncation keeps
  * a contiguous newest-first run; an Undo whose Announce fell beyond the cap

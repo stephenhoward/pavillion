@@ -1101,9 +1101,9 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // -------------------------------------------------------------------------
 
   it.each([
-    ['refused by the SSRF check', 'https://10.0.0.1/calendars/source/outbox?page=2'],
-    ['unreachable', SOURCE_PAGE_2_URI],
-  ])('writes the walked pages when the next page URL is %s', async (_label, nextUrl) => {
+    ['refused by the SSRF check', 'https://10.0.0.1/calendars/source/outbox?page=2', false],
+    ['unreachable', SOURCE_PAGE_2_URI, true],
+  ])('writes the walked pages when the next page URL is %s', async (_label, nextUrl, expectFetched) => {
     // The stub serves no page 2, so an unreachable next page resolves to null.
     const fetcher = makeFetcher({
       [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
@@ -1123,6 +1123,9 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       calendarActorId: sourceCalendarActorId,
       sourceActorUri: SOURCE_ACTOR_URI,
     });
+
+    // A refused URL never reaches the fetcher; an unreachable one does.
+    expect(fetcher.calledWith(nextUrl)).toBe(expectFetched);
 
     const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
       where: { calendar_id: followerCalendarId },
@@ -1184,6 +1187,90 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       bufferedBytes: cap,
       cap,
     });
+  });
+
+  it('leaves no share when the cap keeps an Undo but cuts off its Announce', async () => {
+    // Newest first: the Undo fits the cap exactly and the older Announce it
+    // references does not. The Undo is written alone and changes nothing at
+    // dispatch, so no share is created and none can stick.
+    const eventApId = `${SOURCE_ORIGIN}/events/cut-off`;
+    const announceId = `${SOURCE_ORIGIN}/activities/announce-cut-off`;
+    const undoId = `${SOURCE_ORIGIN}/activities/undo-cut-off`;
+
+    // Local copy of X so an Announce that did get written would dispatch
+    // without a fetch.
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: null });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: SOURCE_ACTOR_URI,
+    });
+
+    const undo = { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2026-05-15T11:00:00Z', object: announceId };
+    const announce = { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2026-05-15T10:00:00Z', object: eventApId };
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage([undo, announce]),
+    });
+
+    const service = runService({ fetcher, maxBufferBytes: JSON.stringify(undo).length });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+    await drainInbox();
+
+    // The Undo's target is not in the inbox, so dispatch ends it as an error
+    // ('Undo target not found') with no state change.
+    expect(await ActivityPubInboxMessageEntity.findByPk(announceId)).toBeNull();
+    expect((await ActivityPubInboxMessageEntity.findByPk(undoId))?.processed_status).toBe('error');
+    expect(await EventActivityEntity.count({
+      where: { event_id: eventApId, type: 'share' },
+    })).toBe(0);
+  });
+
+  it('does not count activities rejected by the trust gates, or with no id, toward the cap', async () => {
+    // Walk order puts the gate-rejected and id-less activities first. The cap
+    // holds exactly the two valid ones, so if either dropped activity were
+    // counted, the older valid activity would not fit.
+    const forged = {
+      id: `${SOURCE_ORIGIN}/activities/forged-cap`,
+      type: 'Create',
+      actor: 'https://attacker.example/users/imposter',
+      published: '2026-04-05T00:00:00Z',
+      object: { id: 'https://attacker.example/events/x', type: 'Event', attributedTo: 'https://attacker.example/users/imposter' },
+    };
+    const noId = buildCreate(`${SOURCE_ORIGIN}/activities/no-id`, '2026-04-04T00:00:00Z');
+    delete noId.id;
+    const newer = buildCreate(`${SOURCE_ORIGIN}/activities/valid-newer`, '2026-04-02T00:00:00Z');
+    const older = buildCreate(`${SOURCE_ORIGIN}/activities/valid-older`, '2026-04-01T00:00:00Z');
+    const cap = JSON.stringify(newer).length + JSON.stringify(older).length;
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage([forged, noId, newer, older]),
+    });
+
+    const service = runService({ fetcher, maxBufferBytes: cap });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
+      where: { calendar_id: followerCalendarId },
+      order: [['id', 'ASC']],
+    })).map(r => r.id);
+    expect(persistedIds).toEqual([
+      `${SOURCE_ORIGIN}/activities/valid-newer`,
+      `${SOURCE_ORIGIN}/activities/valid-older`,
+    ]);
+    expect(backfillWarn.mock.calls.some(([, msg]) => msg === 'backfill truncated at buffer cap')).toBe(false);
   });
 });
 
