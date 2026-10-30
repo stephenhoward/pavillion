@@ -7,49 +7,17 @@
 <script setup>
 import { inject, onBeforeMount } from 'vue';
 import { useRouter } from 'vue-router';
-import { useCalendarStore } from '@/client/stores/calendarStore';
-import { useFeedStore } from '@/client/stores/feedStore';
-import { useEventStore } from '@/client/stores/eventStore';
-import { useCategoryStore } from '@/client/stores/categoryStore';
-import { useSeriesStore } from '@/client/stores/seriesStore';
-import { useInvitationStore } from '@/client/stores/invitationStore';
-import { useApplicationStore } from '@/client/stores/applicationStore';
-import { useFundingStore } from '@/client/stores/fundingStore';
-import { useCalendarAdminStore } from '@/client/stores/calendarAdminStore';
-import { useLocationStore } from '@/client/stores/locationStore';
-import { useModerationStore } from '@/client/stores/moderation-store';
-import { useNotificationStore } from '@/client/stores/notificationStore';
+import { resetUserStores } from '@/client/stores/reset-user-stores';
 
 const router = useRouter();
 const authentication = inject('authn');
-const calendarStore = useCalendarStore();
-const feedStore = useFeedStore();
-const eventStore = useEventStore();
-const categoryStore = useCategoryStore();
-const seriesStore = useSeriesStore();
-const invitationStore = useInvitationStore();
-const applicationStore = useApplicationStore();
-const fundingStore = useFundingStore();
-const calendarAdminStore = useCalendarAdminStore();
-const locationStore = useLocationStore();
-const moderationStore = useModerationStore();
-const notificationStore = useNotificationStore();
 
 onBeforeMount( () => {
+  // Sign out before clearing the stores: a reset re-runs state initializers
+  // that read storage, which must no longer hold the previous session.
   authentication.logout();
   // Clear all user-specific stores to prevent data leakage between sessions
-  calendarStore.$reset();
-  feedStore.$reset();
-  eventStore.$reset();
-  categoryStore.$reset();
-  seriesStore.$reset();
-  invitationStore.$reset();
-  applicationStore.$reset();
-  fundingStore.$reset();
-  calendarAdminStore.$reset();
-  locationStore.$reset();
-  moderationStore.$reset();
-  notificationStore.$reset();
+  resetUserStores();
   router.replace('/');
 });
 </script>
