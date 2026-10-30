@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import ts from 'typescript';
 
-const SOURCE_ROOT = path.resolve(__dirname, '../../..');
+import { SOURCE_ROOT, describeNode, isIdentifier, parse, visit } from './ast';
+
 const SERVER_ROOT = path.join(SOURCE_ROOT, 'server');
 
 /**
@@ -113,27 +114,8 @@ function serverSourceFiles(directory: string): string[] {
   return files;
 }
 
-function parse(file: string): ts.SourceFile {
-  return ts.createSourceFile(file, fs.readFileSync(file, 'utf-8'), ts.ScriptTarget.Latest, true);
-}
-
-function visit(node: ts.Node, callback: (node: ts.Node) => void): void {
-  callback(node);
-  ts.forEachChild(node, child => visit(child, callback));
-}
-
-function isIdentifier(node: ts.Node | undefined, name: string): boolean {
-  return !!node && ts.isIdentifier(node) && node.text === name;
-}
-
 function firstSegment(mountPath: string): string | null {
   return mountPath.replace(/^\//, '').split('/')[0] || null;
-}
-
-function describeNode(source: ts.SourceFile, file: string, node: ts.Node): string {
-  const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-  const text = node.getText(source).split('\n')[0];
-  return `${path.relative(SOURCE_ROOT, file)}:${line + 1}: ${text}`;
 }
 
 /**

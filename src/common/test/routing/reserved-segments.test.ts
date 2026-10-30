@@ -11,96 +11,10 @@ import {
 import { isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { buildSiteRoutes } from '@/site/routes';
 
+import { clientRouterTopLevelSegments, topLevelSegment } from './client-routes';
 import { serverMountedSegments } from './server-mounts';
 
 const SOURCE_ROOT = path.resolve(__dirname, '../../..');
-
-/**
- * Reduces a vue-router path to the static top-level segment it claims.
- * Returns null for the root path, empty child paths, and dynamic segments,
- * none of which claim a name a calendar could otherwise use.
- */
-function topLevelSegment(routePath: string): string | null {
-  const segment = routePath.replace(/^\//, '').split('/')[0];
-
-  if (segment === '' || segment.startsWith(':')) {
-    return null;
-  }
-  return segment;
-}
-
-/**
- * Extracts the top-level URL segments the client SPA router owns by reading its
- * source, so a route added to src/client/routes.ts without a matching reservation
- * fails here instead of silently shadowing a calendar of the same name.
- *
- * Route objects sitting directly in the `routes` array are top level. So are the
- * children of the route whose own path is '/', because they mount directly
- * beneath the root rather than under a namespace of their own.
- *
- * Only a plain single-quoted string literal can be read. Anything else — a
- * template literal, a double-quoted string, a computed expression — is returned
- * in `unparseable` rather than skipped, because a path this reader cannot see is
- * a segment it cannot check, and silence there is indistinguishable from
- * success. A failure means the reader needs extending, not that the route is
- * wrong.
- */
-function clientRouterTopLevelSegments(): { segments: string[], unparseable: string[] } {
-  const source = readFileSync(path.join(SOURCE_ROOT, 'client/routes.ts'), 'utf-8');
-  // The array buildClientRoutes builds and returns.
-  const declaration = 'const routes: RouteRecordRaw[] = [';
-  const declarationIndex = source.indexOf(declaration);
-  if (declarationIndex === -1) {
-    throw new Error(`src/client/routes.ts no longer declares "${declaration}"; update clientRouterTopLevelSegments`);
-  }
-  const arrayStart = declarationIndex + declaration.length - 1;
-
-  const segments = new Set<string>();
-  const unparseable: string[] = [];
-  const pathLiteral = /^path:\s*'([^']*)'/;
-  let bracketDepth = 0;
-  let braceDepth = 0;
-  let enclosingPath = '';
-
-  for (let index = arrayStart; index < source.length; index++) {
-    const character = source[index];
-
-    if (character === '[') {
-      bracketDepth++;
-    }
-    else if (character === ']') {
-      bracketDepth--;
-      if (bracketDepth === 0) break;
-    }
-    else if (character === '{') {
-      braceDepth++;
-    }
-    else if (character === '}') {
-      braceDepth--;
-    }
-    else if (source.startsWith('path:', index)) {
-      const match = pathLiteral.exec(source.slice(index));
-
-      if (!match) {
-        const lineEnd = source.indexOf('\n', index);
-        const expression = source.slice(index, lineEnd === -1 ? source.length : lineEnd).trim();
-
-        unparseable.push(expression.replace(/,$/, ''));
-        continue;
-      }
-
-      if (braceDepth === 1) {
-        enclosingPath = match[1];
-      }
-      if (braceDepth === 1 || (braceDepth === 2 && enclosingPath === '/')) {
-        const segment = topLevelSegment(match[1]);
-        if (segment) segments.add(segment);
-      }
-    }
-  }
-
-  return { segments: [...segments], unparseable };
-}
 
 /**
  * Predicate behaviour and list invariants. `isReservedRouteSegment` and
@@ -189,8 +103,8 @@ describe('reserved route segments', () => {
 
       expect(
         unparseable,
-        `src/client/routes.ts declares route paths this test cannot read as plain '…' string literals, `
-        + 'so their segments are unchecked. Extend clientRouterTopLevelSegments to cover: '
+        'src/client/routes.ts declares route paths this test cannot read as string literals, '
+        + 'so their segments are unchecked. Extend topLevelSegmentsOf in client-routes.ts to cover: '
         + unparseable.join(' | '),
       ).toEqual([]);
     });
