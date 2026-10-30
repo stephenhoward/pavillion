@@ -38,11 +38,11 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
   // request has to pass the owner permission check before the report is read.
   //
   // Two accounts, because the permission check takes different paths for each.
-  // The first account created under NODE_ENV=test is granted the instance admin
-  // role, and userCanReviewReports short-circuits true for admins without ever
-  // consulting CalendarMemberEntity - so an admin never exercises the owner
-  // deep-link path the route case is about. The second account gets no admin
-  // role and reaches the route purely through its owner membership.
+  // The first holds the instance admin role, and userCanReviewReports
+  // short-circuits true for admins without ever consulting
+  // CalendarMemberEntity - so an admin never exercises the owner deep-link
+  // path the route case is about. The second gets no admin role and reaches
+  // the route purely through its owner membership.
   let adminAuthKey: string;
   let adminCalendarId: string;
   let ownerAuthKey: string;
@@ -61,9 +61,8 @@ describe('ModerationService.getReportForCalendar - calendar scoping (integration
     const calendarInterface = new CalendarInterface(eventBus);
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // First account: receives the instance admin role automatically.
-    const adminInfo = await accountService._setupAccount(adminEmail, password);
-    const adminCalendar = await calendarInterface.createCalendar(adminInfo.account, 'reportscopingadmin');
+    const adminAccount = await env.createAdminAccount(adminEmail, password);
+    const adminCalendar = await calendarInterface.createCalendar(adminAccount, 'reportscopingadmin');
     adminCalendarId = adminCalendar.id;
     adminAuthKey = await env.login(adminEmail, password);
 

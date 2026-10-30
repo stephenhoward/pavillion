@@ -55,8 +55,10 @@ export default class SetupInterface {
   }
 
   /**
-   * Clears the setup mode cache, forcing a fresh database query.
-   * Used primarily in test environments to ensure setup state is re-evaluated.
+   * Clears the setup mode cache, forcing a fresh database query on the next
+   * check. completeSetup() clears it itself; anything that creates an admin
+   * another way (the integration test harness) calls this so the setup-mode
+   * middleware sees the new admin.
    */
   clearCache(): void {
     SetupService.clearCache();

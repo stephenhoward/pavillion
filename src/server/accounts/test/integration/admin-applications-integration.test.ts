@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 import { AccountApplicationEntity } from '@/server/common/entity/account';
-import AccountService from '@/server/accounts/service/account';
-import ConfigurationInterface from '@/server/configuration/interface';
-import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
@@ -32,13 +28,7 @@ describe('Admin GET /api/v1/applications status filter (integration)', () => {
     env = new TestEnvironment();
     await env.init();
 
-    const eventBus = new EventEmitter();
-    const configurationInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
-
-    // First account in test mode is granted admin role automatically.
-    await accountService._setupAccount(adminEmail, adminPassword);
+    await env.createAdminAccount(adminEmail, adminPassword);
 
     adminToken = await env.login(adminEmail, adminPassword);
   });

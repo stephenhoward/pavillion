@@ -13,6 +13,13 @@ import BlockedReportersRoutes from '@/server/moderation/api/v1/blocked-reporters
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import ExpressHelper from '@/server/common/helper/express';
 
+/**
+ * Accounts these tests create. Cleanup deletes only these: the harness seeds
+ * its own admin (with role and secrets rows) in init(), and a blanket account
+ * delete would hit those rows' foreign keys.
+ */
+const TEST_ACCOUNT_EMAILS = ['admin@test.com', 'user@test.com'];
+
 describe('BlockedReportersRoutes API Integration', () => {
   let moderationInterface: ModerationInterface;
   let emailBlockingService: EmailBlockingService;
@@ -126,7 +133,7 @@ describe('BlockedReportersRoutes API Integration', () => {
   afterEach(async () => {
     sandbox.restore();
     await BlockedReporterEntity.destroy({ where: {} });
-    await AccountEntity.destroy({ where: {} });
+    await AccountEntity.destroy({ where: { email: TEST_ACCOUNT_EMAILS } });
   });
 
   describe('GET /api/v1/admin/moderation/blocked-reporters', () => {

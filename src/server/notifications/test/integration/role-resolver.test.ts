@@ -81,10 +81,10 @@ describe('resolveRoleAudience (integration)', () => {
     const unrelatedInfo = await accountService._setupAccount('role-resolver-unrelated@pavillion.dev', 'testpassword');
     unrelatedAccount = unrelatedInfo.account;
 
-    // `_setupAccount` auto-grants the first account in the test DB the
-    // admin role (it bootstraps an instance admin so setup-mode
-    // middleware doesn't block other tests). Normalize the admin pool
-    // so this suite asserts on a single, explicit admin.
+    // `env.init()` seeds the harness admin so the setup-mode middleware
+    // lets API calls through. Stripping every admin role removes that
+    // admin's role, leaving this suite's `instance-admins` assertions a
+    // single, explicit admin.
     await AccountRoleEntity.destroy({ where: { role: 'admin' } });
     await AccountRoleEntity.create({ account_id: adminAccount.id, role: 'admin' });
   });

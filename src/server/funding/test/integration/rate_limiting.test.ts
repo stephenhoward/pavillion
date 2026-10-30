@@ -97,23 +97,9 @@ describeOrSkip('Funding Webhook Rate Limiting Integration Tests', () => {
       // the raw-body parser and signature-verification handler run.
       // Imports are deferred so the full-server init cost is only paid here.
       const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-      const { EventEmitter } = await import('events');
-      const { default: AccountService } = await import('@/server/accounts/service/account');
-      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-      const { default: SetupInterface } = await import('@/server/setup/interface');
 
       const realEnv = new TestEnvironment();
       await realEnv.init();
-
-      // Create an admin account so the setup-mode middleware (which returns 503
-      // for API requests while no admin exists) lets the request through to the
-      // funding route where the limiter is wired.
-      const accountService = new AccountService(
-        new EventEmitter(),
-        new ConfigurationInterface(),
-        new SetupInterface(),
-      );
-      await accountService._setupAccount('funding-ratelimit@pavillion.dev', 'testpassword123');
 
       const webhookResponse = await request(realEnv.app)
         .post('/api/funding/webhooks/stripe')

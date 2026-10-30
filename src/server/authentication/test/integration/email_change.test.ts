@@ -46,7 +46,8 @@ describe('Email change endpoints (integration)', () => {
     const setupInterface = new SetupInterface();
     accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // First account exits setup mode; both accounts back the initiate tests.
+    // The requester initiates email changes; the second account holds the
+    // address the taken-email tests try to claim.
     await accountService._setupAccount(requesterEmail, requesterPassword);
     await accountService._setupAccount(takenEmail, 'testpassword!2');
   });

@@ -11,6 +11,13 @@ import { ReportCategory } from '@/common/model/report';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Accounts these tests create. Cleanup deletes only these: the harness seeds
+ * its own admin (with role and secrets rows) in init(), and a blanket account
+ * delete would hit those rows' foreign keys.
+ */
+const TEST_ACCOUNT_EMAILS = ['admin@test.com', 'admin2@test.com'];
+
 describe('EmailBlockingService Integration', () => {
   let service: EmailBlockingService;
   let adminAccount: Account;
@@ -47,7 +54,7 @@ describe('EmailBlockingService Integration', () => {
   afterEach(async () => {
     // Clean up test data
     await BlockedReporterEntity.destroy({ where: {} });
-    await AccountEntity.destroy({ where: {} });
+    await AccountEntity.destroy({ where: { email: TEST_ACCOUNT_EMAILS } });
   });
 
   describe('blockReporter and isEmailBlocked', () => {
@@ -282,7 +289,7 @@ describe('ModerationService - Report Submission with Email Blocking', () => {
     await ReportEntity.destroy({ where: {} });
     await EventReporterEntity.destroy({ where: {} });
     await BlockedReporterEntity.destroy({ where: {} });
-    await AccountEntity.destroy({ where: {} });
+    await AccountEntity.destroy({ where: { email: TEST_ACCOUNT_EMAILS } });
   });
 
   describe('createReport with blocked email', () => {

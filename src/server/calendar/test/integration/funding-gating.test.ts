@@ -33,11 +33,11 @@ import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_fund
  * - Security audit scenarios
  * - Edge cases and race conditions
  *
- * Fixture contract: exactly one account here holds the 'admin' role —
- * adminAccount — and beforeAll asserts it. Admin-owned calendars are exempt
- * from the funding gate (checkFundingAccess invariant 2), so any test that
- * means to observe gating or check ordering must use a calendar owned by one
- * of the non-admin accounts. See the note in beforeAll.
+ * Fixture contract: of the accounts this file creates, only adminAccount
+ * holds the 'admin' role, and beforeAll asserts it. Admin-owned calendars
+ * are exempt from the funding gate (checkFundingAccess invariant 2), so any
+ * test that means to observe gating or check ordering must use a calendar
+ * owned by one of the non-admin accounts. See the note in beforeAll.
  */
 describe('Funding Gating Integration Tests', () => {
   let env: TestEnvironment;
@@ -45,10 +45,8 @@ describe('Funding Gating Integration Tests', () => {
   let fundingInterface: FundingInterface;
   let eventBus: EventEmitter;
 
-  // The instance admin. Deliberately the first account this file creates —
-  // see the note in beforeAll — so the implicit test-mode admin grant lands
-  // somewhere named, and every other account below is non-admin by
-  // construction rather than by accident of creation order.
+  // The instance admin — the only account this file grants the role to.
+  // See the note in beforeAll.
   let adminAccount: Account;
   let adminCalendar: Calendar;
   let adminToken: string;
@@ -219,24 +217,13 @@ describe('Funding Gating Integration Tests', () => {
     );
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
-    // AccountService._setupAccount grants the 'admin' role to the FIRST
-    // account created under NODE_ENV=test, so that the setup-mode middleware
-    // lets the suite run. That grant is implicit and creation-order dependent:
-    // whichever account happens to be created first becomes exempt from the
-    // funding gate by invariant 2, which silently makes any gating assertion
-    // about that account's calendars vacuous.
-    //
-    // So this file claims the grant deliberately. The admin fixture is created
-    // first, named, and pinned by the assertion below; every account created
-    // afterwards is guaranteed non-admin. Anyone reordering these lines gets a
-    // failing beforeAll rather than a quietly meaningless test.
-    const adminInfo = await accountService._setupAccount(adminEmail, password);
-    adminAccount = adminInfo.account;
+    // Any admin-owned calendar is exempt from the funding gate by invariant 2,
+    // which silently makes a gating assertion about it vacuous. So the admin
+    // fixture is named, and the assertion below pins that no other account
+    // here holds the role. (The harness seeds its own admin; it owns no
+    // calendar in this file, so it is not checked.)
+    adminAccount = await env.createAdminAccount(adminEmail, password);
 
-    const adminRoleRows = await AccountRoleEntity.findAll({ where: { role: 'admin' } });
-    expect(adminRoleRows.map((row) => row.account_id)).toEqual([adminAccount.id]);
-
-    // Create test accounts — all non-admin, the admin grant is already spent
     let supporterInfo = await accountService._setupAccount(supporterEmail, password);
     supporterAccount = supporterInfo.account;
 
@@ -245,6 +232,13 @@ describe('Funding Gating Integration Tests', () => {
 
     const outsiderInfo = await accountService._setupAccount(outsiderEmail, password);
     const outsiderAccount = outsiderInfo.account;
+
+    const adminIds = (await AccountRoleEntity.findAll({ where: { role: 'admin' } }))
+      .map((row) => row.account_id);
+    expect(adminIds).toContain(adminAccount.id);
+    for (const account of [supporterAccount, nonSupporterAccount, outsiderAccount]) {
+      expect(adminIds).not.toContain(account.id);
+    }
 
     // Login users to get auth tokens
     adminToken = await env.login(adminEmail, password);

@@ -113,11 +113,11 @@ describe('notification read path — target derivation (integration)', () => {
     const unrelatedInfo = await accountService._setupAccount('read-path-unrelated@pavillion.dev', 'testpassword');
     unrelatedAccount = unrelatedInfo.account;
 
-    // `_setupAccount` auto-grants the first account in the test DB the admin
-    // role so setup-mode middleware does not block other suites. Normalize
-    // the admin pool to a single explicit admin — otherwise the owner would
-    // be an admin too and every report row would resolve to the moderation
-    // surface.
+    // `env.init()` seeds the harness admin so the setup-mode middleware lets
+    // API calls through. Stripping every admin role removes that admin's
+    // role, so the instance-admin audience is the single explicit admin
+    // below and the owner-vs-admin assertions are about accounts this suite
+    // chose.
     await AccountRoleEntity.destroy({ where: { role: 'admin' } });
     await AccountRoleEntity.create({ account_id: adminAccount.id, role: 'admin' });
 

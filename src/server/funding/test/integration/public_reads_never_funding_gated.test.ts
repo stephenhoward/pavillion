@@ -51,10 +51,8 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
  *  1. Funding is not enabled on the instance — then checkFundingAccess
  *     invariant 1 opens every gate and nothing was proved.
  *  2. The calendar's owner is an instance admin — invariant 2 exempts them.
- *     This is the easy one to get wrong: AccountService._setupAccount grants
- *     the admin role to the FIRST account created when NODE_ENV === 'test',
- *     so a fixture that creates one account and uses it has an admin-exempt
- *     calendar. The organizer here is deliberately the second account.
+ *     The organizer here is a plain account; the instance's only admin is
+ *     the one the test harness seeds, and it owns no calendar.
  *  3. The calendar has a plan or a grant — invariant 3 opens the gate.
  *
  * The strongest guard is the third test: the same calendar, asked for over a
@@ -94,7 +92,6 @@ describe('DEC-004: anonymous public reads are never funding-gated', () => {
   const upcomingEventStart = '2033-05-18T17:00:00Z';
   const upcomingEventSlug = '20330518-1700';
 
-  const instanceAdminEmail = 'dec004-instance-admin@pavillion.dev';
   const organizerEmail = 'dec004-organizer@pavillion.dev';
   const password = 'testpassword';
 
@@ -115,10 +112,6 @@ describe('DEC-004: anonymous public reads are never funding-gated', () => {
 
     const eventBus = new EventEmitter();
     const accountService = new AccountService(eventBus, new ConfigurationInterface(), new SetupInterface());
-
-    // The first account absorbs the test-mode auto-admin grant. Nothing else
-    // uses it; it exists so the organizer below is genuinely not an admin.
-    await accountService._setupAccount(instanceAdminEmail, password);
 
     const organizerInfo = await accountService._setupAccount(organizerEmail, password);
     organizerAccountId = organizerInfo.account.id;
