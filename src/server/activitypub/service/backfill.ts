@@ -18,7 +18,8 @@
  * the trust gates in an in-memory buffer, and only when the walk ends normally
  * (no next page, page or buffer cap reached, next URL refused, page
  * unreachable) writes the buffer sorted by clamped `message_time` ascending,
- * one row at a time. Any drain that runs during those writes sees an
+ * ties broken by raw `published` time and then by reverse walk position, one
+ * row at a time. Any drain that runs during those writes sees an
  * oldest-first prefix of the walk, in which every Announce precedes any Undo
  * that references it. A walk that ends on rate-limit exhaustion or on an
  * unfollow writes nothing; the follow row is re-checked at every page boundary
@@ -542,17 +543,23 @@ export class FollowBackfillService {
           ? publishedRaw
           : undefined;
 
-    return { activityId, type, messageTime: clampMessageTime(published, now), activity };
+    const publishedMs = published === undefined ? NaN : new Date(published).getTime();
+
+    return {
+      activityId,
+      type,
+      messageTime: clampMessageTime(published, now),
+      publishedMs: Number.isNaN(publishedMs) ? null : publishedMs,
+      activity,
+    };
   }
 
   /**
    * Writes the buffered walk oldest first, one row at a time, and returns the
-   * number of rows newly inserted. The buffer is in walk order (newest first),
-   * so it is reversed before the stable sort: activities with equal
-   * `message_time` are then written in reverse walk order too, oldest first.
+   * number of rows newly inserted. See {@link compareWriteOrder} for the order.
    */
   private async writeBuffer(buffer: BufferedActivity[], ctx: WalkContext): Promise<number> {
-    const ordered = [...buffer].reverse().sort((a, b) => a.messageTime.getTime() - b.messageTime.getTime());
+    const ordered = [...buffer].reverse().sort(compareWriteOrder);
     let created = 0;
     for (const entry of ordered) {
       if (await this.persistActivity(entry, ctx)) {
@@ -625,13 +632,38 @@ interface WalkContext {
 
 /**
  * One activity that passed the trust gates, held in memory until the walk
- * ends. `messageTime` is already clamped.
+ * ends. `messageTime` is already clamped; `publishedMs` is the raw
+ * `published` time, unclamped, or null when it is missing or unparseable.
  */
 interface BufferedActivity {
   activityId: string;
   type: string;
   messageTime: Date;
+  publishedMs: number | null;
   activity: Record<string, unknown>;
+}
+
+/**
+ * Write order for the buffered walk, applied by a stable sort to the buffer
+ * reversed from walk order: clamped `message_time` ascending, then raw
+ * `published` ascending, then reverse walk position.
+ *
+ * The clamp makes every activity floored at `now - 2y` tie on `message_time`,
+ * so the raw `published` time keeps a floored Announce ahead of its floored
+ * Undo whichever order the peer serves its outbox in. An activity whose
+ * `published` is missing or unparseable compares equal on that key, leaving
+ * reverse walk position — oldest first for a peer that serves newest first —
+ * as the last resort.
+ */
+function compareWriteOrder(a: BufferedActivity, b: BufferedActivity): number {
+  const byMessageTime = a.messageTime.getTime() - b.messageTime.getTime();
+  if (byMessageTime !== 0) {
+    return byMessageTime;
+  }
+  if (a.publishedMs === null || b.publishedMs === null) {
+    return 0;
+  }
+  return a.publishedMs - b.publishedMs;
 }
 
 /** The walk's buffer, in walk order, and the serialized bytes it holds. */

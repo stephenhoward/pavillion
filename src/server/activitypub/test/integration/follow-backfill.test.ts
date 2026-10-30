@@ -614,6 +614,56 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     })).toBe(0);
   });
 
+  it('writes a floored Announce before its floored Undo when the peer serves its outbox oldest first', async () => {
+    // Both activities are older than two years, so both floor to the same
+    // clamped message_time. The page lists the Announce first, so reversing
+    // the walk order alone would write, and dispatch, the Undo first.
+    const eventApId = `${SOURCE_ORIGIN}/events/oldest-first`;
+    const announceId = `${SOURCE_ORIGIN}/activities/announce-oldest-first`;
+    const undoId = `${SOURCE_ORIGIN}/activities/undo-oldest-first`;
+
+    // Local copy of X so the Announce handler does not fetch it.
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: null });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: SOURCE_ACTOR_URI,
+    });
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage([
+        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId },
+        { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId },
+      ]),
+    });
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
+
+    const now = new Date('2026-05-16T12:00:00Z');
+    const service = runService({ fetcher, now: () => now });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    const writes = enqueueSpy.getCalls().map(call => call.args[0]);
+    expect(writes[0].messageTime.getTime()).toBe(writes[1].messageTime.getTime());
+    expect(writes.map(w => w.id)).toEqual([announceId, undoId]);
+
+    await drainInbox();
+
+    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
+    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
+    expect(announceRow?.processed_status).toBe('ok');
+    expect(undoRow?.processed_status).toBe('ok');
+    expect(await EventActivityEntity.count({
+      where: { event_id: eventApId, type: 'share' },
+    })).toBe(0);
+  });
+
   // -------------------------------------------------------------------------
   // 5. Idempotency
   // -------------------------------------------------------------------------
