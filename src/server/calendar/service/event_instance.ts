@@ -286,12 +286,10 @@ class ZonedOccurrenceSet {
     return this.inInstantOrder(candidates)[0] ?? null;
   }
 
-  exdates(): Date[] {
-    return Array.from(this.exdateMillis, ms => new Date(ms));
-  }
-
-  rdates(): Date[] {
-    return [...this.rdateInstants];
+  /** One-off dates before `date` that no exdate or exrule covers. */
+  oneOffsBefore(date: Date): Date[] {
+    return this.inInstantOrder(this.rdateInstants
+      .filter(d => d < date && !this.inExrule(this.floating(d))));
   }
 
   private floating(date: Date): Date {
@@ -1653,8 +1651,8 @@ export default class EventInstanceService {
    *    with their schedule regardless of whether the start is in the past.
    *    This preserves stable shareable public URLs (DEC-004) for one-off
    *    events, per-event ICS downloads, and OG/Twitter card meta tags
-   *    across regenerations. Exclusion dates (exdate) still suppress
-   *    past rdates the same way they suppress future ones.
+   *    across regenerations. Hidden cancellations (exdate and exrule) still
+   *    suppress past rdates the same way they suppress future ones.
    *
    * Computes instance end times by applying the duration derived from the
    * event's base schedule (see {@link computeOccurrenceEndTime}). If it has no
@@ -1676,13 +1674,9 @@ export default class EventInstanceService {
 
     // Past rdates below the window's lower bound must still be materialized,
     // so that a one-off event's row (and its shareable anonymous URL) does
-    // not vanish on regeneration once the event date has passed. Apply
-    // exdates the same way rrule would have — past exclusions still suppress.
-    const exdateTimes = new Set(rruleSet.exdates().map((d: Date) => d.getTime()));
-    const nowTime = now.getTime();
-    const pastRdates = rruleSet
-      .rdates()
-      .filter((d: Date) => d.getTime() < nowTime && !exdateTimes.has(d.getTime()));
+    // not vanish on regeneration once the event date has passed. Hidden
+    // cancellations, one-off or recurring, still suppress past dates.
+    const pastRdates = rruleSet.oneOffsBefore(now);
 
     // Union, dedupe by timestamp, and sort chronologically.
     const seen = new Set<number>();
