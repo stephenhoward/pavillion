@@ -67,8 +67,7 @@ class FakeJobQueueService {
 
 describe('Follow backfill through the worker wiring, drained by the web process', () => {
   let env: TestEnvironment;
-  let webDomain: ActivityPubDomain;
-  let sandbox: sinon.SinonSandbox;
+  let webDomain: ActivityPubDomain | undefined;
   let queue: FakeJobQueueService;
   let followerCalendarId: string;
   let sourceCalendarActorId: string;
@@ -79,14 +78,17 @@ describe('Follow backfill through the worker wiring, drained by the web process'
     // no handle on the domain it builds; capture that domain as it installs
     // its handlers so the test can start the drain the web process starts.
     const installSpy = sinon.spy(ActivityPubDomain.prototype, 'installEventHandlers');
-    env = new TestEnvironment();
-    await env.init();
-    webDomain = installSpy.thisValues[0] as ActivityPubDomain;
-    installSpy.restore();
+    try {
+      env = new TestEnvironment();
+      await env.init();
+      webDomain = installSpy.thisValues[0] as ActivityPubDomain | undefined;
+    }
+    finally {
+      installSpy.restore();
+    }
   });
 
   beforeEach(async () => {
-    sandbox = sinon.createSandbox();
     backfillRateLimiter.reset?.();
 
     const responses: Record<string, Record<string, unknown>> = {
@@ -141,7 +143,6 @@ describe('Follow backfill through the worker wiring, drained by the web process'
   afterEach(() => {
     stopDrain?.();
     stopDrain = undefined;
-    sandbox.restore();
     vi.mocked(fetchRemoteObject).mockReset();
   });
 
@@ -158,7 +159,8 @@ describe('Follow backfill through the worker wiring, drained by the web process'
     expect(row?.processed_time, 'worker left the backfilled row undispatched').toBeNull();
     expect(await EventEntity.count({ where: { event_source_url: EVENT_URI } })).toBe(0);
 
-    stopDrain = webDomain.startInboxDrain();
+    expect(webDomain, 'captured the web process ActivityPubDomain').toBeDefined();
+    stopDrain = webDomain?.startInboxDrain();
 
     const event = await waitFor(
       () => EventEntity.findOne({ where: { event_source_url: EVENT_URI } }),
@@ -170,8 +172,14 @@ describe('Follow backfill through the worker wiring, drained by the web process'
     const instances = await waitFor(async () => {
       const rows = await EventInstanceEntity.findAll({ where: { event_id: event.id } });
       return rows.length > 0 ? rows : null;
-    }, { timeoutMs: 1000 }).catch(() => [] as EventInstanceEntity[]);
+    }).catch(() => [] as EventInstanceEntity[]);
 
     expect(instances.length, 'backfilled event has event_instance rows').toBeGreaterThan(0);
+
+    const processed = await waitFor(async () => {
+      const drained = await ActivityPubInboxMessageEntity.findByPk(CREATE_ACTIVITY_ID);
+      return drained?.processed_time ? drained : null;
+    });
+    expect(processed.processed_status, 'the drain dispatched the backfilled row cleanly').toBe('ok');
   });
 });
