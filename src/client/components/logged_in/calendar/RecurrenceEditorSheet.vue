@@ -69,10 +69,16 @@ const initEndType = (): string => {
   return 'none';
 };
 
+/**
+ * The zone the "ends on" date is read and shown in: the schedule's own,
+ * which recurrences are expanded in, rather than the browser's.
+ */
+const scheduleZone = () => props.schedule.startDate?.zone ?? 'local';
+
 const state = reactive({
   frequency: (props.schedule.frequency as string) || '',
   endType: initEndType(),
-  endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
+  endDate: props.schedule.endDate?.setZone(scheduleZone()).toISODate() ?? '',
   weekdays: initWeekdays(),
   monthlyWeekdayCheckboxes: initMonthlyWeekdayCheckboxes(),
 });
@@ -102,7 +108,7 @@ const compileRecurrence = () => {
       : [];
 
   props.schedule.endDate = state.endType == 'on' && state.endDate
-    ? DateTime.fromISO(state.endDate)
+    ? DateTime.fromISO(state.endDate, { zone: scheduleZone() })
     : null;
 };
 </script>

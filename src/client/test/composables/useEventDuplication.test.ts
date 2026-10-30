@@ -65,7 +65,9 @@ describe('useEventDuplication', () => {
 
     expect(duplicatedEvent.schedules).toHaveLength(1);
     expect(duplicatedEvent.schedules[0].id).toBe('');
-    expect(duplicatedEvent.schedules[0].startDate).toEqual(schedule.startDate);
+    // Same instant and same zone; Luxon's zone object identity is not compared
+    expect(duplicatedEvent.schedules[0].startDate?.toMillis()).toBe(schedule.startDate?.toMillis());
+    expect(duplicatedEvent.schedules[0].startDate?.zoneName).toBe(schedule.startDate?.zoneName);
   });
 
   it('preserves media references', () => {

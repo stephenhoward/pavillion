@@ -8,7 +8,8 @@ import { CalendarEvent } from '@/common/model/events';
  * NoteObject (rendered into the Note content), so the paired Event/Note
  * emissions for a single event can never report different start times.
  *
- * Resolution order: the first schedule's startDate; falling back to parsing
+ * Resolution order: the base schedule's startDate (see
+ * CalendarEvent.baseSchedule); falling back to parsing
  * the event's `date` field as YYYY-MM-DD at midnight UTC; falling back to the
  * current time as a last defensive resort.
  *
@@ -17,9 +18,9 @@ import { CalendarEvent } from '@/common/model/events';
  * string is what the user sees.
  */
 function resolveEventStartTime(event: CalendarEvent): string {
-  const firstSchedule = event.schedules[0];
-  if (firstSchedule?.startDate) {
-    return firstSchedule.startDate.toISO()!;
+  const start = event.baseSchedule()?.startDate;
+  if (start) {
+    return start.toISO()!;
   }
 
   if (event.date) {

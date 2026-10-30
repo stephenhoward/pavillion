@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import config from 'config';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "@/common/model/account";
-import { CalendarEvent, EventFrequency } from "@/common/model/events";
+import { CalendarEvent, CalendarEventSchedule, EventFrequency } from "@/common/model/events";
 import CalendarEventInstance from "@/common/model/event_instance";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import { EventCategoryAssignmentEntity } from "@/server/calendar/entity/event_category_assignment";
@@ -11,7 +11,7 @@ import { EventInstanceEntity } from "@/server/calendar/entity/event_instance";
 import { CalendarEntity } from "@/server/calendar/entity/calendar";
 import { MediaEntity } from "@/server/media/entity/media";
 import { Calendar } from "@/common/model/calendar";
-import { DateTime } from 'luxon';
+import { DateTime, type Zone } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calendar/entity/location_space";
@@ -56,7 +56,7 @@ const EVENT_DETAIL_INCLUDES = [
   { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
 ];
 
-const { RRule, RRuleSet, Weekday } = rrule;
+const { RRule, Weekday } = rrule;
 
 /**
  * Default and floor of the forward generation horizon for recurring event
@@ -151,6 +151,151 @@ function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
   }
   const weekday = Weekday.fromStr(parsed.dayCode as any);
   return parsed.ordinal !== null ? weekday.nth(parsed.ordinal) : weekday;
+}
+
+/**
+ * The wall-clock frame an event's recurrences are expanded in: the zone of
+ * its {@link CalendarEvent.baseSchedule}, or UTC when it has none.
+ *
+ * rrule reads and steps the UTC fields of a JS Date. A "floating" date
+ * carries a wall-clock time of this zone in those fields, so rrule steps
+ * local time and a weekly 10:15 stays at 10:15 across a daylight-saving
+ * change. rrule's own `tzid` option is not used: it takes offsets from the
+ * process zone, so its results would differ between machines.
+ *
+ * In UTC the frame is the identity.
+ */
+class WallClockFrame {
+  private constructor(private readonly zone: Zone | string) {}
+
+  static of(base: CalendarEventSchedule | null): WallClockFrame {
+    return new WallClockFrame(base?.startDate?.zone ?? 'UTC');
+  }
+
+  /** The wall-clock time of `dt` in this zone, as a floating date. */
+  toFloating(dt: DateTime): Date {
+    return dt.setZone(this.zone).setZone('utc', { keepLocalTime: true }).toJSDate();
+  }
+
+  /**
+   * The instant at which a floating date's wall-clock time occurs in this
+   * zone. A wall time skipped by a change (02:30 on a spring-forward night)
+   * moves forward by the gap; one that occurs twice takes Luxon's default
+   * offset, the earlier of the two.
+   */
+  fromFloating(date: Date): DateTime {
+    return DateTime.fromJSDate(date, { zone: 'utc' }).setZone(this.zone, { keepLocalTime: true });
+  }
+}
+
+/**
+ * Widens a floating query window so it holds every occurrence whose instant
+ * lies in the requested one. Larger than any UTC offset change. Floating
+ * order is not instant order around a change (a gap-shifted 02:30 lands
+ * after 03:00, and the repeated hour maps two instants to one wall time),
+ * so floating bounds alone can drop an in-window occurrence; the slack
+ * keeps it, and the exact-instant filter afterwards restores correctness.
+ */
+const FLOATING_WINDOW_SLACK_MS = 2 * 24 * 60 * 60 * 1000;
+
+/** The upper bound of an open-ended rule walk: rrule's own last year. */
+const END_OF_RRULE_TIME = new Date(Date.UTC(9999, 11, 31));
+
+/**
+ * An event's occurrences, taking and returning true instants in instant
+ * order. Rules and exrules are expanded by rrule in a
+ * {@link WallClockFrame}. Single dates stay outside rrule and keep their
+ * exact instants: one-off dates are merged in by instant (so two at the
+ * same wall time in a repeated hour both survive), and exdates are matched
+ * by instant, since a cancellation row stores the instant the occurrence
+ * was listed at.
+ */
+class ZonedOccurrenceSet {
+  private readonly rules: InstanceType<typeof RRule>[] = [];
+  private readonly exrules: InstanceType<typeof RRule>[] = [];
+  private readonly rdateInstants: Date[] = [];
+  private readonly exdateMillis = new Set<number>();
+
+  constructor(private readonly frame: WallClockFrame) {}
+
+  addRule(rule: InstanceType<typeof RRule>, exclude: boolean): void {
+    (exclude ? this.exrules : this.rules).push(rule);
+  }
+
+  addDate(date: DateTime, exclude: boolean): void {
+    if (exclude) {
+      this.exdateMillis.add(date.toMillis());
+    }
+    else {
+      this.rdateInstants.push(date.toJSDate());
+    }
+  }
+
+  /** Occurrences whose instant lies in [from, to]. */
+  between(from: Date, to: Date): Date[] {
+    const lo = new Date(this.floating(from).getTime() - FLOATING_WINDOW_SLACK_MS);
+    const hi = new Date(this.floating(to).getTime() + FLOATING_WINDOW_SLACK_MS);
+    const exruled = new Set(
+      this.exrules.flatMap(r => r.between(lo, hi, true)).map(d => d.getTime()),
+    );
+    const fromRules = this.rules
+      .flatMap(r => r.between(lo, hi, true))
+      .filter(d => !exruled.has(d.getTime()))
+      .map(d => this.frame.fromFloating(d).toJSDate());
+    const fromDates = this.rdateInstants
+      .filter(d => !exruled.has(this.floating(d).getTime()));
+    return this.inInstantOrder([...fromRules, ...fromDates])
+      .filter(d => d >= from && d <= to);
+  }
+
+  /**
+   * The first occurrence strictly after `date`. Walks each rule once from
+   * the slack-widened start. Once a rule yields a candidate, its later wall
+   * times past that candidate plus the slack all occur after it, so the walk
+   * stops there.
+   */
+  after(date: Date): Date | null {
+    const candidates = this.rdateInstants
+      .filter(d => d > date && !this.inExrule(this.floating(d)));
+    const lo = new Date(this.floating(date).getTime() - FLOATING_WINDOW_SLACK_MS);
+    for (const rule of this.rules) {
+      let stopAfter = Infinity;
+      rule.between(lo, END_OF_RRULE_TIME, true, floating => {
+        if (floating.getTime() > stopAfter) return false;
+        const instant = this.frame.fromFloating(floating).toJSDate();
+        if (instant > date && !this.exdateMillis.has(instant.getTime()) && !this.inExrule(floating)) {
+          candidates.push(instant);
+          stopAfter = Math.min(stopAfter, floating.getTime() + FLOATING_WINDOW_SLACK_MS);
+        }
+        return true;
+      });
+    }
+    return this.inInstantOrder(candidates)[0] ?? null;
+  }
+
+  /** One-off dates before `date` that no exdate or exrule covers. */
+  oneOffsBefore(date: Date): Date[] {
+    return this.inInstantOrder(this.rdateInstants
+      .filter(d => d < date && !this.inExrule(this.floating(d))));
+  }
+
+  private floating(date: Date): Date {
+    return this.frame.toFloating(DateTime.fromJSDate(date));
+  }
+
+  private inExrule(floating: Date): boolean {
+    const ms = floating.getTime();
+    return this.exrules.some(r => r.between(new Date(ms - 1), new Date(ms + 1), true).length > 0);
+  }
+
+  /** Drops exdates and duplicate instants, and sorts by instant. */
+  private inInstantOrder(dates: Date[]): Date[] {
+    const byMillis = new Map<number, Date>();
+    for (const d of dates) {
+      if (!this.exdateMillis.has(d.getTime())) byMillis.set(d.getTime(), d);
+    }
+    return Array.from(byMillis.values()).sort((a, b) => a.getTime() - b.getTime());
+  }
 }
 
 export default class EventInstanceService {
@@ -662,24 +807,28 @@ export default class EventInstanceService {
 
   /**
    * Derive an occurrence's end time by applying the duration of the event's
-   * first non-exclusion schedule with a configured eventEndTime. Returns
-   * null if no such schedule exists. Shared by generateInstances and
+   * {@link CalendarEvent.baseSchedule}. Returns null if that schedule has no
+   * eventEndTime. Shared by generateInstances and
    * findOrMaterializeInstanceWithDetails so the two paths agree on the
    * computed end time.
+   *
+   * The duration is wall-clock length in the event's {@link WallClockFrame}:
+   * a 22:00–03:00 event still ends at 03:00 on the night the clocks change.
    */
   private computeOccurrenceEndTime(
     event: CalendarEvent,
     startTime: DateTime,
   ): DateTime | null {
-    const baseSchedule = (event.schedules ?? []).find(
-      s => !s.isExclusion && s.startDate && s.eventEndTime,
-    );
-    if (!baseSchedule || !baseSchedule.startDate || !baseSchedule.eventEndTime) {
+    const base = event.baseSchedule();
+    if (!base?.startDate || !base.eventEndTime) {
       return null;
     }
-    const durationMs = baseSchedule.eventEndTime.toMillis() - baseSchedule.startDate.toMillis();
+    const frame = WallClockFrame.of(base);
+    const durationMs = frame.toFloating(base.eventEndTime).getTime()
+      - frame.toFloating(base.startDate).getTime();
     if (durationMs <= 0) return null;
-    return startTime.plus({ milliseconds: durationMs });
+    const floatingEnd = new Date(frame.toFloating(startTime).getTime() + durationMs);
+    return frame.fromFloating(floatingEnd).setZone(startTime.zone);
   }
 
   /**
@@ -1090,11 +1239,7 @@ export default class EventInstanceService {
   private assertDateMatchesOccurrence(event: CalendarEvent, startDate: DateTime): void {
     const rruleSet = this.rrules(event);
     const ms = startDate.toUTC().toMillis();
-    const hits = rruleSet.between(
-      new Date(ms - 1),
-      new Date(ms + 1),
-      true,
-    );
+    const hits = rruleSet.between(new Date(ms - 1), new Date(ms + 1));
     if (hits.length === 0) {
       throw new InvalidOccurrenceDateError();
     }
@@ -1245,7 +1390,7 @@ export default class EventInstanceService {
   }
 
   /**
-   * Builds an RRuleSet from an event's schedules, distinguishing between
+   * Builds the occurrence set from an event's schedules, distinguishing between
    * hidden (EXDATE-style) and shown (RECURRENCE-ID-style) cancellations.
    *
    * Exclusion schedules only contribute exdate/exrule suppression to the set
@@ -1255,9 +1400,21 @@ export default class EventInstanceService {
    * the parent recurring rule, and the listing layer marks the materialized
    * instance as `isCancelled = true` instead. See
    * {@link markShownCancellations}.
+   *
+   * Zone convention: an event steps in its base schedule's zone. Every
+   * recurrence steps wall-clock time in the {@link WallClockFrame} of the
+   * event's {@link CalendarEvent.baseSchedule} — the non-exclusion schedule
+   * with the earliest start, ties broken by id — whatever order the
+   * schedules load in. dtstart, until and exrule starts enter that frame;
+   * so does every query bound, and every result leaves it as a true
+   * instant in instant order, so callers deal in instants only. A wall
+   * time skipped by a change moves forward by the gap; one that occurs
+   * twice takes the earlier offset. Single dates (rdates and hidden
+   * one-off cancellations) keep their exact instants.
    */
-  private rrules(event: CalendarEvent): any {
-    const rruleSet = new RRuleSet();
+  private rrules(event: CalendarEvent): ZonedOccurrenceSet {
+    const frame = WallClockFrame.of(event.baseSchedule());
+    const occurrences = new ZonedOccurrenceSet(frame);
 
     // Map our EventFrequency enum to RRule's Frequency enum
     const frequencyMap: Record<EventFrequency, number> = {
@@ -1287,13 +1444,13 @@ export default class EventInstanceService {
         let options: Record<string,any> = {
           freq: frequency,
           interval: schedule.interval,
-          dtstart: schedule.startDate?.toJSDate(),
+          dtstart: schedule.startDate ? frame.toFloating(schedule.startDate) : undefined,
         };
         if ( schedule.count ) {
           options.count = schedule.count;
         }
         else if ( schedule.endDate ) {
-          options.until = schedule.endDate?.toJSDate();
+          options.until = frame.toFloating(schedule.endDate);
         }
         if ( schedule.byDay?.length ) {
           const weekdays = schedule.byDay
@@ -1303,26 +1460,13 @@ export default class EventInstanceService {
             options.byweekday = weekdays;
           }
         }
-        const rule = new RRule(options);
-        if ( isHiddenCancellation ) {
-          rruleSet.exrule(rule);
-        }
-        else {
-          rruleSet.rrule(rule);
-        }
+        occurrences.addRule(new RRule(options), isHiddenCancellation);
       }
-      else {
-        if (schedule.startDate) {
-          if ( isHiddenCancellation ) {
-            rruleSet.exdate(schedule.startDate.toJSDate());
-          }
-          else {
-            rruleSet.rdate(schedule.startDate.toJSDate());
-          }
-        }
+      else if (schedule.startDate) {
+        occurrences.addDate(schedule.startDate, isHiddenCancellation);
       }
     }
-    return rruleSet;
+    return occurrences;
   }
 
   /**
@@ -1419,12 +1563,12 @@ export default class EventInstanceService {
   ): Promise<UpcomingOccurrencesResult> {
     const rruleSet = this.rrules(event);
 
-    // Pull limit + 1 to compute hasMore. rrule's `after` takes a JS Date and
-    // inc=false (strictly greater than). Walk forward in a bounded loop.
+    // Pull limit + 1 to compute hasMore. `after` takes a JS Date and returns
+    // the next occurrence strictly greater. Walk forward in a bounded loop.
     const produced: Date[] = [];
     let cursor = afterDate.toJSDate();
     for (let i = 0; i <= limit; i++) {
-      const next = rruleSet.after(cursor, false);
+      const next = rruleSet.after(cursor);
       if (!next) break;
       produced.push(next);
       cursor = next;
@@ -1495,12 +1639,12 @@ export default class EventInstanceService {
    *    with their schedule regardless of whether the start is in the past.
    *    This preserves stable shareable public URLs (DEC-004) for one-off
    *    events, per-event ICS downloads, and OG/Twitter card meta tags
-   *    across regenerations. Exclusion dates (exdate) still suppress
-   *    past rdates the same way they suppress future ones.
+   *    across regenerations. Hidden cancellations (exdate and exrule) still
+   *    suppress past rdates the same way they suppress future ones.
    *
    * Computes instance end times by applying the duration derived from the
-   * first non-exclusion schedule's eventEndTime. If no eventEndTime is set,
-   * instances receive null end times.
+   * event's base schedule (see {@link computeOccurrenceEndTime}). If it has no
+   * eventEndTime, instances receive null end times.
    *
    * @param event - The event containing schedules to generate instances from
    * @param now - The reference "now" for window computation
@@ -1514,17 +1658,13 @@ export default class EventInstanceService {
     const windowEnd = generationWindowEnd(now, horizonMonths);
 
     // Recurring expansions + any rdates that happen to fall inside the window.
-    const windowedDates = rruleSet.between(now, windowEnd, true);
+    const windowedDates = rruleSet.between(now, windowEnd);
 
     // Past rdates below the window's lower bound must still be materialized,
     // so that a one-off event's row (and its shareable anonymous URL) does
-    // not vanish on regeneration once the event date has passed. Apply
-    // exdates the same way rrule would have — past exclusions still suppress.
-    const exdateTimes = new Set(rruleSet.exdates().map((d: Date) => d.getTime()));
-    const nowTime = now.getTime();
-    const pastRdates = rruleSet
-      .rdates()
-      .filter((d: Date) => d.getTime() < nowTime && !exdateTimes.has(d.getTime()));
+    // not vanish on regeneration once the event date has passed. Hidden
+    // cancellations, one-off or recurring, still suppress past dates.
+    const pastRdates = rruleSet.oneOffsBefore(now);
 
     // Union, dedupe by timestamp, and sort chronologically.
     const seen = new Set<number>();

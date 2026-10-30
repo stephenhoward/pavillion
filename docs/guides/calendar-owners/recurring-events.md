@@ -84,7 +84,7 @@ The quick test: would the title field be the same on every occurrence? If yes, r
 
 A short list of the most common stumbles.
 
-**Changing the start time of an already-published recurring event.** If your Tuesday meeting was 7pm and you change the schedule's time to 8pm, *every* future occurrence shifts to 8pm — including ones that were already on the public page (and on visitors' personal calendars, if they added it). For a one-time time change, use a one-off exception schedule and cancel the original. For a permanent time change, accept that anyone who saved the old time has a stale entry, and announce the change visibly somewhere visitors will see it.
+**Changing the start time of an already-published recurring event.** If your Tuesday meeting was 7pm and you change the schedule's time to 8pm, *every* future occurrence shifts to 8pm — including ones that were already on the public page. A visitor who added an occurrence to their own calendar app saved a copy of that one date, and it keeps the old time until they download it again. For a one-time time change, use a one-off exception schedule and cancel the original. For a permanent time change, accept that anyone who saved the old time has a stale entry, and announce the change visibly somewhere visitors will see it.
 
 **Picking a weekday that doesn't include the start date.** A weekly schedule that starts on a Tuesday but only checks Monday in the recurrence panel will skip the first Tuesday entirely — the first occurrence won't be until the following Monday. Either set the start date to a Monday, or add Tuesday to the weekday selection if you want the first Tuesday to count.
 

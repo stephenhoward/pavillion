@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon';
+import { DateTime, IANAZone } from 'luxon';
 
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation, EventLocationSpace } from '@/common/model/location';
@@ -205,6 +205,19 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       throw new Error('Invalid schedule index');
     }
     this.schedules.splice(index, 1);
+  }
+
+  /**
+   * The schedule an event takes its time zone, start and occurrence duration
+   * from: the non-exclusion schedule with the earliest start, ties broken by id.
+   * Schedules load in no fixed order, so the choice must not depend on it.
+   */
+  baseSchedule(): CalendarEventSchedule | null {
+    const candidates = (this.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
+    candidates.sort((a, b) =>
+      a.startDate!.toMillis() - b.startDate!.toMillis()
+      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return candidates[0] ?? null;
   }
 
   /**
@@ -464,20 +477,60 @@ class CalendarEventSchedule extends Model {
   }
 
   /**
+   * Returns the canonical IANA name for the wire `timezone` value, else null.
+   *
+   * The value can arrive from a federated peer, so anything else is ignored
+   * rather than thrown on. It is canonicalized through Intl first (case
+   * variants and link aliases such as "US/Pacific" become
+   * "America/Los_Angeles"), so only canonical names reach Luxon's zone
+   * caches, which keep one entry per distinct string. Fixed offsets such as
+   * "+05:00" are refused even though recent Intl implementations accept them
+   * as zones: an offset has no daylight-saving rules, so it cannot keep a
+   * recurrence's local time. The offset check runs on the canonical form,
+   * which turns a Unicode minus into an ASCII one.
+   *
+   * @param {unknown} value - The `timezone` field from a serialized schedule
+   * @returns {string|null} The canonical zone name, or null to keep the process zone
+   */
+  static parseZone(value: unknown): string | null {
+    if (typeof value !== 'string' || value === '') {
+      return null;
+    }
+    let canonical: string;
+    try {
+      canonical = new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone;
+    }
+    catch {
+      return null;
+    }
+    if (/^[+-]/.test(canonical)) {
+      return null;
+    }
+    return IANAZone.isValidZone(canonical) ? canonical : null;
+  }
+
+  /**
    * Creates a CalendarEventSchedule instance from a plain object.
+   *
+   * When `timezone` names an IANA zone, start, end and eventEndTime are set in
+   * that zone (same instants). Without one they parse in the process zone.
    *
    * @param {Record<string, any>} obj - Plain object containing schedule data
    * @returns {CalendarEventSchedule} A new CalendarEventSchedule instance
    */
   static fromObject(obj: Record<string, any>): CalendarEventSchedule {
+    const zone = CalendarEventSchedule.parseZone(obj.timezone);
+    const parseDate = (iso: string): DateTime => zone
+      ? DateTime.fromISO(iso, { setZone: true }).setZone(zone)
+      : DateTime.fromISO(iso);
+
     let start = obj.start
-      ? DateTime.fromISO(obj.start)
+      ? parseDate(obj.start)
       : undefined;
 
     let end = obj.end
-      ? DateTime.fromISO(obj.end)
+      ? parseDate(obj.end)
       : undefined;
-
 
     let schedule = new CalendarEventSchedule(obj.id, start, end);
 
@@ -493,7 +546,7 @@ class CalendarEventSchedule extends Model {
     schedule.hideFromPublic = obj.hideFromPublic ?? true;
 
     if ( obj.eventEndTime ) {
-      const parsed = DateTime.fromISO(obj.eventEndTime);
+      const parsed = parseDate(obj.eventEndTime);
       if (parsed.isValid) {
         schedule.eventEndTime = parsed;
       }
@@ -513,6 +566,7 @@ class CalendarEventSchedule extends Model {
       start: this.startDate?.toISO() ?? null,
       end: this.endDate?.toISO() ?? null,
       eventEndTime: this.eventEndTime?.toISO() ?? null,
+      timezone: this.startDate?.zoneName ?? null,
       frequency: (this.frequency as string) ?? null,
       interval: this.interval,
       count: this.count,

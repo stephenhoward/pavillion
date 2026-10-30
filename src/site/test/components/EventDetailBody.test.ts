@@ -52,7 +52,7 @@ vi.mock('@/site/components/event-image.vue', () => ({
 vi.mock('@/site/components/add-to-calendar.vue', () => ({
   default: {
     template: '<div class="add-to-calendar-stub"></div>',
-    props: ['event', 'instance'],
+    props: ['instance'],
   },
 }));
 

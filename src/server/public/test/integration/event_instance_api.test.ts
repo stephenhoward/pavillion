@@ -69,6 +69,9 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
         calendarId,
         content: { en: { name, description: 'recurring' } },
         schedules: [{
+          // Recurrences step in the schedule's zone; pinning UTC keeps the
+          // weekly 18:00Z slugs independent of the process zone.
+          timezone: 'UTC',
           start: firstStartIso,
           end: seriesEndIso,
           eventEndTime: firstEndIso,
@@ -555,6 +558,7 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
         calendarId,
         content: { en: { name: 'Space Scoped Cache Miss', description: 'recurring' } },
         schedules: [{
+          timezone: 'UTC',
           start: '2031-04-04T18:00:00Z',
           end: '2032-04-04T18:00:00Z',
           eventEndTime: '2031-04-04T19:00:00Z',

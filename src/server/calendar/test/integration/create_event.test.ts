@@ -1,17 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import sinon from 'sinon';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
+import { DateTime, Settings } from 'luxon';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
-import { EventEntity } from '@/server/calendar/entity/event';
+import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
@@ -144,5 +146,98 @@ describe('Event API', () => {
     // inboxes. The remote-post contract under test is "the event reached
     // federation" — assert at least one post happened.
     expect(postStub.called,"post to remote inbox").toBe(true);
+  });
+
+  describe('schedule zone', () => {
+    let savedDefaultZone: typeof Settings.defaultZone;
+
+    // Pin the server's process zone away from the schedule zone, so the zone
+    // can only come back by being carried on the wire.
+    beforeEach(() => {
+      savedDefaultZone = Settings.defaultZone;
+      Settings.defaultZone = 'America/New_York';
+
+      const getStub = sinon.stub(axios, 'get');
+      sinon.stub(axios, 'post');
+      sinon.stub(CalendarActorService.prototype, 'signActivity').resolves({
+        keyId: 'https://local.test/calendars/testcalendar#main-key',
+        signature: 'mock-signature-base64',
+        algorithm: 'rsa-sha256',
+        headers: '(request-target) host date digest',
+        date: new Date().toUTCString(),
+      });
+      env.stubRemoteCalendar(getStub, 'remotedomain', 'testcalendar');
+    });
+
+    afterEach(() => {
+      Settings.defaultZone = savedDefaultZone;
+    });
+
+    // What the editor sends: toObject() of a weekly schedule built in `zone`.
+    const zonedSchedule = (zone: string, id: string = ''): Record<string, any> => {
+      const start = DateTime.fromISO('2026-10-27T10:15', { zone });
+      const schedule = new CalendarEventSchedule(id, start);
+      schedule.eventEndTime = start.plus({ hours: 1 });
+      schedule.frequency = EventFrequency.WEEKLY;
+      schedule.interval = 1;
+      schedule.byDay = ['TU'];
+      return schedule.toObject();
+    };
+
+    const createWithSchedule = async (authKey: string, schedule: Record<string, any>) => {
+      const created = await env.authPost(authKey, '/api/v1/events', {
+        calendarId: calendar.id,
+        content: { en: { name: 'Zoned Event', description: 'Weekly event' } },
+        schedules: [schedule],
+      });
+      expect(created.status, 'event created').toBe(201);
+      return created.body.id as string;
+    };
+
+    it('createEvent: should keep the schedule zone the client sent', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+      const eventId = await createWithSchedule(authKey, zonedSchedule('America/Los_Angeles'));
+
+      const stored = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+      expect(stored?.timezone, 'zone stored on the schedule row').toBe('America/Los_Angeles');
+
+      const read = await env.authGet(authKey, `/api/v1/events/${eventId}`);
+      expect(read.status, 'event read back').toBe(200);
+      const wire = read.body.schedules[0];
+      expect(wire.timezone, 'zone on the wire').toBe('America/Los_Angeles');
+
+      const readBack = CalendarEventSchedule.fromObject(wire);
+      expect(readBack.startDate?.zoneName).toBe('America/Los_Angeles');
+      expect(readBack.startDate?.toFormat('HH:mm'), '10:15 local').toBe('10:15');
+      expect(readBack.startDate?.toUTC().toISO(), '17:15Z').toBe('2026-10-27T17:15:00.000Z');
+    });
+
+    it('createEvent: should store the fallback zone, not the raw value, for an invalid zone', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+      const schedule = { ...zonedSchedule('America/Los_Angeles'), timezone: 'Not/AZone' };
+      const eventId = await createWithSchedule(authKey, schedule);
+
+      const stored = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+      expect(stored?.timezone, 'process zone stored as the fallback').toBe('America/New_York');
+    });
+
+    it('updateEvent: should store the schedule zone the client sent', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+      const eventId = await createWithSchedule(authKey, zonedSchedule('America/New_York'));
+      const existing = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+      expect(existing?.timezone, 'zone before the edit').toBe('America/New_York');
+
+      const updated = await env.authPut(authKey, `/api/v1/events/${eventId}`, {
+        calendarId: calendar.id,
+        content: { en: { name: 'Zoned Event', description: 'Weekly event' } },
+        schedules: [zonedSchedule('America/Los_Angeles', existing!.id)],
+      });
+      expect(updated.status, 'event updated').toBe(200);
+
+      const stored = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+      expect(stored?.id, 'same schedule row').toBe(existing!.id);
+      expect(stored?.timezone, 'zone stored on the schedule row').toBe('America/Los_Angeles');
+      expect(stored?.toModel().startDate?.toUTC().toISO(), '17:15Z').toBe('2026-10-27T17:15:00.000Z');
+    });
   });
 });

@@ -117,7 +117,8 @@ export type RemoteEditorParams = Partial<Pick<
  * keys CalendarEventSchedule.fromObject reads.
  */
 const REMOTE_EDITOR_SCHEDULE_KEYS = [
-  'id', 'start', 'end', 'eventEndTime', 'frequency', 'interval', 'count', 'byDay', 'isException', 'hideFromPublic',
+  'id', 'start', 'end', 'eventEndTime', 'timezone', 'frequency', 'interval', 'count', 'byDay', 'isException',
+  'hideFromPublic',
 ] as const;
 
 /** Plain-text location fields a remote-editor envelope may carry. */
@@ -208,7 +209,7 @@ class EventObject extends ActivityPubObject {
       }
     }
 
-    // Build startTime from first schedule or fallback to date field
+    // Build startTime from the base schedule or fall back to the date field
     const startTime = resolveEventStartTime(event);
 
     const result: Record<string, any> = {
@@ -234,9 +235,10 @@ class EventObject extends ActivityPubObject {
       result.content = `<p>${primaryDescription}</p>`;
     }
 
-    // endTime: use eventEndTime if available, otherwise synthesize startTime + 1 hour
-    const firstSchedule = event.schedules[0];
-    const endDateTime = firstSchedule?.eventEndTime;
+    // endTime: the base schedule's eventEndTime if it has one, otherwise
+    // synthesize startTime + 1 hour. Only the base schedule's end is used, as
+    // in instance expansion.
+    const endDateTime = event.baseSchedule()?.eventEndTime;
     if (endDateTime?.isValid) {
       result.endTime = endDateTime.toISO();
     }
@@ -572,17 +574,18 @@ class EventObject extends ActivityPubObject {
       //
       // FEP-8a8e timezone: when a non-Pavillion peer supplies the IANA
       // `timezone` the event's times are given in, reinterpret the AS instants
-      // into that zone so the reconstructed schedule carries the intended
-      // wall-clock time rather than a raw UTC/offset instant (fixing events that
-      // otherwise render at the wrong local time). Only IANA-valid zone names
-      // are honoured; a bare offset (or garbage) is ignored and the instant
-      // passes through unchanged. displayEndTime / eventStatus are non-mapping
-      // FEP terms — they are tolerated (dropped by the closed key set)
-      // rather than acted on; a remote EventCancelled is intentionally NOT
-      // applied here (would require an origin-gated hide flow — follow-up).
-      const inboundZone = typeof apObject.timezone === 'string' && IANAZone.isValidZone(apObject.timezone)
-        ? apObject.timezone
-        : null;
+      // into that zone and record it as the schedule's `timezone`, so
+      // CalendarEventSchedule.fromObject keeps the zone and it is stored with
+      // the schedule (the event renders and recurs at the intended local time,
+      // not a raw UTC/offset instant). The value is validated and
+      // canonicalized by CalendarEventSchedule.parseZone, the same gate the
+      // schedule wire key uses; a bare offset (or garbage) is ignored, the
+      // instant passes through unchanged and no zone is recorded.
+      // displayEndTime / eventStatus are non-mapping FEP terms — they are
+      // tolerated (dropped by the closed key set) rather than acted on; a
+      // remote EventCancelled is intentionally NOT applied here (would require
+      // an origin-gated hide flow — follow-up).
+      const inboundZone = CalendarEventSchedule.parseZone(apObject.timezone);
       const applyZone = (iso: string): string => {
         if (!inboundZone) {
           return iso;
@@ -598,6 +601,9 @@ class EventObject extends ActivityPubObject {
       };
       if (apObject.endTime) {
         schedule.end = applyZone(apObject.endTime);
+      }
+      if (inboundZone) {
+        schedule.timezone = inboundZone;
       }
       result.schedules = [schedule];
     }
@@ -1219,12 +1225,12 @@ class EventObject extends ActivityPubObject {
   private _buildFepExtensions(event: CalendarEvent): Record<string, any> {
     const result: Record<string, any> = {};
 
-    // timezone: the IANA identifier of the first schedule's start zone, so peers
+    // timezone: the IANA identifier of the base schedule's start zone, so peers
     // can reconstruct the intended wall-clock time instead of relying on the ISO
     // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
     // than a named IANA zone — a bare offset carries no more than startTime
     // already does. 'UTC' is itself a valid IANA zone and IS emitted.
-    const scheduleZone = event.schedules[0]?.startDate?.zoneName;
+    const scheduleZone = event.baseSchedule()?.startDate?.zoneName;
     if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
       result.timezone = scheduleZone;
     }

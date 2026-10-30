@@ -85,6 +85,7 @@ describe('CalendarEventSchedule.eventEndTime', () => {
     const restored = CalendarEventSchedule.fromObject(obj);
 
     expect(restored.eventEndTime).toBeDefined();
-    expect(restored.eventEndTime!.toISO()).toBe(schedule.eventEndTime.toISO());
+    expect(restored.eventEndTime!.toMillis()).toBe(schedule.eventEndTime.toMillis());
+    expect(restored.eventEndTime!.zoneName).toBe(schedule.eventEndTime.zoneName);
   });
 });

@@ -42,11 +42,12 @@ const formatEventDate = (event: FeedEvent) => {
   const scheduleStart = event.schedules?.[0]?.startDate;
   if (scheduleStart) {
     try {
-      // startDate is a Luxon DateTime; format it directly
+      // startDate is a Luxon DateTime in the schedule's zone; show it in the
+      // viewer's zone, like the calendar view's instances.
       const dt: DateTime = scheduleStart instanceof DateTime
         ? scheduleStart
         : DateTime.fromISO(String(scheduleStart));
-      return dt.toLocaleString(DateTime.DATETIME_MED);
+      return dt.toLocal().toLocaleString(DateTime.DATETIME_MED);
     }
     catch (error) {
       console.error('Error formatting schedule date:', error);

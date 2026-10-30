@@ -108,6 +108,21 @@ describe('NoteObject', () => {
       expect((result.content.match(/ · /g) ?? []).length).toBe(1);
     });
 
+    it('renders the base schedule start when a cancellation loads first', () => {
+      const calendar = new Calendar('cal-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'cal-uuid');
+      event.addContent(new CalendarEventContent('en', 'Weekly Meetup', ''));
+      const cancellation = new CalendarEventSchedule('sched-x', DateTime.fromISO('2026-11-10T18:15:00Z', { zone: 'utc' }));
+      cancellation.isExclusion = true;
+      const base = new CalendarEventSchedule('sched-la', DateTime.fromISO('2026-10-27T10:15:00', { zone: 'America/Los_Angeles' }));
+      event.schedules = [cancellation, base];
+
+      const result = new NoteObject(calendar, event).toActivityPubObject();
+
+      expect(result.content).toContain(base.startDate!.toISO()!);
+      expect(result.content).not.toContain(cancellation.startDate!.toISO()!);
+    });
+
   });
 
   describe('toActivityPubObject() — multilingual event', () => {

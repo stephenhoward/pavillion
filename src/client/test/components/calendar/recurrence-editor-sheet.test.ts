@@ -223,3 +223,42 @@ describe('RecurrenceEditorSheet.vue — weekday checkbox initialization', () => 
     wrapper.unmount();
   });
 });
+
+describe('RecurrenceEditorSheet.vue — end date in the schedule zone', () => {
+  // A zone no test machine runs in, so a parse in the process zone shows.
+  const ZONE = 'Asia/Tokyo';
+
+  function weeklyInZone(): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule();
+    schedule.startDate = DateTime.fromISO('2026-10-27T10:15:00', { zone: ZONE });
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.count = 0;
+    return schedule;
+  }
+
+  it('shows a stored end date as its calendar date in the schedule zone', () => {
+    const schedule = weeklyInZone();
+    schedule.endDate = DateTime.fromISO('2026-12-31T00:00:00', { zone: ZONE });
+
+    const wrapper = mountSheet(schedule);
+
+    const dateInput = wrapper.find('input[type="date"]');
+    expect((dateInput.element as HTMLInputElement).value).toBe('2026-12-31');
+    wrapper.unmount();
+  });
+
+  it('reads a picked end date as midnight in the schedule zone', async () => {
+    const schedule = weeklyInZone();
+    schedule.endDate = null;
+
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('input[type="date"]').setValue('2027-01-15');
+
+    expect(schedule.endDate).not.toBeNull();
+    expect(schedule.endDate!.zoneName).toBe(ZONE);
+    expect(schedule.endDate!.toISO()).toBe('2027-01-15T00:00:00.000+09:00');
+    wrapper.unmount();
+  });
+});

@@ -671,14 +671,16 @@ describe('EventObject.parseRemoteEditorParams — remote-editor envelope', () =>
           count: 3,
           byDay: ['MO'],
           isException: false,
+          timezone: 'America/Los_Angeles',
           eventId: 'someone-elses-event',
           evil: 'raw',
         }],
       }, { actorUri: editorUri, apObject: editorObject });
 
       expect(Object.keys(r.schedules[0]).sort()).toEqual([
-        'byDay', 'count', 'end', 'eventEndTime', 'frequency', 'id', 'interval', 'isException', 'start',
+        'byDay', 'count', 'end', 'eventEndTime', 'frequency', 'id', 'interval', 'isException', 'start', 'timezone',
       ]);
+      expect(r.schedules[0].timezone).toBe('America/Los_Angeles');
     });
 
     it('drops a non-array schedules value and non-object entries', () => {

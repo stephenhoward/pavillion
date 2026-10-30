@@ -307,7 +307,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
       </a>
 
       <!-- Add to Calendar -->
-      <AddToCalendar :event="instance.event" :instance="instance" />
+      <AddToCalendar :instance="instance" />
     </aside>
   </div>
 </template>

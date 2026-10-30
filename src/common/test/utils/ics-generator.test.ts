@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventLocation } from '@/common/model/location';
-import { generateInstanceIcs, generateEventIcs } from '@/common/utils/ics-generator';
+import { generateInstanceIcs } from '@/common/utils/ics-generator';
 
 function makeEvent(overrides?: Partial<{ location: EventLocation; schedules: CalendarEventSchedule[] }>): CalendarEvent {
   const event = new CalendarEvent('evt-123', 'cal-456');
@@ -43,6 +43,70 @@ function makeWeeklySchedule(): CalendarEventSchedule {
 
 describe('ICS Generator', () => {
   describe('generateInstanceIcs', () => {
+    describe('site-shaped instance (public events carry no schedules)', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-30T12:00:00Z'));
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('produces this exact calendar file', () => {
+        const event = makeEvent({ location: makeLocation() });
+        const instance = new CalendarEventInstance(
+          'inst-1',
+          event,
+          DateTime.fromISO('2026-11-03T18:15:00Z'),
+          DateTime.fromISO('2026-11-03T19:15:00Z'),
+        );
+
+        const ics = generateInstanceIcs(
+          instance,
+          'Riverside Allotments Community Workday, Seed Swap; and Potluck Supper',
+          'Bring gloves, tools; and a dish.\nAll welcome',
+          'pavillion.example',
+        );
+
+        expect(ics).toBe([
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//Pavillion//Events//EN',
+          'CALSCALE:GREGORIAN',
+          'METHOD:PUBLISH',
+          'BEGIN:VEVENT',
+          'UID:evt-123@pavillion.example',
+          'DTSTAMP:20261030T120000Z',
+          'DTSTART:20261103T181500Z',
+          'DTEND:20261103T191500Z',
+          'SUMMARY:Riverside Allotments Community Workday\\, Seed Swap\\; and Potluck Su',
+          ' pper',
+          'DESCRIPTION:Bring gloves\\, tools\\; and a dish.\\nAll welcome',
+          'LOCATION:City Hall\\, 100 Main St\\, Springfield\\, IL 62701',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\r\n'));
+      });
+
+      it('produces valid ICS with no recurrence when the event has no schedules', () => {
+        const event = makeEvent();
+        const instance = new CalendarEventInstance(
+          'inst-1',
+          event,
+          DateTime.fromISO('2026-11-03T18:15:00Z'),
+          null,
+        );
+
+        const ics = generateInstanceIcs(instance, 'No Schedule Event', '', 'example.com');
+
+        expect(ics).toContain('BEGIN:VCALENDAR');
+        expect(ics).toContain('SUMMARY:No Schedule Event');
+        expect(ics).not.toContain('RRULE');
+        expect(ics).not.toContain('DTEND');
+      });
+    });
+
     it('should produce valid VCALENDAR structure', () => {
       const event = makeEvent();
       const instance = new CalendarEventInstance(
@@ -108,22 +172,6 @@ describe('ICS Generator', () => {
       expect(ics).toContain('Springfield');
     });
 
-    it('should include RRULE from event schedules', () => {
-      const schedule = makeWeeklySchedule();
-      const event = makeEvent({ schedules: [schedule] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        DateTime.fromISO('2026-04-01T20:00:00Z'),
-      );
-
-      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
-
-      expect(ics).toContain('RRULE:FREQ=WEEKLY');
-      expect(ics).toContain('BYDAY=MO,WE');
-    });
-
     it('should include UID with hostname', () => {
       const event = makeEvent();
       const instance = new CalendarEventInstance(
@@ -173,194 +221,30 @@ describe('ICS Generator', () => {
       expect(summaryLine).toContain('Real Event\\n');
     });
 
-    it('should omit frequency-based exclusions (EXRULE is deprecated in RFC 5545)', () => {
-      const inclusion = makeWeeklySchedule();
-      const exclusion = new CalendarEventSchedule(
-        'sched-2',
-        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
-      );
-      exclusion.frequency = EventFrequency.WEEKLY;
-      exclusion.interval = 4;
-      exclusion.isExclusion = true;
-
-      const event = makeEvent({ schedules: [inclusion, exclusion] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        null,
-      );
-
-      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
-
-      expect(ics).toContain('RRULE:FREQ=WEEKLY');
-      expect(ics).not.toContain('EXRULE');
-    });
-
-    it('should emit EXDATE for hidden cancellations (hideFromPublic=true)', () => {
-      const inclusion = makeWeeklySchedule();
-      const exclusion = new CalendarEventSchedule(
-        'sched-2',
-        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
-      );
-      exclusion.isExclusion = true;
-      exclusion.hideFromPublic = true;
-
-      const event = makeEvent({ schedules: [inclusion, exclusion] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        null,
-      );
-
-      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
-
-      expect(ics).toContain('EXDATE:20260415T180000Z');
-      // No sibling VEVENT for hidden cancellations.
-      expect(ics).not.toContain('STATUS:CANCELLED');
-      expect(ics).not.toContain('RECURRENCE-ID');
-    });
-
-    it('should emit a sibling VEVENT with RECURRENCE-ID + STATUS:CANCELLED for shown cancellations', () => {
-      const inclusion = makeWeeklySchedule();
-      inclusion.eventEndTime = DateTime.fromISO('2026-04-01T20:00:00', { zone: 'utc' });
-      const exclusion = new CalendarEventSchedule(
-        'sched-2',
-        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
-      );
-      exclusion.isExclusion = true;
-      exclusion.hideFromPublic = false;
-
-      const event = makeEvent({ schedules: [inclusion, exclusion] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        DateTime.fromISO('2026-04-01T20:00:00Z'),
-      );
-
-      const ics = generateInstanceIcs(instance, 'Community Meetup', '', 'pavillion.example');
-
-      // No EXDATE for shown cancellations.
-      expect(ics).not.toContain('EXDATE');
-
-      // Parent VEVENT and a sibling VEVENT both present.
-      const blocks = ics.split('BEGIN:VEVENT');
-      expect(blocks.length).toBe(3); // preamble + parent + sibling
-
-      const sibling = 'BEGIN:VEVENT' + blocks[2];
-      expect(sibling).toContain('UID:evt-123@pavillion.example');
-      expect(sibling).toContain('RECURRENCE-ID:20260415T180000Z');
-      expect(sibling).toContain('DTSTART:20260415T180000Z');
-      expect(sibling).toContain('DTEND:20260415T200000Z'); // +2h duration from inclusion
-      expect(sibling).toContain('SUMMARY:Community Meetup');
-      expect(sibling).toContain('STATUS:CANCELLED');
-      expect(sibling).toContain('END:VEVENT');
-    });
-
-    it('should omit DTEND on sibling when event has no derivable duration', () => {
-      const inclusion = new CalendarEventSchedule(
-        'sched-1',
-        DateTime.fromISO('2026-04-01T18:00:00', { zone: 'utc' }),
-      );
-      inclusion.frequency = EventFrequency.WEEKLY;
-      inclusion.interval = 1;
-      // No eventEndTime → no duration derivable.
-
-      const exclusion = new CalendarEventSchedule(
-        'sched-2',
-        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
-      );
-      exclusion.isExclusion = true;
-      exclusion.hideFromPublic = false;
-
-      const event = makeEvent({ schedules: [inclusion, exclusion] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        null,
-      );
-
-      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
-
-      const blocks = ics.split('BEGIN:VEVENT');
-      const sibling = 'BEGIN:VEVENT' + blocks[2];
-      expect(sibling).toContain('STATUS:CANCELLED');
-      expect(sibling).not.toContain('DTEND:');
-    });
-
-    it('should emit mixed EXDATE + sibling VEVENT when both hidden and shown cancellations exist', () => {
-      const inclusion = makeWeeklySchedule();
-      inclusion.eventEndTime = DateTime.fromISO('2026-04-01T20:00:00', { zone: 'utc' });
-
-      const hidden = new CalendarEventSchedule(
-        'sched-2',
-        DateTime.fromISO('2026-04-08T18:00:00', { zone: 'utc' }),
-      );
-      hidden.isExclusion = true;
-      hidden.hideFromPublic = true;
-
-      const shown = new CalendarEventSchedule(
-        'sched-3',
-        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
-      );
-      shown.isExclusion = true;
-      shown.hideFromPublic = false;
-
-      const event = makeEvent({ schedules: [inclusion, hidden, shown] });
-      const instance = new CalendarEventInstance(
-        'inst-1',
-        event,
-        DateTime.fromISO('2026-04-01T18:00:00Z'),
-        DateTime.fromISO('2026-04-01T20:00:00Z'),
-      );
-
-      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
-
-      expect(ics).toContain('EXDATE:20260408T180000Z');
-      expect(ics).not.toContain('EXDATE:20260415T180000Z');
-      expect(ics).toContain('RECURRENCE-ID:20260415T180000Z');
-      expect(ics).toContain('STATUS:CANCELLED');
-    });
-  });
-
-  describe('generateEventIcs', () => {
-    it('should use first schedule start date as DTSTART', () => {
+    it('exports only the instance, with no recurrence, even when the event carries schedules', () => {
       const schedule = makeWeeklySchedule();
-      const event = makeEvent({ schedules: [schedule] });
-
-      const ics = generateEventIcs(event, 'Weekly Meetup', '', 'example.com');
-
-      expect(ics).toContain('DTSTART:20260401T180000Z');
-      expect(ics).toContain('RRULE:FREQ=WEEKLY');
-    });
-
-    it('should include RRULE with COUNT when set', () => {
-      const schedule = new CalendarEventSchedule(
-        'sched-1',
-        DateTime.fromISO('2026-04-01T18:00:00', { zone: 'utc' }),
+      const cancellation = new CalendarEventSchedule(
+        'sched-2',
+        DateTime.fromISO('2026-04-15T18:00:00', { zone: 'utc' }),
       );
-      schedule.frequency = EventFrequency.DAILY;
-      schedule.interval = 1;
-      schedule.count = 10;
+      cancellation.isExclusion = true;
 
-      const event = makeEvent({ schedules: [schedule] });
+      const event = makeEvent({ schedules: [schedule, cancellation] });
+      const instance = new CalendarEventInstance(
+        'inst-1',
+        event,
+        DateTime.fromISO('2026-04-08T18:00:00Z'),
+        DateTime.fromISO('2026-04-08T20:00:00Z'),
+      );
 
-      const ics = generateEventIcs(event, 'Daily Standup', '', 'example.com');
+      const ics = generateInstanceIcs(instance, 'Test', '', 'example.com');
 
-      expect(ics).toContain('RRULE:FREQ=DAILY;COUNT=10');
-    });
-
-    it('should produce valid ICS without schedules', () => {
-      const event = makeEvent();
-
-      const ics = generateEventIcs(event, 'No Schedule Event', '', 'example.com');
-
-      expect(ics).toContain('BEGIN:VCALENDAR');
-      expect(ics).toContain('SUMMARY:No Schedule Event');
+      expect(ics).toContain('DTSTART:20260408T180000Z');
+      expect(ics).toContain('DTEND:20260408T200000Z');
       expect(ics).not.toContain('RRULE');
+      expect(ics).not.toContain('EXDATE');
+      expect(ics).not.toContain('RECURRENCE-ID');
+      expect(ics.split('BEGIN:VEVENT').length).toBe(2);
     });
   });
 });

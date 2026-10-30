@@ -1,9 +1,7 @@
-import { DateTime, Duration } from 'luxon';
-import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
+import { DateTime } from 'luxon';
+import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventLocation } from '@/common/model/location';
-
-const ICS_DAY_MAP = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
 
 /**
  * Formats a Luxon DateTime as an ICS datetime string (YYYYMMDDTHHMMSSZ).
@@ -64,37 +62,6 @@ function foldLine(line: string): string {
 }
 
 /**
- * Converts a CalendarEventSchedule to an ICS RRULE string.
- * Returns null for schedules without a frequency (single-date schedules).
- */
-function scheduleToRRule(schedule: CalendarEventSchedule): string | null {
-  if (!schedule.frequency) return null;
-
-  const parts: string[] = [`FREQ=${schedule.frequency.toUpperCase()}`];
-
-  // INTERVAL=1 is the RFC 5545 default and can be omitted
-  if (schedule.interval > 1) {
-    parts.push(`INTERVAL=${schedule.interval}`);
-  }
-
-  if (schedule.count > 0) {
-    parts.push(`COUNT=${schedule.count}`);
-  }
-  else if (schedule.endDate) {
-    parts.push(`UNTIL=${formatIcsDate(schedule.endDate)}`);
-  }
-
-  if (schedule.byDay?.length) {
-    const days = schedule.byDay.map(d => ICS_DAY_MAP[parseInt(d)] || d).filter(Boolean);
-    if (days.length) {
-      parts.push(`BYDAY=${days.join(',')}`);
-    }
-  }
-
-  return parts.join(';');
-}
-
-/**
  * Formats a location into a single ICS LOCATION string.
  */
 function formatLocation(location: EventLocation): string {
@@ -111,84 +78,6 @@ function formatLocation(location: EventLocation): string {
 }
 
 /**
- * Appends RRULE and EXDATE lines from event schedules to the ICS lines array.
- * EXRULE is deprecated in RFC 5545 and not supported by most calendar clients,
- * so frequency-based exclusion schedules are omitted.
- *
- * Exclusion schedules split by their hideFromPublic flag:
- * - hideFromPublic=true  → EXDATE (silent suppression of the occurrence)
- * - hideFromPublic=false → no EXDATE here; caller emits a sibling VEVENT with
- *                          RECURRENCE-ID + STATUS:CANCELLED so clients show
- *                          the cancellation instead of silently dropping it.
- */
-function appendScheduleRules(lines: string[], schedules: CalendarEventSchedule[]): void {
-  for (const schedule of schedules) {
-    if (schedule.isExclusion) {
-      if (schedule.hideFromPublic && schedule.startDate) {
-        lines.push(`EXDATE:${formatIcsDate(schedule.startDate)}`);
-      }
-    }
-    else {
-      const rrule = scheduleToRRule(schedule);
-      if (rrule) {
-        lines.push(`RRULE:${rrule}`);
-      }
-    }
-  }
-}
-
-/**
- * Derives the per-occurrence duration from the first non-exclusion schedule
- * that has both startDate and eventEndTime. Mirrors the logic used when
- * generating instance end times so sibling cancellation VEVENTs report the
- * same duration as live occurrences.
- */
-function deriveOccurrenceDuration(event: CalendarEvent): Duration | null {
-  for (const schedule of event.schedules) {
-    if (!schedule.isExclusion && schedule.startDate && schedule.eventEndTime) {
-      return schedule.eventEndTime.diff(schedule.startDate);
-    }
-  }
-  return null;
-}
-
-/**
- * Emits a sibling VEVENT for each shown cancellation (is_exclusion=true AND
- * hide_from_public=false). The sibling shares the parent UID and supplies a
- * RECURRENCE-ID pointing at the original occurrence start, with
- * STATUS:CANCELLED so RFC 5545 clients render a visible cancellation rather
- * than silently dropping the occurrence (EXDATE behavior).
- */
-function appendCancellationSiblings(
-  lines: string[],
-  event: CalendarEvent,
-  eventName: string,
-  hostname: string,
-): void {
-  const duration = deriveOccurrenceDuration(event);
-  for (const schedule of event.schedules) {
-    if (!schedule.isExclusion || schedule.hideFromPublic || !schedule.startDate) {
-      continue;
-    }
-
-    const originalStart = schedule.startDate;
-    lines.push(
-      'BEGIN:VEVENT',
-      `UID:${escapeIcsText(event.id)}@${escapeIcsText(hostname)}`,
-      `DTSTAMP:${formatIcsDate(DateTime.now())}`,
-      `RECURRENCE-ID:${formatIcsDate(originalStart)}`,
-      `DTSTART:${formatIcsDate(originalStart)}`,
-    );
-    if (duration) {
-      lines.push(`DTEND:${formatIcsDate(originalStart.plus(duration))}`);
-    }
-    lines.push(foldLine(`SUMMARY:${escapeIcsText(eventName)}`));
-    lines.push('STATUS:CANCELLED');
-    lines.push('END:VEVENT');
-  }
-}
-
-/**
  * Generates an ICS file string for a calendar event.
  *
  * @param event - The calendar event
@@ -198,7 +87,7 @@ function appendCancellationSiblings(
  * @param eventDescription - Localized event description
  * @param hostname - The instance hostname for UID generation
  */
-export function generateIcs(
+function generateIcs(
   event: CalendarEvent,
   dtstart: DateTime,
   dtend: DateTime | null,
@@ -232,20 +121,16 @@ export function generateIcs(
     lines.push(foldLine(`LOCATION:${escapeIcsText(formatLocation(event.location))}`));
   }
 
-  appendScheduleRules(lines, event.schedules);
-
-  lines.push('END:VEVENT');
-
-  appendCancellationSiblings(lines, event, eventName, hostname);
-
-  lines.push('END:VCALENDAR');
+  lines.push('END:VEVENT', 'END:VCALENDAR');
 
   return lines.join('\r\n');
 }
 
 /**
- * Generates an ICS file string for a calendar event instance.
- * Includes the full RRULE set from the parent event's schedules.
+ * Generates an ICS file string for a single occurrence of an event: one
+ * VEVENT spanning the instance's start and end, with no recurrence. Public
+ * events reach the site without schedules, so a single occurrence is all the
+ * site can export.
  */
 export function generateInstanceIcs(
   instance: CalendarEventInstance,
@@ -254,22 +139,6 @@ export function generateInstanceIcs(
   hostname: string,
 ): string {
   return generateIcs(instance.event, instance.start, instance.end, eventName, eventDescription, hostname);
-}
-
-/**
- * Generates an ICS file string for a base event (no specific instance).
- * Uses the first schedule's start date as DTSTART.
- */
-export function generateEventIcs(
-  event: CalendarEvent,
-  eventName: string,
-  eventDescription: string,
-  hostname: string,
-): string {
-  const primarySchedule = event.schedules.find(s => !s.isExclusion && s.startDate);
-  const dtstart = primarySchedule?.startDate ?? DateTime.now();
-  const dtend = (primarySchedule?.endDate && !primarySchedule.frequency) ? primarySchedule.endDate : null;
-  return generateIcs(event, dtstart, dtend, eventName, eventDescription, hostname);
 }
 
 /**

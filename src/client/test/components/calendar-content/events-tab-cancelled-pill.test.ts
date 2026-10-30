@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router, RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { setActivePinia, createPinia, Pinia } from 'pinia';
+import { DateTime, Settings } from 'luxon';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
@@ -243,5 +244,46 @@ describe('EventsTab - Cancelled Pill', () => {
 
     const pills = wrapper.findAll('[data-testid="event-cancelled-pill"]');
     expect(pills).toHaveLength(0);
+  });
+});
+
+/**
+ * The list shows a schedule's start in the viewer's zone, the same as the
+ * instance-based calendar view, whatever zone the schedule itself carries.
+ * Existing rows are stored with timezone 'UTC', so the process zone is
+ * pinned to a non-UTC zone to tell the two renderings apart.
+ */
+describe('EventsTab - schedule start date', () => {
+  let savedDefaultZone: typeof Settings.defaultZone;
+
+  beforeEach(() => {
+    activePinia = createPinia();
+    setActivePinia(activePinia);
+    savedDefaultZone = Settings.defaultZone;
+    Settings.defaultZone = 'America/New_York';
+  });
+
+  afterEach(() => {
+    Settings.defaultZone = savedDefaultZone;
+    vi.restoreAllMocks();
+  });
+
+  it('shows a UTC-zoned schedule start in the viewer zone', async () => {
+    const event = createEvent('event-1', 'UTC Row');
+    const schedule = CalendarEventSchedule.fromObject({
+      id: 'event-1-schedule-0',
+      start: '2026-10-27T17:15:00.000Z',
+      timezone: 'UTC',
+    });
+    expect(schedule.startDate?.zoneName).toBe('UTC');
+    event.schedules = [schedule];
+
+    const wrapper = await mountEventsTab([event]);
+
+    const instant = DateTime.fromISO('2026-10-27T17:15:00.000Z', { zone: 'UTC' });
+    const viewerText = instant.setZone('America/New_York').toLocaleString(DateTime.DATETIME_MED);
+    const utcText = instant.toLocaleString(DateTime.DATETIME_MED);
+    expect(viewerText).not.toBe(utcText);
+    expect(wrapper.find('.date-text').text()).toBe(viewerText);
   });
 });
