@@ -1,4 +1,4 @@
-import { DateTime } from 'luxon';
+import { DateTime, IANAZone } from 'luxon';
 
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation, EventLocationSpace } from '@/common/model/location';
@@ -464,20 +464,45 @@ class CalendarEventSchedule extends Model {
   }
 
   /**
+   * Returns the wire `timezone` value when it names an IANA zone, else null.
+   *
+   * The value can arrive from a federated peer, so anything else is ignored
+   * rather than thrown on. Fixed offsets such as "+05:00" are refused even
+   * though recent Intl implementations accept them as zones: an offset has no
+   * daylight-saving rules, so it cannot keep a recurrence's local time.
+   *
+   * @param {unknown} value - The `timezone` field from a serialized schedule
+   * @returns {string|null} The zone name, or null to keep the process zone
+   */
+  static parseZone(value: unknown): string | null {
+    if (typeof value !== 'string' || /^[+-]/.test(value)) {
+      return null;
+    }
+    return IANAZone.isValidZone(value) ? value : null;
+  }
+
+  /**
    * Creates a CalendarEventSchedule instance from a plain object.
+   *
+   * When `timezone` names an IANA zone, start, end and eventEndTime are set in
+   * that zone (same instants). Without one they parse in the process zone.
    *
    * @param {Record<string, any>} obj - Plain object containing schedule data
    * @returns {CalendarEventSchedule} A new CalendarEventSchedule instance
    */
   static fromObject(obj: Record<string, any>): CalendarEventSchedule {
+    const zone = CalendarEventSchedule.parseZone(obj.timezone);
+    const parseDate = (iso: string): DateTime => zone
+      ? DateTime.fromISO(iso, { setZone: true }).setZone(zone)
+      : DateTime.fromISO(iso);
+
     let start = obj.start
-      ? DateTime.fromISO(obj.start)
+      ? parseDate(obj.start)
       : undefined;
 
     let end = obj.end
-      ? DateTime.fromISO(obj.end)
+      ? parseDate(obj.end)
       : undefined;
-
 
     let schedule = new CalendarEventSchedule(obj.id, start, end);
 
@@ -493,7 +518,7 @@ class CalendarEventSchedule extends Model {
     schedule.hideFromPublic = obj.hideFromPublic ?? true;
 
     if ( obj.eventEndTime ) {
-      const parsed = DateTime.fromISO(obj.eventEndTime);
+      const parsed = parseDate(obj.eventEndTime);
       if (parsed.isValid) {
         schedule.eventEndTime = parsed;
       }
@@ -513,6 +538,7 @@ class CalendarEventSchedule extends Model {
       start: this.startDate?.toISO() ?? null,
       end: this.endDate?.toISO() ?? null,
       eventEndTime: this.eventEndTime?.toISO() ?? null,
+      timezone: this.startDate?.zoneName ?? null,
       frequency: (this.frequency as string) ?? null,
       interval: this.interval,
       count: this.count,

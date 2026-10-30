@@ -117,7 +117,8 @@ export type RemoteEditorParams = Partial<Pick<
  * keys CalendarEventSchedule.fromObject reads.
  */
 const REMOTE_EDITOR_SCHEDULE_KEYS = [
-  'id', 'start', 'end', 'eventEndTime', 'frequency', 'interval', 'count', 'byDay', 'isException', 'hideFromPublic',
+  'id', 'start', 'end', 'eventEndTime', 'timezone', 'frequency', 'interval', 'count', 'byDay', 'isException',
+  'hideFromPublic',
 ] as const;
 
 /** Plain-text location fields a remote-editor envelope may carry. */

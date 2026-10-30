@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { DateTime, Settings } from 'luxon';
 
-import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { EventLocationSpace } from '@/common/model/location';
 
 /**
@@ -145,5 +146,97 @@ describe('CalendarEvent model', () => {
 
       expect(restored.getLanguages()).toEqual(['en']);
     });
+  });
+});
+
+/**
+ * Unit tests for CalendarEventSchedule's zone on the wire.
+ *
+ * The process zone is pinned to America/New_York so a schedule zone of
+ * America/Los_Angeles can only survive by being carried, never by matching
+ * the machine running the tests.
+ */
+describe('CalendarEventSchedule zone', () => {
+  const PROCESS_ZONE = 'America/New_York';
+  let savedDefaultZone: typeof Settings.defaultZone;
+
+  beforeEach(() => {
+    savedDefaultZone = Settings.defaultZone;
+    Settings.defaultZone = PROCESS_ZONE;
+  });
+
+  afterEach(() => {
+    Settings.defaultZone = savedDefaultZone;
+  });
+
+  const laSchedule = (): CalendarEventSchedule => {
+    const start = DateTime.fromISO('2026-10-27T10:15', { zone: 'America/Los_Angeles' });
+    const schedule = new CalendarEventSchedule('sched-1', start, start.plus({ weeks: 8 }));
+    schedule.eventEndTime = start.plus({ hours: 2 });
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    return schedule;
+  };
+
+  it('toObject emits the start date zone as timezone', () => {
+    expect(laSchedule().toObject().timezone).toBe('America/Los_Angeles');
+  });
+
+  it('toObject emits timezone: null when there is no start date', () => {
+    expect(new CalendarEventSchedule('sched-empty').toObject().timezone).toBeNull();
+  });
+
+  it('round-trips America/Los_Angeles on start, end and eventEndTime with instants unchanged', () => {
+    const original = laSchedule();
+
+    const restored = CalendarEventSchedule.fromObject(original.toObject());
+
+    expect(restored.startDate?.zoneName).toBe('America/Los_Angeles');
+    expect(restored.endDate?.zoneName).toBe('America/Los_Angeles');
+    expect(restored.eventEndTime?.zoneName).toBe('America/Los_Angeles');
+    expect(restored.startDate?.toMillis()).toBe(original.startDate?.toMillis());
+    expect(restored.endDate?.toMillis()).toBe(original.endDate?.toMillis());
+    expect(restored.eventEndTime?.toMillis()).toBe(original.eventEndTime?.toMillis());
+    expect(restored.startDate?.toFormat('HH:mm')).toBe('10:15');
+  });
+
+  it('applies the zone to UTC instants on the wire', () => {
+    const restored = CalendarEventSchedule.fromObject({
+      start: '2026-10-27T17:15:00.000Z',
+      timezone: 'America/Los_Angeles',
+    });
+
+    expect(restored.startDate?.zoneName).toBe('America/Los_Angeles');
+    expect(restored.startDate?.toFormat('HH:mm')).toBe('10:15');
+  });
+
+  it('parses a schedule with no timezone key exactly as before: process zone, same instant', () => {
+    const wire = laSchedule().toObject();
+    delete wire.timezone;
+
+    const restored = CalendarEventSchedule.fromObject(wire);
+
+    expect(restored.startDate?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.endDate?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.eventEndTime?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.startDate?.toMillis()).toBe(laSchedule().startDate?.toMillis());
+  });
+
+  it.each([
+    ['an unknown zone name', 'Not/AZone'],
+    ['a fixed UTC offset', '+05:00'],
+    ['a negative fixed offset', '-08:00'],
+    ['an empty string', ''],
+    ['a non-string', 42],
+    ['null', null],
+  ])('falls back to the process zone without throwing for %s', (_label, timezone) => {
+    const wire = { ...laSchedule().toObject(), timezone };
+
+    const restored = CalendarEventSchedule.fromObject(wire);
+
+    expect(restored.startDate?.isValid).toBe(true);
+    expect(restored.startDate?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.eventEndTime?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.startDate?.toMillis()).toBe(laSchedule().startDate?.toMillis());
   });
 });

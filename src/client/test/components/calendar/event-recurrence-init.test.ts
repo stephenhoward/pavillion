@@ -15,7 +15,7 @@
  *     logic (`useEventDuplication`) that is independent of the sheet refactor.
  *     Each retained block is annotated below.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { DateTime } from 'luxon';
@@ -151,6 +151,77 @@ describe('event_recurrence.vue — initialization from existing schedule data', 
       await findRecurrenceTrigger(wrapper).trigger('click');
 
       expect(wrapper.findComponent({ name: 'RecurrenceEditorSheet' }).exists()).toBe(true);
+    });
+  });
+
+  describe('timezone select initialization', () => {
+    const BROWSER_ZONE = 'America/New_York';
+
+    /**
+     * Stubs the browser zone that getLocalTimezone() reads, leaving every
+     * other Intl.DateTimeFormat behaviour (Luxon formatting) untouched.
+     */
+    const stubBrowserZone = (zone: string) => {
+      const original = Intl.DateTimeFormat.prototype.resolvedOptions;
+      vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...original.call(this), timeZone: zone };
+      });
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const findInputs = (wrapper: ReturnType<typeof mountRecurrence>) => ({
+      zone: wrapper.find('select.grid-input').element as HTMLSelectElement,
+      date: wrapper.find('input[type="date"]').element as HTMLInputElement,
+      time: wrapper.find('input[type="time"]').element as HTMLInputElement,
+    });
+
+    it('selects the loaded schedule\'s zone, not the browser zone', () => {
+      stubBrowserZone(BROWSER_ZONE);
+      const start = DateTime.fromISO('2026-10-27T10:15', { zone: 'America/Los_Angeles' });
+      const schedule = new CalendarEventSchedule('sched-la', start);
+
+      const inputs = findInputs(mountRecurrence(schedule));
+
+      expect(inputs.zone.value).toBe('America/Los_Angeles');
+      expect(inputs.date.value).toBe('2026-10-27');
+      expect(inputs.time.value).toBe('10:15');
+    });
+
+    it('keeps the instant when the schedule is re-saved without edits to the time', async () => {
+      stubBrowserZone(BROWSER_ZONE);
+      const start = DateTime.fromISO('2026-10-27T10:15', { zone: 'America/Los_Angeles' });
+      const schedule = new CalendarEventSchedule('sched-la', start);
+      const wrapper = mountRecurrence(schedule);
+
+      // Any edit runs syncScheduleFromDateTime, which rebuilds startDate from
+      // the displayed digits in the selected zone.
+      await wrapper.find('select.grid-input').trigger('change');
+
+      expect(schedule.startDate?.zoneName).toBe('America/Los_Angeles');
+      expect(schedule.startDate?.toMillis()).toBe(start.toMillis());
+    });
+
+    it('falls back to the browser zone, showing the time in it, when the schedule zone is not offered', () => {
+      stubBrowserZone(BROWSER_ZONE);
+      // 'UTC' is absent from Intl.supportedValuesOf('timeZone') in current engines.
+      const start = DateTime.fromISO('2026-10-27T17:15:00Z', { zone: 'UTC' });
+      const schedule = new CalendarEventSchedule('sched-utc', start);
+
+      const inputs = findInputs(mountRecurrence(schedule));
+
+      expect(inputs.zone.value).toBe(BROWSER_ZONE);
+      expect(inputs.time.value).toBe('13:15');
+    });
+
+    it('uses the browser zone for a schedule with no start date', () => {
+      stubBrowserZone(BROWSER_ZONE);
+
+      const inputs = findInputs(mountRecurrence(new CalendarEventSchedule()));
+
+      expect(inputs.zone.value).toBe(BROWSER_ZONE);
     });
   });
 

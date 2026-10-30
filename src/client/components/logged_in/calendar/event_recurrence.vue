@@ -346,10 +346,26 @@ const getLocalTimezone = (): string => {
   return 'UTC';
 };
 
-// Initialize date/time fields from startDate
+/**
+ * Returns the zone the editor opens in: the loaded schedule's own zone when the
+ * select offers it, otherwise the browser's zone. The date and time fields are
+ * shown in this zone, so the select and the digits always agree and an edit
+ * rebuilds startDate at the instant it was loaded with.
+ */
+const getInitialTimezone = (): string => {
+  const scheduleZone = props.schedule.startDate?.zoneName;
+  if (scheduleZone && timezones.includes(scheduleZone)) {
+    return scheduleZone;
+  }
+  return getLocalTimezone();
+};
+
+const initialTimezone = getInitialTimezone();
+
+// Initialize date/time fields from startDate, shown in the initial zone
 const initDateTime = () => {
   if (props.schedule.startDate) {
-    const dt = props.schedule.startDate;
+    const dt = props.schedule.startDate.setZone(initialTimezone);
     return {
       date: dt.toFormat('yyyy-MM-dd'),
       time: dt.toFormat('HH:mm'),
@@ -367,7 +383,7 @@ const initDateTime = () => {
  */
 const initEndDateTime = () => {
   if (props.schedule.eventEndTime) {
-    const dt = props.schedule.eventEndTime;
+    const dt = props.schedule.eventEndTime.setZone(initialTimezone);
     return {
       eventEndDate: dt.toFormat('yyyy-MM-dd'),
       eventEndTime: dt.toFormat('HH:mm'),
@@ -375,7 +391,7 @@ const initEndDateTime = () => {
     };
   }
   // Default end date to start date
-  const startDate = props.schedule.startDate;
+  const startDate = props.schedule.startDate?.setZone(initialTimezone);
   return {
     eventEndDate: startDate ? startDate.toFormat('yyyy-MM-dd') : '',
     eventEndTime: '',
@@ -394,7 +410,7 @@ const state = reactive({
   eventEndTime: initialEndTime,
   eventEndDateManuallySet: initialEndDateManuallySet,
   previousStartDate: initialDate,
-  timezone: getLocalTimezone(),
+  timezone: initialTimezone,
   timeIncomplete: { start: false, end: false },
 });
 
