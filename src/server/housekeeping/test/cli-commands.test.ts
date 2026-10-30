@@ -1,11 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFile } from 'child_process';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { stripVTControlCharacters } from 'util';
 import sinon from 'sinon';
 import HousekeepingInterface from '@/server/housekeeping/interface';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
 import StorageService from '@/server/housekeeping/service/storage';
+import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
+import { formatDrillStatus } from '@/server/cli/drill-status';
 
 /**
  * CLI Commands Test Suite
@@ -162,6 +169,142 @@ describe('CLI Commands (HousekeepingInterface)', () => {
 
       expect(lastBackup).toBeNull();
     });
+
+    /**
+     * The drill section is what keeps an operator from reading the Last Backup
+     * "Verified" mark — a write-time size check — as proof of restorability.
+     */
+    describe('last successful restore drill section', () => {
+      const plain = (lines: string[]) => lines.map((line) => stripVTControlCharacters(line));
+
+      it('should print the drill timestamp and the backup it restored', () => {
+        const lines = plain(formatDrillStatus({
+          id: '323e4567-e89b-12d3-a456-426614174002',
+          backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+          // Local-time constructor: the CLI prints local time, as for backups.
+          ranAt: new Date(2026, 8, 1, 3, 0, 0),
+          passed: true,
+          detail: null,
+        }));
+
+        expect(lines).toEqual([
+          'Last Successful Restore Drill:',
+          '  Date: 2026-09-01 03:00:00',
+          '  Restored backup: pavillion_20260901_020000_scheduled.dump',
+          '  ("Verified" on a backup means its file was written; only a drill proves it restores)',
+        ]);
+      });
+
+      it('should say plainly when no drill has ever passed', () => {
+        const lines = plain(formatDrillStatus(null));
+
+        expect(lines).toEqual([
+          'Last Successful Restore Drill:',
+          '  No successful restore drill recorded — no backup has been proven restorable',
+          '  (Run scripts/restore-drill.sh to prove one)',
+          '  ("Verified" on a backup means its file was written; only a drill proves it restores)',
+        ]);
+      });
+    });
+  });
+
+  describe('backup record-drill command', () => {
+    it('should record a drill outcome through the domain boundary', async () => {
+      const recordStub = sandbox.stub(DrillService.prototype, 'recordResult').resolves();
+
+      await housekeeping.recordDrillResult({
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        passed: false,
+        detail: 'pg_restore failed',
+      });
+
+      expect(recordStub.calledOnce).toBe(true);
+      expect(recordStub.firstCall.args[0]).toEqual({
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        passed: false,
+        detail: 'pg_restore failed',
+      });
+    });
+
+    it('should project a drill entity onto a boundary-safe record', async () => {
+      sandbox.stub(BackupDrillEntity, 'findOne').resolves(
+        BackupDrillEntity.build({
+          id: '323e4567-e89b-12d3-a456-426614174002',
+          backup_filename: 'pavillion_20260901_020000_scheduled.dump',
+          ran_at: new Date('2026-09-01T03:00:00Z'),
+          passed: true,
+          detail: null,
+        }),
+      );
+
+      const drill = await housekeeping.getLastSuccessfulDrill();
+
+      // camelCase out of a snake_case entity, as toBackupRecord does above.
+      expect(drill).toEqual({
+        id: '323e4567-e89b-12d3-a456-426614174002',
+        backupFilename: 'pavillion_20260901_020000_scheduled.dump',
+        ranAt: new Date('2026-09-01T03:00:00Z'),
+        passed: true,
+        detail: null,
+      });
+    });
+
+    it('should return null when no drill has ever passed', async () => {
+      sandbox.stub(BackupDrillEntity, 'findOne').resolves(null);
+
+      expect(await housekeeping.getLastSuccessfulDrill()).toBeNull();
+    });
+
+    /**
+     * The one test in this file that spawns the CLI.
+     *
+     * The `--result` allowlist lives in handleBackupRecordDrill, above the
+     * interface — commander accepts any string for `--result <result>`, so the
+     * guard is the only thing between a typo and a drill stored under a third
+     * verdict. Every other test here calls HousekeepingInterface directly, which
+     * is deliberately the wrong side of that guard: `passed: options.result ===
+     * 'pass'` means an unrecognised word would silently record as a FAILED
+     * drill, and a run of those reads as "restores are broken" rather than "the
+     * caller is broken". Exercising that needs the real argv path, and the
+     * module runs main() on import, so it has to be a process.
+     *
+     * It is also cheap to keep honest: the rejection happens before
+     * initDatabase, so nothing here touches a database — asserted below, because
+     * a guard that fired after the connection was open would be a different
+     * (and worse) guard.
+     */
+    it('should reject a verdict that is neither pass nor fail, before touching the database', async () => {
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
+        (resolve) => {
+          execFile(
+            path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
+            [
+              path.join('src', 'server', 'cli', 'index.ts'),
+              'backup', 'record-drill',
+              '--file', 'pavillion_20260901_020000_scheduled.dump',
+              '--result', 'maybe',
+            ],
+            { cwd: repoRoot },
+            (error, stdout, stderr) => {
+              resolve({
+                code: error ? ((error as NodeJS.ErrnoException & { code?: number }).code ?? 1) as number : 0,
+                stdout,
+                stderr,
+              });
+            },
+          );
+        },
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain("--result must be 'pass' or 'fail'");
+      expect(result.stderr).toContain('maybe');
+      // No connection was opened, so no row could have been written.
+      expect(result.stdout).not.toContain('Database connected');
+      expect(result.stdout).not.toContain('Recorded');
+    }, 60000);
   });
 
   describe('backup restore command', () => {

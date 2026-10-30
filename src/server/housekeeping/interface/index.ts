@@ -4,6 +4,7 @@ import StorageService, { StorageStats } from '@/server/housekeeping/service/stor
 import StatusService, { HousekeepingStatus } from '@/server/housekeeping/service/status';
 import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 import MetricsService, { OperationalMetrics } from '@/server/housekeeping/service/metrics';
+import DrillService, { DrillRecord, DrillResultInput } from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
 // Re-exported so other domains set a job's retry/expiry policy via the
@@ -29,6 +30,10 @@ export type {
   VolumeMetrics,
   QueueMetrics,
 } from '@/server/housekeeping/service/metrics';
+
+// Re-exported so callers (the management CLI today, the metrics exposition
+// later) can type a drill record without importing the DrillService internal.
+export type { DrillRecord, DrillResultInput } from '@/server/housekeeping/service/drill';
 
 /**
  * Backup metadata exposed across the housekeeping domain boundary.
@@ -78,6 +83,7 @@ export default class HousekeepingInterface {
   private storageService: StorageService;
   private statusService: StatusService;
   private metricsService: MetricsService;
+  private drillService: DrillService;
   private jobQueueService: JobQueueService | null = null;
 
   constructor(emailInterface: EmailInterface, accountsInterface: AccountsInterface) {
@@ -86,6 +92,7 @@ export default class HousekeepingInterface {
     this.storageService = new StorageService();
     this.statusService = new StatusService();
     this.metricsService = new MetricsService();
+    this.drillService = new DrillService();
   }
 
   /**
@@ -209,6 +216,36 @@ export default class HousekeepingInterface {
       order: [['created_at', 'DESC']],
     });
     return lastBackup ? toBackupRecord(lastBackup) : null;
+  }
+
+  /**
+   * Records the outcome of one completed restore drill.
+   *
+   * Used by the management CLI's `backup record-drill` command, which
+   * scripts/restore-drill.sh invokes once per completed run. Deliberately
+   * distinct from {@link BackupRecord.verified}: `verified` is the backup job's
+   * write-time smoke check (the file exists and exceeds a minimum size) and is
+   * already a retention policy input, while a drill is evidence that the dump
+   * actually restores. Folding one into the other would silently change
+   * retention behaviour.
+   *
+   * @param input - The dump drilled, the verdict, and an optional short reason
+   */
+  async recordDrillResult(input: DrillResultInput): Promise<void> {
+    await this.drillService.recordResult(input);
+  }
+
+  /**
+   * Gets the most recent drill that passed.
+   *
+   * Used by the management CLI and, later, by the metrics exposition as the
+   * "last successful restore drill" staleness signal. Failed runs are ignored,
+   * so a failure after a success does not hide the successful drill.
+   *
+   * @returns The newest passing drill record, or null if none has ever passed
+   */
+  async getLastSuccessfulDrill(): Promise<DrillRecord | null> {
+    return this.drillService.getLastSuccessful();
   }
 
   /**

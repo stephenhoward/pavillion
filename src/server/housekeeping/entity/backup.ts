@@ -29,6 +29,16 @@ class BackupEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: false })
   declare category: 'daily' | 'weekly' | 'monthly';
 
+  /**
+   * The backup job's write-time smoke check: the dump file exists and exceeds
+   * minBackupSize. It is a retention policy input — the GFS filter in
+   * service/retention.ts, getLastVerifiedBackup() and the status report all key
+   * on it — so widening what it means silently changes which backups survive
+   * pruning.
+   *
+   * It is NOT evidence that the dump restores. That lives in `backup_drill`,
+   * appended by the restore drill; see {@link BackupDrillEntity}.
+   */
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
   declare verified: boolean;
 

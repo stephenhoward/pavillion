@@ -17,6 +17,13 @@
 #   ./scripts/backup.sh status
 #   ./scripts/backup.sh restore 123e4567-e89b-12d3-a456-426614174000
 #
+# This wrapper is a pass-through, so the CLI's `record-drill` verb is reachable
+# through it as well. It is deliberately left out of the list above: record-drill
+# is written by scripts/restore-drill.sh and is not intended for hand invocation.
+# A hand-written row weakens what backup_drill asserts from "a drill passed" to
+# "something claimed a drill passed", and the table stores no provenance that
+# would tell the two apart.
+#
 
 set -e
 
