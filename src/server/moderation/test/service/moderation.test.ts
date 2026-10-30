@@ -2674,6 +2674,24 @@ describe('ModerationService', () => {
         })).rejects.toThrow(EventNotFoundError);
       });
 
+      it('createReportForEvent propagates a lookup failure instead of reporting the event as not found', async () => {
+        // A database failure during the event lookup must surface as
+        // itself (a 500 at the route), not be masked as a 404.
+        const lookupFailure = new Error('database connection lost');
+        sandbox.stub(mockCalendarInterface, 'getEventById').rejects(lookupFailure);
+
+        const result = service.createReportForEvent({
+          eventId: '22222222-2222-4222-8222-222222222222',
+          category: ReportCategory.SPAM,
+          description: 'Report during a database failure',
+          reporterType: 'authenticated',
+          reporterAccountId: 'account-1',
+        });
+
+        await expect(result).rejects.toBe(lookupFailure);
+        await expect(result).rejects.not.toBeInstanceOf(EventNotFoundError);
+      });
+
       it('throws ReportValidationError before looking up the event when fields are invalid', async () => {
         // The validation pass must run before any I/O so callers get a
         // 400 (validation) instead of a 404 (event not found) for bad
