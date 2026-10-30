@@ -5,6 +5,7 @@ import {
   isValidLanguageCode,
   getLanguage,
   getDefaultEnabledLanguageCodes,
+  getSupportedLanguageCodes,
   type Language,
 } from '@/common/i18n/languages';
 
@@ -131,6 +132,18 @@ describe('getLanguage', () => {
       expect(lang).toHaveProperty('nativeName');
       expect(lang).toHaveProperty('fallbackChain');
       expect(lang).toHaveProperty('direction');
+    }
+  });
+});
+
+describe('getSupportedLanguageCodes', () => {
+  it('should return every code isValidLanguageCode accepts, in AVAILABLE_LANGUAGES order', () => {
+    expect(getSupportedLanguageCodes()).toEqual(AVAILABLE_LANGUAGES.map(lang => lang.code));
+  });
+
+  it('should return only codes isValidLanguageCode accepts', () => {
+    for (const code of getSupportedLanguageCodes()) {
+      expect(isValidLanguageCode(code)).toBe(true);
     }
   });
 });

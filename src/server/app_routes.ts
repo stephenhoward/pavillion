@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import config from 'config';
 import { stripLocalePrefix, addLocalePrefix } from '@/common/i18n/locale-url';
-import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes, getSupportedLanguageCodes } from '@/common/i18n/languages';
 import ConfigurationInterface from '@/server/configuration/interface';
 import logger from '@/server/common/helper/logger';
 import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
@@ -41,9 +41,18 @@ export const SERVER_OWNED_SEGMENTS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Alternation of the enabled locale codes, for the /:locale/... route shapes.
+ * Alternation of the supported locale codes, for the /:locale/... route shapes.
+ *
+ * Built from the supported set, not an instance's enabled subset: the regex is
+ * compiled once at module load and could not track a runtime setting, and a
+ * supported-but-disabled code is still reserved (DEC-018), so it must still
+ * route as a locale. The other consumer of this answer is
+ * parseEventPageParams in src/server/common/helper/meta-tags.ts, which strips
+ * through stripLocalePrefix (isValidLanguageCode) — the same set. If the two
+ * diverge, /<code>/cal/events/:id routes as a calendar named <code> while its
+ * meta tags describe cal's event; public-url-contract.test.ts pins agreement.
  */
-const LOCALE_SEGMENT_PATTERN = getDefaultEnabledLanguageCodes().map(escapeRegExp).join('|');
+const LOCALE_SEGMENT_PATTERN = getSupportedLanguageCodes().map(escapeRegExp).join('|');
 
 /**
  * Alternation of every first segment that is not a calendar name.
@@ -52,11 +61,14 @@ const LOCALE_SEGMENT_PATTERN = getDefaultEnabledLanguageCodes().map(escapeRegExp
  *
  * 1. Each entry is escaped before joining. '.well-known' carries a regex
  *    metacharacter, and a naive join would also match 'awell-known'.
- * 2. The enabled locale codes are composed in. RESERVED_ROUTE_SEGMENTS omits
- *    them on purpose — `isReservedRouteSegment` ORs the array against
+ * 2. The supported locale codes are composed in. RESERVED_ROUTE_SEGMENTS
+ *    omits them on purpose — `isReservedRouteSegment` ORs the array against
  *    `isValidLanguageCode` — so an alternation built from the array alone would
  *    reserve strictly less than the validator does and would serve /fr as a
- *    calendar named "fr".
+ *    calendar named "fr". getSupportedLanguageCodes is the set the validator
+ *    answers from, so this alternation and `isReservedRouteSegment` — which
+ *    parseEventPageParams in meta-tags.ts consults for the same question —
+ *    reserve the same segments.
  * 3. Matching happens on the raw, undecoded pathname, which is where Express
  *    puts the decode seam: `decode_param` runs after route matching, and
  *    `isReservedRouteSegment` does no decoding of its own. A percent-encoded
@@ -71,7 +83,7 @@ const LOCALE_SEGMENT_PATTERN = getDefaultEnabledLanguageCodes().map(escapeRegExp
  */
 const RESERVED_FIRST_SEGMENT_PATTERN = [
   ...RESERVED_ROUTE_SEGMENTS,
-  ...getDefaultEnabledLanguageCodes(),
+  ...getSupportedLanguageCodes(),
 ].map(escapeRegExp).join('|');
 
 /**

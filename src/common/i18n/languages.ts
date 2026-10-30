@@ -81,6 +81,20 @@ export function getLanguage(code: string): Language | undefined {
 }
 
 /**
+ * Returns every supported language code: the set isValidLanguageCode answers
+ * from, fixed at compile time.
+ *
+ * This is the set that decides URL shape. DEC-018 reserves locale codes by
+ * delegating to isValidLanguageCode, so a supported code is never a calendar
+ * name whether or not an instance enables it. Routing consumers read this
+ * helper; locale negotiation and content consumers read the enabled set
+ * instead.
+ */
+export function getSupportedLanguageCodes(): string[] {
+  return AVAILABLE_LANGUAGES.map(lang => lang.code);
+}
+
+/**
  * Returns the default list of enabled language codes.
  * Includes all languages in AVAILABLE_LANGUAGES.
  */
