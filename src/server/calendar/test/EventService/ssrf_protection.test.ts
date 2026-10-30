@@ -199,6 +199,25 @@ describe('EventService', () => {
       expect(result.calendarId).toBe(remoteCalendarActor.id);
     });
 
+    it('forwards a removed-language tombstone and leaves that language off the returned event', async () => {
+      const remoteCalendarActor = buildRemoteCalendarActor(REMOTE_INBOX_URL);
+      const eventId = '11111111-1111-4111-8111-111111111111';
+      const eventParams = {
+        content: { en: { name: 'Updated Event', description: 'Updated description' }, fr: null },
+      };
+
+      const result = await (service as any).updateRemoteEventViaActivityPub(
+        account,
+        remoteCalendarActor,
+        eventId,
+        eventParams,
+      );
+
+      expect(mockApInterface.publishEventUpdate.firstCall.args[1].eventParams.content.fr).toBeNull();
+      expect(result.getLanguages()).toEqual(['en']);
+      expect(result.content('en').name).toBe('Updated Event');
+    });
+
     it('propagates errors thrown by publishEventUpdate (e.g. missing inbox URL)', async () => {
       const remoteCalendarActor = buildRemoteCalendarActor('');
       const eventId = '11111111-1111-4111-8111-111111111111';

@@ -223,6 +223,62 @@ describe('EventSeries', () => {
   });
 });
 
+describe('EventSeries dropped-language tombstones', () => {
+  it('serializes a dropped language as null so the server deletes it', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts');
+    series.addContent(new EventSeriesContent('en', 'Summer Concerts'));
+    series.addContent(new EventSeriesContent('fr', 'Concerts d\'été'));
+
+    series.dropContent('fr');
+
+    const obj = series.toObject();
+    expect(obj.content).toHaveProperty('fr', null);
+    expect(obj.content.en.name).toBe('Summer Concerts');
+  });
+
+  it('emits no tombstone for a series that has not been saved yet', () => {
+    const series = new EventSeries('', 'cal-456', 'summer_concerts');
+    series.addContent(new EventSeriesContent('en', 'Summer Concerts'));
+    series.addContent(new EventSeriesContent('fr', 'Concerts d\'été'));
+
+    series.dropContent('fr');
+
+    expect(series.toObject().content).not.toHaveProperty('fr');
+  });
+
+  it('clears the tombstone when the language is added back with addContent', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts');
+    series.addContent(new EventSeriesContent('fr', 'Concerts d\'été'));
+    series.dropContent('fr');
+
+    series.addContent(new EventSeriesContent('fr', 'Concerts'));
+
+    expect(series.toObject().content.fr.name).toBe('Concerts');
+  });
+
+  it('clears the tombstone when the language is re-created through content()', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts');
+    series.addContent(new EventSeriesContent('fr', 'Concerts d\'été'));
+    series.dropContent('fr');
+
+    series.content('fr').name = 'Concerts';
+
+    expect(series.toObject().content.fr.name).toBe('Concerts');
+  });
+
+  it('round-trips a tombstone to a series without that language', () => {
+    const series = new EventSeries('series-123', 'cal-456', 'summer_concerts');
+    series.addContent(new EventSeriesContent('en', 'Summer Concerts'));
+    series.addContent(new EventSeriesContent('fr', 'Concerts d\'été'));
+    series.dropContent('fr');
+
+    const restored = EventSeries.fromObject(series.toObject());
+
+    expect(restored.getLanguages()).toEqual(['en']);
+    expect(restored.toObject().content).not.toHaveProperty('fr');
+  });
+});
+
 describe('EventSeries.mediaFocalPoint', () => {
 
   it('defaults mediaFocalPointX to 0.5', () => {

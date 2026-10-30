@@ -123,6 +123,17 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
   _content: Record<string, T> = Object.create(null);
 
   /**
+   * Languages removed with {@link dropContent} and not added back since.
+   *
+   * An update payload only carries the languages still on the model, and the
+   * update endpoints leave a stored row alone when its language is absent, so
+   * a dropped language has to be named explicitly for the removal to reach
+   * the server. Subclasses whose update endpoint destroys a row on a `null`
+   * value emit one per entry here through {@link droppedContentTombstones}.
+   */
+  private droppedLanguages: Set<string> = new Set();
+
+  /**
    * Reads the stored content row for a language without creating one, by own
    * property only, so inherited keys (`__proto__`, `constructor`, `toString`,
    * …) resolve to `undefined` rather than to something off the prototype
@@ -156,6 +167,7 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
   content(language: string): T {
     if ( ! this.ownContent(language) ) {
       this._content[language] = this.createContent(language);
+      this.droppedLanguages.delete(language);
     }
     return this._content[language];
   }
@@ -167,15 +179,37 @@ abstract class TranslatedModel<T extends TranslatedContentModel> extends Primary
    */
   addContent(content: T) {
     this._content[content.language] = content;
+    this.droppedLanguages.delete(content.language);
   }
 
   /**
-   * Removes content for the specified language.
+   * Removes content for the specified language and remembers the removal so
+   * {@link droppedContentTombstones} can report it.
    *
-   * @param {string} langauge - The language code to remove
+   * @param {string} language - The language code to remove
    */
-  dropContent(langauge: string) {
-    delete this._content[langauge];
+  dropContent(language: string) {
+    delete this._content[language];
+    this.droppedLanguages.add(language);
+  }
+
+  /**
+   * A `null` entry for each language dropped since the model was loaded, for
+   * a subclass's `toObject` to merge into its content map so an update
+   * deletes the stored row instead of leaving it untouched.
+   *
+   * A model without an id has never been saved, so it has no stored rows to
+   * delete and gets no tombstones; that keeps `null` out of create payloads,
+   * whose handlers do not expect it.
+   *
+   * @returns {Record<string, null>} Dropped language codes mapped to null
+   * @protected
+   */
+  protected droppedContentTombstones(): Record<string, null> {
+    if ( ! this.id ) {
+      return {};
+    }
+    return Object.fromEntries([...this.droppedLanguages].map(language => [language, null]));
   }
 
   /**
