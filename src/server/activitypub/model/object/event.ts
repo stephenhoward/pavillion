@@ -209,7 +209,7 @@ class EventObject extends ActivityPubObject {
       }
     }
 
-    // Build startTime from first schedule or fallback to date field
+    // Build startTime from the base schedule or fall back to the date field
     const startTime = resolveEventStartTime(event);
 
     const result: Record<string, any> = {
@@ -235,9 +235,10 @@ class EventObject extends ActivityPubObject {
       result.content = `<p>${primaryDescription}</p>`;
     }
 
-    // endTime: use eventEndTime if available, otherwise synthesize startTime + 1 hour
-    const firstSchedule = event.schedules[0];
-    const endDateTime = firstSchedule?.eventEndTime;
+    // endTime: the base schedule's eventEndTime if it has one, otherwise
+    // synthesize startTime + 1 hour. Only the base schedule's end is used, as
+    // in instance expansion.
+    const endDateTime = event.baseSchedule()?.eventEndTime;
     if (endDateTime?.isValid) {
       result.endTime = endDateTime.toISO();
     }
@@ -1224,12 +1225,12 @@ class EventObject extends ActivityPubObject {
   private _buildFepExtensions(event: CalendarEvent): Record<string, any> {
     const result: Record<string, any> = {};
 
-    // timezone: the IANA identifier of the first schedule's start zone, so peers
+    // timezone: the IANA identifier of the base schedule's start zone, so peers
     // can reconstruct the intended wall-clock time instead of relying on the ISO
     // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
     // than a named IANA zone — a bare offset carries no more than startTime
     // already does. 'UTC' is itself a valid IANA zone and IS emitted.
-    const scheduleZone = event.schedules[0]?.startDate?.zoneName;
+    const scheduleZone = event.baseSchedule()?.startDate?.zoneName;
     if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
       result.timezone = scheduleZone;
     }

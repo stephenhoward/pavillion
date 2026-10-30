@@ -422,7 +422,7 @@ describe('EventObject', () => {
         expect(result).not.toHaveProperty('displayEndTime');
       });
 
-      it('should emit timezone with the IANA identifier of the first schedule start zone', () => {
+      it('should emit timezone with the IANA identifier of the base schedule start zone', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
         event.addContent(new CalendarEventContent('en', 'Zoned Event', ''));
@@ -474,6 +474,57 @@ describe('EventObject', () => {
         const result = new EventObject(calendar, event).toActivityPubObject();
 
         expect(result).not.toHaveProperty('timezone');
+      });
+
+      describe('an event with more than one schedule', () => {
+        function laBase(): CalendarEventSchedule {
+          const base = new CalendarEventSchedule(
+            'sched-la',
+            DateTime.fromISO('2026-10-27T10:15:00', { zone: 'America/Los_Angeles' }),
+          );
+          base.eventEndTime = DateTime.fromISO('2026-10-27T11:15:00', { zone: 'America/Los_Angeles' });
+          return base;
+        }
+
+        function serialize(schedules: CalendarEventSchedule[]): Record<string, any> {
+          const calendar = new Calendar('calendar-uuid', 'mycal');
+          const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+          event.addContent(new CalendarEventContent('en', 'Weekly Meetup', ''));
+          event.schedules = schedules;
+          return new EventObject(calendar, event).toActivityPubObject();
+        }
+
+        it('takes startTime, endTime and timezone from the base schedule when a cancellation loads first', () => {
+          // Exclusion rows are stored as UTC instants.
+          const cancellation = new CalendarEventSchedule(
+            'sched-x',
+            DateTime.fromISO('2026-11-10T18:15:00Z', { zone: 'utc' }),
+          );
+          cancellation.isExclusion = true;
+          const base = laBase();
+
+          const result = serialize([cancellation, base]);
+
+          expect(result.startTime).toBe(base.startDate!.toISO());
+          expect(result.endTime).toBe(base.eventEndTime!.toISO());
+          expect(result).not.toHaveProperty('displayEndTime');
+          expect(result.timezone).toBe('America/Los_Angeles');
+        });
+
+        it('takes startTime, endTime and timezone from the earlier schedule when a later one loads first', () => {
+          const later = new CalendarEventSchedule(
+            'sched-berlin',
+            DateTime.fromISO('2026-11-05T19:00:00', { zone: 'Europe/Berlin' }),
+          );
+          later.eventEndTime = DateTime.fromISO('2026-11-05T21:00:00', { zone: 'Europe/Berlin' });
+          const base = laBase();
+
+          const result = serialize([later, base]);
+
+          expect(result.startTime).toBe(base.startDate!.toISO());
+          expect(result.endTime).toBe(base.eventEndTime!.toISO());
+          expect(result.timezone).toBe('America/Los_Angeles');
+        });
       });
 
       it('should always emit eventStatus EventScheduled for a live event', () => {

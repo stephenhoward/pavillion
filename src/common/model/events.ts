@@ -208,6 +208,19 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   }
 
   /**
+   * The schedule an event takes its time zone, start and occurrence duration
+   * from: the non-exclusion schedule with the earliest start, ties broken by id.
+   * Schedules load in no fixed order, so the choice must not depend on it.
+   */
+  baseSchedule(): CalendarEventSchedule | null {
+    const candidates = (this.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
+    candidates.sort((a, b) =>
+      a.startDate!.toMillis() - b.startDate!.toMillis()
+      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return candidates[0] ?? null;
+  }
+
+  /**
    * Creates a CalendarEvent instance from a plain object.
    *
    * @param {Record<string, any>} obj - Plain object containing event data

@@ -154,21 +154,8 @@ function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
 }
 
 /**
- * The schedule an event takes its time zone and occurrence duration from:
- * the non-exclusion schedule with the earliest start, ties broken by id.
- * Schedules load in no fixed order, so the choice must not depend on it.
- */
-function baseSchedule(event: CalendarEvent): CalendarEventSchedule | null {
-  const candidates = (event.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
-  candidates.sort((a, b) =>
-    a.startDate!.toMillis() - b.startDate!.toMillis()
-    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return candidates[0] ?? null;
-}
-
-/**
  * The wall-clock frame an event's recurrences are expanded in: the zone of
- * its {@link baseSchedule}, or UTC when it has none.
+ * its {@link CalendarEvent.baseSchedule}, or UTC when it has none.
  *
  * rrule reads and steps the UTC fields of a JS Date. A "floating" date
  * carries a wall-clock time of this zone in those fields, so rrule steps
@@ -820,9 +807,10 @@ export default class EventInstanceService {
 
   /**
    * Derive an occurrence's end time by applying the duration of the event's
-   * {@link baseSchedule}. Returns null if that schedule has no eventEndTime.
-   * Shared by generateInstances and findOrMaterializeInstanceWithDetails so
-   * the two paths agree on the computed end time.
+   * {@link CalendarEvent.baseSchedule}. Returns null if that schedule has no
+   * eventEndTime. Shared by generateInstances and
+   * findOrMaterializeInstanceWithDetails so the two paths agree on the
+   * computed end time.
    *
    * The duration is wall-clock length in the event's {@link WallClockFrame}:
    * a 22:00–03:00 event still ends at 03:00 on the night the clocks change.
@@ -831,7 +819,7 @@ export default class EventInstanceService {
     event: CalendarEvent,
     startTime: DateTime,
   ): DateTime | null {
-    const base = baseSchedule(event);
+    const base = event.baseSchedule();
     if (!base?.startDate || !base.eventEndTime) {
       return null;
     }
@@ -1415,9 +1403,9 @@ export default class EventInstanceService {
    *
    * Zone convention: an event steps in its base schedule's zone. Every
    * recurrence steps wall-clock time in the {@link WallClockFrame} of the
-   * event's {@link baseSchedule} — the non-exclusion schedule with the
-   * earliest start, ties broken by id — whatever order the schedules load
-   * in. dtstart, until and exrule starts enter that frame; so does every
+   * event's {@link CalendarEvent.baseSchedule} — the non-exclusion schedule
+   * with the earliest start, ties broken by id — whatever order the
+   * schedules load in. dtstart, until and exrule starts enter that frame; so does every
    * query bound, and every result leaves it as a true instant in instant
    * order, so callers deal in instants only. A wall time skipped by a change
    * moves forward by the gap; one that occurs twice takes the earlier offset.
@@ -1425,7 +1413,7 @@ export default class EventInstanceService {
    * instants.
    */
   private rrules(event: CalendarEvent): ZonedOccurrenceSet {
-    const frame = WallClockFrame.of(baseSchedule(event));
+    const frame = WallClockFrame.of(event.baseSchedule());
     const occurrences = new ZonedOccurrenceSet(frame);
 
     // Map our EventFrequency enum to RRule's Frequency enum

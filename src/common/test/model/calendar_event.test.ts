@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CalendarEvent } from '@/common/model/events';
+import { DateTime } from 'luxon';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 
 describe('CalendarEvent.sourceCalendar', () => {
 
@@ -202,5 +203,64 @@ describe('CalendarEvent.mediaFocalPoint', () => {
     expect(restored.mediaFocalPointX).toBe(0.1);
     expect(restored.mediaFocalPointY).toBe(0.9);
     expect(restored.mediaZoom).toBe(1.5);
+  });
+});
+
+describe('CalendarEvent.baseSchedule', () => {
+  const LA = 'America/Los_Angeles';
+
+  function schedule(id: string, iso: string, zone: string, isExclusion = false): CalendarEventSchedule {
+    const s = new CalendarEventSchedule(id, DateTime.fromISO(iso, { zone }));
+    s.isExclusion = isExclusion;
+    return s;
+  }
+
+  function eventWith(schedules: CalendarEventSchedule[]): CalendarEvent {
+    const event = new CalendarEvent('evt-1', 'cal-1');
+    event.schedules = schedules;
+    return event;
+  }
+
+  it('returns the earliest-starting schedule whichever loads first', () => {
+    const losAngeles = schedule('sched-la', '2026-10-27T10:15:00', LA);
+    const berlin = schedule('sched-berlin', '2026-11-05T19:00:00', 'Europe/Berlin');
+
+    for (const schedules of [[losAngeles, berlin], [berlin, losAngeles]]) {
+      expect(eventWith(schedules).baseSchedule()).toBe(losAngeles);
+    }
+  });
+
+  it('never returns an exclusion row, even when it loads first and starts earliest', () => {
+    const cancellation = schedule('sched-x', '2026-10-01T00:00:00Z', 'utc', true);
+    const base = schedule('sched-la', '2026-10-27T10:15:00', LA);
+
+    expect(eventWith([cancellation, base]).baseSchedule()).toBe(base);
+  });
+
+  it('breaks a tie on start by the lower id in either load order', () => {
+    // Same instant, written in two zones.
+    const lower = schedule('00000000-0000-4000-8000-000000000001', '2026-10-27T10:15:00', LA);
+    const higher = schedule('00000000-0000-4000-8000-000000000002', '2026-10-27T18:15:00', 'Europe/Berlin');
+
+    for (const schedules of [[lower, higher], [higher, lower]]) {
+      expect(eventWith(schedules).baseSchedule()).toBe(lower);
+    }
+  });
+
+  it('skips a schedule with no start date', () => {
+    const undated = new CalendarEventSchedule('sched-0');
+    const dated = schedule('sched-la', '2026-10-27T10:15:00', LA);
+
+    expect(eventWith([undated, dated]).baseSchedule()).toBe(dated);
+  });
+
+  it('is null when the event has no schedules', () => {
+    expect(eventWith([]).baseSchedule()).toBeNull();
+  });
+
+  it('is null when every schedule is an exclusion', () => {
+    const cancellation = schedule('sched-x', '2026-11-10T18:15:00Z', 'utc', true);
+
+    expect(eventWith([cancellation]).baseSchedule()).toBeNull();
   });
 });
