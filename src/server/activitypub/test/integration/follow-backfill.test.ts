@@ -4,12 +4,15 @@
  * These tests verify the public `runBackfill` contract end-to-end:
  *   - persistence shape (auth_source, auth_origin, clamped message_time)
  *   - trust-gate rejection at the public entry point (no helper mocking)
- *   - drain ordering by messageTime ASC across shuffled `published` values
- *   - single drain (one `processInboxMessages` call after final page)
+ *   - the walk is buffered and written oldest first when it ends, so a drain
+ *     running mid-walk sees none of it
+ *   - no inbox drain: the service only writes rows; the web process drains
  *   - idempotency under re-run
  *   - first-writer-wins race when a live HTTP-signed row already exists
  *   - no `inboxMessageAdded` emission on the backfill path
  *   - private-URL SSRF rejection on the source actor URI
+ *   - nothing written when the walk pauses on the rate limit or the follow
+ *     row disappears mid-walk
  *
  * The trust-gate logic itself has dedicated unit tests in
  * `../service/backfill.test.ts`. The cases here exercise the public
@@ -21,9 +24,9 @@
  * CalendarContent / Media includes — a partial sync is not enough). An
  * injected `fetcher` stub drives the outbox pagination, a fresh
  * `SyncRateLimiter` per test eliminates cross-test budget interference,
- * and `processInboxMessages` is replaced with a no-op spy on the real
- * `ActivityPubInterface` so single-drain semantics can be asserted without
- * running the live per-type handlers.
+ * and `processInboxMessages` is replaced with a no-op stub on the real
+ * `ActivityPubInterface` as a sentinel: the service must never call it. Tests
+ * that need a real drain call the inbox service directly.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -136,17 +139,12 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     sandbox = sinon.createSandbox();
 
     // Real interfaces — the only thing replaced is `processInboxMessages`,
-    // and even that is replaced with a no-op stub so its call count can be
-    // asserted without driving the (heavy) drain pipeline. Drain ordering is
-    // verified by snapshotting pending rows at drain time, below.
+    // stubbed as a sentinel so a test can assert the service never drains.
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const accountsInterface = new AccountsInterface();
     activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
 
-    // Stub the drain so the test does not depend on the live inbox handlers
-    // resolving real EventObjectEntity rows; the snapshot the stub captures
-    // is what proves drain ordering and single-drain semantics.
     drainSpy = sandbox.stub(activityPubInterface, 'processInboxMessages').resolves();
 
     rateLimiter = new SyncRateLimiter({ limit: 1000, windowMs: 60_000 });
@@ -214,6 +212,15 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     >();
     stub.callsFake(async (uri: string) => responses[uri] ?? null);
     return stub as sinon.SinonStub & typeof fetchRemoteObject;
+  }
+
+  /**
+   * Runs the real inbox drain — the one the web process runs — bypassing the
+   * sentinel stub on the interface.
+   */
+  async function drainInbox(): Promise<void> {
+    await (activityPubInterface as unknown as { inboxService: ProcessInboxService })
+      .inboxService.processInboxMessages();
   }
 
   function runService(opts: {
@@ -316,9 +323,6 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
 
     const forgedRow = await ActivityPubInboxMessageEntity.findByPk(forgedActivityId);
     expect(forgedRow).toBeNull();
-
-    // Drain still ran exactly once even though the page yielded zero rows.
-    expect(drainSpy.callCount).toBe(1);
   });
 
   it('rejects an activity whose actor is on a different origin from the source actor (trust gate)', async () => {
@@ -380,38 +384,29 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 3. Drain ordering
+  // 3. Write ordering
   // -------------------------------------------------------------------------
 
-  it('drains pending rows in messageTime ASC even when the source delivers activities out of order', async () => {
+  it('writes the whole walk oldest first, by clamped message_time, once the walk ends', async () => {
     const now = new Date('2026-05-16T12:00:00Z');
-    // Three activities whose `published` timestamps span the clamp window
-    // intentionally arrive in non-chronological order.
-    const activities = [
-      buildCreate(`${SOURCE_ORIGIN}/activities/middle`, '2026-04-01T00:00:00Z'),
-      buildCreate(`${SOURCE_ORIGIN}/activities/earliest`, '2026-01-01T00:00:00Z'),
-      buildCreate(`${SOURCE_ORIGIN}/activities/latest`, '2026-05-15T00:00:00Z'),
-    ];
+    // The outbox is newest first across pages, and each page is shuffled
+    // within itself, so neither walk order nor page order is chronological.
     const fetcher = makeFetcher({
       [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
       [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(activities),
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [
+          buildCreate(`${SOURCE_ORIGIN}/activities/third`, '2026-04-03T00:00:00Z'),
+          buildCreate(`${SOURCE_ORIGIN}/activities/fourth`, '2026-04-05T00:00:00Z'),
+        ],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        buildCreate(`${SOURCE_ORIGIN}/activities/second`, '2026-04-02T00:00:00Z'),
+        buildCreate(`${SOURCE_ORIGIN}/activities/first`, '2026-04-01T00:00:00Z'),
+      ]),
     });
-
-    // Capture the pending rows at drain time, ordered by message_time ASC —
-    // the same property the live `inboxService.processInboxMessages` uses
-    // (the prod query references the entity attribute name; this snapshot
-    // uses the column-name field declared on the entity, which Sequelize
-    // resolves identically for SQLite's case-insensitive identifiers). The
-    // assertion that matters is the ordering of the persisted rows: that
-    // proves the worker did not synthesize an in-arrival-order dispatch.
-    let drainSnapshot: { id: string; messageTime: Date }[] = [];
-    drainSpy.callsFake(async () => {
-      const pending = await ActivityPubInboxMessageEntity.findAll({
-        order: [['message_time', 'ASC']],
-      });
-      drainSnapshot = pending.map(r => ({ id: r.id, messageTime: r.message_time }));
-    });
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
     const service = runService({ fetcher, now: () => now });
     await service.runBackfill({
@@ -420,24 +415,27 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
-    expect(drainSnapshot.map(r => r.id)).toEqual([
-      `${SOURCE_ORIGIN}/activities/earliest`,
-      `${SOURCE_ORIGIN}/activities/middle`,
-      `${SOURCE_ORIGIN}/activities/latest`,
+    // Insertion order is the call order on the writer.
+    const writes = enqueueSpy.getCalls().map(call => call.args[0]);
+    expect(writes.map(w => w.id)).toEqual([
+      `${SOURCE_ORIGIN}/activities/first`,
+      `${SOURCE_ORIGIN}/activities/second`,
+      `${SOURCE_ORIGIN}/activities/third`,
+      `${SOURCE_ORIGIN}/activities/fourth`,
     ]);
-    // Times are also monotonically increasing — defends against the
-    // assertion above silently accepting an "ordering by insertion".
-    for (let i = 1; i < drainSnapshot.length; i++) {
-      expect(drainSnapshot[i].messageTime.getTime())
-        .toBeGreaterThan(drainSnapshot[i - 1].messageTime.getTime());
+    for (let i = 1; i < writes.length; i++) {
+      expect(writes[i].messageTime.getTime()).toBeGreaterThan(writes[i - 1].messageTime.getTime());
     }
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(4);
   });
 
   // -------------------------------------------------------------------------
-  // 4. Single drain across multiple pages
+  // 4. No drain, and a drain that runs mid-walk sees none of the walk
   // -------------------------------------------------------------------------
 
-  it('calls processInboxMessages exactly once after walking every page', async () => {
+  it('writes every page and never drains the inbox itself', async () => {
     const fetcher = makeFetcher({
       [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
       [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
@@ -460,9 +458,8 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       sourceActorUri: SOURCE_ACTOR_URI,
     });
 
-    expect(drainSpy.callCount).toBe(1);
+    expect(drainSpy.callCount).toBe(0);
 
-    // All three rows from both pages were persisted before the single drain ran.
     const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
       where: { calendar_id: followerCalendarId },
       order: [['id', 'ASC']],
@@ -472,6 +469,68 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       `${SOURCE_ORIGIN}/activities/p1b`,
       `${SOURCE_ORIGIN}/activities/p2a`,
     ]);
+  });
+
+  it('leaves nothing for a mid-walk drain to dispatch, so an Undo never runs before its Announce', async () => {
+    // Page 1 (newer) holds Undo(Announce X); page 2 (older) holds Announce X.
+    // A drain that dispatched the Undo before the Announce was written would
+    // find no Announce to undo, and the Announce dispatched later would leave
+    // a share that sticks.
+    const eventApId = `${SOURCE_ORIGIN}/events/mid-walk`;
+    const announceId = `${SOURCE_ORIGIN}/activities/announce-mid-walk`;
+    const undoId = `${SOURCE_ORIGIN}/activities/undo-mid-walk`;
+
+    // Local copy of X so the Announce handler does not fetch it.
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: null });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: SOURCE_ACTOR_URI,
+    });
+
+    const pages: Record<string, Record<string, unknown>> = {
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2026-05-15T11:00:00Z', object: announceId }],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2026-05-15T10:00:00Z', object: eventApId },
+      ]),
+    };
+
+    let rowsSeenByMidWalkDrain: number | null = null;
+    const fetcher = makeFetcher({});
+    fetcher.callsFake(async (uri: string) => {
+      if (uri === SOURCE_PAGE_2_URI) {
+        // The web process drains while the worker is still walking.
+        rowsSeenByMidWalkDrain = await ActivityPubInboxMessageEntity.count({
+          where: { calendar_id: followerCalendarId },
+        });
+        await drainInbox();
+      }
+      return pages[uri] ?? null;
+    });
+
+    const service = runService({ fetcher });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    expect(rowsSeenByMidWalkDrain).toBe(0);
+
+    // The next drain after the walk dispatches the Announce, then its Undo.
+    await drainInbox();
+
+    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
+    expect(announceRow?.processed_time).not.toBeNull();
+    expect(await EventActivityEntity.count({
+      where: { event_id: eventApId, type: 'share' },
+    })).toBe(0);
   });
 
   // -------------------------------------------------------------------------
@@ -511,9 +570,6 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.count({
       where: { id: `${SOURCE_ORIGIN}/activities/dup2` },
     })).toBe(1);
-
-    // Each run drains once.
-    expect(drainSpy.callCount).toBe(2);
   });
 
   // -------------------------------------------------------------------------
@@ -651,8 +707,6 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.count({
       where: { calendar_id: followerCalendarId },
     })).toBe(0);
-    // Drain still ran exactly once (cleanup guarantee from the finally block).
-    expect(drainSpy.callCount).toBe(1);
   });
 
   // -------------------------------------------------------------------------
@@ -662,7 +716,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // Backfill walks an Announce + later Undo(Announce) for the same event.
   // Two followers (F and G) consume identical activity sequences from the
   // same source. F has a pre-existing RepostDismissalEntity for the event;
-  // G does not. After backfill drains its inbox, F has no SharedEventEntity
+  // G does not. After the inbox drains, F has no SharedEventEntity
   // (the dismissal suppressed share creation inside checkAndPerformAutoRepost),
   // while G has one (the dismissal is calendar-scoped — it does not leak
   // across to G's share). This is the DEC-008 per-calendar scoping invariant.
@@ -675,15 +729,11 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
 
   it('respects DEC-008 per-calendar dismissal scoping during backfill (F suppressed; G unaffected)', async () => {
     // The strict Undo cross-check (pv-wy2u.3.1) and the DEC-008 dismissal
-    // guard both live in ProcessInboxService. The beforeEach hook stubs
-    // out `processInboxMessages` (plural) so the other tests in this suite
-    // can assert single-drain semantics without running the live handlers;
-    // we keep that stub in place here and instead drive the dispatch
-    // pipeline directly via `processInboxMessage` (singular) on each
-    // persisted row in `message_time` ASC order, which is the same
-    // ordering the production drain uses (column-name vs. attribute-name
-    // discrepancy on the live query is tracked separately and not under
-    // test here).
+    // guard both live in ProcessInboxService. Backfill only writes rows, so
+    // this test drives the dispatch pipeline directly via
+    // `processInboxMessage` (singular) on each persisted row in
+    // `message_time` ASC order, which is the same ordering the production
+    // drain uses.
 
     const eventApId = `${SOURCE_ORIGIN}/events/dismissal-scoping`;
     const announceFId = `${SOURCE_ORIGIN}/activities/announce-f`;
@@ -778,8 +828,8 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // Run F's backfill against an outbox that emits only F's
     // Announce/Undo pair. Then run G's backfill against an outbox that
     // emits only G's pair. Each run persists its own pair into ap_inbox
-    // (PK is the activity id, which differs) and drains the inbox via
-    // the real ProcessInboxService.
+    // (PK is the activity id, which differs); the drain below dispatches
+    // them through the real ProcessInboxService.
     const fetcherF = makeFetcher({
       [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
       [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
@@ -856,7 +906,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // the actor profile, the outbox collection, and the first page, then the
   // page-2 fetch is denied and the run pauses.
 
-  it('drains partial progress and throws BackfillRateLimitError when the per-host budget is exhausted mid-walk', async () => {
+  it('writes nothing and throws BackfillRateLimitError when the per-host budget is exhausted mid-walk', async () => {
     const host = new URL(SOURCE_ACTOR_URI).hostname;
     rateLimiter = new SyncRateLimiter({ limit: 60, windowMs: 60_000 });
     for (let i = 0; i < 57; i++) {
@@ -882,18 +932,14 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       sourceActorUri: SOURCE_ACTOR_URI,
     })).rejects.toBeInstanceOf(BackfillRateLimitError);
 
-    // Page 1 persisted before the pause; page 2 was never fetched.
-    expect(await ActivityPubInboxMessageEntity.count({
-      where: { id: `${SOURCE_ORIGIN}/activities/p1` },
-    })).toBe(1);
-    expect(await ActivityPubInboxMessageEntity.count({
-      where: { id: `${SOURCE_ORIGIN}/activities/p2` },
-    })).toBe(0);
+    // Page 1 was walked but its buffered rows were discarded: a partial,
+    // newest-first walk must never reach the inbox. Page 2 was never fetched.
+    expect(fetcher.calledWith(SOURCE_PAGE_1_URI)).toBe(true);
     expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
-
-    // Drain still ran exactly once despite the throw (the finally guarantee),
-    // so the page-1 row is dispatched now rather than waiting for the retry.
-    expect(drainSpy.callCount).toBe(1);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(0);
+    expect(drainSpy.callCount).toBe(0);
   });
 
   it('walks the remaining pages on a subsequent run after the rate window resets (pg-boss retry)', async () => {
@@ -922,15 +968,15 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     };
     const service = runService({ fetcher });
 
-    // First attempt pauses after page 1.
+    // First attempt pauses after page 1 and writes nothing.
     await expect(service.runBackfill(payload)).rejects.toBeInstanceOf(BackfillRateLimitError);
     expect(await ActivityPubInboxMessageEntity.count({
-      where: { id: `${SOURCE_ORIGIN}/activities/p2` },
+      where: { calendar_id: followerCalendarId },
     })).toBe(0);
 
     // The pg-boss retry runs after the sliding window has reset, modelled here
-    // by clearing the limiter. The re-walk starts from page 1 again; findOrCreate
-    // makes the already-persisted page-1 row a no-op, and page 2 now succeeds.
+    // by clearing the limiter. The re-walk starts from page 1 again and, with
+    // the budget available, walks to the end and writes both pages.
     rateLimiter.reset();
     await service.runBackfill(payload);
 
@@ -943,9 +989,47 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.count({
       where: { calendar_id: followerCalendarId },
     })).toBe(2);
+  });
 
-    // One drain per attempt: the paused run drained page 1, the retry drained both.
-    expect(drainSpy.callCount).toBe(2);
+  // -------------------------------------------------------------------------
+  // 11. Unfollow mid-walk
+  // -------------------------------------------------------------------------
+
+  it('writes nothing when the follow row is removed during the walk', async () => {
+    const pages: Record<string, Record<string, unknown>> = {
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
+      ]),
+    };
+    const fetcher = makeFetcher({});
+    fetcher.callsFake(async (uri: string) => {
+      if (uri === SOURCE_PAGE_1_URI) {
+        // The user unfollows while page 1 is in flight; the page-boundary
+        // re-check after page 1 sees the row gone.
+        await FollowingCalendarEntity.destroy({
+          where: { calendar_id: followerCalendarId, calendar_actor_id: sourceCalendarActorId },
+        });
+      }
+      return pages[uri] ?? null;
+    });
+
+    const service = runService({ fetcher });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(0);
   });
 });
 

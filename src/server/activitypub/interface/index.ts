@@ -300,7 +300,8 @@ export default class ActivityPubInterface {
 
   /**
    * Deferred inbox write that does NOT emit `inboxMessageAdded`. The caller
-   * must drain the inbox afterwards via {@link processInboxMessages}. See
+   * does not drain: the row waits for the web process's inbox drain, which
+   * runs with the domain handlers installed. See
    * {@link ActivityPubServerService.enqueueInboxRow}.
    */
   async enqueueInboxRow(input: InboxRowInput): Promise<{ created: boolean }> {
