@@ -2,21 +2,19 @@
 import { useTranslation } from 'i18next-vue';
 import { CalendarPlus } from 'lucide-vue-next';
 
-import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
-import { generateInstanceIcs, generateEventIcs, downloadIcs } from '@/common/utils/ics-generator';
+import { generateInstanceIcs, downloadIcs } from '@/common/utils/ics-generator';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 
 const props = defineProps<{
-  event: CalendarEvent;
-  instance?: CalendarEventInstance | null;
+  instance: CalendarEventInstance;
 }>();
 
 const { t } = useTranslation('system');
 const { localizedContent } = useLocalizedContent();
 
 function handleDownload() {
-  const content = localizedContent(props.event);
+  const content = localizedContent(props.instance.event);
   const eventName = content.name || '';
   const eventDescription = content.description || '';
   const hostname = window.location.hostname;
@@ -24,15 +22,7 @@ function handleDownload() {
     ? `${eventName.substring(0, 50).replace(/[^a-zA-Z0-9-_ ]/g, '').trim()}.ics`
     : 'event.ics';
 
-  let icsContent: string;
-
-  if (props.instance) {
-    icsContent = generateInstanceIcs(props.instance, eventName, eventDescription, hostname);
-  }
-  else {
-    icsContent = generateEventIcs(props.event, eventName, eventDescription, hostname);
-  }
-
+  const icsContent = generateInstanceIcs(props.instance, eventName, eventDescription, hostname);
   downloadIcs(icsContent, filename);
 }
 </script>

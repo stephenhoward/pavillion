@@ -10,7 +10,6 @@ import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
-import AddToCalendar from './add-to-calendar.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import { calendarPath, seriesPath } from '@/common/routing/public-paths';
 
@@ -323,9 +322,6 @@ function closeReportModal() {
           >
             {{ t('url_prompt.' + safePrompt) }}
           </a>
-
-          <!-- Add to Calendar -->
-          <AddToCalendar v-if="state.event.schedules?.length" :event="state.event" />
         </aside>
       </div>
 
