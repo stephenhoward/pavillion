@@ -158,13 +158,17 @@ Use for inputs where context is clear visually (e.g., icon buttons, inline input
 
 ### Error states
 
-Use `role="alert"` and `aria-live="polite"` for error messages:
+Render the error into a live region that is **always mounted**, and change only its text (and its visual styling) when an error appears:
 
 ```vue
-<div v-if="error" class="error" role="alert" aria-live="polite">
+<!-- Stays mounted with no error; only the text and the box change. -->
+<div role="alert" :class="{ error: error }">
   {{ error }}
 </div>
 ```
+
+- **Never put `v-if` on the live region.** Screen readers announce changes to a region they are already watching; a region inserted together with its text is not reliably announced, so the first error would be silent. Toggle the content or a class, not the element. `src/client/components/logged_out/error-alert.vue` is the shipped example of a mounted region.
+- **Pick one urgency, not two.** `role="alert"` already means `aria-live="assertive"` (plus `aria-atomic="true"`), which suits an error the user must act on. Adding `aria-live="polite"` contradicts the role. For a non-urgent message use `role="status"`, which means `aria-live="polite"`, instead of `role="alert"`.
 
 ### Required fields
 
@@ -183,7 +187,7 @@ The contracts below describe what each pattern should announce. Deviations indic
 | `<button role="switch" aria-checked="true">…` | `…, switch, on` (and `switch, off` when `aria-checked="false"`) |
 | `<button aria-expanded="true">…` | `…, expanded` (and `…, collapsed` when `aria-expanded="false"`) |
 | `<label for="id">Name</label><input id="id">` | `Name, edit` |
-| `<div role="alert" aria-live="polite">{{ error }}</div>` | The error text announces after the alert is rendered (live region update) |
+| `<div role="alert">{{ error }}</div>` (always mounted) | The error text announces when it is set into the already-rendered alert (live region update) |
 | `aria-hidden="true"` decorative icon | No announcement (the icon does not appear in the spoken log) |
 | `sr-only` label | Announced as part of the associated control's accessible name, never as a standalone phrase |
 
