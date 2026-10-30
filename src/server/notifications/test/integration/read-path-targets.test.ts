@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { readFileSync } from 'fs';
 import path from 'path';
+import ts from 'typescript';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
@@ -304,66 +305,98 @@ describe('notification read path — target derivation (integration)', () => {
 
   describe('report calendar immutability', () => {
     /**
-     * Identifier names in `source` that hold a `ReportEntity`: the model class
-     * itself, plus every local bound to a `ReportEntity` query result — either
-     * directly or by iterating a collection of them.
+     * Walks the syntax tree of `source` for Sequelize writes issued through a
+     * `ReportEntity` receiver, and reports any that write `calendar_id`.
      *
-     * Narrowing the scan to these receivers is what keeps the tripwire honest.
-     * A scan over every `.update(` in the file also matched
-     * `createHmac(...).update(email...)` in `hashEmail` — a Node crypto call,
-     * not a database write — and picked up unrelated report columns from other
-     * entities besides. Either one turns this into a test that fails for
-     * reasons unconnected to report reassignment.
+     * Receivers are the model class itself, plus every local bound to a
+     * `ReportEntity.*` call result (through `await`, parentheses, `!` and
+     * `as`), plus every `for..of` variable over such a local. Narrowing the
+     * scan to these receivers is what keeps the tripwire honest: a scan over
+     * every `.update(` also matched `createHmac(...).update(email...)` in
+     * `hashEmail` — a Node crypto call, not a database write.
+     *
+     * A write is `<receiver>.update(payload, ...)`. Its payload must be an
+     * object literal; anything else is returned in `unparseable`, because a
+     * payload this walk cannot read is a set of columns it cannot check.
+     * Walking the tree rather than the text is what keeps comments, string
+     * contents and reformatting out of the result.
      */
-    function reportEntityReceivers(source: string): Set<string> {
+    function reportCalendarIdWrites(source: string): {
+      receivers: Set<string>;
+      payloadCount: number;
+      unparseable: string[];
+      calendarIdWrites: string[];
+    } {
+      const file = ts.createSourceFile('moderation.ts', source, ts.ScriptTarget.Latest, true);
+      const visit = (node: ts.Node, callback: (node: ts.Node) => void): void => {
+        callback(node);
+        ts.forEachChild(node, child => visit(child, callback));
+      };
+      const unwrap = (expression: ts.Expression): ts.Expression => {
+        while (
+          ts.isAwaitExpression(expression) || ts.isParenthesizedExpression(expression)
+          || ts.isNonNullExpression(expression) || ts.isAsExpression(expression)
+        ) {
+          expression = expression.expression;
+        }
+        return expression;
+      };
+      const isReportEntityCall = (expression: ts.Expression): boolean => {
+        const call = unwrap(expression);
+        return ts.isCallExpression(call)
+          && ts.isPropertyAccessExpression(call.expression)
+          && ts.isIdentifier(call.expression.expression)
+          && call.expression.expression.text === 'ReportEntity';
+      };
+      const locate = (node: ts.Node): string => {
+        const { line } = file.getLineAndCharacterOfPosition(node.getStart(file));
+        return `moderation.ts:${line + 1}: ${node.getText(file).split('\n')[0]}`;
+      };
+
       const receivers = new Set(['ReportEntity']);
-
-      const bindings = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+ReportEntity\./g;
-      for (const match of source.matchAll(bindings)) {
-        receivers.add(match[1]);
-      }
-
+      visit(file, (node) => {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+          && node.initializer && isReportEntityCall(node.initializer)) {
+          receivers.add(node.name.text);
+        }
+      });
       // `for (const entity of reportsToEscalate)` — the loop variable holds a
       // ReportEntity whenever the iterated collection does.
-      const loops = /\bfor\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s+of\s+([A-Za-z_$][\w$]*)\s*\)/g;
-      for (const match of source.matchAll(loops)) {
-        if (receivers.has(match[2])) {
-          receivers.add(match[1]);
+      visit(file, (node) => {
+        if (!ts.isForOfStatement(node) || !ts.isVariableDeclarationList(node.initializer)) return;
+        const [binding] = node.initializer.declarations;
+        const iterated = unwrap(node.expression);
+        if (binding && ts.isIdentifier(binding.name) && ts.isIdentifier(iterated) && receivers.has(iterated.text)) {
+          receivers.add(binding.name.text);
         }
-      }
+      });
 
-      return receivers;
-    }
+      let payloadCount = 0;
+      const unparseable: string[] = [];
+      const calendarIdWrites: string[] = [];
+      visit(file, (node) => {
+        if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)
+          || node.expression.name.text !== 'update') return;
+        const receiver = unwrap(node.expression.expression);
+        const isReport = ts.isIdentifier(receiver) ? receivers.has(receiver.text) : isReportEntityCall(receiver);
+        if (!isReport) return;
 
-    /**
-     * The first-argument object literal of every Sequelize write issued through
-     * a `ReportEntity` receiver, brace-matched so nested objects are not
-     * truncated (regex alone cannot do that).
-     *
-     * The match requires `\.update\(\s*\{` — only whitespace may separate the
-     * call from its object literal. A call whose first argument is not an
-     * object literal is therefore skipped outright rather than causing a walk
-     * forward into whatever unrelated block happens to come next.
-     */
-    function reportUpdatePayloads(source: string, receivers: Set<string>): string[] {
-      const alternation = [...receivers].join('|');
-      const writes = new RegExp(`\\b(?:${alternation})\\.update\\(\\s*\\{`, 'g');
-
-      const payloads: string[] = [];
-      for (const match of source.matchAll(writes)) {
-        const open = match.index + match[0].length - 1;
-        let depth = 0;
-        let index = open;
-        for (; index < source.length; index++) {
-          if (source[index] === '{') depth++;
-          else if (source[index] === '}') {
-            depth--;
-            if (depth === 0) break;
+        const payload = node.arguments[0];
+        if (!payload || !ts.isObjectLiteralExpression(payload)) {
+          unparseable.push(locate(node));
+          return;
+        }
+        payloadCount++;
+        visit(payload, (member) => {
+          if ((ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member))
+            && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))
+            && member.name.text === 'calendar_id') {
+            calendarIdWrites.push(locate(member));
           }
-        }
-        payloads.push(source.slice(open, index + 1));
-      }
-      return payloads;
+        });
+      });
+
+      return { receivers, payloadCount, unparseable, calendarIdWrites };
     }
 
     it('has no moderation update path that writes calendar_id', () => {
@@ -377,8 +410,7 @@ describe('notification read path — target derivation (integration)', () => {
         path.resolve(__dirname, '../../../moderation/service/moderation.ts'),
         'utf8',
       );
-      const receivers = reportEntityReceivers(source);
-      const payloads = reportUpdatePayloads(source, receivers);
+      const scan = reportCalendarIdWrites(source);
 
       // Guard the extractor itself: too few payloads would make the assertion
       // below vacuously true. Most report writes go through an *instance*
@@ -386,12 +418,97 @@ describe('notification read path — target derivation (integration)', () => {
       // collapsed to `ReportEntity` alone means the binding scan stopped
       // recognising them. The moderation service has ~15 report update paths
       // today; the floor is deliberately slack, but not slack enough to survive
-      // the matcher breaking.
-      expect(receivers.size).toBeGreaterThan(1);
-      expect(payloads.length).toBeGreaterThanOrEqual(10);
-      for (const payload of payloads) {
-        expect(payload).not.toContain('calendar_id');
-      }
+      // the walker breaking.
+      expect(scan.receivers.size).toBeGreaterThan(1);
+      expect(scan.payloadCount).toBeGreaterThanOrEqual(10);
+      expect(
+        scan.unparseable,
+        'ReportEntity update calls whose first argument is not an object literal, '
+        + 'so their written columns cannot be checked',
+      ).toEqual([]);
+      expect(scan.calendarIdWrites).toEqual([]);
+    });
+
+    describe('reportCalendarIdWrites', () => {
+      const scan = (body: string) => reportCalendarIdWrites(
+        `import crypto from 'crypto';\nclass Service {\n  async run(id: string) {\n${body}\n  }\n}\n`,
+      );
+
+      it('ignores update calls on receivers that are not ReportEntity', () => {
+        const result = scan(`
+          const hash = crypto.createHmac('sha256', key).update(email).digest('hex');
+          await CalendarEntity.update({ calendar_id: id }, { where: { id } });
+        `);
+
+        expect(result.payloadCount).toBe(0);
+        expect(result.calendarIdWrites).toEqual([]);
+        expect(result.unparseable).toEqual([]);
+      });
+
+      it('neither truncates nor false-positives on a brace in a string or calendar_id in a comment', () => {
+        const result = scan(`
+          const entity = await ReportEntity.findByPk(id);
+          await entity.update({
+            owner_notes: '} closing brace in a string',
+            // calendar_id is deliberately not written here
+            status: 'resolved',
+          });
+        `);
+
+        expect(result.payloadCount).toBe(1);
+        expect(result.calendarIdWrites).toEqual([]);
+      });
+
+      it('flags a payload that writes calendar_id', () => {
+        const result = scan(`
+          const entity = await ReportEntity.findByPk(id);
+          await entity.update({ status: 'resolved', calendar_id: x });
+          await ReportEntity.update({ calendar_id: x }, { where: { id } });
+        `);
+
+        expect(result.calendarIdWrites).toHaveLength(2);
+      });
+
+      it('allows calendar_id in the where clause, which filters rather than writes', () => {
+        const result = scan(`
+          await ReportEntity.update({ status: 'resolved' }, { where: { id, calendar_id: x } });
+        `);
+
+        expect(result.payloadCount).toBe(1);
+        expect(result.calendarIdWrites).toEqual([]);
+      });
+
+      it('recognises a receiver bound through await, parentheses and a non-null assertion', () => {
+        const result = scan(`
+          const report = (await ReportEntity.findByPk(id))!;
+          await report.update({ calendar_id: x });
+        `);
+
+        expect(result.receivers.has('report')).toBe(true);
+        expect(result.calendarIdWrites).toHaveLength(1);
+      });
+
+      it('recognises the loop variable over a collection of reports', () => {
+        const result = scan(`
+          const reports = await ReportEntity.findAll({ where: {} });
+          for (const entity of reports) {
+            await entity.update({ calendar_id: x });
+          }
+        `);
+
+        expect(result.receivers.has('entity')).toBe(true);
+        expect(result.calendarIdWrites).toHaveLength(1);
+      });
+
+      it('fails closed on a payload that is not an object literal', () => {
+        const result = scan(`
+          const entity = await ReportEntity.findByPk(id);
+          await entity.update(changes);
+        `);
+
+        expect(result.unparseable).toHaveLength(1);
+        expect(result.unparseable[0]).toContain('entity.update(changes)');
+      });
     });
 
     it('preserves calendar_id across a report\'s lifecycle transitions', async () => {
