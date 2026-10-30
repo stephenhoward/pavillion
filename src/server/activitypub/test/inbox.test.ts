@@ -2514,3 +2514,114 @@ describe('ProcessInboxService - processInboxMessages skip window', () => {
     expect(dispatched).toEqual([]);
   });
 });
+
+describe('ProcessInboxService - processInboxMessages ordering', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let dispatched: string[];
+
+  const calendarId = 'ordering-calendar-id';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    const eventBus = new EventEmitter();
+    inboxService = new ProcessInboxService(eventBus, new CalendarInterface(eventBus));
+
+    await CalendarEntity.create({
+      id: calendarId,
+      url_name: 'ordering-calendar',
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    dispatched = [];
+    sandbox.stub(inboxService, 'processInboxMessage').callsFake(async (message: ActivityPubInboxMessageEntity) => {
+      dispatched.push(message.id);
+      await message.update({ processed_time: new Date(), processed_status: 'ok' });
+    });
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('dispatches rows with equal message_time in the order they were written', async () => {
+    // clampMessageTime pins every activity older than two years to the same
+    // floor, so an old Announce and its Undo can share a message_time. The
+    // backfill writes them oldest first, so createdAt breaks the tie.
+    const sharedTime = new Date('2024-01-01T00:00:00Z');
+    const announceId = 'https://remote.instance/activities/announce';
+    const undoId = 'https://remote.instance/activities/undo';
+
+    // Insert the Undo first so insertion order disagrees with createdAt.
+    for (const id of [undoId, announceId]) {
+      await ActivityPubInboxMessageEntity.create({
+        id,
+        type: id === undoId ? 'Undo' : 'Announce',
+        message_time: sharedTime,
+        message: {},
+        calendar_id: calendarId,
+      });
+    }
+    await ActivityPubInboxMessageEntity.update(
+      { createdAt: new Date(Date.now() - 2_000) },
+      { where: { id: announceId }, silent: true },
+    );
+    await ActivityPubInboxMessageEntity.update(
+      { createdAt: new Date(Date.now() - 1_000) },
+      { where: { id: undoId }, silent: true },
+    );
+
+    await inboxService.processInboxMessages();
+
+    expect(dispatched).toEqual([announceId, undoId]);
+  });
+});
+
+describe('ProcessInboxService - processInboxMessage calendar lookup failure', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let calendarInterface: CalendarInterface;
+
+  const calendarId = 'lookup-failure-calendar-id';
+  const rowId = 'https://remote.instance/activities/lookup-failure';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    const eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    await CalendarEntity.create({
+      id: calendarId,
+      url_name: 'lookup-failure-calendar',
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+    await ActivityPubInboxMessageEntity.create({
+      id: rowId,
+      type: 'Ignore',
+      message_time: new Date(),
+      message: {},
+      calendar_id: calendarId,
+    });
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('marks the row as an error instead of failing the drain, so later drains move past it', async () => {
+    sandbox.stub(calendarInterface, 'getCalendar').rejects(new Error('database unavailable'));
+
+    await expect(inboxService.processInboxMessages()).resolves.toBeUndefined();
+
+    const row = await ActivityPubInboxMessageEntity.findByPk(rowId);
+    expect(row!.processed_status).toBe('error');
+    expect(row!.processed_time).not.toBeNull();
+  });
+});

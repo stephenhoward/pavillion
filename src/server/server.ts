@@ -507,11 +507,17 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
       const metricsServer = startMetricsListener(housekeepingDomain.interface);
 
+      // Every domain has installed its handlers by now (Notifications last),
+      // so the startup drain dispatches with the full set. Not in test mode:
+      // suites drive dispatch themselves and must not get a running timer.
+      const stopInboxDrain = activityPubDomain.startInboxDrain();
+
       // Add graceful shutdown handlers for clean server termination
       if (process.env.NODE_ENV === 'e2e') {
         // Lightweight shutdown for e2e: close server and exit immediately
         // The test helper sends SIGTERM and waits 5s before SIGKILL
         const shutdownE2e = () => {
+          stopInboxDrain();
           metricsServer?.close();
           metricsServer?.closeAllConnections();
           server.close(() => process.exit(0));
@@ -525,6 +531,8 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
           logger.info({ signal }, 'Received signal, starting graceful shutdown');
 
           try {
+            stopInboxDrain();
+
             // Stop accepting scrapes and drop existing sockets before the
             // database goes away. close() alone only stops new connections and
             // would leave in-flight requests and idle keep-alive sockets to
