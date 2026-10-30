@@ -289,6 +289,35 @@ test.describe('Root URLs and legacy /view redirects', () => {
     await expect(page.locator('h2.discovery-subheading')).toBeVisible();
   });
 
+  test('restores the discovery scroll position on Back once the list has rendered', async ({ page }) => {
+    // Short enough that the seeded calendar list overflows the window.
+    await page.setViewportSize({ width: 1280, height: 400 });
+    await page.goto(env.baseURL + '/discover');
+    const tiles = page.locator('a.discovery-tile');
+    await expect(tiles.first()).toBeVisible({ timeout: 10000 });
+
+    const savedY = await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      return window.scrollY;
+    });
+    expect(savedY).toBeGreaterThan(0);
+
+    await tiles.last().click();
+    await expect(page.locator('h1.discovery-title')).toHaveCount(0, { timeout: 10000 });
+
+    // Discovery refetches its list on every mount. Delaying that response keeps
+    // the page at loading-frame height for longer than the router's tick, which
+    // is the window in which an unheld saved position gets clamped.
+    await page.route(/\/api\/public\/v1\/calendars(\?|$)/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      await route.continue();
+    });
+
+    await page.goBack();
+    await expect(tiles.first()).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 5000 }).toBe(savedY);
+  });
+
   test('serves a calendar at its root URL', async ({ page }) => {
     const response = await page.goto(env.baseURL + '/test_calendar');
     expect(response?.status()).toBe(200);

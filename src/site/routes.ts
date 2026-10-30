@@ -3,6 +3,7 @@ import { RouteRecordRaw, RouterScrollBehavior } from 'vue-router';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { DISCOVER_PATH } from '@/common/routing/public-paths';
 import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
+import { takeScrollHold } from '@/site/routing/scroll-hold';
 
 /**
  * Whatever vue-router accepts as a route's `component`.
@@ -89,17 +90,24 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
  * always started at the top. The rule reproduces that without disturbing
  * navigations that only re-parameterise the page already on screen:
  *
- * - Back/forward restores the position the browser saved for that entry.
+ * - Back/forward restores the position the browser saved for that entry,
+ *   once any scroll hold the destination view registered has settled (see
+ *   `routing/scroll-hold.ts`), so the saved position is not clamped to a view
+ *   still rendering its loading frame.
  * - Arriving at a different view (calendar → event, discovery → calendar)
  *   starts at the top, as a fresh page load would.
  * - Staying on the same view (filter changes rewriting the query, a locale
  *   switch swapping the prefix) keeps the reader's place.
  *
- * @returns The saved position, the top of the page, or false to leave scroll alone
+ * Every navigation takes the hold, so one registered by a view reached any
+ * other way cannot delay a later Back/forward.
+ *
+ * @returns The saved position once the destination has rendered, the top of the page, or false to leave scroll alone
  */
 export const siteScrollBehavior: RouterScrollBehavior = (to, from, savedPosition) => {
+  const hold = takeScrollHold();
   if (savedPosition) {
-    return savedPosition;
+    return hold.then(() => savedPosition);
   }
 
   const toView = to.matched[0]?.components?.default;

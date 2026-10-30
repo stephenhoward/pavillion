@@ -8,6 +8,10 @@
  *   - error
  *   - navigation (tile click resolves to the calendar route at /:urlName)
  *
+ * Plus the scroll hold: mounting registers one that is released only once the
+ * list has rendered, so browser Back restores its saved position against the
+ * full-height page rather than the loading frame.
+ *
  * Plus a per-locale rendering smoke test confirming that a representative
  * discovery.* key renders translated text in en / es / fr — not the literal
  * key string.
@@ -21,6 +25,7 @@ import i18next from 'i18next';
 
 import Discovery from '../discovery.vue';
 import { buildSiteRoutes } from '@/site/routes';
+import { takeScrollHold } from '@/site/routing/scroll-hold';
 import ModelService from '@/client/service/models';
 import ListResult from '@/client/service/list-result';
 
@@ -239,6 +244,51 @@ describe('discovery.vue - five behavioral states', () => {
 
     expect(wrapper.find('.discovery-list').exists()).toBe(false);
     expect(wrapper.find('.discovery-empty').exists()).toBe(false);
+  });
+
+  it('holds back/forward scroll restoration until the calendar list has rendered', async () => {
+    let resolveList: (value: ListResult) => void;
+    vi.mocked(ModelService.listModels).mockReturnValue(new Promise<ListResult>((resolve) => {
+      resolveList = resolve;
+    }));
+
+    await router.push('/discover');
+    const wrapper = mountDiscovery();
+
+    // Mounting must register the hold synchronously, before the request settles.
+    let listRenderedWhenReleased: boolean | null = null;
+    const released = takeScrollHold().then(() => {
+      listRenderedWhenReleased = wrapper.find('.discovery-list').exists();
+    });
+
+    await flushPromises();
+    expect(listRenderedWhenReleased).toBeNull();
+
+    resolveList!(ListResult.fromArray([
+      {
+        id: 'cal-1',
+        urlName: 'alpha',
+        content: [{ language: 'en', name: 'Alpha Calendar', description: '' }],
+        lastEventActivity: null,
+      },
+    ]));
+    await released;
+
+    expect(listRenderedWhenReleased).toBe(true);
+  });
+
+  it('releases the scroll hold when the list request fails', async () => {
+    vi.mocked(ModelService.listModels).mockRejectedValue(new Error('boom'));
+
+    await router.push('/discover');
+    const wrapper = mountDiscovery();
+
+    let errorRenderedWhenReleased: boolean | null = null;
+    await takeScrollHold().then(() => {
+      errorRenderedWhenReleased = wrapper.find('.discovery-error').exists();
+    });
+
+    expect(errorRenderedWhenReleased).toBe(true);
   });
 
   it('navigates to /:urlName when a calendar tile is clicked', async () => {
