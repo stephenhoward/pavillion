@@ -238,7 +238,8 @@ class ProcessInboxService {
    * Rows are taken by `message_time`, then by `createdAt`: `clampMessageTime`
    * floors every activity older than two years to the same instant, so an
    * old Announce and its Undo can tie, and the backfill writes them oldest
-   * first.
+   * first. `createdAt` has millisecond resolution, so the tie-break is
+   * best-effort: two rows written within the same millisecond can still tie.
    *
    * @param options.skipNewerThanMs - Minimum age of a row's write, in ms
    * @returns {Promise<void>}

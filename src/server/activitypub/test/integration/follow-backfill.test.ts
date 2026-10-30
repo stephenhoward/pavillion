@@ -559,6 +559,61 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     })).toBe(0);
   });
 
+  it('clamps every activity against one clock reading per run, so a floored Announce is still written before its floored Undo', async () => {
+    // Both activities are older than two years, so both floor to now - 2y.
+    // The clock advances on every call: if each activity were clamped against
+    // its own reading, the Undo (walked first) would get the earlier floor and
+    // be written, and dispatched, before its Announce, leaving a stuck share.
+    const eventApId = `${SOURCE_ORIGIN}/events/floored`;
+    const announceId = `${SOURCE_ORIGIN}/activities/announce-floored`;
+    const undoId = `${SOURCE_ORIGIN}/activities/undo-floored`;
+
+    // Local copy of X so the Announce handler does not fetch it.
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: null });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: SOURCE_ACTOR_URI,
+    });
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId }],
+        SOURCE_PAGE_2_URI,
+      ),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId },
+      ]),
+    });
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
+
+    let tick = 0;
+    const advancingNow = () => new Date(Date.parse('2026-05-16T12:00:00Z') + (tick++) * 1000);
+
+    const service = runService({ fetcher, now: advancingNow });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    const writes = enqueueSpy.getCalls().map(call => call.args[0]);
+    expect(writes.map(w => w.id)).toEqual([announceId, undoId]);
+
+    await drainInbox();
+
+    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
+    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
+    expect(announceRow?.processed_status).toBe('ok');
+    expect(undoRow?.processed_status).toBe('ok');
+    expect(await EventActivityEntity.count({
+      where: { event_id: eventApId, type: 'share' },
+    })).toBe(0);
+  });
+
   // -------------------------------------------------------------------------
   // 5. Idempotency
   // -------------------------------------------------------------------------

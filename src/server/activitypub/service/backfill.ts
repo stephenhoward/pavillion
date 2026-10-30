@@ -292,6 +292,7 @@ export class FollowBackfillService {
       authOrigin,
       calendar,
       localActorUri,
+      now: this.now(),
     };
 
     const buffer: WalkBuffer = { entries: [], bytes: 0 };
@@ -506,7 +507,7 @@ export class FollowBackfillService {
         continue;
       }
 
-      const entry = this.bufferEntry(activity, type);
+      const entry = this.bufferEntry(activity, type, ctx.now);
       if (!entry) {
         continue;
       }
@@ -522,12 +523,12 @@ export class FollowBackfillService {
 
   /**
    * Builds the buffer entry for one activity, resolving its clamped
-   * `message_time` now, with the injected clock. Returns null for an activity
-   * with no id: no id, no idempotency key. Skip rather than synthesize one — a
-   * synthesized id would forfeit deduplication across reruns and could race
-   * with a future live POST of the same activity.
+   * `message_time` against the run's single clock reading `now`. Returns null
+   * for an activity with no id: no id, no idempotency key. Skip rather than
+   * synthesize one — a synthesized id would forfeit deduplication across
+   * reruns and could race with a future live POST of the same activity.
    */
-  private bufferEntry(activity: Record<string, unknown>, type: string): BufferedActivity | null {
+  private bufferEntry(activity: Record<string, unknown>, type: string, now: Date): BufferedActivity | null {
     const activityId = typeof activity.id === 'string' ? activity.id : null;
     if (!activityId) {
       return null;
@@ -541,7 +542,7 @@ export class FollowBackfillService {
           ? publishedRaw
           : undefined;
 
-    return { activityId, type, messageTime: clampMessageTime(published, this.now()), activity };
+    return { activityId, type, messageTime: clampMessageTime(published, now), activity };
   }
 
   /**
@@ -611,6 +612,15 @@ interface WalkContext {
   calendar: import('@/common/model/calendar').Calendar;
   /** Local calendar's actor URI; used by the loop guard. */
   localActorUri: string;
+  /**
+   * The run's one clock reading, taken before the walk, used for every
+   * `clampMessageTime` call. One reading makes every floored or
+   * missing-`published` activity tie on `message_time`, so the write order
+   * (oldest first) decides their dispatch order through the drain's
+   * `createdAt` tie-break. A reading per activity would give the newest-first
+   * walk's later items later floors, inverting an Undo and its Announce.
+   */
+  now: Date;
 }
 
 /**
