@@ -1956,6 +1956,33 @@ describe('EventObject', () => {
         expect(result.schedules[0].end).toContain('+01:00');
       });
 
+      it('should carry a valid IANA timezone onto the synthesized schedule so it is stored', () => {
+        const apObject = {
+          name: 'Zoned',
+          startTime: '2026-10-27T17:15:00Z',
+          timezone: 'America/Los_Angeles',
+        };
+
+        const result = EventObject.parseInboundEvent(apObject);
+        const schedule = CalendarEventSchedule.fromObject(result.schedules[0]);
+
+        expect(result.schedules[0].timezone).toBe('America/Los_Angeles');
+        expect(schedule.startDate?.zoneName).toBe('America/Los_Angeles');
+        expect(schedule.startDate?.toFormat('HH:mm')).toBe('10:15');
+      });
+
+      it('should canonicalize a case-variant timezone before carrying it', () => {
+        const apObject = {
+          name: 'Zoned',
+          startTime: '2026-10-27T17:15:00Z',
+          timezone: 'america/los_angeles',
+        };
+
+        const result = EventObject.parseInboundEvent(apObject);
+
+        expect(result.schedules[0].timezone).toBe('America/Los_Angeles');
+      });
+
       it('should ignore a fixed-offset (non-IANA) timezone and leave instants unchanged', () => {
         const apObject = {
           name: 'Bad Zone',
@@ -1966,6 +1993,7 @@ describe('EventObject', () => {
         const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
+        expect(result.schedules[0]).not.toHaveProperty('timezone');
       });
 
       it('should ignore a non-string / garbage timezone without error', () => {
@@ -1978,6 +2006,7 @@ describe('EventObject', () => {
         const result = EventObject.parseInboundEvent(apObject);
 
         expect(result.schedules[0].start).toBe('2026-04-15T09:00:00Z');
+        expect(result.schedules[0]).not.toHaveProperty('timezone');
       });
 
       it('should not apply inbound timezone when pavillion:schedules are present (Pavillion peer path)', () => {

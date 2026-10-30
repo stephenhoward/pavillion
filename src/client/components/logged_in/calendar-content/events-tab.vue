@@ -419,7 +419,8 @@ const formatEventDate = (event) => {
     return null;
   }
 
-  return schedule.startDate.toLocaleString(DateTime.DATETIME_MED);
+  // Shown in the viewer's zone, like the calendar view's instances.
+  return schedule.startDate.toLocal().toLocaleString(DateTime.DATETIME_MED);
 };
 
 // Check if event is recurring

@@ -226,6 +226,7 @@ describe('CalendarEventSchedule zone', () => {
     ['an unknown zone name', 'Not/AZone'],
     ['a fixed UTC offset', '+05:00'],
     ['a negative fixed offset', '-08:00'],
+    ['a fixed offset written with a Unicode minus', '−08:00'],
     ['an empty string', ''],
     ['a non-string', 42],
     ['null', null],
@@ -237,6 +238,19 @@ describe('CalendarEventSchedule zone', () => {
     expect(restored.startDate?.isValid).toBe(true);
     expect(restored.startDate?.zoneName).toBe(PROCESS_ZONE);
     expect(restored.eventEndTime?.zoneName).toBe(PROCESS_ZONE);
+    expect(restored.startDate?.toMillis()).toBe(laSchedule().startDate?.toMillis());
+  });
+
+  it.each([
+    ['a case variant', 'america/los_angeles'],
+    ['an upper-case variant', 'AMERICA/LOS_ANGELES'],
+    ['a link alias', 'US/Pacific'],
+  ])('canonicalizes %s to America/Los_Angeles', (_label, timezone) => {
+    expect(CalendarEventSchedule.parseZone(timezone)).toBe('America/Los_Angeles');
+
+    const restored = CalendarEventSchedule.fromObject({ ...laSchedule().toObject(), timezone });
+
+    expect(restored.startDate?.zoneName).toBe('America/Los_Angeles');
     expect(restored.startDate?.toMillis()).toBe(laSchedule().startDate?.toMillis());
   });
 });

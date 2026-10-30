@@ -464,21 +464,36 @@ class CalendarEventSchedule extends Model {
   }
 
   /**
-   * Returns the wire `timezone` value when it names an IANA zone, else null.
+   * Returns the canonical IANA name for the wire `timezone` value, else null.
    *
    * The value can arrive from a federated peer, so anything else is ignored
-   * rather than thrown on. Fixed offsets such as "+05:00" are refused even
-   * though recent Intl implementations accept them as zones: an offset has no
-   * daylight-saving rules, so it cannot keep a recurrence's local time.
+   * rather than thrown on. It is canonicalized through Intl first (case
+   * variants and link aliases such as "US/Pacific" become
+   * "America/Los_Angeles"), so only canonical names reach Luxon's zone
+   * caches, which keep one entry per distinct string. Fixed offsets such as
+   * "+05:00" are refused even though recent Intl implementations accept them
+   * as zones: an offset has no daylight-saving rules, so it cannot keep a
+   * recurrence's local time. The offset check runs on the canonical form,
+   * which turns a Unicode minus into an ASCII one.
    *
    * @param {unknown} value - The `timezone` field from a serialized schedule
-   * @returns {string|null} The zone name, or null to keep the process zone
+   * @returns {string|null} The canonical zone name, or null to keep the process zone
    */
   static parseZone(value: unknown): string | null {
-    if (typeof value !== 'string' || /^[+-]/.test(value)) {
+    if (typeof value !== 'string' || value === '') {
       return null;
     }
-    return IANAZone.isValidZone(value) ? value : null;
+    let canonical: string;
+    try {
+      canonical = new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone;
+    }
+    catch {
+      return null;
+    }
+    if (/^[+-]/.test(canonical)) {
+      return null;
+    }
+    return IANAZone.isValidZone(canonical) ? canonical : null;
   }
 
   /**

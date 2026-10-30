@@ -573,17 +573,18 @@ class EventObject extends ActivityPubObject {
       //
       // FEP-8a8e timezone: when a non-Pavillion peer supplies the IANA
       // `timezone` the event's times are given in, reinterpret the AS instants
-      // into that zone so the reconstructed schedule carries the intended
-      // wall-clock time rather than a raw UTC/offset instant (fixing events that
-      // otherwise render at the wrong local time). Only IANA-valid zone names
-      // are honoured; a bare offset (or garbage) is ignored and the instant
-      // passes through unchanged. displayEndTime / eventStatus are non-mapping
-      // FEP terms — they are tolerated (dropped by the closed key set)
-      // rather than acted on; a remote EventCancelled is intentionally NOT
-      // applied here (would require an origin-gated hide flow — follow-up).
-      const inboundZone = typeof apObject.timezone === 'string' && IANAZone.isValidZone(apObject.timezone)
-        ? apObject.timezone
-        : null;
+      // into that zone and record it as the schedule's `timezone`, so
+      // CalendarEventSchedule.fromObject keeps the zone and it is stored with
+      // the schedule (the event renders and recurs at the intended local time,
+      // not a raw UTC/offset instant). The value is validated and
+      // canonicalized by CalendarEventSchedule.parseZone, the same gate the
+      // schedule wire key uses; a bare offset (or garbage) is ignored, the
+      // instant passes through unchanged and no zone is recorded.
+      // displayEndTime / eventStatus are non-mapping FEP terms — they are
+      // tolerated (dropped by the closed key set) rather than acted on; a
+      // remote EventCancelled is intentionally NOT applied here (would require
+      // an origin-gated hide flow — follow-up).
+      const inboundZone = CalendarEventSchedule.parseZone(apObject.timezone);
       const applyZone = (iso: string): string => {
         if (!inboundZone) {
           return iso;
@@ -599,6 +600,9 @@ class EventObject extends ActivityPubObject {
       };
       if (apObject.endTime) {
         schedule.end = applyZone(apObject.endTime);
+      }
+      if (inboundZone) {
+        schedule.timezone = inboundZone;
       }
       result.schedules = [schedule];
     }
