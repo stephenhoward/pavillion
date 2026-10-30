@@ -101,6 +101,24 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     };
   }
 
+  /**
+   * Run `task` on the dispatch path the installed handlers use, for work that
+   * is not a bus event (the web process's inbox drain).
+   *
+   * On SQLite the task joins {@link dispatchQueue}: it starts after every
+   * handler already queued and holds back every handler queued after it, so
+   * its transactions never overlap theirs. On PostgreSQL it runs at once. A
+   * rejection reaches the caller and does not stall the chain.
+   */
+  runSerialized(task: () => Promise<void>): Promise<void> {
+    if (!this.serializeDispatch) {
+      return task();
+    }
+    const run = this.dispatchQueue.then(task);
+    this.dispatchQueue = run.catch(() => {});
+    return run;
+  }
+
   install(eventBus: EventEmitter): void {
     eventBus.on('eventCreated', this.serialize(this.handleEventCreated.bind(this)));
     eventBus.on('eventUpdated', this.serialize(this.handleEventUpdated.bind(this)));

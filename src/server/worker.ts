@@ -280,10 +280,9 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
         logger.info({ followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill job completed');
       }
       catch (error) {
-        // A rate-limit pause is expected back-pressure, not a failure: rows
-        // persisted before the pause were already drained, and re-throwing
-        // lets pg-boss re-queue the job (after the configured retry delay) to
-        // walk the remaining outbox pages. Log it at warn, not error.
+        // A rate-limit pause is expected back-pressure, not a failure: the
+        // pause wrote nothing, and re-throwing lets pg-boss re-walk the outbox
+        // after the configured retry delay. Log it at warn, not error.
         if (error instanceof BackfillRateLimitError) {
           logger.warn({ followingCalendarId: data?.followingCalendarId }, 'activitypub:follow:backfill paused on rate limit; will retry');
           throw error;

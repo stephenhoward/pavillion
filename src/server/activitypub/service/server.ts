@@ -400,10 +400,11 @@ export default class ActivityPubService {
 
   /**
    * Deferred inbox entry point: persist a row WITHOUT emitting
-   * `inboxMessageAdded`. The caller is responsible for draining the inbox
-   * afterwards via `processInboxMessages()`. Used by the follow-backfill
-   * worker, which persists an entire outbox crawl and then drains once in
-   * chronological `message_time` order rather than one row per arrival.
+   * `inboxMessageAdded`. The caller does not drain: the row waits for the web
+   * process's inbox drain, which dispatches in chronological `message_time`
+   * order with the domain handlers installed. Used by the follow-backfill
+   * worker, which buffers an entire outbox crawl and writes it oldest first
+   * rather than one row per arrival.
    *
    * `messageTime` is supplied already resolved (e.g. clamped through
    * `clampMessageTime` for untrusted outbox-pull timestamps): this path does
