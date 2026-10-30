@@ -12,7 +12,9 @@
  *   - no `inboxMessageAdded` emission on the backfill path
  *   - private-URL SSRF rejection on the source actor URI
  *   - nothing written when the walk pauses on the rate limit or the follow
- *     row disappears mid-walk
+ *     row disappears mid-walk or before the write
+ *   - a refused or unreachable next page, or the buffer byte cap, ends the
+ *     walk normally and the buffer is written
  *
  * The trust-gate logic itself has dedicated unit tests in
  * `../service/backfill.test.ts`. The cases here exercise the public
@@ -29,8 +31,25 @@
  * that need a real drain call the inbox service directly.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
+
+// Capture the backfill logger's warn lines (the truncation warnings) while
+// every other logger stays real. vi.hoisted keeps the reference valid.
+const { backfillWarn } = vi.hoisted(() => ({ backfillWarn: vi.fn() }));
+vi.mock('@/server/common/helper/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/common/helper/logger')>();
+  return {
+    ...actual,
+    createLogger: (domain: string) => {
+      const child = actual.createLogger(domain);
+      if (domain === 'activitypub.backfill') {
+        child.warn = backfillWarn as unknown as typeof child.warn;
+      }
+      return child;
+    },
+  };
+});
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
@@ -137,6 +156,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
+    backfillWarn.mockClear();
 
     // Real interfaces — the only thing replaced is `processInboxMessages`,
     // stubbed as a sentinel so a test can assert the service never drains.
@@ -226,6 +246,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   function runService(opts: {
     fetcher: sinon.SinonStub & typeof fetchRemoteObject;
     now?: () => Date;
+    maxBufferBytes?: number;
   }): FollowBackfillService {
     return new FollowBackfillService({
       activityPubInterface,
@@ -233,6 +254,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       rateLimiter,
       fetcher: opts.fetcher,
       now: opts.now,
+      maxBufferBytes: opts.maxBufferBytes,
     });
   }
 
@@ -526,8 +548,12 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // The next drain after the walk dispatches the Announce, then its Undo.
     await drainInbox();
 
+    // processed_time is set on error as well as on success, so assert the
+    // status: both rows must have dispatched cleanly.
     const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
-    expect(announceRow?.processed_time).not.toBeNull();
+    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
+    expect(announceRow?.processed_status).toBe('ok');
+    expect(undoRow?.processed_status).toBe('ok');
     expect(await EventActivityEntity.count({
       where: { event_id: eventApId, type: 'share' },
     })).toBe(0);
@@ -1030,6 +1056,134 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.count({
       where: { calendar_id: followerCalendarId },
     })).toBe(0);
+  });
+
+  it('writes nothing when the follow row is removed after the last page has been walked', async () => {
+    // Page 1 passes its page-boundary re-check; the user unfollows while the
+    // next page is in flight, and that page turns out to be unreachable. The
+    // walk ends normally with page 1 buffered, so only the re-check
+    // immediately before the write can see the row is gone.
+    const pages: Record<string, Record<string, unknown>> = {
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+        SOURCE_PAGE_2_URI,
+      ),
+    };
+    const fetcher = makeFetcher({});
+    fetcher.callsFake(async (uri: string) => {
+      if (uri === SOURCE_PAGE_2_URI) {
+        await FollowingCalendarEntity.destroy({
+          where: { calendar_id: followerCalendarId, calendar_actor_id: sourceCalendarActorId },
+        });
+      }
+      return pages[uri] ?? null;
+    });
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
+
+    const service = runService({ fetcher });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(true);
+    expect(enqueueSpy.callCount).toBe(0);
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // 12. A walk that ends on a refused or unreachable next page is a normal end
+  // -------------------------------------------------------------------------
+
+  it.each([
+    ['refused by the SSRF check', 'https://10.0.0.1/calendars/source/outbox?page=2'],
+    ['unreachable', SOURCE_PAGE_2_URI],
+  ])('writes the walked pages when the next page URL is %s', async (_label, nextUrl) => {
+    // The stub serves no page 2, so an unreachable next page resolves to null.
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage(
+        [
+          buildCreate(`${SOURCE_ORIGIN}/activities/p1b`, '2026-04-02T00:00:00Z'),
+          buildCreate(`${SOURCE_ORIGIN}/activities/p1a`, '2026-04-01T00:00:00Z'),
+        ],
+        nextUrl,
+      ),
+    });
+
+    const service = runService({ fetcher });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
+      where: { calendar_id: followerCalendarId },
+      order: [['id', 'ASC']],
+    })).map(r => r.id);
+    expect(persistedIds).toEqual([
+      `${SOURCE_ORIGIN}/activities/p1a`,
+      `${SOURCE_ORIGIN}/activities/p1b`,
+    ]);
+  });
+
+  // -------------------------------------------------------------------------
+  // 13. Buffer byte cap
+  // -------------------------------------------------------------------------
+
+  it('stops the walk at the buffer byte cap and writes what it buffered, oldest first', async () => {
+    // Walk order is newest first. With the cap set to exactly the first two
+    // activities' serialized size, the third does not fit: it is not
+    // buffered, and page 2 is never fetched.
+    const newest = buildCreate(`${SOURCE_ORIGIN}/activities/newest`, '2026-04-03T00:00:00Z');
+    const middle = buildCreate(`${SOURCE_ORIGIN}/activities/middle`, '2026-04-02T00:00:00Z');
+    const oldest = buildCreate(`${SOURCE_ORIGIN}/activities/oldest`, '2026-04-01T00:00:00Z');
+    const cap = JSON.stringify(newest).length + JSON.stringify(middle).length;
+
+    const fetcher = makeFetcher({
+      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+      [SOURCE_PAGE_1_URI]: buildPage([newest, middle, oldest], SOURCE_PAGE_2_URI),
+      [SOURCE_PAGE_2_URI]: buildPage([
+        buildCreate(`${SOURCE_ORIGIN}/activities/page-2`, '2026-03-01T00:00:00Z'),
+      ]),
+    });
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
+
+    const service = runService({ fetcher, maxBufferBytes: cap });
+    await service.runBackfill({
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    });
+
+    expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
+
+    const writes = enqueueSpy.getCalls().map(call => call.args[0]);
+    expect(writes.map(w => w.id)).toEqual([
+      `${SOURCE_ORIGIN}/activities/middle`,
+      `${SOURCE_ORIGIN}/activities/newest`,
+    ]);
+    expect(writes[1].messageTime.getTime()).toBeGreaterThan(writes[0].messageTime.getTime());
+    expect(await ActivityPubInboxMessageEntity.count({
+      where: { calendar_id: followerCalendarId },
+    })).toBe(2);
+
+    const capWarnings = backfillWarn.mock.calls.filter(([, msg]) => msg === 'backfill truncated at buffer cap');
+    expect(capWarnings).toHaveLength(1);
+    expect(capWarnings[0][0]).toEqual({
+      followingCalendarId: followerCalendarId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+      bufferedBytes: cap,
+      cap,
+    });
   });
 });
 

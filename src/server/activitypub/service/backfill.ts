@@ -16,11 +16,13 @@
  * written; the strict Undo cross-check then no-ops and the share sticks when
  * the Announce arrives (DEC-013). So the walk keeps every activity that passes
  * the trust gates in an in-memory buffer, and only when the walk ends normally
- * (no next page, page cap reached, next URL refused, page unreachable) writes
- * the buffer sorted by clamped `message_time` ascending, one row at a time.
- * Any drain that runs during those writes sees an oldest-first prefix of the
- * walk, in which every Announce precedes any Undo that references it. A walk
- * that ends on rate-limit exhaustion or on an unfollow writes nothing.
+ * (no next page, page or buffer cap reached, next URL refused, page
+ * unreachable) writes the buffer sorted by clamped `message_time` ascending,
+ * one row at a time. Any drain that runs during those writes sees an
+ * oldest-first prefix of the walk, in which every Announce precedes any Undo
+ * that references it. A walk that ends on rate-limit exhaustion or on an
+ * unfollow writes nothing; the follow row is re-checked at every page boundary
+ * and once more immediately before the write.
  *
  * Every write goes through the deferred inbox entry point
  * `activityPubInterface.enqueueInboxRow()` — the same `findOrCreate` (first
@@ -51,6 +53,15 @@
  * unbounded `next` chain or by returning a multi-megabyte page. Reaching
  * the page cap emits one warn-level log line; pages larger than the byte
  * cap are dropped by the underlying axios client (which returns null).
+ *
+ * `MAX_BACKFILL_BUFFER_BYTES = 8 MiB` bounds the buffer itself, since the
+ * page caps alone would let a peer hold up to 50 MiB of activities in worker
+ * memory. Each buffered activity counts as its serialized length (bytes, not
+ * items: one activity can be close to a whole page). When the next activity
+ * would exceed the cap the walk stops there, emits one warn-level log line,
+ * and writes the buffer as a normal end. Like the page cap, truncation keeps
+ * a contiguous newest-first run; an Undo whose Announce fell beyond the cap
+ * no-ops at dispatch.
  *
  * Rate limiting
  * -------------
@@ -107,6 +118,9 @@ export const MAX_OUTBOX_PAGES = 50;
 
 /** Per-page response-body byte cap enforced on every outbound GET. */
 export const MAX_PAGE_BYTES = 1_048_576;
+
+/** Cap on the serialized size of the activities one walk buffers in memory. */
+export const MAX_BACKFILL_BUFFER_BYTES = 8 * 1024 * 1024;
 
 /** Per-host outbound request budget for outbox pulls. */
 const RATE_LIMIT_PER_MINUTE = 60;
@@ -190,6 +204,8 @@ export interface BackfillDependencies {
   fetcher?: typeof fetchRemoteObject;
   /** Clock override for tests. Production code uses `new Date()`. */
   now?: () => Date;
+  /** Buffer cap override for tests. Production code uses {@link MAX_BACKFILL_BUFFER_BYTES}. */
+  maxBufferBytes?: number;
 }
 
 /**
@@ -204,6 +220,7 @@ export class FollowBackfillService {
   private readonly rateLimiter: SyncRateLimiter;
   private readonly fetcher: typeof fetchRemoteObject;
   private readonly now: () => Date;
+  private readonly maxBufferBytes: number;
 
   constructor(deps: BackfillDependencies) {
     this.activityPubInterface = deps.activityPubInterface;
@@ -211,21 +228,21 @@ export class FollowBackfillService {
     this.rateLimiter = deps.rateLimiter ?? backfillRateLimiter;
     this.fetcher = deps.fetcher ?? fetchRemoteObject;
     this.now = deps.now ?? (() => new Date());
+    this.maxBufferBytes = deps.maxBufferBytes ?? MAX_BACKFILL_BUFFER_BYTES;
   }
 
   /**
    * Run a single backfill job to completion. Never throws for "done"
    * conditions (follow removed, source unreachable, malformed page, cap
    * reached) — those exit cleanly so pg-boss does not loop on a
-   * permanently-broken peer. Two cases DO throw: catastrophic infrastructure
-   * failures (DB unavailable while loading the follow row) propagate so the
-   * job retries, and rate-limit exhaustion throws {@link BackfillRateLimitError}
-   * so the outbox is re-walked on a later, delayed retry.
+   * permanently-broken peer. Catastrophic infrastructure failures (DB
+   * unavailable while loading the follow row) propagate so the job retries.
+   * Rate-limit exhaustion throws {@link BackfillRateLimitError} (see the
+   * module header).
    *
-   * Writes the buffered walk only when it ends normally (all pages walked,
-   * page cap reached, next URL refused or unreachable). A rate-limit pause or
-   * an unfollow detected mid-walk discards the buffer and writes nothing. The
-   * run never drains the inbox; the web process does.
+   * Writes the buffered walk only when it ends normally and the follow row
+   * still exists immediately before the write. The run never drains the
+   * inbox; the web process does.
    */
   async runBackfill(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
     const { followingCalendarId, calendarActorId, sourceActorUri } = payload;
@@ -274,38 +291,39 @@ export class FollowBackfillService {
       localActorUri,
     };
 
-    const buffer: BufferedActivity[] = [];
-    const end = await this.walkOutbox(ctx, buffer);
+    const buffer: WalkBuffer = { entries: [], bytes: 0 };
+    let end = await this.walkOutbox(ctx, buffer);
 
-    // Rate-limit exhaustion is the one non-catastrophic early exit that must
-    // NOT be treated as "done": the outbox still needs walking. The partial
-    // walk is newest first, so writing it would let a drain dispatch an Undo
-    // ahead of an Announce the retry has yet to write. Discard it and let
-    // pg-boss re-queue the job; the publish-time BACKFILL_RETRY_* options give
-    // the sliding window time to reset, and the re-walk from the start is
-    // idempotent via findOrCreate.
+    // The page-boundary re-checks cannot see an unfollow that lands after the
+    // last one; check once more so an unfollowed calendar gets nothing written.
+    if (end === 'complete' && !(await this.isStillFollowing(ctx))) {
+      end = 'unfollowed';
+    }
+
+    // A partial walk must not be written; pg-boss re-walks it after the delay.
     if (end === 'rate_limited') {
-      logger.info({ followingCalendarId, sourceActorUri, discardedRows: buffer.length }, 'backfill paused on rate limit; buffer discarded');
+      logger.info({ followingCalendarId, sourceActorUri, discardedRows: buffer.entries.length }, 'backfill paused on rate limit; buffer discarded');
       throw new BackfillRateLimitError(authOrigin);
     }
     if (end === 'unfollowed') {
-      logger.info({ followingCalendarId, sourceActorUri, discardedRows: buffer.length }, 'backfill stopped on unfollow; buffer discarded');
+      logger.info({ followingCalendarId, calendarActorId, discardedRows: buffer.entries.length }, 'follow row removed during backfill; buffer discarded');
       return;
     }
 
-    const persistedRows = await this.writeBuffer(buffer, ctx);
+    const persistedRows = await this.writeBuffer(buffer.entries, ctx);
     logger.info(
-      { followingCalendarId, sourceActorUri, bufferedRows: buffer.length, persistedRows },
+      { followingCalendarId, sourceActorUri, bufferedRows: buffer.entries.length, persistedRows },
       'backfill run finished; rows written oldest first',
     );
   }
 
   /**
    * Walks the source outbox page-by-page, pushing every activity that passes
-   * the trust gates onto `buffer`. Writes nothing. Returns how the walk ended
-   * ({@link WalkEnd}): the caller writes the buffer only on `'complete'`.
+   * the trust gates onto `buffer` until the buffer cap is reached. Writes
+   * nothing. Returns how the walk ended ({@link WalkEnd}): the caller writes
+   * the buffer only on `'complete'`.
    */
-  private async walkOutbox(ctx: WalkContext, buffer: BufferedActivity[]): Promise<WalkEnd> {
+  private async walkOutbox(ctx: WalkContext, buffer: WalkBuffer): Promise<WalkEnd> {
     // 2. Fetch the source actor profile so we read the *current* outbox URL
     // rather than whatever URL the federation handshake cached. Validate
     // first because the source URI is attacker-influenced (came in via
@@ -366,19 +384,18 @@ export class FollowBackfillService {
       pagesWalked++;
 
       const items = Array.isArray(currentPage.orderedItems) ? currentPage.orderedItems : [];
-      this.processPage(items as unknown[], ctx, buffer);
+      if (!this.processPage(items as unknown[], ctx, buffer)) {
+        logger.warn(
+          { followingCalendarId: ctx.followingCalendarId, sourceActorUri: ctx.sourceActorUri, bufferedBytes: buffer.bytes, cap: this.maxBufferBytes },
+          'backfill truncated at buffer cap',
+        );
+        return 'complete';
+      }
 
       // Re-verify the follow row at every page boundary. A user unfollowing
       // mid-backfill should stop us from continuing to drag down their
       // event history.
-      const stillFollowing = await FollowingCalendarEntity.findOne({
-        where: {
-          calendar_id: ctx.followingCalendarId,
-          calendar_actor_id: ctx.calendarActorId,
-        },
-      });
-      if (!stillFollowing) {
-        logger.info({ followingCalendarId: ctx.followingCalendarId, calendarActorId: ctx.calendarActorId }, 'follow row removed during backfill; stopping pagination');
+      if (!(await this.isStillFollowing(ctx))) {
         return 'unfollowed';
       }
 
@@ -408,6 +425,17 @@ export class FollowBackfillService {
   // ---------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------
+
+  /** Whether the follow relationship this run backfills still exists. */
+  private async isStillFollowing(ctx: WalkContext): Promise<boolean> {
+    const followRow = await FollowingCalendarEntity.findOne({
+      where: {
+        calendar_id: ctx.followingCalendarId,
+        calendar_actor_id: ctx.calendarActorId,
+      },
+    });
+    return followRow !== null;
+  }
 
   /**
    * Validates a URL via the shared SSRF helper. Returns false (with a log
@@ -447,8 +475,10 @@ export class FollowBackfillService {
 
   /**
    * Single-pass walk of a page. For each item: type-filter, run the
-   * per-type pre-write trust gate, then push it onto `buffer`. Nothing is
-   * written here.
+   * per-type pre-write trust gate, then push it onto `buffer`, counting its
+   * serialized length against the buffer cap. Nothing is written here.
+   * Returns false, without buffering it, at the first activity that would
+   * take the buffer over the cap; the caller then stops the walk.
    *
    * Duplicate activity ids, within a page or across pages, are left in the
    * buffer: the write's `findOrCreate` on the activity id makes the second
@@ -456,7 +486,7 @@ export class FollowBackfillService {
    * inbox handler is idempotent and the drain dispatches rows in
    * `message_time` order.
    */
-  private processPage(items: unknown[], ctx: WalkContext, buffer: BufferedActivity[]): void {
+  private processPage(items: unknown[], ctx: WalkContext, buffer: WalkBuffer): boolean {
     for (const raw of items) {
       if (!raw || typeof raw !== 'object') continue;
       const activity = raw as Record<string, unknown>;
@@ -474,10 +504,17 @@ export class FollowBackfillService {
       }
 
       const entry = this.bufferEntry(activity, type);
-      if (entry) {
-        buffer.push(entry);
+      if (!entry) {
+        continue;
       }
+      const bytes = JSON.stringify(activity).length;
+      if (buffer.bytes + bytes > this.maxBufferBytes) {
+        return false;
+      }
+      buffer.entries.push(entry);
+      buffer.bytes += bytes;
     }
+    return true;
   }
 
   /**
@@ -584,16 +621,23 @@ interface BufferedActivity {
   activity: Record<string, unknown>;
 }
 
+/** The walk's buffer, in walk order, and the serialized bytes it holds. */
+interface WalkBuffer {
+  entries: BufferedActivity[];
+  bytes: number;
+}
+
 /**
  * How a {@link FollowBackfillService.walkOutbox} run ended.
  *
- *   - `'complete'`: the walk is done — every page walked, page cap reached,
- *     next URL refused, or the source unreachable. The buffer is written.
+ *   - `'complete'`: the walk is done — every page walked, page or buffer cap
+ *     reached, next URL refused, or the source unreachable. The buffer is
+ *     written unless the follow row is gone by then.
  *   - `'rate_limited'`: the per-host budget ran out with pages remaining. The
  *     buffer is discarded and the caller throws {@link BackfillRateLimitError}
  *     so pg-boss retries.
- *   - `'unfollowed'`: the follow row disappeared mid-walk. The buffer is
- *     discarded.
+ *   - `'unfollowed'`: the follow row disappeared mid-walk or before the
+ *     write. The buffer is discarded.
  */
 type WalkEnd = 'complete' | 'rate_limited' | 'unfollowed';
 
