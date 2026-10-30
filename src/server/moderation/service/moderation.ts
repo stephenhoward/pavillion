@@ -464,24 +464,14 @@ class ModerationService {
     // Validate all input fields in one pass
     this.validateCreateReportForEventInput(data);
 
-    let calendarId: string;
-    try {
-      const event = await this.calendarInterface.getEventById(data.eventId);
-      if (!event || !event.calendarId) {
-        throw new EventNotFoundError();
-      }
-      calendarId = event.calendarId;
-    }
-    catch (error) {
-      if (error instanceof EventNotFoundError) {
-        throw error;
-      }
+    const event = await this.calendarInterface.getEventById(data.eventId);
+    if (!event || !event.calendarId) {
       throw new EventNotFoundError();
     }
 
     return this.createReport({
       ...data,
-      calendarId,
+      calendarId: event.calendarId,
     });
   }
 
