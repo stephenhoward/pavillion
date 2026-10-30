@@ -2151,3 +2151,267 @@ describe('EventInstanceService.buildEventInstances', () => {
     });
   });
 });
+
+/**
+ * Recurrences step in the wall-clock time of the schedule's own zone, so a
+ * weekly 10:15 event in Los Angeles stays at 10:15 across a daylight-saving
+ * change. Every expectation is a literal instant, and the describe must pass
+ * under any process zone (run it with TZ=UTC and TZ=America/New_York).
+ */
+describe('EventInstanceService zone-aware expansion', () => {
+  const LA = 'America/Los_Angeles';
+  const HORIZON_MONTHS = 6;
+  const EVENT_ID = '88888888-8888-4888-8888-888888888888';
+  const CALENDAR_ID = '99999999-9999-4999-8999-999999999999';
+  let service: EventInstanceService;
+  let sandbox: sinon.SinonSandbox;
+
+  function recurringSchedule(opts: {
+    startIso: string;
+    zone: string;
+    frequency: EventFrequency;
+    eventEndIso?: string;
+  }): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule(
+      uuidv4(),
+      DateTime.fromISO(opts.startIso, { zone: opts.zone }),
+    );
+    schedule.eventEndTime = opts.eventEndIso
+      ? DateTime.fromISO(opts.eventEndIso, { zone: opts.zone })
+      : null;
+    schedule.frequency = opts.frequency;
+    schedule.interval = 1;
+    schedule.count = 0;
+    schedule.byDay = [];
+    schedule.isExclusion = false;
+    schedule.hideFromPublic = false;
+    return schedule;
+  }
+
+  function eventWith(schedules: CalendarEventSchedule[], calendarId: string = CALENDAR_ID, eventId: string = EVENT_ID): CalendarEvent {
+    const event = new CalendarEvent(eventId, calendarId);
+    event.schedules = schedules;
+    return event;
+  }
+
+  /** The weekly 10:15 Los Angeles series of Judge 1, starting Tue 2026-10-27. */
+  function weeklyLosAngeles(): CalendarEventSchedule {
+    return recurringSchedule({
+      startIso: '2026-10-27T10:15:00',
+      zone: LA,
+      frequency: EventFrequency.WEEKLY,
+    });
+  }
+
+  async function upcomingStarts(event: CalendarEvent, afterIso: string, limit: number): Promise<string[]> {
+    const result = await service.listUpcomingOccurrences(
+      event,
+      DateTime.fromISO(afterIso, { zone: 'utc' }),
+      limit,
+    );
+    return result.occurrences.map(o => o.start.toUTC().toISO()!);
+  }
+
+  function generatedStarts(event: CalendarEvent, nowIso: string): string[] {
+    const instances: CalendarEventInstance[] = (service as any).generateInstances(event, new Date(nowIso), HORIZON_MONTHS);
+    return instances.map(i => i.start.toUTC().toISO()!);
+  }
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new EventInstanceService(new EventEmitter());
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('keeps a weekly Los Angeles event at 10:15 local across the November change', async () => {
+    const event = eventWith([weeklyLosAngeles()]);
+
+    expect(await upcomingStarts(event, '2026-10-26T00:00:00Z', 3)).toEqual([
+      '2026-10-27T17:15:00.000Z',
+      '2026-11-03T18:15:00.000Z',
+      '2026-11-10T18:15:00.000Z',
+    ]);
+    expect(generatedStarts(event, '2026-10-26T00:00:00Z').slice(0, 3)).toEqual([
+      '2026-10-27T17:15:00.000Z',
+      '2026-11-03T18:15:00.000Z',
+      '2026-11-10T18:15:00.000Z',
+    ]);
+  });
+
+  it('keeps a daily Los Angeles event at 17:00 local across the March change', async () => {
+    const event = eventWith([recurringSchedule({
+      startIso: '2027-03-10T17:00:00',
+      zone: LA,
+      frequency: EventFrequency.DAILY,
+    })]);
+
+    // 13 March 17:00 PST, then 14 March 17:00 PDT.
+    expect(await upcomingStarts(event, '2027-03-13T12:00:00Z', 2)).toEqual([
+      '2027-03-14T01:00:00.000Z',
+      '2027-03-15T00:00:00.000Z',
+    ]);
+  });
+
+  it('moves an occurrence whose wall time does not exist forward by the gap', async () => {
+    const event = eventWith([recurringSchedule({
+      startIso: '2027-03-12T02:30:00',
+      zone: LA,
+      frequency: EventFrequency.DAILY,
+    })]);
+
+    // 02:30 does not exist on 14 March; Luxon shifts it to 03:30 PDT.
+    expect(await upcomingStarts(event, '2027-03-13T00:00:00Z', 3)).toEqual([
+      '2027-03-13T10:30:00.000Z',
+      '2027-03-14T10:30:00.000Z',
+      '2027-03-15T09:30:00.000Z',
+    ]);
+    // The shifted occurrence is still one the owner can cancel.
+    expect(() => (service as any).assertDateMatchesOccurrence(
+      event, DateTime.fromISO('2027-03-14T10:30:00Z', { zone: 'utc' }),
+    )).not.toThrow();
+  });
+
+  it('keeps a one-off date at its exact instant in the repeated hour', () => {
+    // 01:30 PST, the second 01:30 of 1 November.
+    const oneOff = new CalendarEventSchedule(
+      uuidv4(),
+      DateTime.fromISO('2026-11-01T09:30:00Z').setZone(LA),
+    );
+    oneOff.frequency = null;
+    oneOff.isExclusion = false;
+
+    expect(generatedStarts(eventWith([oneOff]), '2026-10-01T00:00:00Z')).toEqual([
+      '2026-11-01T09:30:00.000Z',
+    ]);
+  });
+
+  it('keeps the wall-clock length of an occurrence that spans the change', () => {
+    const event = eventWith([recurringSchedule({
+      startIso: '2026-10-24T22:00:00',
+      eventEndIso: '2026-10-25T03:00:00',
+      zone: LA,
+      frequency: EventFrequency.WEEKLY,
+    })]);
+
+    const instances: CalendarEventInstance[] = (service as any).generateInstances(
+      event, new Date('2026-10-20T00:00:00Z'), HORIZON_MONTHS,
+    );
+    const spanning = instances.find(i => i.start.toUTC().toISO() === '2026-11-01T05:00:00.000Z');
+
+    // 22:00 PDT on 31 October to 03:00 PST on 1 November.
+    expect(spanning).toBeDefined();
+    expect(spanning!.end!.toUTC().toISO()).toBe('2026-11-01T11:00:00.000Z');
+  });
+
+  describe('cancelling an occurrence after the change', () => {
+    function stubStoredEvent(scheduleEntity: EventScheduleEntity): void {
+      const eventEntity = EventEntity.build({ id: EVENT_ID, calendar_id: CALENDAR_ID });
+      eventEntity.setDataValue('schedules', [scheduleEntity] as any);
+      const calendar = new Calendar(CALENDAR_ID, 'zone-calendar');
+      sandbox.stub(service['calendarService'], 'getCalendar').resolves(calendar);
+      sandbox.stub(service['calendarService'], 'editableCalendarsForUser').resolves([calendar]);
+      sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
+      sandbox.stub(EventScheduleEntity, 'findOne').resolves(null);
+    }
+
+    it('hides exactly that occurrence, through the stored schedule and exclusion rows', async () => {
+      // Round-trip the series through storage so the stored-digit
+      // convention (local digits plus a timezone column) is exercised.
+      const seriesEntity = EventScheduleEntity.fromModel(weeklyLosAngeles());
+      seriesEntity.event_id = EVENT_ID;
+      stubStoredEvent(seriesEntity);
+      const saveStub = sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+
+      await service.cancelOccurrenceByDate(
+        new Account(uuidv4(), 'editor', 'editor@example.com'),
+        EVENT_ID,
+        DateTime.fromISO('2026-11-10T18:15:00Z', { zone: 'utc' }),
+        true,
+      );
+
+      expect(saveStub.calledOnce).toBe(true);
+      const exclusionEntity = saveStub.firstCall.thisValue as EventScheduleEntity;
+      const event = eventWith([seriesEntity.toModel(), exclusionEntity.toModel()]);
+
+      const result = await service.listUpcomingOccurrences(
+        event, DateTime.fromISO('2026-10-26T00:00:00Z', { zone: 'utc' }), 4,
+      );
+      expect(result.occurrences.map(o => [o.start.toUTC().toISO(), o.state])).toEqual([
+        ['2026-10-27T17:15:00.000Z', 'active'],
+        ['2026-11-03T18:15:00.000Z', 'active'],
+        ['2026-11-10T18:15:00.000Z', 'hidden'],
+        ['2026-11-17T18:15:00.000Z', 'active'],
+      ]);
+      expect(generatedStarts(event, '2026-10-26T00:00:00Z').slice(0, 3)).toEqual([
+        '2026-10-27T17:15:00.000Z',
+        '2026-11-03T18:15:00.000Z',
+        '2026-11-17T18:15:00.000Z',
+      ]);
+    });
+  });
+
+  it('expands a stored UTC schedule to the same instants as before', async () => {
+    const stored = EventScheduleEntity.build({
+      id: uuidv4(),
+      event_id: EVENT_ID,
+      timezone: 'UTC',
+      start_date: new Date('2026-10-27T17:15:00.000Z'),
+      end_date: null,
+      event_end_time: new Date('2026-10-27T18:45:00.000Z'),
+      frequency: EventFrequency.WEEKLY,
+      interval: 1,
+      count: 0,
+      by_day: '',
+      is_exclusion: false,
+      hide_from_public: false,
+    });
+    const event = eventWith([stored.toModel()]);
+
+    expect(await upcomingStarts(event, '2026-10-26T00:00:00Z', 3)).toEqual([
+      '2026-10-27T17:15:00.000Z',
+      '2026-11-03T17:15:00.000Z',
+      '2026-11-10T17:15:00.000Z',
+    ]);
+    const instances: CalendarEventInstance[] = (service as any).generateInstances(
+      event, new Date('2026-10-26T00:00:00Z'), HORIZON_MONTHS,
+    );
+    expect(instances.slice(0, 3).map(i => [i.start.toUTC().toISO(), i.end!.toUTC().toISO()])).toEqual([
+      ['2026-10-27T17:15:00.000Z', '2026-10-27T18:45:00.000Z'],
+      ['2026-11-03T17:15:00.000Z', '2026-11-03T18:45:00.000Z'],
+      ['2026-11-10T17:15:00.000Z', '2026-11-10T18:45:00.000Z'],
+    ]);
+  });
+
+  describe('materialising rows', () => {
+    let calendarId: string;
+
+    beforeAll(async () => {
+      await db.sync({ force: true });
+      calendarId = uuidv4();
+      await CalendarEntity.create({ id: calendarId, url_name: 'zone-aware-cal' });
+    });
+
+    it('stores the weekly Los Angeles occurrences at 10:15 local across the change', async () => {
+      const eventId = uuidv4();
+      await EventEntity.create({ id: eventId, calendar_id: calendarId });
+
+      await service.buildEventInstances(
+        eventWith([weeklyLosAngeles()], calendarId, eventId),
+        new Date('2026-10-26T00:00:00Z'),
+      );
+
+      const rows = await EventInstanceEntity.findAll({
+        where: { event_id: eventId },
+        order: [['start_time', 'ASC']],
+      });
+      expect(rows.slice(0, 3).map(r => r.start_time.toISOString())).toEqual([
+        '2026-10-27T17:15:00.000Z',
+        '2026-11-03T18:15:00.000Z',
+        '2026-11-10T18:15:00.000Z',
+      ]);
+    });
+  });
+});

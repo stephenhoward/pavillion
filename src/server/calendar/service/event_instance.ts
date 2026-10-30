@@ -11,7 +11,7 @@ import { EventInstanceEntity } from "@/server/calendar/entity/event_instance";
 import { CalendarEntity } from "@/server/calendar/entity/calendar";
 import { MediaEntity } from "@/server/media/entity/media";
 import { Calendar } from "@/common/model/calendar";
-import { DateTime } from 'luxon';
+import { DateTime, type Zone } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { LocationSpaceEntity, LocationSpaceContentEntity } from "@/server/calendar/entity/location_space";
@@ -151,6 +151,120 @@ function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
   }
   const weekday = Weekday.fromStr(parsed.dayCode as any);
   return parsed.ordinal !== null ? weekday.nth(parsed.ordinal) : weekday;
+}
+
+/**
+ * The wall-clock frame an event's recurrences are expanded in: the zone of
+ * its first non-exclusion schedule with a start, or UTC when it has none.
+ *
+ * rrule reads and steps the UTC fields of a JS Date. A "floating" date
+ * carries a wall-clock time of this zone in those fields, so rrule steps
+ * local time and a weekly 10:15 stays at 10:15 across a daylight-saving
+ * change. rrule's own `tzid` option is not used: it takes offsets from the
+ * process zone, so its results would differ between machines.
+ *
+ * In UTC the frame is the identity.
+ */
+class WallClockFrame {
+  private constructor(private readonly zone: Zone | string) {}
+
+  static forEvent(event: CalendarEvent): WallClockFrame {
+    const base = (event.schedules ?? []).find(s => !s.isExclusion && s.startDate);
+    return new WallClockFrame(base?.startDate?.zone ?? 'UTC');
+  }
+
+  /** The wall-clock time of `dt` in this zone, as a floating date. */
+  toFloating(dt: DateTime): Date {
+    return dt.setZone(this.zone).setZone('utc', { keepLocalTime: true }).toJSDate();
+  }
+
+  /**
+   * The instant at which a floating date's wall-clock time occurs in this
+   * zone. A wall time skipped by a change (02:30 on a spring-forward night)
+   * moves forward by the gap; one that occurs twice takes Luxon's default
+   * offset, the earlier of the two.
+   */
+  fromFloating(date: Date): DateTime {
+    return DateTime.fromJSDate(date, { zone: 'utc' }).setZone(this.zone, { keepLocalTime: true });
+  }
+}
+
+/**
+ * Widens a floating query window so it holds every occurrence whose instant
+ * lies in the requested one. Larger than any UTC offset change.
+ */
+const FLOATING_WINDOW_SLACK_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * An event's occurrences, taking and returning true instants. Rules and
+ * exrules are expanded by rrule in a {@link WallClockFrame}. Single dates
+ * keep their exact instants: an rdate maps back to the instant it was added
+ * with, and exdates are matched by instant here rather than by rrule, since
+ * a cancellation row stores the instant the occurrence was listed at.
+ */
+class ZonedOccurrenceSet {
+  private readonly set = new RRuleSet();
+  private readonly rdateInstants = new Map<number, Date>();
+  private readonly exdateMillis = new Set<number>();
+
+  constructor(readonly frame: WallClockFrame) {}
+
+  addRule(rule: InstanceType<typeof RRule>, exclude: boolean): void {
+    if (exclude) {
+      this.set.exrule(rule);
+    }
+    else {
+      this.set.rrule(rule);
+    }
+  }
+
+  addDate(date: DateTime, exclude: boolean): void {
+    if (exclude) {
+      this.exdateMillis.add(date.toMillis());
+      return;
+    }
+    const floating = this.frame.toFloating(date);
+    this.rdateInstants.set(floating.getTime(), date.toJSDate());
+    this.set.rdate(floating);
+  }
+
+  between(after: Date, before: Date, inc: boolean): Date[] {
+    const from = new Date(this.floating(after).getTime() - FLOATING_WINDOW_SLACK_MS);
+    const to = new Date(this.floating(before).getTime() + FLOATING_WINDOW_SLACK_MS);
+    return this.set.between(from, to, true)
+      .map(d => this.instant(d))
+      .filter(d => !this.exdateMillis.has(d.getTime()))
+      .filter(d => inc
+        ? d >= after && d <= before
+        : d > after && d < before);
+  }
+
+  after(date: Date, inc: boolean): Date | null {
+    const from = new Date(this.floating(date).getTime() - FLOATING_WINDOW_SLACK_MS);
+    for (let next = this.set.after(from, true); next; next = this.set.after(next, false)) {
+      const instant = this.instant(next);
+      if (this.exdateMillis.has(instant.getTime())) continue;
+      if (inc ? instant >= date : instant > date) return instant;
+    }
+    return null;
+  }
+
+  exdates(): Date[] {
+    return Array.from(this.exdateMillis, ms => new Date(ms));
+  }
+
+  rdates(): Date[] {
+    return Array.from(this.rdateInstants.values());
+  }
+
+  private floating(date: Date): Date {
+    return this.frame.toFloating(DateTime.fromJSDate(date));
+  }
+
+  private instant(floating: Date): Date {
+    return this.rdateInstants.get(floating.getTime())
+      ?? this.frame.fromFloating(floating).toJSDate();
+  }
 }
 
 export default class EventInstanceService {
@@ -666,6 +780,9 @@ export default class EventInstanceService {
    * null if no such schedule exists. Shared by generateInstances and
    * findOrMaterializeInstanceWithDetails so the two paths agree on the
    * computed end time.
+   *
+   * The duration is wall-clock length in the event's {@link WallClockFrame}:
+   * a 22:00–03:00 event still ends at 03:00 on the night the clocks change.
    */
   private computeOccurrenceEndTime(
     event: CalendarEvent,
@@ -677,9 +794,12 @@ export default class EventInstanceService {
     if (!baseSchedule || !baseSchedule.startDate || !baseSchedule.eventEndTime) {
       return null;
     }
-    const durationMs = baseSchedule.eventEndTime.toMillis() - baseSchedule.startDate.toMillis();
+    const frame = WallClockFrame.forEvent(event);
+    const durationMs = frame.toFloating(baseSchedule.eventEndTime).getTime()
+      - frame.toFloating(baseSchedule.startDate).getTime();
     if (durationMs <= 0) return null;
-    return startTime.plus({ milliseconds: durationMs });
+    const floatingEnd = new Date(frame.toFloating(startTime).getTime() + durationMs);
+    return frame.fromFloating(floatingEnd).setZone(startTime.zone);
   }
 
   /**
@@ -1255,9 +1375,18 @@ export default class EventInstanceService {
    * the parent recurring rule, and the listing layer marks the materialized
    * instance as `isCancelled = true` instead. See
    * {@link markShownCancellations}.
+   *
+   * Zone convention: recurrences step wall-clock time in the event's
+   * {@link WallClockFrame}, the zone of its first non-exclusion schedule.
+   * dtstart, until and exrule starts enter that frame; so does every query
+   * bound, and every result leaves it as a true instant, so callers deal in
+   * instants only. A wall time skipped by a change moves forward by the gap;
+   * one that occurs twice takes the earlier offset. Single dates (rdates and
+   * hidden one-off cancellations) keep their exact instants.
    */
-  private rrules(event: CalendarEvent): any {
-    const rruleSet = new RRuleSet();
+  private rrules(event: CalendarEvent): ZonedOccurrenceSet {
+    const occurrences = new ZonedOccurrenceSet(WallClockFrame.forEvent(event));
+    const frame = occurrences.frame;
 
     // Map our EventFrequency enum to RRule's Frequency enum
     const frequencyMap: Record<EventFrequency, number> = {
@@ -1287,13 +1416,13 @@ export default class EventInstanceService {
         let options: Record<string,any> = {
           freq: frequency,
           interval: schedule.interval,
-          dtstart: schedule.startDate?.toJSDate(),
+          dtstart: schedule.startDate ? frame.toFloating(schedule.startDate) : undefined,
         };
         if ( schedule.count ) {
           options.count = schedule.count;
         }
         else if ( schedule.endDate ) {
-          options.until = schedule.endDate?.toJSDate();
+          options.until = frame.toFloating(schedule.endDate);
         }
         if ( schedule.byDay?.length ) {
           const weekdays = schedule.byDay
@@ -1303,26 +1432,13 @@ export default class EventInstanceService {
             options.byweekday = weekdays;
           }
         }
-        const rule = new RRule(options);
-        if ( isHiddenCancellation ) {
-          rruleSet.exrule(rule);
-        }
-        else {
-          rruleSet.rrule(rule);
-        }
+        occurrences.addRule(new RRule(options), isHiddenCancellation);
       }
-      else {
-        if (schedule.startDate) {
-          if ( isHiddenCancellation ) {
-            rruleSet.exdate(schedule.startDate.toJSDate());
-          }
-          else {
-            rruleSet.rdate(schedule.startDate.toJSDate());
-          }
-        }
+      else if (schedule.startDate) {
+        occurrences.addDate(schedule.startDate, isHiddenCancellation);
       }
     }
-    return rruleSet;
+    return occurrences;
   }
 
   /**
