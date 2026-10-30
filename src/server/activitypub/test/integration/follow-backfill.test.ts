@@ -427,22 +427,52 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(await ActivityPubInboxMessageEntity.findByPk(foreignActivityId)).toBeNull();
   });
 
-  it('skips an activity whose id is not on the source actor origin, leaving no row, and keeps the rest of the page', async () => {
+  it('skips an activity whose id is not on the source actor origin, leaving no row, and keeps writing the rest of the buffer', async () => {
     // A source outbox may not claim another host's activity id: the inbox is
     // first-writer-wins on id, so storing it would shadow that host's genuine
-    // activity (e.g. a deterministic `{objectUrl}/delete`).
+    // activity (e.g. a deterministic `{objectUrl}/delete`). The claimed id is
+    // the older activity, so it is refused before the own one is written.
     const claimedId = 'https://other.example/events/elsewhere/delete';
     const ownId = `${SOURCE_ORIGIN}/activities/own`;
     const fetcher = makeFetcher(buildOutbox([
-      { id: claimedId, type: 'Delete', actor: SOURCE_ACTOR_URI, published: '2026-05-16T11:00:00Z', object: 'https://other.example/events/elsewhere' },
       buildCreate(ownId, '2026-05-16T11:00:00Z'),
+      { id: claimedId, type: 'Delete', actor: SOURCE_ACTOR_URI, published: '2026-05-16T10:00:00Z', object: 'https://other.example/events/elsewhere' },
     ]));
+    const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
     const service = runService({ fetcher });
     await service.runBackfill(sourcePayload());
 
+    expect(enqueueSpy.getCalls().map(call => call.args[0].id)).toEqual([claimedId, ownId]);
     expect(await ActivityPubInboxMessageEntity.findByPk(claimedId)).toBeNull();
     expect(await ActivityPubInboxMessageEntity.findByPk(ownId)).not.toBeNull();
+  });
+
+  it('stops writing at the first failed write and rejects, so the written rows stay an oldest-first prefix', async () => {
+    // A row skipped mid-buffer while later rows are written would let the
+    // drain dispatch an Undo whose Announce is missing; the Announce written
+    // by the retry would then find the Undo already processed and the share
+    // would stick. So a failed write ends the run, and pg-boss re-walks it.
+    const oldestId = `${SOURCE_ORIGIN}/activities/oldest-write`;
+    const failingId = `${SOURCE_ORIGIN}/activities/failing-write`;
+    const newestId = `${SOURCE_ORIGIN}/activities/newest-write`;
+    const fetcher = makeFetcher(buildOutbox([
+      buildCreate(newestId, '2026-04-03T00:00:00Z'),
+      buildCreate(failingId, '2026-04-02T00:00:00Z'),
+      buildCreate(oldestId, '2026-04-01T00:00:00Z'),
+    ]));
+    const writeError = new Error('connection terminated unexpectedly');
+    const enqueueStub = sandbox.stub(activityPubInterface, 'enqueueInboxRow').callThrough();
+    enqueueStub.onSecondCall().rejects(writeError);
+
+    const service = runService({ fetcher });
+    await expect(service.runBackfill(sourcePayload())).rejects.toBe(writeError);
+
+    expect(enqueueStub.getCalls().map(call => call.args[0].id)).toEqual([oldestId, failingId]);
+    const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
+      where: { calendar_id: followerCalendarId },
+    })).map(r => r.id);
+    expect(persistedIds).toEqual([oldestId]);
   });
 
   // -------------------------------------------------------------------------

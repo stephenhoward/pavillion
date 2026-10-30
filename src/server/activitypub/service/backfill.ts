@@ -21,7 +21,10 @@
  * ties broken by raw `published` time and then by reverse walk position, one
  * row at a time. Any drain that runs during those writes sees an
  * oldest-first prefix of the walk, in which every Announce precedes any Undo
- * that references it. A walk that ends on rate-limit exhaustion or on an
+ * that references it. A row refused for an off-origin id is skipped, but any
+ * other write error stops the write there and rejects the run, so the written
+ * rows stay an oldest-first prefix and pg-boss re-walks the job, idempotently
+ * through `findOrCreate`. A walk that ends on rate-limit exhaustion or on an
  * unfollow writes nothing; the follow row is re-checked at every page boundary
  * and once more immediately before the write.
  *
@@ -574,7 +577,8 @@ export class FollowBackfillService {
    * `enqueueInboxRow` (which persists via `findOrCreate` — first writer wins,
    * no upgrade on conflict — without emitting `inboxMessageAdded`). Returns
    * true when a new row was inserted, false when an existing row with the
-   * same activity id was already present or the write was refused.
+   * same activity id was already present or the id was refused for its
+   * origin. Any other write error is rethrown, which ends the buffer write.
    */
   private async persistActivity(entry: BufferedActivity, ctx: WalkContext): Promise<boolean> {
     try {
@@ -594,8 +598,11 @@ export class FollowBackfillService {
       if (error instanceof ActivityIdOriginMismatchError) {
         return false;
       }
-      logError(error, `[ActivityPub backfill] enqueueInboxRow failed for ${entry.type} ${entry.activityId}`);
-      return false;
+      // Skipping this row while writing later ones would break the
+      // oldest-first prefix: an Undo written past a failed Announce would be
+      // dispatched, and processed, before the retry writes the Announce.
+      logError(error, `[ActivityPub backfill] enqueueInboxRow failed for ${entry.type} ${entry.activityId}; stopping the write`);
+      throw error;
     }
   }
 }
