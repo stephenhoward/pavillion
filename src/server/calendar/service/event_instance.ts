@@ -1405,12 +1405,12 @@ export default class EventInstanceService {
    * recurrence steps wall-clock time in the {@link WallClockFrame} of the
    * event's {@link CalendarEvent.baseSchedule} — the non-exclusion schedule
    * with the earliest start, ties broken by id — whatever order the
-   * schedules load in. dtstart, until and exrule starts enter that frame; so does every
-   * query bound, and every result leaves it as a true instant in instant
-   * order, so callers deal in instants only. A wall time skipped by a change
-   * moves forward by the gap; one that occurs twice takes the earlier offset.
-   * Single dates (rdates and hidden one-off cancellations) keep their exact
-   * instants.
+   * schedules load in. dtstart, until and exrule starts enter that frame;
+   * so does every query bound, and every result leaves it as a true
+   * instant in instant order, so callers deal in instants only. A wall
+   * time skipped by a change moves forward by the gap; one that occurs
+   * twice takes the earlier offset. Single dates (rdates and hidden
+   * one-off cancellations) keep their exact instants.
    */
   private rrules(event: CalendarEvent): ZonedOccurrenceSet {
     const frame = WallClockFrame.of(event.baseSchedule());

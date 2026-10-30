@@ -87,7 +87,7 @@ function formatLocation(location: EventLocation): string {
  * @param eventDescription - Localized event description
  * @param hostname - The instance hostname for UID generation
  */
-export function generateIcs(
+function generateIcs(
   event: CalendarEvent,
   dtstart: DateTime,
   dtend: DateTime | null,

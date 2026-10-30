@@ -26,7 +26,7 @@ Opening your public URL shows what anyone on the internet sees:
 - A **search box**, **category filters**, and a **date control**, so visitors can narrow the list or look further ahead.
 - A choice of **list, week, or month view**.
 
-Every event has its own page with the full details: place, time, description, accessibility notes, and an option to add it to the visitor's own calendar app. Visitors don't need an account for any of this, and Pavillion doesn't track them.
+Every event has its own page with the full details: place, time, description, and accessibility notes. Each occurrence's page also has an option to add that date to the visitor's own calendar app. Visitors don't need an account for any of this, and Pavillion doesn't track them.
 
 Your public page also shows events you've reposted from other calendars, and each one's page links back to the calendar it came from.
 
