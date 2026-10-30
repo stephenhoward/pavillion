@@ -1543,6 +1543,35 @@ describe('SearchFilterPublic Component', () => {
       expect(store.endDate).toBe('2026-03-04');
       expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('reloads on an external change after its own URL write', async () => {
+      const store = usePublicCalendarStore();
+      await router.push('/calendar/test');
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Self-write: a preset pill writes the URL through updateURL()
+      await wrapper.find('.date-filter-button').trigger('click');
+      await flushPromises();
+      await wrapper.findAll('.date-pill')[0].trigger('click');
+      await flushPromises();
+
+      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
+
+      // External navigation (e.g. browser back) to a different filter query
+      await router.replace({ query: { startDate: '2026-03-04', endDate: '2026-03-04' } });
+      await flushPromises();
+
+      expect(store.startDate).toBe('2026-03-04');
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Date controls by view', () => {
@@ -1658,6 +1687,29 @@ describe('SearchFilterPublic Component', () => {
 
       // Should have triggered reload
       expect(reloadSpy).toHaveBeenCalled();
+    });
+
+    it('reloads exactly once when a preset pill writes its own URL', async () => {
+      const store = usePublicCalendarStore();
+      await router.push('/calendar/test');
+
+      const wrapper = mount(SearchFilterPublic, {
+        props: { viewMode: 'list' },
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
+
+      await wrapper.find('.date-filter-button').trigger('click');
+      await flushPromises();
+      await wrapper.findAll('.date-pill')[0].trigger('click');
+      await flushPromises();
+
+      expect(router.currentRoute.value.query.startDate).toBe(store.startDate);
+      expect(reloadSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

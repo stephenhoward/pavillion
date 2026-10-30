@@ -632,7 +632,9 @@ const updateURL = () => {
     delete query[LIST_END_DATE_QUERY_KEY];
   }
 
-  // Use replace to avoid adding to browser history
+  // Use replace to avoid adding to browser history. Every caller has already
+  // reloaded, so the filterQueryKey watcher must not reload for this write.
+  lastWrittenFilterKey = filterKeyOf(query);
   router.replace({ query });
 };
 
@@ -713,14 +715,28 @@ const initializeFromURL = () => {
 // a day link from a week or month cell). Keys owned by the calendar view —
 // `view` and `date` — are excluded: the view's window sync reloads for those,
 // and reacting here too would fetch twice per view change.
-const filterQueryKey = computed(() => JSON.stringify([
-  route.query.search,
-  route.query.categories,
-  route.query[LIST_START_DATE_QUERY_KEY],
-  route.query[LIST_END_DATE_QUERY_KEY],
-]));
+function filterKeyOf(query: Record<string, any>): string {
+  return JSON.stringify([
+    query.search,
+    query.categories,
+    query[LIST_START_DATE_QUERY_KEY],
+    query[LIST_END_DATE_QUERY_KEY],
+  ]);
+}
 
-watch(filterQueryKey, () => {
+const filterQueryKey = computed(() => filterKeyOf(route.query));
+
+// The key updateURL() last wrote. Its own write already reloaded, so the
+// watcher skips it; the token is cleared on every fire so a later external
+// navigation back to the same query still reloads.
+let lastWrittenFilterKey: string | null = null;
+
+watch(filterQueryKey, (key) => {
+  const isOwnWrite = key === lastWrittenFilterKey;
+  lastWrittenFilterKey = null;
+  if (isOwnWrite) {
+    return;
+  }
   initializeFromURL();
   publicStore.reloadWithFilters();
 });

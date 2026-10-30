@@ -62,6 +62,12 @@ function eventRequestUrls(): string[] {
     .filter((url) => url.includes('/events'));
 }
 
+function categoryRequestUrls(): string[] {
+  return vi.mocked(ModelService.listModels).mock.calls
+    .map((call) => String(call[0]))
+    .filter((url) => url.includes('/categories'));
+}
+
 beforeAll(async () => {
   if (!i18next.isInitialized) {
     await i18next.init({ lng: 'en', resources: { en: { system: {} } } });
@@ -115,6 +121,16 @@ describe('widget-container mount ordering', () => {
       expect(url).toContain('startDate=2026-11-01');
       expect(url).toContain('endDate=2026-11-30');
     }
+  });
+
+  it('fetches categories once, for the URL date range', async () => {
+    const mounted = await mountContainerAt(LIST_PATH);
+    wrapper = mounted.wrapper;
+
+    const urls = categoryRequestUrls();
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('startDate=2026-11-01');
+    expect(urls[0]).toContain('endDate=2026-11-30');
   });
 });
 

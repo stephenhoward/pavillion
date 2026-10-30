@@ -176,10 +176,9 @@ onBeforeMount(async () => {
     }
 
     // Load calendar settings (including defaultDateRange) before loading events
+    // SearchFilterPublic loads events and the ranged categories once settings
+    // are in; an unranged categories request here would land last and win.
     await publicCalendarStore.loadCalendar(calendarUrlName);
-
-    // Load categories - SearchFilterPublic will handle URL params and event loading
-    await publicCalendarStore.loadCategories(calendarUrlName);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
