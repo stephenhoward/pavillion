@@ -129,11 +129,11 @@ describe('Federation Flag inbox — anonymization + no outbound side effect (int
     const ownerInfo = await accountService._setupAccount('flag-fed-owner@pavillion.dev', 'testpassword');
     ownerAccount = ownerInfo.account;
 
-    // `_setupAccount` auto-grants the FIRST account the admin role to keep
-    // setup-mode middleware happy across the test suite. Strip that so the
-    // assertions about who receives the notification are deterministic:
-    // the owner's recipient row comes from `calendar-owners` resolution,
-    // not from happening to also be the only admin.
+    // `env.init()` seeds the harness admin so the setup-mode middleware lets
+    // API calls through. Stripping every admin role removes that admin's
+    // role, so the recipient assertion below sees exactly the owner (from
+    // `calendar-owners` resolution) and the one admin seeded next, rather
+    // than an extra harness recipient.
     await AccountRoleEntity.destroy({ where: { role: 'admin' } });
 
     // Seed a dedicated admin account so the test exercises the owners+admins

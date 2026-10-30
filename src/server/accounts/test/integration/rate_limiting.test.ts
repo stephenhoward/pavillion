@@ -42,27 +42,16 @@ const rateLimitEnabled = config.get<boolean>('rateLimit.enabled');
 const describeOrSkip = rateLimitEnabled ? describe : describe.skip;
 
 /**
- * Boots the real server app with an admin provisioned, so setup-mode
+ * Boots the real server app. `init()` seeds the harness admin, so setup-mode
  * middleware (503 for unauthenticated API calls until an admin exists) does
  * not mask the limiter under test. Imports are deferred so the full-server
  * init cost is only paid by the tests that need it.
  */
-async function initRealServer(adminEmail: string): Promise<Express> {
+async function initRealServer(): Promise<Express> {
   const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-  const { EventEmitter } = await import('events');
-  const { default: AccountService } = await import('@/server/accounts/service/account');
-  const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-  const { default: SetupInterface } = await import('@/server/setup/interface');
 
   const realEnv = new TestEnvironment();
   await realEnv.init();
-
-  const accountService = new AccountService(
-    new EventEmitter(),
-    new ConfigurationInterface(),
-    new SetupInterface(),
-  );
-  await accountService._setupAccount(adminEmail, 'testpassword!1');
 
   return realEnv.app as Express;
 }
@@ -142,7 +131,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
         expect(response.status).toBe(200);
       }
 
-      const realApp = await initRealServer('rate-limit-apply-email-admin@pavillion.dev');
+      const realApp = await initRealServer();
 
       // limitApplicationByIp runs first on the real route and its localhost
       // bucket is spent elsewhere in this file, which would mask the email
@@ -228,22 +217,9 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // Imports are deferred so the full-server init cost is only paid when
       // this test actually runs.
       const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-      const { EventEmitter } = await import('events');
-      const { default: AccountService } = await import('@/server/accounts/service/account');
-      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-      const { default: SetupInterface } = await import('@/server/setup/interface');
 
       const realEnv = new TestEnvironment();
       await realEnv.init();
-
-      // Setup-mode middleware would otherwise return 503 for unauthenticated
-      // API calls until an admin exists.
-      const accountService = new AccountService(
-        new EventEmitter(),
-        new ConfigurationInterface(),
-        new SetupInterface(),
-      );
-      await accountService._setupAccount('rate-limit-apply-admin@pavillion.dev', 'testpassword!1');
 
       // Hit the real route with the same IP (localhost). Because
       // `limitApplicationByIp` runs first in the chain and is already exhausted,
@@ -297,24 +273,9 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // file is loaded by other suites; Phase 2 only spins up the server when
       // the test actually runs.
       const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-      const { EventEmitter } = await import('events');
-      const { default: AccountService } = await import('@/server/accounts/service/account');
-      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-      const { default: SetupInterface } = await import('@/server/setup/interface');
 
       const realEnv = new TestEnvironment();
       await realEnv.init();
-
-      // Setup-mode middleware blocks unauthenticated API calls with 503 until
-      // an admin exists. Provision one so the real confirm route can be
-      // reached and the rate limiter (already exhausted) is what blocks the
-      // request, not setup mode.
-      const accountService = new AccountService(
-        new EventEmitter(),
-        new ConfigurationInterface(),
-        new SetupInterface(),
-      );
-      await accountService._setupAccount('rate-limit-admin@pavillion.dev', 'testpassword!1');
 
       const realPost = await request(realEnv.app).post(
         '/api/v1/applications/confirm/any-token-here',
@@ -398,7 +359,7 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
         expect(response.status).toBe(200);
       }
 
-      const realApp = await initRealServer('rate-limit-register-email-admin@pavillion.dev');
+      const realApp = await initRealServer();
 
       // limitRegisterByIp runs first on the real route; a fresh forwarded
       // address (the real app trusts one proxy hop) keeps it from masking the
@@ -453,22 +414,9 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // Imports are deferred so full-server init cost is only paid when this
       // test actually runs.
       const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-      const { EventEmitter } = await import('events');
-      const { default: AccountService } = await import('@/server/accounts/service/account');
-      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-      const { default: SetupInterface } = await import('@/server/setup/interface');
 
       const realEnv = new TestEnvironment();
       await realEnv.init();
-
-      // Setup-mode middleware returns 503 for unauthenticated API calls until
-      // an admin exists; provision one so the rate limiter is what blocks.
-      const accountService = new AccountService(
-        new EventEmitter(),
-        new ConfigurationInterface(),
-        new SetupInterface(),
-      );
-      await accountService._setupAccount('rate-limit-register-admin@pavillion.dev', 'testpassword!1');
 
       const realPost = await request(realEnv.app)
         .post('/api/v1/register')
@@ -521,22 +469,9 @@ describeOrSkip('Account Application Rate Limiting Integration Tests', () => {
       // handler runs. Imports are deferred so full-server init cost is only
       // paid when this test actually runs.
       const { TestEnvironment } = await import('@/server/common/test/lib/test_environment');
-      const { EventEmitter } = await import('events');
-      const { default: AccountService } = await import('@/server/accounts/service/account');
-      const { default: ConfigurationInterface } = await import('@/server/configuration/interface');
-      const { default: SetupInterface } = await import('@/server/setup/interface');
 
       const realEnv = new TestEnvironment();
       await realEnv.init();
-
-      // Setup-mode middleware returns 503 for unauthenticated API calls until
-      // an admin exists; provision one so the rate limiter is what blocks.
-      const accountService = new AccountService(
-        new EventEmitter(),
-        new ConfigurationInterface(),
-        new SetupInterface(),
-      );
-      await accountService._setupAccount('rate-limit-invitation-admin@pavillion.dev', 'testpassword!1');
 
       const realPost = await request(realEnv.app)
         .post('/api/v1/invitations/any-code-here')

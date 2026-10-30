@@ -10,7 +10,6 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { AccountRoleEntity } from '@/server/common/entity/account';
 
 /**
  * Integration tests for Category Management Enhancements
@@ -22,7 +21,6 @@ describe('Category Management Integration Tests', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
   let testAccount: Account;
-  let unauthorizedAccount: Account;
   let testCalendar: Calendar;
   let testCategory1: EventCategory;
   let testCategory2: EventCategory;
@@ -51,17 +49,7 @@ describe('Category Management Integration Tests', () => {
     let accountInfo = await accountService._setupAccount(testEmail, password);
     testAccount = accountInfo.account;
 
-    let unauthorizedInfo = await accountService._setupAccount(unauthorizedEmail, password);
-    unauthorizedAccount = unauthorizedInfo.account;
-
-    // Remove admin role from unauthorized account to test permission checks
-    // (_setupAccount grants admin role in test mode, but we need a non-admin for permission tests)
-    await AccountRoleEntity.destroy({
-      where: {
-        account_id: unauthorizedAccount.id,
-        role: 'admin',
-      },
-    });
+    await accountService._setupAccount(unauthorizedEmail, password);
 
     // Login both users to get proper auth tokens
     authToken = await env.login(testEmail, password);

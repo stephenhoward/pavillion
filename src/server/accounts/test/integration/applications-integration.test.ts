@@ -36,15 +36,6 @@ describe('Public confirm endpoints (integration)', () => {
   beforeAll(async () => {
     env = new TestEnvironment();
     await env.init();
-
-    // Setup mode middleware would otherwise return 503 for unauthenticated
-    // API requests. Provisioning the first account exits setup mode so the
-    // public confirm endpoints respond on their own merits.
-    const eventBus = new EventEmitter();
-    const configurationInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
-    await accountService._setupAccount('admin-confirm@pavillion.dev', 'testpassword!1');
   });
 
   afterAll(async () => {
@@ -182,13 +173,7 @@ describe('Public POST /api/v1/applications anti-enumeration (integration)', () =
     env = new TestEnvironment();
     await env.init();
 
-    // Provision an admin to exit setup mode so the public apply endpoint
-    // responds on its own merits (setup mode would otherwise return 503).
-    const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
-    await accountService._setupAccount('admin-apply@pavillion.dev', 'testpassword!1');
 
     // The apply endpoint requires registrationMode === 'apply' or it throws
     // AccountApplicationsClosedError before any branch logic runs.
@@ -436,17 +421,6 @@ describe('confirmAccountApplication admin-notify (integration)', () => {
   beforeAll(async () => {
     env = new TestEnvironment();
     await env.init();
-
-    // Provision a single admin account to exit setup mode so the public
-    // confirm endpoint responds on its own merits. This bootstrap admin is
-    // preserved across tests (the FK chain via account_secrets makes wholesale
-    // truncation noisy); per-test admin seeding controls which admin roles
-    // exist via the AccountRole table only.
-    const eventBus = new EventEmitter();
-    const configurationInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
-    await accountService._setupAccount('admin-notify-bootstrap@pavillion.dev', 'testpassword!1');
   });
 
   afterAll(async () => {
@@ -458,10 +432,10 @@ describe('confirmAccountApplication admin-notify (integration)', () => {
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
     await AccountApplicationEntity.destroy({ where: {}, truncate: true });
-    // Clear ALL admin roles (including the bootstrap admin's role). Each test
-    // re-adds the role assignments it needs. Account rows themselves are not
-    // truncated — the bootstrap row stays so the FK chain via
-    // account_secrets is preserved.
+    // Clear ALL admin roles, including the role of the harness admin that
+    // `env.init()` seeds. Each test re-adds the role assignments it needs.
+    // Account rows themselves are not truncated: the harness admin's
+    // account_secrets row references its account.
     await AccountRoleEntity.destroy({ where: {}, truncate: true });
   });
 
