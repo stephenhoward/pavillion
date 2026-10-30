@@ -73,13 +73,17 @@ export default class ActivityPubDomain {
    *
    * Called by the web process once every domain has installed its handlers,
    * never from {@link initialize}, so test suites that initialize the domain
-   * get no running timer.
+   * get no running timer. Refuses to start without a moderation interface,
+   * since the drain would then dispatch rows past no blocked-instance gate.
    *
    * @returns A function that stops the interval
    */
   public startInboxDrain(): () => void {
     if (!this.eventHandlers) {
       throw new Error('ActivityPubDomain.startInboxDrain called before installEventHandlers');
+    }
+    if (!this.moderationInterface) {
+      throw new Error('ActivityPubDomain.startInboxDrain called without a moderation interface');
     }
     const eventHandlers = this.eventHandlers;
 

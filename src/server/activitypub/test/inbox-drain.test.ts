@@ -19,12 +19,14 @@ import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activ
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import HousekeepingInterface from '@/server/housekeeping/interface';
+import ModerationInterface from '@/server/moderation/interface';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
 /**
- * Builds an ActivityPubDomain with its event handlers installed, as the web
- * process does before it starts the drain.
+ * Builds an ActivityPubDomain with its event handlers installed and a
+ * moderation interface wired, as the web process does before it starts the
+ * drain.
  */
 function buildDomain(eventBus: EventEmitter): ActivityPubDomain {
   const domain = new ActivityPubDomain(
@@ -32,6 +34,7 @@ function buildDomain(eventBus: EventEmitter): ActivityPubDomain {
     new CalendarInterface(eventBus),
     new AccountsInterface(),
     { publishJob: async () => {} } as unknown as HousekeepingInterface,
+    { isInstanceBlocked: async () => false } as unknown as ModerationInterface,
   );
   domain.installEventHandlers();
   return domain;
@@ -102,9 +105,12 @@ describe('ActivityPubDomain inbox drain', () => {
     drainStub.onFirstCall().returns(inFlight.promise);
 
     stopDrain = domain.startInboxDrain();
+    const startupDrain = (domain as any)['inboxDrain'];
     await vi.advanceTimersByTimeAsync(INBOX_DRAIN_INTERVAL_MS);
     await vi.advanceTimersByTimeAsync(INBOX_DRAIN_INTERVAL_MS);
-    expect(drainStub.callCount, 'ticks during the in-flight drain start nothing').toBe(1);
+    // On SQLite a second drain would queue on the chain rather than call the
+    // stub, so the call count cannot show it; the in-flight promise can.
+    expect((domain as any)['inboxDrain'], 'ticks during the in-flight drain start nothing').toBe(startupDrain);
 
     inFlight.resolve();
     await settleDrain(domain);
@@ -152,6 +158,21 @@ describe('ActivityPubDomain inbox drain', () => {
     await vi.advanceTimersByTimeAsync(INBOX_DRAIN_INTERVAL_MS * 3);
 
     expect(drainStub.callCount).toBe(1);
+  });
+
+  it('refuses to start without a moderation interface', () => {
+    // Without one, the drain would dispatch rows past no blocked-instance gate.
+    const unmoderated = new ActivityPubDomain(
+      eventBus,
+      new CalendarInterface(eventBus),
+      new AccountsInterface(),
+      { publishJob: async () => {} } as unknown as HousekeepingInterface,
+    );
+    unmoderated.installEventHandlers();
+    const unmoderatedDrain = sandbox.stub(unmoderated.interface, 'processInboxMessages').resolves();
+
+    expect(() => { stopDrain = unmoderated.startInboxDrain(); }).toThrow(/moderation/i);
+    expect(unmoderatedDrain.called).toBe(false);
   });
 
   it('does not drain from initialize()', async () => {
