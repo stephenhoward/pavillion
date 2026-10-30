@@ -61,6 +61,13 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 const FOLLOW_PROCESS_MS = 3_000;
 const BACKFILL_DRAIN_MS = 15_000;
 
+// After a follow, each test polls for its follower-visible end state rather
+// than sleeping, within the same budget: the Accept round-trip plus the drain.
+const BACKFILL_POLL = {
+  timeout: FOLLOW_PROCESS_MS + BACKFILL_DRAIN_MS,
+  intervals: [500, 1_000, 2_000],
+};
+
 test.describe('Follow Backfill', () => {
   let aliceToken: string;
   let bobToken: string;
@@ -119,19 +126,15 @@ test.describe('Follow Backfill', () => {
     const aliceCalendarRemoteId = formatRemoteCalendarId(aliceCalendar.urlName, INSTANCE_ALPHA);
     await followCalendar(INSTANCE_BETA, bobToken, bobCalendar.id, aliceCalendarRemoteId);
 
-    // Wait for follow Accept + backfill worker to drain
-    await new Promise(resolve => setTimeout(resolve, FOLLOW_PROCESS_MS + BACKFILL_DRAIN_MS));
-
     // --- Assert: all 3 pre-existing events appear in Bob's feed exactly once
-    const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
-
-    for (const title of eventTitles) {
-      const count = feed.events.filter(e => e.content?.en?.title === title).length;
-      expect(
-        count,
-        `expected exactly one feed row for "${title}" after initial backfill`,
-      ).toBe(1);
-    }
+    // Polled: the follow Accept and the backfill drain land asynchronously.
+    await expect.poll(
+      async () => {
+        const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
+        return eventTitles.map(title => feed.events.filter(e => e.content?.en?.title === title).length);
+      },
+      { ...BACKFILL_POLL, message: 'expected exactly one feed row per pre-existing event after initial backfill' },
+    ).toEqual(eventTitles.map(() => 1));
   });
 
   test('Update round-trip: backfill of Create+Update yields the latest title on follower', async () => {
@@ -220,15 +223,19 @@ test.describe('Follow Backfill', () => {
     const aliceCalendarRemoteId = formatRemoteCalendarId(aliceCalendar.urlName, INSTANCE_ALPHA);
     await followCalendar(INSTANCE_BETA, bobToken, bobCalendar.id, aliceCalendarRemoteId);
 
-    await new Promise(resolve => setTimeout(resolve, FOLLOW_PROCESS_MS + BACKFILL_DRAIN_MS));
-
     // --- Assert: Bob's feed shows v2 (latest title), not v1 ----------------
-    const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
-    const feedEntryV2 = feed.events.find(e => e.content?.en?.title === titleV2);
-    expect(feedEntryV2, 'expected follower feed to show v2 after backfill').toBeDefined();
-
-    const feedEntryV1 = feed.events.find(e => e.content?.en?.title === titleV1);
-    expect(feedEntryV1, 'expected v1 title to NOT appear in follower feed (replaced by v2)').toBeUndefined();
+    // Polled until v2 is present, which proves the drain ran; v1 must be
+    // absent in that same read (replaced by v2).
+    await expect.poll(
+      async () => {
+        const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
+        return {
+          v2: feed.events.some(e => e.content?.en?.title === titleV2),
+          v1: feed.events.some(e => e.content?.en?.title === titleV1),
+        };
+      },
+      { ...BACKFILL_POLL, message: 'expected follower feed to show v2, and not v1, after backfill' },
+    ).toEqual({ v2: true, v1: false });
   });
 
   test('Undo round-trip: backfill of Announce+Undo(Announce) yields no follower share row', async () => {
@@ -327,6 +334,23 @@ test.describe('Follow Backfill', () => {
     // Let Undo(Announce) land in Alice's outbox
     await new Promise(resolve => setTimeout(resolve, 3_000));
 
+    // A later event of Alice's own. Its Create is published after the
+    // Announce, and the drain dispatches rows oldest first, so once it shows
+    // in Bob's feed the drain has run past the Announce. Without it, the
+    // no-share assertion below would also pass if the drain never ran.
+    const sentinelTitle = `Backfill Undo Sentinel ${Date.now()}`;
+    await createEvent(INSTANCE_ALPHA, aliceToken, {
+      calendarId: aliceCalendar.id,
+      content: {
+        en: {
+          title: sentinelTitle,
+          description: 'Created after the Undo, to prove the backfill drain ran',
+        },
+      },
+      startTime: '2025-07-11T10:00:00Z',
+      endTime: '2025-07-11T12:00:00Z',
+    });
+
     // --- Bob follows Alice — backfill replays Announce + Undo(Announce) ---
     const bobCalendar = await createCalendar(INSTANCE_BETA, bobToken, {
       urlName: generateCalendarName('bbx'),
@@ -338,7 +362,14 @@ test.describe('Follow Backfill', () => {
     const aliceCalendarRemoteId = formatRemoteCalendarId(aliceCalendar.urlName, INSTANCE_ALPHA);
     await followCalendar(INSTANCE_BETA, bobToken, bobCalendar.id, aliceCalendarRemoteId);
 
-    await new Promise(resolve => setTimeout(resolve, FOLLOW_PROCESS_MS + BACKFILL_DRAIN_MS));
+    // --- Wait for the drain to reach the sentinel -------------------------
+    await expect.poll(
+      async () => {
+        const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
+        return feed.events.some(e => e.content?.en?.title === sentinelTitle);
+      },
+      { ...BACKFILL_POLL, message: 'expected Alice\'s later event in Bob\'s feed, proving the backfill drain ran' },
+    ).toBe(true);
 
     // --- Assert: Bob has NO share row for the Undone event ----------------
     // Bob's calendar event list (backed by SharedEventEntity) must not
