@@ -36,14 +36,14 @@ import { createRouter as createServerPageRouter } from '@/server/app_routes';
 import { buildSiteRoutes } from '@/site/routes';
 import { RESERVED_ROUTE_SEGMENTS } from '@/common/routing/reserved-segments';
 import { DISCOVER_PATH, calendarPath, eventPath, seriesPath } from '@/common/routing/public-paths';
-import { buildEventMetaTags, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
+import { buildEventMetaTags, parseEventPageParams, PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import {
   AVAILABLE_LANGUAGES,
   DEFAULT_LANGUAGE_CODE,
-  getDefaultEnabledLanguageCodes,
+  getSupportedLanguageCodes,
 } from '@/common/i18n/languages';
 import ConfigurationInterface from '@/server/configuration/interface';
 
@@ -356,15 +356,15 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
     // how DEC-018 reserves them: RESERVED_ROUTE_SEGMENTS omits them and
     // isReservedRouteSegment ORs the array against isValidLanguageCode. Naming
     // them here would make enabling a language a three-file edit for no gain.
-    it('pins a bare locale root as a redirect for every enabled language', () => {
-      const codes = getDefaultEnabledLanguageCodes();
+    it('pins a bare locale root as a redirect for every supported language', () => {
+      const codes = getSupportedLanguageCodes();
       const observed = codes.map(code => [code, disposition(`/${code}`)]);
 
       expect(observed).toEqual(codes.map(code => [code, 'locale_root_redirect']));
     });
 
     it('gives the site router a match for every reserved segment served to the site shell', () => {
-      const segments = [...RESERVED_ROUTE_SEGMENTS, ...getDefaultEnabledLanguageCodes()];
+      const segments = [...RESERVED_ROUTE_SEGMENTS, ...getSupportedLanguageCodes()];
       const servedToSite = segments.filter(segment => SITE_SHELL_HANDLERS.has(disposition(`/${segment}`)));
 
       // Non-vacuity: 'discover' qualifies today, so an empty list here would
@@ -515,6 +515,31 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       expect(tags?.url).toBe(
         `${baseUrl}${eventPath(SAMPLE_PARAMS.calendar, SAMPLE_PARAMS.event, SAMPLE_PARAMS.startTime)}`,
       );
+    });
+  });
+
+  // Direction 6: two server-side consumers answer "is this first segment a
+  // locale?" — the router's locale alternation and parseEventPageParams, which
+  // strips through stripLocalePrefix and isReservedRouteSegment. If they ever
+  // disagree, /<code>/cal/events/:id routes as a page for a calendar named
+  // <code> while its SSR meta tags describe cal's event. Both read the supported
+  // set, so this pins their agreement on every supported code and on a segment
+  // outside it.
+  describe('the router and the meta-tag parser agree on what a locale segment is', () => {
+    const eventId = '5f0c6a2e-3b1d-4e8a-9c7f-2d4b6e8a0c1f';
+
+    it.each(getSupportedLanguageCodes())('treats /%s/... as a locale-prefixed event page in both', (code) => {
+      const path = `/${code}/${SAMPLE_PARAMS.calendar}/events/${eventId}`;
+
+      expect(disposition(path)).toBe('locale_prefixed_site');
+      expect(parseEventPageParams(path)?.calendarUrlName).toBe(SAMPLE_PARAMS.calendar);
+    });
+
+    it('treats an unsupported two-letter first segment as a calendar name in both', () => {
+      const path = `/zu/${SAMPLE_PARAMS.calendar}/events/${eventId}`;
+
+      expect(disposition(path)).toBe('site_index');
+      expect(parseEventPageParams(path)).toBeNull();
     });
   });
 

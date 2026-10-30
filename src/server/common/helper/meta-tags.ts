@@ -105,7 +105,11 @@ const EVENT_PAGE_RE = new RegExp(`^/([^/]{1,64})/events/([^/]{1,36})(?:/(${INSTA
  * 2. The reservation check is a routing disposition, not name validation. It
  *    keeps /api/events/x and /admin/events/x from resolving as event pages, and
  *    mirrors the server route table's exclusions so SSR meta tags agree with
- *    whatever the router would have served. It is not the DEC-018 rule-4
+ *    whatever the router would have served. The router's counterpart is
+ *    RESERVED_FIRST_SEGMENT_PATTERN (with LOCALE_SEGMENT_PATTERN) in
+ *    src/server/app_routes.ts, built from getSupportedLanguageCodes -- the set
+ *    isValidLanguageCode answers from -- so both decide "is this a locale?"
+ *    from one source. It is not the DEC-018 rule-4
  *    lookup gate: calendar resolution still happens in getCalendarByName on the
  *    shape rule alone.
  *

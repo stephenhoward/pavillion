@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';
 
-import { getDefaultEnabledLanguageCodes, isValidLanguageCode } from '@/common/i18n/languages';
+import { getSupportedLanguageCodes, isValidLanguageCode } from '@/common/i18n/languages';
 import {
   RESERVED_ROUTE_SEGMENTS,
   classifyReservedRouteSegment,
@@ -239,7 +239,7 @@ describe('reserved route segments', () => {
   });
 
   describe('locale codes', () => {
-    it.each(getDefaultEnabledLanguageCodes())('reserves the locale prefix %s', (code) => {
+    it.each(getSupportedLanguageCodes())('reserves the locale prefix %s', (code) => {
       expect(isReservedRouteSegment(code)).toBe(true);
     });
 
@@ -338,7 +338,7 @@ describe('classifyReservedRouteSegment', () => {
     expect(classifyReservedRouteSegment(segment)).toBe('reserved_segment');
   });
 
-  it.each(getDefaultEnabledLanguageCodes())('classifies the locale code %s as locale_code', (code) => {
+  it.each(getSupportedLanguageCodes())('classifies the locale code %s as locale_code', (code) => {
     expect(classifyReservedRouteSegment(code)).toBe('locale_code');
   });
 
@@ -363,7 +363,7 @@ describe('classifyReservedRouteSegment', () => {
   it('agrees with isReservedRouteSegment on every sampled segment', () => {
     const sample = [
       ...RESERVED_ROUTE_SEGMENTS,
-      ...getDefaultEnabledLanguageCodes(),
+      ...getSupportedLanguageCodes(),
       'Admin',
       'Es',
       'my-calendar',
