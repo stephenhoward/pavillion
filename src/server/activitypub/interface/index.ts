@@ -389,10 +389,14 @@ export default class ActivityPubInterface {
    * order (`messageTime ASC` over `processedAt: null`). Used by the follow
    * backfill worker to flush inserted messages after pagination completes.
    *
+   * `skipNewerThanMs` leaves rows written within that many milliseconds
+   * unprocessed; omit it to drain every unprocessed row.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's write, in ms
    * @returns {Promise<void>}
    */
-  async processInboxMessages(): Promise<void> {
-    return this.inboxService.processInboxMessages();
+  async processInboxMessages(options: { skipNewerThanMs?: number } = {}): Promise<void> {
+    return this.inboxService.processInboxMessages(options);
   }
 
   /**

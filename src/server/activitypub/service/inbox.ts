@@ -223,15 +223,27 @@ class ProcessInboxService {
   /**
    * Processes all unprocessed inbox messages in batches.
    *
+   * With `skipNewerThanMs`, rows written (`createdAt`) less than that many
+   * milliseconds before the call are left alone. The cutoff is fixed when
+   * the call starts, so rows inside the window are excluded by the query and
+   * the loop ends once only they remain. `message_time` cannot serve here:
+   * for live deliveries it is the sender's published time, not the write.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's write, in ms
    * @returns {Promise<void>}
    */
-  async processInboxMessages() {
+  async processInboxMessages(options: { skipNewerThanMs?: number } = {}) {
+
+    const where: Record<string, unknown> = { processed_time: null };
+    if ( options.skipNewerThanMs !== undefined ) {
+      where.createdAt = { [Op.lt]: new Date(Date.now() - options.skipNewerThanMs) };
+    }
 
     let messages: ActivityPubInboxMessageEntity[] = [];
 
     do {
       messages = await ActivityPubInboxMessageEntity.findAll({
-        where: { processed_time: null },
+        where,
         order: [ ['message_time', 'ASC'] ],
         limit: 1000,
       });

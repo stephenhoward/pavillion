@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
-import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
@@ -2427,5 +2427,90 @@ describe('ProcessInboxService - remote-editor envelope', () => {
       expect(params.content).toEqual({ en: { name: 'Renamed', description: '' } });
       expect(params.eventSourceUrl).toBe(apObjectId);
     });
+  });
+});
+
+describe('ProcessInboxService - processInboxMessages skip window', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let dispatched: string[];
+
+  const calendarId = 'skip-window-calendar-id';
+
+  /**
+   * Writes an unprocessed ap_inbox row whose write time (createdAt) is
+   * `ageMs` in the past.
+   */
+  const insertInboxRow = async (id: string, ageMs: number): Promise<void> => {
+    await ActivityPubInboxMessageEntity.create({
+      id,
+      type: 'Create',
+      message_time: new Date(),
+      message: {},
+      calendar_id: calendarId,
+    });
+    const writtenAt = new Date(Date.now() - ageMs);
+    await ActivityPubInboxMessageEntity.update(
+      { createdAt: writtenAt, updatedAt: writtenAt },
+      { where: { id }, silent: true },
+    );
+  };
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    const eventBus = new EventEmitter();
+    inboxService = new ProcessInboxService(eventBus, new CalendarInterface(eventBus));
+
+    await CalendarEntity.create({
+      id: calendarId,
+      url_name: 'skip-window-calendar',
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Record which rows are dispatched and mark them processed, as the real
+    // processInboxMessage does, so the drain loop advances.
+    dispatched = [];
+    sandbox.stub(inboxService, 'processInboxMessage').callsFake(async (message: ActivityPubInboxMessageEntity) => {
+      dispatched.push(message.id);
+      await message.update({ processed_time: new Date(), processed_status: 'ok' });
+    });
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('dispatches every unprocessed row when called without a window', async () => {
+    await insertInboxRow('https://remote.instance/activities/old', 60_000);
+    await insertInboxRow('https://remote.instance/activities/fresh', 0);
+
+    await inboxService.processInboxMessages();
+
+    expect(dispatched.sort()).toEqual([
+      'https://remote.instance/activities/fresh',
+      'https://remote.instance/activities/old',
+    ]);
+  });
+
+  it('skips rows written inside the window and dispatches older ones', async () => {
+    await insertInboxRow('https://remote.instance/activities/old', 60_000);
+    await insertInboxRow('https://remote.instance/activities/fresh', 0);
+
+    await inboxService.processInboxMessages({ skipNewerThanMs: 10_000 });
+
+    expect(dispatched).toEqual(['https://remote.instance/activities/old']);
+    const fresh = await ActivityPubInboxMessageEntity.findByPk('https://remote.instance/activities/fresh');
+    expect(fresh!.processed_time).toBeNull();
+  });
+
+  it('returns when only rows inside the window remain unprocessed', async () => {
+    await insertInboxRow('https://remote.instance/activities/fresh', 0);
+
+    await inboxService.processInboxMessages({ skipNewerThanMs: 10_000 });
+
+    expect(dispatched).toEqual([]);
   });
 });
