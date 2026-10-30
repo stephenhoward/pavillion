@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject, onBeforeMount, watch } from 'vue';
+import { ref, computed, inject, nextTick, onBeforeMount, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Calendar as CalendarIcon } from 'lucide-vue-next';
 
@@ -10,6 +10,7 @@ import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { calendarPath } from '@/common/routing/public-paths';
 import EmptyState from '@/common/ui/components/EmptyState.vue';
+import { holdScrollUntil } from '@/site/routing/scroll-hold';
 
 const { t } = useTranslation('system');
 const { currentLocale, localizedPath } = useLocale();
@@ -127,6 +128,16 @@ onBeforeMount(async () => {
   // description on unmount: the next route's onBeforeMount will overwrite it,
   // and clearing here would briefly drop SEO context during navigation.
   applyHead();
+
+  // The list is fetched on every mount, so on browser Back the page is still
+  // at loading-frame height when the router restores the saved position. Hold
+  // that restoration until whichever outcome renders; this must be registered
+  // before the first await, while the router is still waiting a tick.
+  let releaseScroll!: () => void;
+  holdScrollUntil(new Promise<void>((resolve) => {
+    releaseScroll = resolve;
+  }));
+
   try {
     const listings = await calendarService.listPublicCalendars();
     calendars.value = listings;
@@ -135,6 +146,10 @@ onBeforeMount(async () => {
   catch (error) {
     console.error('Error loading discovery list:', error);
     state.value = 'error';
+  }
+  finally {
+    await nextTick();
+    releaseScroll();
   }
 });
 </script>
