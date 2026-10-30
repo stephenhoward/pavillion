@@ -19,7 +19,7 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { waitFor } from '@/server/common/test/lib/test_polling';
 import { JobHandler } from '@/server/housekeeping/service/job-queue';
 import { registerJobHandlers } from '@/server/worker';
 import ActivityPubDomain from '@/server/activitypub';
@@ -164,6 +164,7 @@ describe('Follow backfill through the worker wiring, drained by the web process'
 
     const event = await waitFor(
       () => EventEntity.findOne({ where: { event_source_url: EVENT_URI } }),
+      { label: 'backfilled event created' },
     );
 
     // The event carries a schedule, so instances are buildable from it.
@@ -172,14 +173,14 @@ describe('Follow backfill through the worker wiring, drained by the web process'
     const instances = await waitFor(async () => {
       const rows = await EventInstanceEntity.findAll({ where: { event_id: event.id } });
       return rows.length > 0 ? rows : null;
-    }).catch(() => [] as EventInstanceEntity[]);
+    }, { label: 'backfilled event has event_instance rows' });
 
     expect(instances.length, 'backfilled event has event_instance rows').toBeGreaterThan(0);
 
     const processed = await waitFor(async () => {
       const drained = await ActivityPubInboxMessageEntity.findByPk(CREATE_ACTIVITY_ID);
       return drained?.processed_time ? drained : null;
-    });
+    }, { label: 'backfilled row processed' });
     expect(processed.processed_status, 'the drain dispatched the backfilled row cleanly').toBe('ok');
   });
 });

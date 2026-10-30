@@ -85,6 +85,18 @@ const SOURCE_PAGE_1_URI = `${SOURCE_ORIGIN}/calendars/source/outbox?page=1`;
 const SOURCE_PAGE_2_URI = `${SOURCE_ORIGIN}/calendars/source/outbox?page=2`;
 
 /**
+ * The clock every run reads unless a test injects its own. A fixed reading
+ * keeps the clamp window still, so a `published` date written relative to it
+ * never drifts past the two-year floor as the real clock moves on.
+ */
+const NOW = new Date('2026-05-16T12:00:00Z');
+
+/** An ISO timestamp `hours` before {@link NOW}. */
+function hoursBeforeNow(hours: number): string {
+  return new Date(NOW.getTime() - hours * 60 * 60 * 1000).toISOString();
+}
+
+/**
  * Builds a Create activity for the source calendar to publish.
  *
  * `published` controls the `messageTime` after `clampMessageTime` runs.
@@ -127,6 +139,28 @@ function buildPage(
     page.next = next;
   }
   return page;
+}
+
+/**
+ * Builds the stubbed source outbox: the actor profile, the collection, page 1
+ * and, when `page2Items` is given, page 2. Page 1 links to page 2 whenever
+ * page 2 exists; pass `page1Next` to link it elsewhere, or to a page the stub
+ * does not serve.
+ */
+function buildOutbox(
+  page1Items: Record<string, unknown>[],
+  page2Items?: Record<string, unknown>[],
+  page1Next: string | undefined = page2Items ? SOURCE_PAGE_2_URI : undefined,
+): Record<string, Record<string, unknown>> {
+  const responses: Record<string, Record<string, unknown>> = {
+    [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
+    [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
+    [SOURCE_PAGE_1_URI]: buildPage(page1Items, page1Next),
+  };
+  if (page2Items) {
+    responses[SOURCE_PAGE_2_URI] = buildPage(page2Items);
+  }
+  return responses;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,9 +287,48 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       calendarInterface,
       rateLimiter,
       fetcher: opts.fetcher,
-      now: opts.now,
+      now: opts.now ?? (() => NOW),
       maxBufferBytes: opts.maxBufferBytes,
     });
+  }
+
+  /** The beforeEach follow: the follower calendar following the source actor. */
+  function sourcePayload(): Parameters<FollowBackfillService['runBackfill']>[0] {
+    return {
+      followingCalendarId: followerCalendarId,
+      calendarActorId: sourceCalendarActorId,
+      sourceActorUri: SOURCE_ACTOR_URI,
+    };
+  }
+
+  /**
+   * Seeds a local copy of the remote event so the Announce handler finds it
+   * without a fetch, and so a dismissal row has an event to reference.
+   * Returns the local event id.
+   */
+  async function seedLocalEvent(eventApId: string): Promise<string> {
+    const eventId = uuidv4();
+    await EventEntity.create({ id: eventId, calendar_id: null });
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: SOURCE_ACTOR_URI,
+    });
+    return eventId;
+  }
+
+  /**
+   * Runs the drain and asserts the Announce and its Undo both dispatched
+   * cleanly and left no share behind. processed_time is set on error as well
+   * as on success, so the status is what proves a clean dispatch.
+   */
+  async function expectDrainLeavesNoShare(announceId: string, undoId: string, eventApId: string): Promise<void> {
+    await drainInbox();
+    expect((await ActivityPubInboxMessageEntity.findByPk(announceId))?.processed_status).toBe('ok');
+    expect((await ActivityPubInboxMessageEntity.findByPk(undoId))?.processed_status).toBe('ok');
+    expect(await EventActivityEntity.count({
+      where: { event_id: eventApId, type: 'share' },
+    })).toBe(0);
   }
 
   // -------------------------------------------------------------------------
@@ -263,25 +336,16 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // -------------------------------------------------------------------------
 
   it('persists each surviving activity with auth_source=outbox_pull, auth_origin=<source origin>, and a clamped message_time', async () => {
-    const now = new Date('2026-05-16T12:00:00Z');
-    const published1 = '2026-05-16T11:00:00Z'; // recent — within clamp window
+    const published1 = hoursBeforeNow(1); // recent — within clamp window
     const published2 = '2020-01-01T00:00:00Z'; // older than 2y — should be floored
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/a1`, published1),
-        buildCreate(`${SOURCE_ORIGIN}/activities/a2`, published2),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([
+      buildCreate(`${SOURCE_ORIGIN}/activities/a1`, published1),
+      buildCreate(`${SOURCE_ORIGIN}/activities/a2`, published2),
+    ]));
 
-    const service = runService({ fetcher, now: () => now });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    const service = runService({ fetcher });
+    await service.runBackfill(sourcePayload());
 
     const rows = await ActivityPubInboxMessageEntity.findAll({
       where: { calendar_id: followerCalendarId },
@@ -299,12 +363,12 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const row1 = rows.find(r => r.id.endsWith('a1'))!;
     expect(row1.message_time.toISOString()).toBe(new Date(published1).toISOString());
 
-    // published2 is older than 2 years from `now`; clampMessageTime floors it
-    // to `now - 2 years`. Exact ms equality is brittle, so assert the row is
+    // published2 is older than 2 years from `NOW`; clampMessageTime floors it
+    // to `NOW - 2 years`. Exact ms equality is brittle, so assert the row is
     // pinned to the floor (not to the original 2020 timestamp).
     const row2 = rows.find(r => r.id.endsWith('a2'))!;
     const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
-    expect(row2.message_time.getTime()).toBe(now.getTime() - TWO_YEARS_MS);
+    expect(row2.message_time.getTime()).toBe(NOW.getTime() - TWO_YEARS_MS);
     expect(row2.message_time.getTime()).toBeGreaterThan(new Date(published2).getTime());
   });
 
@@ -314,34 +378,26 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
 
   it('rejects an activity whose object.attributedTo does not match the actor (trust gate)', async () => {
     const forgedActivityId = `${SOURCE_ORIGIN}/activities/forged`;
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        {
-          id: forgedActivityId,
-          type: 'Create',
-          actor: SOURCE_ACTOR_URI,
-          published: '2026-05-16T11:00:00Z',
-          object: {
-            id: `${SOURCE_ORIGIN}/events/forged`,
-            type: 'Event',
-            // Forged attribution: the wrapping actor is the source, but the
-            // object claims to be authored by a different identity. The
-            // pre-write trust gate must drop this before any DB insert.
-            attributedTo: `${SOURCE_ORIGIN}/users/someone-else`,
-            name: 'forged event',
-          },
+    const fetcher = makeFetcher(buildOutbox([
+      {
+        id: forgedActivityId,
+        type: 'Create',
+        actor: SOURCE_ACTOR_URI,
+        published: '2026-05-16T11:00:00Z',
+        object: {
+          id: `${SOURCE_ORIGIN}/events/forged`,
+          type: 'Event',
+          // Forged attribution: the wrapping actor is the source, but the
+          // object claims to be authored by a different identity. The
+          // pre-write trust gate must drop this before any DB insert.
+          attributedTo: `${SOURCE_ORIGIN}/users/someone-else`,
+          name: 'forged event',
         },
-      ]),
-    });
+      },
+    ]));
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     const forgedRow = await ActivityPubInboxMessageEntity.findByPk(forgedActivityId);
     expect(forgedRow).toBeNull();
@@ -350,31 +406,23 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   it('rejects an activity whose actor is on a different origin from the source actor (trust gate)', async () => {
     const foreignActivityId = `${SOURCE_ORIGIN}/activities/foreign`;
     const foreignActor = 'https://attacker.example/users/imposter';
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        {
-          id: foreignActivityId,
-          type: 'Create',
-          actor: foreignActor,
-          published: '2026-05-16T11:00:00Z',
-          object: {
-            id: `${SOURCE_ORIGIN}/events/foreign`,
-            type: 'Event',
-            attributedTo: foreignActor,
-            name: 'foreign-origin event',
-          },
+    const fetcher = makeFetcher(buildOutbox([
+      {
+        id: foreignActivityId,
+        type: 'Create',
+        actor: foreignActor,
+        published: '2026-05-16T11:00:00Z',
+        object: {
+          id: `${SOURCE_ORIGIN}/events/foreign`,
+          type: 'Event',
+          attributedTo: foreignActor,
+          name: 'foreign-origin event',
         },
-      ]),
-    });
+      },
+    ]));
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(await ActivityPubInboxMessageEntity.findByPk(foreignActivityId)).toBeNull();
   });
@@ -385,57 +433,41 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // activity (e.g. a deterministic `{objectUrl}/delete`).
     const claimedId = 'https://other.example/events/elsewhere/delete';
     const ownId = `${SOURCE_ORIGIN}/activities/own`;
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        { id: claimedId, type: 'Delete', actor: SOURCE_ACTOR_URI, published: '2026-05-16T11:00:00Z', object: 'https://other.example/events/elsewhere' },
-        buildCreate(ownId, '2026-05-16T11:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([
+      { id: claimedId, type: 'Delete', actor: SOURCE_ACTOR_URI, published: '2026-05-16T11:00:00Z', object: 'https://other.example/events/elsewhere' },
+      buildCreate(ownId, '2026-05-16T11:00:00Z'),
+    ]));
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(await ActivityPubInboxMessageEntity.findByPk(claimedId)).toBeNull();
     expect(await ActivityPubInboxMessageEntity.findByPk(ownId)).not.toBeNull();
   });
 
   // -------------------------------------------------------------------------
-  // 3. Write ordering
+  // 3. Write ordering, and no drain
   // -------------------------------------------------------------------------
 
-  it('writes the whole walk oldest first, by clamped message_time, once the walk ends', async () => {
-    const now = new Date('2026-05-16T12:00:00Z');
+  it('writes the whole walk oldest first, by clamped message_time, once the walk ends, and never drains the inbox itself', async () => {
     // The outbox is newest first across pages, and each page is shuffled
     // within itself, so neither walk order nor page order is chronological.
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [
-          buildCreate(`${SOURCE_ORIGIN}/activities/third`, '2026-04-03T00:00:00Z'),
-          buildCreate(`${SOURCE_ORIGIN}/activities/fourth`, '2026-04-05T00:00:00Z'),
-        ],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
+    const fetcher = makeFetcher(buildOutbox(
+      [
+        buildCreate(`${SOURCE_ORIGIN}/activities/third`, '2026-04-03T00:00:00Z'),
+        buildCreate(`${SOURCE_ORIGIN}/activities/fourth`, '2026-04-05T00:00:00Z'),
+      ],
+      [
         buildCreate(`${SOURCE_ORIGIN}/activities/second`, '2026-04-02T00:00:00Z'),
         buildCreate(`${SOURCE_ORIGIN}/activities/first`, '2026-04-01T00:00:00Z'),
-      ]),
-    });
+      ],
+    ));
     const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
-    const service = runService({ fetcher, now: () => now });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    const service = runService({ fetcher });
+    await service.runBackfill(sourcePayload());
+
+    expect(drainSpy.callCount).toBe(0);
 
     // Insertion order is the call order on the writer.
     const writes = enqueueSpy.getCalls().map(call => call.args[0]);
@@ -454,44 +486,9 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 4. No drain, and a drain that runs mid-walk sees none of the walk
+  // 4. A drain that runs mid-walk sees none of the walk, and an Undo is never
+  //    written before its Announce
   // -------------------------------------------------------------------------
-
-  it('writes every page and never drains the inbox itself', async () => {
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [
-          buildCreate(`${SOURCE_ORIGIN}/activities/p1a`, '2026-04-01T00:00:00Z'),
-          buildCreate(`${SOURCE_ORIGIN}/activities/p1b`, '2026-04-02T00:00:00Z'),
-        ],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/p2a`, '2026-04-03T00:00:00Z'),
-      ]),
-    });
-
-    const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
-
-    expect(drainSpy.callCount).toBe(0);
-
-    const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
-      where: { calendar_id: followerCalendarId },
-      order: [['id', 'ASC']],
-    })).map(r => r.id);
-    expect(persistedIds).toEqual([
-      `${SOURCE_ORIGIN}/activities/p1a`,
-      `${SOURCE_ORIGIN}/activities/p1b`,
-      `${SOURCE_ORIGIN}/activities/p2a`,
-    ]);
-  });
 
   it('leaves nothing for a mid-walk drain to dispatch, so an Undo never runs before its Announce', async () => {
     // Page 1 (newer) holds Undo(Announce X); page 2 (older) holds Announce X.
@@ -503,25 +500,12 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const undoId = `${SOURCE_ORIGIN}/activities/undo-mid-walk`;
 
     // Local copy of X so the Announce handler does not fetch it.
-    const eventId = uuidv4();
-    await EventEntity.create({ id: eventId, calendar_id: null });
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: SOURCE_ACTOR_URI,
-    });
+    await seedLocalEvent(eventApId);
 
-    const pages: Record<string, Record<string, unknown>> = {
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2026-05-15T11:00:00Z', object: announceId }],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2026-05-15T10:00:00Z', object: eventApId },
-      ]),
-    };
+    const pages = buildOutbox(
+      [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: hoursBeforeNow(25), object: announceId }],
+      [{ id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: hoursBeforeNow(26), object: eventApId }],
+    );
 
     let rowsSeenByMidWalkDrain: number | null = null;
     const fetcher = makeFetcher({});
@@ -537,26 +521,12 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     });
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(rowsSeenByMidWalkDrain).toBe(0);
 
     // The next drain after the walk dispatches the Announce, then its Undo.
-    await drainInbox();
-
-    // processed_time is set on error as well as on success, so assert the
-    // status: both rows must have dispatched cleanly.
-    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
-    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
-    expect(announceRow?.processed_status).toBe('ok');
-    expect(undoRow?.processed_status).toBe('ok');
-    expect(await EventActivityEntity.count({
-      where: { event_id: eventApId, type: 'share' },
-    })).toBe(0);
+    await expectDrainLeavesNoShare(announceId, undoId, eventApId);
   });
 
   it('clamps every activity against one clock reading per run, so a floored Announce is still written before its floored Undo', async () => {
@@ -569,49 +539,24 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const undoId = `${SOURCE_ORIGIN}/activities/undo-floored`;
 
     // Local copy of X so the Announce handler does not fetch it.
-    const eventId = uuidv4();
-    await EventEntity.create({ id: eventId, calendar_id: null });
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: SOURCE_ACTOR_URI,
-    });
+    await seedLocalEvent(eventApId);
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId }],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId },
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox(
+      [{ id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId }],
+      [{ id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId }],
+    ));
     const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
     let tick = 0;
-    const advancingNow = () => new Date(Date.parse('2026-05-16T12:00:00Z') + (tick++) * 1000);
+    const advancingNow = () => new Date(NOW.getTime() + (tick++) * 1000);
 
     const service = runService({ fetcher, now: advancingNow });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     const writes = enqueueSpy.getCalls().map(call => call.args[0]);
     expect(writes.map(w => w.id)).toEqual([announceId, undoId]);
 
-    await drainInbox();
-
-    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
-    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
-    expect(announceRow?.processed_status).toBe('ok');
-    expect(undoRow?.processed_status).toBe('ok');
-    expect(await EventActivityEntity.count({
-      where: { event_id: eventApId, type: 'share' },
-    })).toBe(0);
+    await expectDrainLeavesNoShare(announceId, undoId, eventApId);
   });
 
   it('writes a floored Announce before its floored Undo when the peer serves its outbox oldest first', async () => {
@@ -623,45 +568,22 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const undoId = `${SOURCE_ORIGIN}/activities/undo-oldest-first`;
 
     // Local copy of X so the Announce handler does not fetch it.
-    const eventId = uuidv4();
-    await EventEntity.create({ id: eventId, calendar_id: null });
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: SOURCE_ACTOR_URI,
-    });
+    await seedLocalEvent(eventApId);
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId },
-        { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId },
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([
+      { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2020-01-01T00:00:00Z', object: eventApId },
+      { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2020-01-02T00:00:00Z', object: announceId },
+    ]));
     const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
-    const now = new Date('2026-05-16T12:00:00Z');
-    const service = runService({ fetcher, now: () => now });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    const service = runService({ fetcher });
+    await service.runBackfill(sourcePayload());
 
     const writes = enqueueSpy.getCalls().map(call => call.args[0]);
     expect(writes[0].messageTime.getTime()).toBe(writes[1].messageTime.getTime());
     expect(writes.map(w => w.id)).toEqual([announceId, undoId]);
 
-    await drainInbox();
-
-    const announceRow = await ActivityPubInboxMessageEntity.findByPk(announceId);
-    const undoRow = await ActivityPubInboxMessageEntity.findByPk(undoId);
-    expect(announceRow?.processed_status).toBe('ok');
-    expect(undoRow?.processed_status).toBe('ok');
-    expect(await EventActivityEntity.count({
-      where: { event_id: eventApId, type: 'share' },
-    })).toBe(0);
+    await expectDrainLeavesNoShare(announceId, undoId, eventApId);
   });
 
   // -------------------------------------------------------------------------
@@ -669,21 +591,13 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // -------------------------------------------------------------------------
 
   it('produces no duplicate rows when runBackfill is invoked twice over the same source', async () => {
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/dup1`, '2026-04-01T00:00:00Z'),
-        buildCreate(`${SOURCE_ORIGIN}/activities/dup2`, '2026-04-02T00:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([
+      buildCreate(`${SOURCE_ORIGIN}/activities/dup1`, '2026-04-01T00:00:00Z'),
+      buildCreate(`${SOURCE_ORIGIN}/activities/dup2`, '2026-04-02T00:00:00Z'),
+    ]));
 
     const service = runService({ fetcher });
-    const payload = {
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    };
+    const payload = sourcePayload();
     await service.runBackfill(payload);
     await service.runBackfill(payload);
 
@@ -737,20 +651,10 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // published timestamp. Backfill uses `findOrCreate` with no upgrade on
     // conflict, so the existing row must remain.
     const backfillPublished = '2026-05-16T11:00:00Z';
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        buildCreate(sharedActivityId, backfillPublished),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([buildCreate(sharedActivityId, backfillPublished)]));
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     const rows = await ActivityPubInboxMessageEntity.findAll({
       where: { id: sharedActivityId },
@@ -768,23 +672,15 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // -------------------------------------------------------------------------
 
   it('does not emit `inboxMessageAdded` when persisting backfill rows', async () => {
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/silent`, '2026-05-15T00:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox([
+      buildCreate(`${SOURCE_ORIGIN}/activities/silent`, '2026-05-15T00:00:00Z'),
+    ]));
 
     const inboxMessageAddedSpy = sandbox.spy();
     eventBus.on('inboxMessageAdded', inboxMessageAddedSpy);
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     // The row landed but no event fired — proving the worker uses the
     // deferred `enqueueInboxRow` entry point rather than the emitting
@@ -875,16 +771,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // Pre-create the underlying local event row so processShareEvent's
     // EventObjectEntity lookup hits and skips the remote fetch path, and
     // so the RepostDismissalEntity FK to event has a valid target.
-    const eventId = uuidv4();
-    await EventEntity.create({
-      id: eventId,
-      calendar_id: null, // remote-origin event
-    });
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: SOURCE_ACTOR_URI,
-    });
+    const eventId = await seedLocalEvent(eventApId);
 
     // Second follower (G) — a separate local calendar with its own follow
     // row pointing at the same source actor. The beforeEach already wired
@@ -961,29 +848,13 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // emits only G's pair. Each run persists its own pair into ap_inbox
     // (PK is the activity id, which differs); the drain below dispatches
     // them through the real ProcessInboxService.
-    const fetcherF = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([announceF, undoF]),
-    });
+    const fetcherF = makeFetcher(buildOutbox([announceF, undoF]));
     const serviceF = runService({ fetcher: fetcherF });
-    await serviceF.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await serviceF.runBackfill(sourcePayload());
 
-    const fetcherG = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([announceG, undoG]),
-    });
+    const fetcherG = makeFetcher(buildOutbox([announceG, undoG]));
     const serviceG = runService({ fetcher: fetcherG });
-    await serviceG.runBackfill({
-      followingCalendarId: followerGCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await serviceG.runBackfill({ ...sourcePayload(), followingCalendarId: followerGCalendarId });
 
     // Drain the inbox rows in message_time ASC order — same property the
     // production drain query relies on, exercised here per-row through
@@ -1044,24 +915,13 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
       rateLimiter.tryAcquire(host);
     }
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox(
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z')],
+    ));
 
     const service = runService({ fetcher });
-    await expect(service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    })).rejects.toBeInstanceOf(BackfillRateLimitError);
+    await expect(service.runBackfill(sourcePayload())).rejects.toBeInstanceOf(BackfillRateLimitError);
 
     // Page 1 was walked but its buffered rows were discarded: a partial,
     // newest-first walk must never reach the inbox. Page 2 was never fetched.
@@ -1073,30 +933,19 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     expect(drainSpy.callCount).toBe(0);
   });
 
-  it('walks the remaining pages on a subsequent run after the rate window resets (pg-boss retry)', async () => {
+  it('re-walks the outbox from the first page on a subsequent run after the rate window resets (pg-boss retry)', async () => {
     const host = new URL(SOURCE_ACTOR_URI).hostname;
     rateLimiter = new SyncRateLimiter({ limit: 60, windowMs: 60_000 });
     for (let i = 0; i < 57; i++) {
       rateLimiter.tryAcquire(host);
     }
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox(
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z')],
+    ));
 
-    const payload = {
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    };
+    const payload = sourcePayload();
     const service = runService({ fetcher });
 
     // First attempt pauses after page 1 and writes nothing.
@@ -1127,17 +976,10 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
   // -------------------------------------------------------------------------
 
   it('writes nothing when the follow row is removed during the walk', async () => {
-    const pages: Record<string, Record<string, unknown>> = {
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
-        SOURCE_PAGE_2_URI,
-      ),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z'),
-      ]),
-    };
+    const pages = buildOutbox(
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p2`, '2026-04-02T00:00:00Z')],
+    );
     const fetcher = makeFetcher({});
     fetcher.callsFake(async (uri: string) => {
       if (uri === SOURCE_PAGE_1_URI) {
@@ -1151,11 +993,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     });
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
     expect(await ActivityPubInboxMessageEntity.count({
@@ -1168,14 +1006,11 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     // next page is in flight, and that page turns out to be unreachable. The
     // walk ends normally with page 1 buffered, so only the re-check
     // immediately before the write can see the row is gone.
-    const pages: Record<string, Record<string, unknown>> = {
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
-        SOURCE_PAGE_2_URI,
-      ),
-    };
+    const pages = buildOutbox(
+      [buildCreate(`${SOURCE_ORIGIN}/activities/p1`, '2026-04-01T00:00:00Z')],
+      undefined,
+      SOURCE_PAGE_2_URI,
+    );
     const fetcher = makeFetcher({});
     fetcher.callsFake(async (uri: string) => {
       if (uri === SOURCE_PAGE_2_URI) {
@@ -1188,11 +1023,7 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(true);
     expect(enqueueSpy.callCount).toBe(0);
@@ -1210,24 +1041,17 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     ['unreachable', SOURCE_PAGE_2_URI, true],
   ])('writes the walked pages when the next page URL is %s', async (_label, nextUrl, expectFetched) => {
     // The stub serves no page 2, so an unreachable next page resolves to null.
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage(
-        [
-          buildCreate(`${SOURCE_ORIGIN}/activities/p1b`, '2026-04-02T00:00:00Z'),
-          buildCreate(`${SOURCE_ORIGIN}/activities/p1a`, '2026-04-01T00:00:00Z'),
-        ],
-        nextUrl,
-      ),
-    });
+    const fetcher = makeFetcher(buildOutbox(
+      [
+        buildCreate(`${SOURCE_ORIGIN}/activities/p1b`, '2026-04-02T00:00:00Z'),
+        buildCreate(`${SOURCE_ORIGIN}/activities/p1a`, '2026-04-01T00:00:00Z'),
+      ],
+      undefined,
+      nextUrl,
+    ));
 
     const service = runService({ fetcher });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     // A refused URL never reaches the fetcher; an unreachable one does.
     expect(fetcher.calledWith(nextUrl)).toBe(expectFetched);
@@ -1255,22 +1079,14 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const oldest = buildCreate(`${SOURCE_ORIGIN}/activities/oldest`, '2026-04-01T00:00:00Z');
     const cap = JSON.stringify(newest).length + JSON.stringify(middle).length;
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([newest, middle, oldest], SOURCE_PAGE_2_URI),
-      [SOURCE_PAGE_2_URI]: buildPage([
-        buildCreate(`${SOURCE_ORIGIN}/activities/page-2`, '2026-03-01T00:00:00Z'),
-      ]),
-    });
+    const fetcher = makeFetcher(buildOutbox(
+      [newest, middle, oldest],
+      [buildCreate(`${SOURCE_ORIGIN}/activities/page-2`, '2026-03-01T00:00:00Z')],
+    ));
     const enqueueSpy = sandbox.spy(activityPubInterface, 'enqueueInboxRow');
 
     const service = runService({ fetcher, maxBufferBytes: cap });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     expect(fetcher.calledWith(SOURCE_PAGE_2_URI)).toBe(false);
 
@@ -1304,28 +1120,14 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
 
     // Local copy of X so an Announce that did get written would dispatch
     // without a fetch.
-    const eventId = uuidv4();
-    await EventEntity.create({ id: eventId, calendar_id: null });
-    await EventObjectEntity.create({
-      event_id: eventId,
-      ap_id: eventApId,
-      attributed_to: SOURCE_ACTOR_URI,
-    });
+    await seedLocalEvent(eventApId);
 
-    const undo = { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: '2026-05-15T11:00:00Z', object: announceId };
-    const announce = { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: '2026-05-15T10:00:00Z', object: eventApId };
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([undo, announce]),
-    });
+    const undo = { id: undoId, type: 'Undo', actor: SOURCE_ACTOR_URI, published: hoursBeforeNow(25), object: announceId };
+    const announce = { id: announceId, type: 'Announce', actor: SOURCE_ACTOR_URI, published: hoursBeforeNow(26), object: eventApId };
+    const fetcher = makeFetcher(buildOutbox([undo, announce]));
 
     const service = runService({ fetcher, maxBufferBytes: JSON.stringify(undo).length });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
     await drainInbox();
 
     // The Undo's target is not in the inbox, so dispatch ends it as an error
@@ -1354,18 +1156,10 @@ describe('FollowBackfillService.runBackfill (integration)', () => {
     const older = buildCreate(`${SOURCE_ORIGIN}/activities/valid-older`, '2026-04-01T00:00:00Z');
     const cap = JSON.stringify(newer).length + JSON.stringify(older).length;
 
-    const fetcher = makeFetcher({
-      [SOURCE_ACTOR_URI]: { type: 'Person', outbox: SOURCE_OUTBOX_URI },
-      [SOURCE_OUTBOX_URI]: { type: 'OrderedCollection', first: SOURCE_PAGE_1_URI },
-      [SOURCE_PAGE_1_URI]: buildPage([forged, noId, newer, older]),
-    });
+    const fetcher = makeFetcher(buildOutbox([forged, noId, newer, older]));
 
     const service = runService({ fetcher, maxBufferBytes: cap });
-    await service.runBackfill({
-      followingCalendarId: followerCalendarId,
-      calendarActorId: sourceCalendarActorId,
-      sourceActorUri: SOURCE_ACTOR_URI,
-    });
+    await service.runBackfill(sourcePayload());
 
     const persistedIds = (await ActivityPubInboxMessageEntity.findAll({
       where: { calendar_id: followerCalendarId },

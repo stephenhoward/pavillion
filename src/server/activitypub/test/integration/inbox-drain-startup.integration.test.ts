@@ -27,7 +27,7 @@ import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activ
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { BlockedInstanceEntity } from '@/server/moderation/entity/blocked_instance';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
-import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { waitFor } from '@/server/common/test/lib/test_polling';
 
 const BLOCKED_HOST = 'blocked.example';
 
@@ -118,11 +118,11 @@ describe('ActivityPubDomain startup inbox drain (integration)', () => {
   }
 
   /** Waits until the drain has marked the row processed, and returns it. */
-  function waitForProcessed(rowId: string): Promise<ActivityPubInboxMessageEntity | null> {
+  function waitForProcessed(rowId: string): Promise<ActivityPubInboxMessageEntity> {
     return waitFor(async () => {
       const found = await ActivityPubInboxMessageEntity.findByPk(rowId);
       return found?.processed_time ? found : null;
-    });
+    }, { label: `row ${rowId} processed` });
   }
 
   it('dispatches a row left unprocessed before the web process started', async () => {
@@ -138,7 +138,7 @@ describe('ActivityPubDomain startup inbox drain (integration)', () => {
     const { domain } = wireDomain();
     stopDrain = domain.startInboxDrain();
 
-    expect((await waitForProcessed(rowId))?.processed_status).toBe('ok');
+    expect((await waitForProcessed(rowId)).processed_status).toBe('ok');
   });
 
   it('marks a left-over row from a blocked instance blocked without dispatching it', async () => {
@@ -158,7 +158,7 @@ describe('ActivityPubDomain startup inbox drain (integration)', () => {
     const createSpy = sandbox.spy(inboxService, 'processCreateEvent');
     stopDrain = domain.startInboxDrain();
 
-    expect((await waitForProcessed(rowId))?.processed_status).toBe('blocked');
+    expect((await waitForProcessed(rowId)).processed_status).toBe('blocked');
     expect(createSpy.called).toBe(false);
   });
 
@@ -179,7 +179,7 @@ describe('ActivityPubDomain startup inbox drain (integration)', () => {
     const createSpy = sandbox.spy(inboxService, 'processCreateEvent');
     stopDrain = domain.startInboxDrain();
 
-    expect((await waitForProcessed(rowId))?.processed_status).toBe('rejected');
+    expect((await waitForProcessed(rowId)).processed_status).toBe('rejected');
     expect(createSpy.called).toBe(false);
   });
 });
