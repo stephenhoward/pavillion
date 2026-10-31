@@ -70,10 +70,15 @@ const activateTab = (tab) => {
  * stale. The feed service also drops any response whose calendar is no
  * longer the selection, so a slow load for a calendar switched away from
  * cannot land on this one.
+ *
+ * Once the load settles the page is initialized, unless the user switched
+ * calendars meanwhile: then the newer load owns the loading indicator and
+ * the failure toast, and this one reports neither.
  */
 const loadFeedData = async () => {
   const calendarId = calendar.value?.id;
   if (!calendarId) {
+    state.isInitialized = true;
     return;
   }
   if (calendarStore.selectedCalendarId !== calendarId) {
@@ -89,7 +94,12 @@ const loadFeedData = async () => {
   }
   catch (error) {
     console.error('Error loading feed data:', error);
-    toast.error(t('load_error'));
+    if (calendar.value?.id === calendarId) {
+      toast.error(t('load_error'));
+    }
+  }
+  if (calendar.value?.id === calendarId) {
+    state.isInitialized = true;
   }
 };
 
@@ -139,7 +149,6 @@ onMounted(async () => {
 
   feedStore.clearFeedData();
   await loadFeedData();
-  state.isInitialized = true;
 });
 
 // Switching calendars keeps this component mounted with a new param. The

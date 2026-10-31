@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia, Pinia } from 'pinia';
@@ -12,6 +12,23 @@ import { CalendarInfo } from '@/common/model/calendar_info';
 import CalendarService from '@/client/service/calendar';
 import FeedService from '@/client/service/feed';
 import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
+
+const mockToastError = vi.fn();
+
+vi.mock('@/client/composables/useToast', () => ({
+  useToast: () => ({
+    error: mockToastError,
+    success: vi.fn(),
+  }),
+}));
+
+/** A promise plus the functions that settle it, for holding a request in flight. */
+function deferred<T = unknown>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (reason: unknown) => void = () => {};
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
 
 const Stub = { template: '<div />' };
 const viewStubs = { FollowsView: true, FollowersView: true, FollowedEventsView: true, AddCalendarModal: true };
@@ -30,6 +47,7 @@ describe('Feed Root', () => {
 
   beforeEach(async () => {
     localStorage.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
+    mockToastError.mockReset();
     sandbox = sinon.createSandbox();
     pinia = createPinia();
     setActivePinia(pinia);
@@ -153,6 +171,47 @@ describe('Feed Root', () => {
     expect(feedStore.events.map((event) => event.id)).toEqual(['second-event']);
     expect(feedStore.eventsHasMore).toBe(false);
     expect(feedStore.follows.map((follow) => follow.id)).toEqual(['second-follow']);
+  });
+
+  it('shows no failure toast for a load that fails after the calendar was switched away from', async () => {
+    const firstFeed = deferred();
+    getFeed.withArgs('o1').returns(firstFeed.promise);
+
+    await mountAt('/feed/first');
+    await router.push('/feed/second');
+    await flushPromises();
+
+    firstFeed.reject(new Error('network'));
+    await flushPromises();
+
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  it('still shows the failure toast when the current calendar fails to load', async () => {
+    getFeed.rejects(new Error('network'));
+
+    await mountAt('/feed/first');
+
+    expect(mockToastError).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the loading indicator until the second calendar loads when switched during the first load', async () => {
+    const firstFeed = deferred();
+    const secondFeed = deferred();
+    getFeed.withArgs('o1').returns(firstFeed.promise);
+    getFeed.withArgs('o2').returns(secondFeed.promise);
+
+    const wrapper = await mountAt('/feed/first');
+    await router.push('/feed/second');
+    await flushPromises();
+
+    firstFeed.resolve({ events: [], hasMore: false });
+    await flushPromises();
+    expect(wrapper.find('.loading-state').exists()).toBe(true);
+
+    secondFeed.resolve({ events: [], hasMore: false });
+    await flushPromises();
+    expect(wrapper.find('.loading-state').exists()).toBe(false);
   });
 
   it('closes the follow dialog when the calendar changes', async () => {
