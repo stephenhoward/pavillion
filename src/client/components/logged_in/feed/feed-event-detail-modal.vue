@@ -29,10 +29,10 @@ const { titleId, open, close, handleBackdropClick, cleanup } = useDialog(
 
 /**
  * Format event date and time for display.
- * Reads the start date from the first schedule, falling back to the legacy date field.
+ * Reads the start date from the base schedule, falling back to the legacy date field.
  */
 const formattedDate = computed(() => {
-  const scheduleStart = props.event.schedules?.[0]?.startDate;
+  const scheduleStart = props.event.baseSchedule()?.startDate;
   if (scheduleStart) {
     try {
       // Shown in the viewer's zone, like the calendar view's instances.

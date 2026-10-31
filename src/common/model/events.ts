@@ -32,6 +32,21 @@ export type UrlPrompt = 'tickets' | 'rsvp' | 'more_info' | 'register';
 export const URL_PROMPT_VALUES: readonly UrlPrompt[] = ['tickets', 'rsvp', 'more_info', 'register'] as const;
 
 /**
+ * Orders schedules by start, earliest first, ties broken by id; a schedule
+ * with no start sorts last. Schedules load in no fixed order, so anything
+ * that picks a representative schedule sorts with this rather than taking
+ * the first one loaded.
+ */
+export function compareSchedulesByStart(a: CalendarEventSchedule, b: CalendarEventSchedule): number {
+  const aStart = a.startDate?.toMillis() ?? Infinity;
+  const bStart = b.startDate?.toMillis() ?? Infinity;
+  if (aStart !== bStart) {
+    return aStart < bStart ? -1 : 1;
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
  * Represents a calendar event with multilingual content support.
  * Extends TranslatedModel to manage event content in different languages.
  *
@@ -214,9 +229,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    */
   baseSchedule(): CalendarEventSchedule | null {
     const candidates = (this.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
-    candidates.sort((a, b) =>
-      a.startDate!.toMillis() - b.startDate!.toMillis()
-      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    candidates.sort(compareSchedulesByStart);
     return candidates[0] ?? null;
   }
 

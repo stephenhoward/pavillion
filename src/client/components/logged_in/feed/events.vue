@@ -35,11 +35,11 @@ let observer = null;
 
 /**
  * Format event date and time for display.
- * Reads the start date from the first schedule, falling back to the legacy date field.
+ * Reads the start date from the base schedule, falling back to the legacy date field.
  */
 const formatEventDate = (event: FeedEvent) => {
-  // Prefer the start date from the first schedule (the canonical source of truth)
-  const scheduleStart = event.schedules?.[0]?.startDate;
+  // Prefer the base schedule's start (the canonical source of truth)
+  const scheduleStart = event.baseSchedule()?.startDate;
   if (scheduleStart) {
     try {
       // startDate is a Luxon DateTime in the schedule's zone; show it in the

@@ -47,6 +47,7 @@ const mockEvent = {
   id: 'evt-1',
   content: (_lang: string) => ({ name: 'Test Event', description: 'Description' }),
   schedules: [],
+  baseSchedule: () => null,
   categories: [],
   languages: ['en'],
   media: null,

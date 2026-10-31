@@ -410,12 +410,8 @@ const handleUnpostConfirm = async () => {
 
 // Format event date for display
 const formatEventDate = (event) => {
-  if (!event.schedules || event.schedules.length === 0) {
-    return null;
-  }
-
-  const schedule = event.schedules[0];
-  if (!schedule.startDate) {
+  const schedule = event.baseSchedule();
+  if (!schedule?.startDate) {
     return null;
   }
 
@@ -425,12 +421,8 @@ const formatEventDate = (event) => {
 
 // Check if event is recurring
 const isRecurring = (event) => {
-  if (!event.schedules || event.schedules.length === 0) {
-    return false;
-  }
-
-  const schedule = event.schedules[0];
-  return schedule.frequency !== null && schedule.frequency !== undefined;
+  const frequency = event.baseSchedule()?.frequency;
+  return frequency !== null && frequency !== undefined;
 };
 
 // Get recurrence description
@@ -439,8 +431,7 @@ const getRecurrenceText = (event) => {
     return null;
   }
 
-  const schedule = event.schedules[0];
-  const frequency = schedule.frequency;
+  const frequency = event.baseSchedule().frequency;
 
   const labels = {
     daily: t('recurrence_daily'),
