@@ -34,6 +34,7 @@ import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
 import { hashIp } from '@/server/moderation/service/ip-utils';
 import { createLogger } from '@/server/common/helper/logger';
+import { withKeyedLock } from '@/server/common/helper/keyed-lock';
 
 const logger = createLogger('moderation');
 
@@ -2048,6 +2049,10 @@ class ModerationService {
    * exists to bound. On the ActivityPub path the `ap_inbox` row (DEC-013) is
    * the durable record that the Flag arrived and was authenticated.
    *
+   * The cap holds under concurrent delivery within one process only: the
+   * count-and-save is serialized by an in-process keyed lock, not by the
+   * database, so a multi-process deployment needs a database-side guard.
+   *
    * @param data - Remote report data including source instance information
    * @returns The created Report domain model
    * @throws EventNotFoundError if the event does not exist
@@ -2069,27 +2074,36 @@ class ModerationService {
     }
     // Throttle before writing: a remote instance mints its own activity ids,
     // so nothing about the Flag itself bounds how many it can send.
-    if (await this.hasExceededFederatedReportLimit(data.eventId, data.forwardedFromInstance)) {
-      logger.warn(
-        { eventId: data.eventId, instance: data.forwardedFromInstance },
-        '[MODERATION] Suppressed federated report: per-instance cap reached for this event',
-      );
-      throw new FederatedReportRateLimitError();
-    }
-    // Create the report with federation reporter type
-    const report = new Report();
-    report.eventId = data.eventId;
-    report.calendarId = event.calendarId;
-    report.category = data.category;
-    report.description = data.description;
-    report.reporterType = 'federation' as ReporterType;
-    report.status = ReportStatus.SUBMITTED;
-    report.forwardedFromInstance = data.forwardedFromInstance;
-    report.forwardedReportId = data.forwardedReportId;
-    // Persist the report
-    const entity = ReportEntity.fromModel(report);
-    const saved = await entity.save();
-    const createdReport = saved.toModel();
+    //
+    // The count and the save run under a per-(event, instance) lock because
+    // inbox handlers dispatch concurrently on PostgreSQL: without it a burst
+    // of Flags all read the count before any insert lands. The lock is
+    // in-process only — it does not hold across multiple server processes —
+    // and its key must change in lockstep with the count's filter in
+    // hasExceededFederatedReportLimit, or the two stop guarding the same bucket.
+    const createdReport = await withKeyedLock(`${data.eventId}|${data.forwardedFromInstance}`, async () => {
+      if (await this.hasExceededFederatedReportLimit(data.eventId, data.forwardedFromInstance)) {
+        logger.warn(
+          { eventId: data.eventId, instance: data.forwardedFromInstance },
+          '[MODERATION] Suppressed federated report: per-instance cap reached for this event',
+        );
+        throw new FederatedReportRateLimitError();
+      }
+      // Create the report with federation reporter type
+      const report = new Report();
+      report.eventId = data.eventId;
+      report.calendarId = event.calendarId;
+      report.category = data.category;
+      report.description = data.description;
+      report.reporterType = 'federation' as ReporterType;
+      report.status = ReportStatus.SUBMITTED;
+      report.forwardedFromInstance = data.forwardedFromInstance;
+      report.forwardedReportId = data.forwardedReportId;
+      // Persist the report
+      const entity = ReportEntity.fromModel(report);
+      const saved = await entity.save();
+      return saved.toModel();
+    });
 
     // Run pattern detection for federation reports
     await this.detectAndSetPatternFlagsForFederation(createdReport);
