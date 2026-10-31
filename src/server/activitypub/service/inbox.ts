@@ -1892,16 +1892,18 @@ class ProcessInboxService {
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {DeleteActivity} message - The Delete activity message
-   * @param {{ trustLocalOrigin?: boolean }} [options] - When `trustLocalOrigin`
-   *   is `true`, the actorOwnsObject remote attributedTo fetch is skipped
-   *   (ownership trusted by outbox row provenance). Set only by the
-   *   local-dispatch path; HTTP callers omit it.
+   * @param {{ trustLocalOrigin?: boolean }} [_options] - Accepted for
+   *   signature parity with the dispatch helper. processDeleteEvent verifies
+   *   ownership against the locally-stored `attributed_to` column rather
+   *   than via remote fetch (the origin has deleted the object, so a fetch
+   *   can only 404), so the flag is currently unused here. Kept on the
+   *   signature so all dispatchByType branches share the same shape.
    * @returns {Promise<void>}
    */
   async processDeleteEvent(
     calendar: Calendar,
     message: DeleteActivity,
-    options: { trustLocalOrigin?: boolean } = {},
+    _options: { trustLocalOrigin?: boolean } = {},
   ) {
     // Validate that the object field is present and has an identifiable AP ID.
     // message.object can be a string URL (standard federation) or a Tombstone object
@@ -2026,8 +2028,28 @@ class ProcessInboxService {
         return;
       }
 
-      const ok = await this.actorOwnsObject(message, options);
-      if (!ok) {
+      // SECURITY: Domain-of-origin verification - ensure the actor's domain matches
+      // the event object's origin domain to prevent cross-domain spoofing of Delete activities.
+      const actorDomain = new URL(actorUri).hostname;
+      const eventDomain = new URL(apObjectId).hostname;
+      if (actorDomain !== eventDomain) {
+        logActivityRejection({
+          rejection_type: 'domain_mismatch',
+          activity_type: 'Delete',
+          actor_uri: actorUri,
+          actor_domain: actorDomain,
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Actor domain ${actorDomain} does not match event domain ${eventDomain}`,
+        });
+        return;
+      }
+
+      // Verify ownership using the locally-stored attributed_to field, as
+      // processUpdateEvent does. A Delete means the origin removed the
+      // object, so re-fetching it to read attributedTo can only 404. The
+      // attributed_to field was stored when the event was first received.
+      if (!apObject || apObject.attributed_to !== actorUri) {
         logActivityRejection({
           rejection_type: 'ownership_verification_failed',
           activity_type: 'Delete',
