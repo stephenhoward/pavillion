@@ -86,6 +86,12 @@ function formatLocation(location: EventLocation): string {
  * @param eventName - Localized event name
  * @param eventDescription - Localized event description
  * @param hostname - The instance hostname for UID generation
+ *
+ * The UID is scoped to the occurrence (event id plus its UTC start), so two
+ * downloaded occurrences of one recurring event stay separate entries in the
+ * attendee's calendar while re-downloading the same occurrence still updates
+ * it in place. The start, not the instance id, keys it because instance rows
+ * are regenerated when a schedule is re-expanded.
  */
 function generateIcs(
   event: CalendarEvent,
@@ -102,7 +108,7 @@ function generateIcs(
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:${escapeIcsText(event.id)}@${escapeIcsText(hostname)}`,
+    `UID:${escapeIcsText(event.id)}-${formatIcsDate(dtstart)}@${escapeIcsText(hostname)}`,
     `DTSTAMP:${formatIcsDate(DateTime.now())}`,
     `DTSTART:${formatIcsDate(dtstart)}`,
   ];

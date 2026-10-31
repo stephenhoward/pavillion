@@ -76,7 +76,7 @@ describe('ICS Generator', () => {
           'CALSCALE:GREGORIAN',
           'METHOD:PUBLISH',
           'BEGIN:VEVENT',
-          'UID:evt-123@pavillion.example',
+          'UID:evt-123-20261103T181500Z@pavillion.example',
           'DTSTAMP:20261030T120000Z',
           'DTSTART:20261103T181500Z',
           'DTEND:20261103T191500Z',
@@ -183,7 +183,31 @@ describe('ICS Generator', () => {
 
       const ics = generateInstanceIcs(instance, 'Test', '', 'pavillion.example');
 
-      expect(ics).toContain('UID:evt-123@pavillion.example');
+      expect(ics).toContain('UID:evt-123-20260401T180000Z@pavillion.example');
+    });
+
+    it('gives two occurrences of one event different UIDs', () => {
+      const event = makeEvent({ schedules: [makeWeeklySchedule()] });
+      const first = new CalendarEventInstance('inst-1', event, DateTime.fromISO('2026-04-01T18:00:00Z'), null);
+      const second = new CalendarEventInstance('inst-2', event, DateTime.fromISO('2026-04-08T18:00:00Z'), null);
+
+      const uidOf = (instance: CalendarEventInstance) =>
+        generateInstanceIcs(instance, 'Test', '', 'pavillion.example')
+          .split('\r\n').find(l => l.startsWith('UID:'));
+
+      expect(uidOf(first)).toBe('UID:evt-123-20260401T180000Z@pavillion.example');
+      expect(uidOf(second)).toBe('UID:evt-123-20260408T180000Z@pavillion.example');
+    });
+
+    it('gives the same occurrence the same UID when exported twice', () => {
+      const event = makeEvent();
+      const uidOf = () => generateInstanceIcs(
+        new CalendarEventInstance('inst-1', event, DateTime.fromISO('2026-04-01T13:00:00-05:00'), null),
+        'Test', '', 'pavillion.example',
+      ).split('\r\n').find(l => l.startsWith('UID:'));
+
+      expect(uidOf()).toBe('UID:evt-123-20260401T180000Z@pavillion.example');
+      expect(uidOf()).toBe(uidOf());
     });
 
     it('should escape special characters in text fields', () => {
