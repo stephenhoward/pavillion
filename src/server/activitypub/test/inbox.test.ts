@@ -371,6 +371,37 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       });
     });
 
+    it('should ignore an inline-Follow Accept whose followed actor is on a different host from the sender', async () => {
+      // Arrange: a signed actor on attacker.instance replays a (local calendar,
+      // followed remote) pair. Acting on it would enqueue backfill against
+      // remote.instance on the attacker's behalf.
+      const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivity = new FollowActivity(testCalendar.id, remoteCalendarUrl);
+      followActivity.id = 'https://local.instance/calendars/test-calendar/follows/790';
+
+      const acceptActivity = {
+        type: 'Accept',
+        actor: 'https://attacker.instance/calendars/attacker',
+        object: followActivity,
+      };
+
+      const getByActorUriStub = sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri')
+        .resolves({ id: 'mock-calendar-actor-uuid', actor_uri: remoteCalendarUrl } as any);
+      const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne')
+        .resolves({ id: uuidv4(), calendar_actor_id: 'mock-calendar-actor-uuid', calendar_id: testCalendar.id } as any);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:follow:accepted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
+
+      // Assert: no follow lookup and no accepted event, so no backfill is enqueued
+      expect(emittedEvents).toHaveLength(0);
+      expect(getByActorUriStub.called).toBe(false);
+      expect(findOneStub.called).toBe(false);
+    });
+
     it('should emit activitypub:follow:accepted when string-URI Accept confirms a known follow', async () => {
       // Arrange: string-URI Accept path with matching hostnames (Follow Accept).
       const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';

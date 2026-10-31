@@ -2252,6 +2252,23 @@ class ProcessInboxService {
 
       // Find the CalendarActorEntity for the remote calendar we're following
       const remoteActorUrl = followActivity.object as string;
+
+      // Same hostname guard as the string-URI branch: only the followed
+      // actor's host may accept a Follow of it. Without this, any signed
+      // actor that knows a (local calendar, followed remote) pair could
+      // trigger backfill against the followed remote's host.
+      let hostnamesMatch = false;
+      try {
+        hostnamesMatch = new URL(remoteActorUrl).hostname === new URL(message.actor).hostname;
+      }
+      catch {
+        hostnamesMatch = false;
+      }
+      if (!hostnamesMatch) {
+        logger.warn(`Accept from ${message.actor} names a followed actor on a different host: ${remoteActorUrl}`);
+        return;
+      }
+
       const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
 
       if (!remoteCalendar) {
