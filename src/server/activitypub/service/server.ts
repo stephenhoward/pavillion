@@ -7,6 +7,7 @@ import { Calendar } from "@/common/model/calendar";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
+import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
@@ -421,7 +422,9 @@ export default class ActivityPubService {
   /**
    * Retrieve paginated outbox messages for a calendar.
    * Returns only public activity types (Create, Announce, Update, Delete) that
-   * were successfully processed.
+   * were successfully processed, minus any Announce this calendar has since
+   * undone — otherwise a peer backfilling the outbox would show a repost the
+   * calendar withdrew.
    *
    * @param calendarId - The calendar ID to query
    * @param cursor - Optional ISO 8601 timestamp cursor for paging (exclusive upper bound)
@@ -436,33 +439,52 @@ export default class ActivityPubService {
     // short-circuited by the receiver (ProcessInboxService.processCreateEvent),
     // so serving the paired Note here cannot create a duplicate feed event.
     const publicTypes = ['Create', 'Announce', 'Update', 'Delete'];
-    const where: Record<string, any> = {
+    const baseWhere: Record<string, any> = {
       calendar_id: calendarId,
       type: publicTypes,
       processed_status: 'ok',
     };
 
+    // Any recorded Undo withdraws its target, whatever its delivery status.
+    const undoneIds = await this.undoneActivityIds(calendarId);
+    if (undoneIds.length > 0) {
+      baseWhere.id = { [Op.notIn]: undoneIds };
+    }
+
+    const pageWhere: Record<string, any> = { ...baseWhere };
     if (cursor) {
-      const { Op } = await import('sequelize');
-      where.message_time = { [Op.lt]: cursor };
+      pageWhere.message_time = { [Op.lt]: cursor };
     }
 
     const [items, totalItems] = await Promise.all([
       ActivityPubOutboxMessageEntity.findAll({
-        where,
+        where: pageWhere,
         order: [['message_time', 'DESC']],
         limit,
       }),
-      ActivityPubOutboxMessageEntity.count({
-        where: {
-          calendar_id: calendarId,
-          type: publicTypes,
-          processed_status: 'ok',
-        },
-      }),
+      ActivityPubOutboxMessageEntity.count({ where: baseWhere }),
     ]);
 
     return { items, totalItems };
+  }
+
+  /**
+   * Ids of the activities this calendar's own outbox Undo rows reverse.
+   * unshareEvent emits `Undo` with the Announce's AP id as `object`
+   * (SharedEventEntity.id is that id), so the target is read from the
+   * stored message rather than derived from the Undo's own id.
+   *
+   * @param calendarId - The calendar whose outbox to scan
+   * @returns The undone activity ids
+   */
+  private async undoneActivityIds(calendarId: string): Promise<string[]> {
+    const undoRows = await ActivityPubOutboxMessageEntity.findAll({
+      where: { calendar_id: calendarId, type: 'Undo' },
+      attributes: ['message'],
+    });
+    return undoRows
+      .map(row => UndoActivity.targetIdOf((row.message as Record<string, unknown>)?.object))
+      .filter((id): id is string => id !== null);
   }
 
   /**
