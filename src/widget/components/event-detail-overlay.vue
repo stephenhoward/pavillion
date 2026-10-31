@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount } from 'vue';
+import { reactive, computed, onBeforeMount } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
@@ -8,13 +8,16 @@ import CalendarService from '@/site/service/calendar';
 import { useWidgetStore } from '../stores/widgetStore';
 import NotFound from '@/site/components/not-found.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
+import { useLocalizedContent } from '@/common/ui/composables/useLocalizedContent';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import type { Calendar } from '@/common/model/calendar';
 import type { EventCategory } from '@/common/model/event_category';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const router = useRouter();
 const widgetStore = useWidgetStore();
+const { localizedContent } = useLocalizedContent();
 
 const calendarId = route.params.urlName;
 const eventId = route.params.eventId;
@@ -23,12 +26,24 @@ const startTimeSlug = route.params.startTime as string | undefined;
 const state = reactive({
   err: '',
   notFound: false,
-  calendar: null,
+  calendar: null as Calendar | null,
   instance: null,
   isLoading: false,
 });
 
 const calendarService = new CalendarService();
+
+/**
+ * Name shown in the Back label: the calendar's localized display name, as the
+ * public site shows it, falling back to its URL name. Before the calendar
+ * loads (or when loading failed) only the URL name is known.
+ */
+const backLabel = computed(() => {
+  const name = state.calendar
+    ? localizedContent(state.calendar).name || state.calendar.urlName
+    : calendarId as string;
+  return t('back_to_calendar', { name });
+});
 
 /**
  * True when the history entry before this one is this calendar's list, so
@@ -158,7 +173,7 @@ onBeforeMount(async () => {
     <div v-else-if="!state.isLoading && state.err" class="error-container">
       <div class="error" role="alert">{{ state.err }}</div>
       <button type="button" class="back-button" @click="goBack">
-        {{ t('back_to_calendar', { name: widgetStore.calendarUrlName || '' }) }}
+        {{ backLabel }}
       </button>
     </div>
 
@@ -169,9 +184,9 @@ onBeforeMount(async () => {
         <button type="button"
                 class="back-link"
                 @click="goBack"
-                :aria-label="t('back_to_calendar', { name: widgetStore.calendarUrlName || '' })">
+                :aria-label="backLabel">
           <ArrowLeft :size="16" class="back-arrow" aria-hidden="true" />
-          <span>{{ t('back_to_calendar', { name: widgetStore.calendarUrlName || '' }) }}</span>
+          <span>{{ backLabel }}</span>
         </button>
       </header>
 
