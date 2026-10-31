@@ -535,6 +535,56 @@ describe('ICS mapper: mapVEvent', () => {
       expect(out.schedule.startDate!.zoneName).toBe('America/New_York');
     });
 
+    it('canonicalizes a case-variant TZID to its IANA name', () => {
+      const vevent = makeVEvent({
+        start: makeDtz('2026-06-01T14:00:00Z', 'AMERICA/new_york'),
+        end: makeDtz('2026-06-01T15:00:00Z', 'AMERICA/new_york'),
+      });
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.schedule.startDate!.zoneName).toBe('America/New_York');
+      expect(out.schedule.eventEndTime!.zoneName).toBe('America/New_York');
+    });
+
+    it('canonicalizes a case-variant X-WR-TIMEZONE fallback', () => {
+      const vevent = makeVEvent({
+        start: makeDtz('2026-06-01T14:00:00Z', 'NotAZone/Invalid'),
+        end: makeDtz('2026-06-01T15:00:00Z', 'NotAZone/Invalid'),
+      });
+      const out = mapVEvent({
+        vevent,
+        calendarPrimaryLanguage: 'en',
+        calendarFallbackTimezone: 'america/los_angeles',
+      });
+      expect(out.schedule.startDate!.zoneName).toBe('America/Los_Angeles');
+    });
+
+    it('treats a fixed-offset TZID as unrecognized and falls back without moving the instant', () => {
+      const vevent = makeVEvent({
+        start: makeDtz('2026-06-01T14:00:00Z', '+05:00'),
+        end: makeDtz('2026-06-01T15:00:00Z', '+05:00'),
+      });
+      const out = mapVEvent({
+        vevent,
+        calendarPrimaryLanguage: 'en',
+        calendarFallbackTimezone: 'America/Los_Angeles',
+      });
+      expect(out.schedule.startDate!.zoneName).toBe('America/Los_Angeles');
+      expect(out.schedule.startDate!.toUTC().toISO()).toBe('2026-06-01T14:00:00.000Z');
+    });
+
+    it('falls back to UTC when both TZID and X-WR-TIMEZONE are fixed offsets', () => {
+      const vevent = makeVEvent({
+        start: makeDtz('2026-06-01T14:00:00Z', '\u221205:00'),
+        end: makeDtz('2026-06-01T15:00:00Z', '\u221205:00'),
+      });
+      const out = mapVEvent({
+        vevent,
+        calendarPrimaryLanguage: 'en',
+        calendarFallbackTimezone: '+05:00',
+      });
+      expect(out.schedule.startDate!.zoneName).toBe('UTC');
+    });
+
     it('falls back to calendar X-WR-TIMEZONE when TZID is unrecognized', () => {
       const vevent = makeVEvent({
         start: makeDtz('2026-06-01T14:00:00Z', 'NotAZone/Invalid'),

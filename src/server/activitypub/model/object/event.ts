@@ -1,6 +1,6 @@
 import config from 'config';
 import he from 'he';
-import { DateTime, IANAZone } from 'luxon';
+import { DateTime } from 'luxon';
 import striptags from 'striptags';
 
 import { Calendar } from '@/common/model/calendar';
@@ -1227,11 +1227,13 @@ class EventObject extends ActivityPubObject {
 
     // timezone: the IANA identifier of the base schedule's start zone, so peers
     // can reconstruct the intended wall-clock time instead of relying on the ISO
-    // offset alone. Omitted when the zone is a fixed offset (e.g. 'UTC+2') rather
-    // than a named IANA zone — a bare offset carries no more than startTime
-    // already does. 'UTC' is itself a valid IANA zone and IS emitted.
-    const scheduleZone = event.baseSchedule()?.startDate?.zoneName;
-    if (scheduleZone && IANAZone.isValidZone(scheduleZone)) {
+    // offset alone. Canonicalized by CalendarEventSchedule.parseZone, the same
+    // gate inbound uses, so a legacy alias ('US/Pacific') or case variant goes
+    // out as its canonical name. Omitted when the zone is a fixed offset (e.g.
+    // 'UTC+2') rather than a named IANA zone — a bare offset carries no more
+    // than startTime already does. 'UTC' is itself a valid IANA zone and IS emitted.
+    const scheduleZone = CalendarEventSchedule.parseZone(event.baseSchedule()?.startDate?.zoneName);
+    if (scheduleZone) {
       result.timezone = scheduleZone;
     }
 

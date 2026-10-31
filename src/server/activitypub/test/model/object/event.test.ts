@@ -435,6 +435,22 @@ describe('EventObject', () => {
         expect(result.timezone).toBe('America/New_York');
       });
 
+      it('should emit the canonical IANA name for a link-alias or case-variant schedule zone', () => {
+        const calendar = new Calendar('calendar-uuid', 'mycal');
+        const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+        event.addContent(new CalendarEventContent('en', 'Alias Event', ''));
+
+        event.schedules = [
+          new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00', { zone: 'US/Pacific' })),
+        ];
+        expect(new EventObject(calendar, event).toActivityPubObject().timezone).toBe('America/Los_Angeles');
+
+        event.schedules = [
+          new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00', { zone: 'america/new_york' })),
+        ];
+        expect(new EventObject(calendar, event).toActivityPubObject().timezone).toBe('America/New_York');
+      });
+
       it('should emit timezone "UTC" for a UTC-default schedule', () => {
         const calendar = new Calendar('calendar-uuid', 'mycal');
         const event = new CalendarEvent('event-uuid', 'calendar-uuid');
