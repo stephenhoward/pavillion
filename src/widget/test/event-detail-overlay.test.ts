@@ -36,10 +36,20 @@ import i18next from 'i18next';
 // Spy hooks for assertions about which fetch path was taken. Hoisted so
 // they are defined before vi.mock factories (which vitest runs at module
 // evaluation time, *before* any top-level `const`).
-const { loadCalendarEventsMock, loadEventInstanceMock } = vi.hoisted(() => ({
+const { loadCalendarEventsMock, loadEventInstanceMock, getCalendarByUrlNameMock } = vi.hoisted(() => ({
   loadCalendarEventsMock: vi.fn(),
   loadEventInstanceMock: vi.fn(),
+  getCalendarByUrlNameMock: vi.fn(),
 }));
+
+function buildCalendarMock(name: string) {
+  return {
+    urlName: 'test_calendar',
+    content: (_lang: string) => ({ name, description: '' }),
+    hasContent: (_lang: string) => name !== '',
+    getLanguages: () => (name !== '' ? ['en'] : []),
+  };
+}
 
 function buildFallbackInstanceMock() {
   const localized = {
@@ -79,12 +89,7 @@ vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(function () {
       return {
-        getCalendarByUrlName: vi.fn().mockResolvedValue({
-          urlName: 'test_calendar',
-          content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
-          hasContent: (_lang: string) => true,
-          getLanguages: () => ['en'],
-        }),
+        getCalendarByUrlName: getCalendarByUrlNameMock,
         // Note: do NOT call mockImplementation here — that would clobber any
         // per-test mockResolvedValue set up before mountOverlay. The default
         // implementation is installed once in beforeEach instead.
@@ -212,6 +217,8 @@ beforeAll(async () => {
 
 describe('widget event-detail-overlay shell', () => {
   beforeEach(() => {
+    getCalendarByUrlNameMock.mockReset();
+    getCalendarByUrlNameMock.mockResolvedValue(buildCalendarMock('Test Calendar'));
     loadCalendarEventsMock.mockReset();
     loadEventInstanceMock.mockReset();
     loadCalendarEventsMock.mockImplementation(
@@ -262,6 +269,23 @@ describe('widget event-detail-overlay shell', () => {
 
     const backButton = wrapper.find('.instance-back-header .back-link');
     expect(backButton.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('labels the back button with the calendar\'s display name, not its URL name', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
+
+    const backButton = wrapper.get('.instance-back-header .back-link');
+    expect(backButton.text()).toBe('Back to Test Calendar');
+    expect(backButton.attributes('aria-label')).toBe('Back to Test Calendar');
+    wrapper.unmount();
+  });
+
+  it('falls back to the calendar\'s URL name when it has no display name', async () => {
+    getCalendarByUrlNameMock.mockResolvedValue(buildCalendarMock(''));
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
+
+    expect(wrapper.get('.instance-back-header .back-link').text()).toBe('Back to test_calendar');
     wrapper.unmount();
   });
 
@@ -368,6 +392,8 @@ describe('widget event-detail-overlay shell', () => {
 
 describe('widget event-detail-overlay slug routing', () => {
   beforeEach(() => {
+    getCalendarByUrlNameMock.mockReset();
+    getCalendarByUrlNameMock.mockResolvedValue(buildCalendarMock('Test Calendar'));
     loadCalendarEventsMock.mockReset();
     loadEventInstanceMock.mockReset();
     loadCalendarEventsMock.mockImplementation(

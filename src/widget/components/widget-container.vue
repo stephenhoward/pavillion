@@ -292,6 +292,16 @@ header {
   overflow: hidden;
 }
 
+// The widget has one horizontal gutter, $public-space-md, set by the header,
+// the toolbar, the grids and the list. The site's filter centres itself in a
+// padded max-width page column; inside the frame that would inset it past
+// the list, so the widget releases the column.
+header .search-filter-public {
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: 0;
+}
+
 // The shared toolbar and grids are token-only; the widget sets their spacing.
 .ui-view-toolbar {
   margin: $public-space-md $public-space-md 0;
