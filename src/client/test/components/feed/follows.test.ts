@@ -299,6 +299,27 @@ describe('Following Tab', () => {
     expect(wrapper.vm.showAddModal).toBe(true);
   });
 
+  it('closes the follow dialog when the selected calendar changes', async () => {
+    const calendarStore = useCalendarStore();
+    calendarStore.selectedCalendarId = 'cal-a';
+    useFeedStore().follows = [];
+
+    const wrapper = mount(Follows, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: { EmptyLayout: true, AddCalendarModal: true },
+      },
+    });
+
+    await wrapper.vm.handleOpenAddModal();
+    expect(wrapper.vm.showAddModal).toBe(true);
+
+    calendarStore.selectedCalendarId = 'cal-b';
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.showAddModal).toBe(false);
+  });
+
   it('shows second toggle only when first toggle is enabled', async () => {
     const feedStore = useFeedStore();
     feedStore.follows = [
