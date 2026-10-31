@@ -227,6 +227,7 @@
           ref="iframeRef"
           :src="previewUrl"
           class="widget-preview"
+          :style="{ height: `${previewHeight}px` }"
           :title="t('preview_iframe_title')"
         />
       </div>
@@ -235,7 +236,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, ref, watch, onMounted } from 'vue';
+import { reactive, computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -284,6 +285,26 @@ const snapshot = reactive({
 
 // Iframe ref
 const iframeRef = ref(null);
+
+// The widget sizes to its content and reports its height with
+// `pavillion:resize`, as it does to the SDK in a real embed. Start where the
+// SDK starts, then follow the reports, never going below a floor so the
+// preview cannot collapse.
+const PREVIEW_INITIAL_HEIGHT = 600;
+const PREVIEW_MIN_HEIGHT = 200;
+const previewHeight = ref(PREVIEW_INITIAL_HEIGHT);
+
+/**
+ * Follow the preview widget's resize reports. Only messages from the preview
+ * iframe itself, on this app's own origin, are honoured.
+ */
+const handlePreviewMessage = (event) => {
+  if (event.origin !== window.location.origin) return;
+  if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return;
+  const { type, height } = event.data ?? {};
+  if (type !== 'pavillion:resize' || typeof height !== 'number' || !Number.isFinite(height)) return;
+  previewHeight.value = Math.max(PREVIEW_MIN_HEIGHT, Math.ceil(height));
+};
 
 // Dirty state: true when any field differs from the loaded snapshot
 const isDirty = computed(() => {
@@ -414,7 +435,13 @@ watch(
 );
 
 // Load config on mount and when calendar id changes
-onMounted(loadConfig);
+onMounted(() => {
+  window.addEventListener('message', handlePreviewMessage);
+  loadConfig();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handlePreviewMessage);
+});
 watch(() => props.calendarId, loadConfig);
 
 // Expose state to parent component
@@ -653,11 +680,10 @@ defineExpose({
       border-radius: 0.75rem;
       background: var(--pav-color-neutral-100);
       padding: var(--pav-space-4);
-      min-height: 600px;
 
       .widget-preview {
+        display: block;
         width: 100%;
-        height: 600px;
         border: none;
         border-radius: 0.75rem;
         // The widget document declares no root color-scheme, so it is light.
