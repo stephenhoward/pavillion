@@ -21,7 +21,7 @@
  * @see complexity-playbook — no HTML sanitizer dep; minimal tag strip for v1
  */
 
-import { DateTime, IANAZone } from 'luxon';
+import { DateTime } from 'luxon';
 import type { VEvent, DateWithTimeZone } from 'node-ical';
 
 import {
@@ -166,9 +166,14 @@ function extractTzid(value: DateWithTimeZone | undefined): string | undefined {
 
 /**
  * Resolves the effective timezone per the epic's fallback chain:
- *   1. Recognized TZID (IANA) → preserve
- *   2. Unrecognized TZID + X-WR-TIMEZONE (recognized) → use X-WR-TIMEZONE
+ *   1. Recognized TZID (IANA) → its canonical name
+ *   2. Unrecognized TZID + X-WR-TIMEZONE (recognized) → its canonical name
  *   3. Otherwise → UTC + structured warn log
+ *
+ * Recognition and canonicalization are CalendarEventSchedule.parseZone's,
+ * so case variants and link aliases reach Luxon only in canonical form (its
+ * zone caches grow per distinct string) and fixed offsets such as "+05:00"
+ * count as unrecognized: an offset cannot keep a recurrence's local time.
  *
  * @param tzid The TZID stamped by node-ical on DTSTART, if any.
  * @param fallbackTz The VCALENDAR-level X-WR-TIMEZONE (or undefined).
@@ -179,11 +184,10 @@ function resolveTimezone(
   fallbackTz: string | undefined,
   externalUid: string,
 ): string {
-  if (tzid && IANAZone.isValidZone(tzid)) {
-    return tzid;
-  }
-  if (fallbackTz && IANAZone.isValidZone(fallbackTz)) {
-    return fallbackTz;
+  const zone = CalendarEventSchedule.parseZone(tzid)
+    ?? CalendarEventSchedule.parseZone(fallbackTz);
+  if (zone) {
+    return zone;
   }
   logger.warn(
     {
