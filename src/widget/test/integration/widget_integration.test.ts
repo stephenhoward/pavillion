@@ -59,9 +59,6 @@ describe('Widget Integration Tests', () => {
                 copied: 'Copied!',
               },
               config: {
-                view_mode_list: 'List',
-                view_mode_week: 'Week',
-                view_mode_month: 'Month',
                 color_mode_auto: 'Auto',
                 color_mode_light: 'Light',
                 color_mode_dark: 'Dark',
