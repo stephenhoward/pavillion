@@ -1,4 +1,5 @@
 import { describe, test, it, expect } from 'vitest';
+import { DateTime } from 'luxon';
 
 import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import {
@@ -254,6 +255,34 @@ describe('getRecurrenceSummary', () => {
       params: {},
     });
   });
+
+  test('describes the earliest-starting recurring schedule in either load order', () => {
+    const later = new CalendarEventSchedule('b', DateTime.fromISO('2026-03-01T10:00:00Z'));
+    later.frequency = EventFrequency.WEEKLY;
+    later.byDay = ['FR'];
+    const earlier = new CalendarEventSchedule('c', DateTime.fromISO('2026-01-01T10:00:00Z'));
+    earlier.frequency = EventFrequency.WEEKLY;
+    earlier.byDay = ['MO'];
+
+    for (const schedules of [[later, earlier], [earlier, later]]) {
+      expect(getRecurrenceSummary(schedules)).toEqual({
+        key: 'recurrence.weekly_on_days',
+        params: { days: ['MO'] },
+      });
+    }
+  });
+
+  test('breaks a tie on start by the lower id in either load order', () => {
+    const start = DateTime.fromISO('2026-01-01T10:00:00Z');
+    const lower = new CalendarEventSchedule('a', start);
+    lower.frequency = EventFrequency.DAILY;
+    const higher = new CalendarEventSchedule('b', start);
+    higher.frequency = EventFrequency.YEARLY;
+
+    for (const schedules of [[higher, lower], [lower, higher]]) {
+      expect(getRecurrenceSummary(schedules)).toEqual({ key: 'recurrence.every_day', params: {} });
+    }
+  });
 });
 
 describe('generateRecurrenceText', () => {
@@ -427,6 +456,20 @@ describe('getRecurrenceText', () => {
     const weekly = makeSchedule({ frequency: 'weekly', byDay: ['FR'] });
     expect(getRecurrenceText([noFreq, weekly], stubT))
       .toBe('recurrence.weekly_on_days:{"days":"recurrence.FR"}');
+  });
+
+  it('should describe the earliest-starting recurring schedule in either load order', () => {
+    const later = new CalendarEventSchedule('b', DateTime.fromISO('2026-03-01T10:00:00Z'));
+    later.frequency = EventFrequency.WEEKLY;
+    later.byDay = ['FR'];
+    const earlier = new CalendarEventSchedule('c', DateTime.fromISO('2026-01-01T10:00:00Z'));
+    earlier.frequency = EventFrequency.WEEKLY;
+    earlier.byDay = ['SA'];
+
+    for (const schedules of [[later, earlier], [earlier, later]]) {
+      expect(getRecurrenceText(schedules, stubT))
+        .toBe('recurrence.weekly_on_days:{"days":"recurrence.SA"}');
+    }
   });
 
   it('should return text for a single weekly schedule', () => {

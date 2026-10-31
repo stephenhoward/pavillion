@@ -84,9 +84,8 @@ function handleCancel() {
 }
 
 function formatEventDate(event: CalendarEvent): string | null {
-  if (!event.schedules || event.schedules.length === 0) return null;
-  const schedule = event.schedules[0];
-  if (!schedule.startDate) return null;
+  const schedule = event.baseSchedule();
+  if (!schedule?.startDate) return null;
   // Shown in the viewer's zone, like the calendar view's instances.
   return schedule.startDate.toLocal().toLocaleString(DateTime.DATETIME_MED);
 }

@@ -1,4 +1,4 @@
-import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { CalendarEventSchedule, EventFrequency, compareSchedulesByStart } from '@/common/model/events';
 import { parseByDayEntry } from '@/common/utils/recurrence-by-day';
 
 /**
@@ -117,14 +117,25 @@ export function generateRecurrenceSummary(schedule: CalendarEventSchedule): Recu
 }
 
 /**
- * Picks the first non-exclusion schedule with a frequency from an array and
- * returns its structured recurrence summary.
+ * The recurring schedule a summary describes: the earliest-starting
+ * non-exclusion schedule with a frequency, ties broken by id, so the answer
+ * does not depend on the order schedules loaded in.
+ */
+function primaryRecurringSchedule(schedules: CalendarEventSchedule[]): CalendarEventSchedule | null {
+  const recurring = schedules.filter(s => !s.isExclusion && s.frequency);
+  recurring.sort(compareSchedulesByStart);
+  return recurring[0] ?? null;
+}
+
+/**
+ * Picks the earliest-starting recurring schedule from an array and returns
+ * its structured recurrence summary.
  *
  * @param schedules - Array of CalendarEventSchedule objects
  * @returns Structured summary, or `null` if no recurring schedule is present
  */
 export function getRecurrenceSummary(schedules: CalendarEventSchedule[]): RecurrenceSummary | null {
-  const primarySchedule = schedules.find(s => !s.isExclusion && s.frequency);
+  const primarySchedule = primaryRecurringSchedule(schedules);
   if (!primarySchedule) {
     return null;
   }
@@ -260,8 +271,8 @@ export function generateRecurrenceText(
 }
 
 /**
- * Generates localized recurrence text from the first non-exclusion schedule in
- * an array.
+ * Generates localized recurrence text from the earliest-starting recurring
+ * schedule in an array.
  *
  * @param schedules - Array of CalendarEventSchedule objects
  * @param t - Unprefixed i18next translation function for `event_editor` namespace
@@ -274,7 +285,7 @@ export function getRecurrenceText(
   t: TranslateFn,
   language: string = 'en',
 ): string {
-  const primarySchedule = schedules.find(s => !s.isExclusion && s.frequency !== null);
+  const primarySchedule = primaryRecurringSchedule(schedules);
   if (!primarySchedule) {
     return '';
   }
