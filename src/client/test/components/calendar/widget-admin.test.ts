@@ -375,6 +375,85 @@ describe('Widget Admin UI Components', () => {
       expect(vm.state.fieldErrors.accentColor).toBe('Invalid hex');
     });
 
+    describe('preview resize', () => {
+      const mountAttached = async () => {
+        axiosGetStub.resolves({ data: defaultConfig });
+        const wrapper = mount(WidgetConfig, {
+          attachTo: document.body,
+          props: {
+            calendarId: 'test-calendar-id',
+            calendarUrlName: 'my-calendar',
+          },
+          global: {
+            plugins: [[I18NextVue, { i18next }]],
+          },
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const iframe = wrapper.find('iframe.widget-preview');
+        const frameWindow = (iframe.element as HTMLIFrameElement).contentWindow;
+        return { wrapper, iframe, frameWindow };
+      };
+
+      const postResize = async (height: unknown, init: MessageEventInit) => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'pavillion:resize', height },
+          ...init,
+        }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+      };
+
+      it('sizes the preview iframe to the height the widget reports', async () => {
+        const { wrapper, iframe, frameWindow } = await mountAttached();
+
+        await postResize(320, { origin: window.location.origin, source: frameWindow });
+
+        expect((iframe.element as HTMLIFrameElement).style.height).toBe('320px');
+        wrapper.unmount();
+      });
+
+      it('ignores resize messages that do not come from the preview iframe', async () => {
+        const { wrapper, iframe } = await mountAttached();
+        const before = (iframe.element as HTMLIFrameElement).style.height;
+
+        await postResize(320, { origin: window.location.origin, source: window });
+
+        expect((iframe.element as HTMLIFrameElement).style.height).toBe(before);
+        wrapper.unmount();
+      });
+
+      it('ignores resize messages from a foreign origin', async () => {
+        const { wrapper, iframe, frameWindow } = await mountAttached();
+        const before = (iframe.element as HTMLIFrameElement).style.height;
+
+        await postResize(320, { origin: 'https://evil.example', source: frameWindow });
+
+        expect((iframe.element as HTMLIFrameElement).style.height).toBe(before);
+        wrapper.unmount();
+      });
+
+      it('keeps a minimum height and rejects non-numeric heights', async () => {
+        const { wrapper, iframe, frameWindow } = await mountAttached();
+        const init = { origin: window.location.origin, source: frameWindow };
+
+        await postResize(10, init);
+        expect((iframe.element as HTMLIFrameElement).style.height).toBe('200px');
+
+        await postResize('400px', init);
+        expect((iframe.element as HTMLIFrameElement).style.height).toBe('200px');
+        wrapper.unmount();
+      });
+
+      it('stops listening after unmount', async () => {
+        const removeSpy = vi.spyOn(window, 'removeEventListener');
+        const { wrapper } = await mountAttached();
+
+        wrapper.unmount();
+
+        expect(removeSpy).toHaveBeenCalledWith('message', expect.any(Function));
+        removeSpy.mockRestore();
+      });
+    });
+
     it('should not include a Discard button (spec: reload is the escape hatch)', async () => {
       axiosGetStub.resolves({ data: defaultConfig });
       const wrapper = mount(WidgetConfig, {
