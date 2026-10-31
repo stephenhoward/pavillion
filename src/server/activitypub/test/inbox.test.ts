@@ -1406,7 +1406,6 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
     const enqueued: any[] = [];
     eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
@@ -1474,7 +1473,6 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     // event delete.
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
     const deleteEnqueued: any[] = [];
     eventBus.on('outboxMessageAdded', (activity) => deleteEnqueued.push(activity));
@@ -1501,7 +1499,6 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
     const enqueued: any[] = [];
     eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
@@ -1527,7 +1524,6 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
     const deleteMessage = DeleteActivity.fromObject({
       type: 'Delete',
@@ -1653,6 +1649,110 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
 
     expect(enqueued.filter(a => a.type === 'Delete').length).toBe(0);
+  });
+});
+
+describe('ProcessInboxService - processDeleteEvent calendar-actor ownership', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('delete-owner-calendar-id', 'delete-owner-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Delete Ownership Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  async function seedRemoteCopy(eventApId: string, attributedTo: string): Promise<string> {
+    const eventId = uuidv4();
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: attributedTo,
+    });
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
+    return eventId;
+  }
+
+  it('deletes the followed copy using the stored attributed_to, without re-fetching the deleted object', async () => {
+    const eventApId = 'https://remote.instance/events/gone';
+    const eventId = await seedRemoteCopy(eventApId, sourceActorUri);
+    // The origin hard-deleted the object, so a re-fetch can only 404.
+    const ownsObject = sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(false);
+    const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+
+    await inboxService.processDeleteEvent(testCalendar, new DeleteActivity(sourceActorUri, eventApId));
+
+    expect(ownsObject.called).toBe(false);
+    expect(deleteRemoteEvent.calledOnceWith(testCalendar, eventId)).toBe(true);
+    expect(await EventObjectEntity.findOne({ where: { ap_id: eventApId } })).toBeNull();
+  });
+
+  it('refuses a same-host Delete from an actor that is not the stored attributed_to', async () => {
+    const eventApId = 'https://remote.instance/events/owned-by-source';
+    await seedRemoteCopy(eventApId, sourceActorUri);
+    const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+
+    const otherActor = 'https://remote.instance/calendars/other-calendar';
+    await inboxService.processDeleteEvent(testCalendar, new DeleteActivity(otherActor, eventApId));
+
+    expect(deleteRemoteEvent.called).toBe(false);
+    expect(await EventObjectEntity.findOne({ where: { ap_id: eventApId } })).not.toBeNull();
+  });
+
+  it('refuses a Delete whose actor host differs from the object IRI host', async () => {
+    const eventApId = 'https://remote.instance/events/cross-host';
+    const attackerActor = 'https://malicious.instance/calendars/attacker';
+    // Even a stored attributed_to naming the attacker must not let another
+    // host's object be deleted.
+    await seedRemoteCopy(eventApId, attackerActor);
+    const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+
+    await inboxService.processDeleteEvent(testCalendar, new DeleteActivity(attackerActor, eventApId));
+
+    expect(deleteRemoteEvent.called).toBe(false);
+    expect(await EventObjectEntity.findOne({ where: { ap_id: eventApId } })).not.toBeNull();
+  });
+
+  it('is a no-op for an unknown object IRI and never fetches it', async () => {
+    const getEventById = sandbox.stub(calendarInterface, 'getEventById').resolves(null);
+    const ownsObject = sandbox.spy(inboxService as any, 'actorOwnsObject');
+    const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+
+    await inboxService.processDeleteEvent(
+      testCalendar,
+      new DeleteActivity(sourceActorUri, 'https://remote.instance/events/never-seen'),
+    );
+
+    expect(getEventById.called).toBe(false);
+    expect(ownsObject.called).toBe(false);
+    expect(deleteRemoteEvent.called).toBe(false);
   });
 });
 
@@ -2198,9 +2298,8 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
     });
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
-    // Stub ownership verification to true so the test cannot pass for the
-    // wrong reason (i.e. the real fetcher failing on an unreachable IRI).
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+    // The seeded attributed_to matches the actor, so ownership verification
+    // would pass: only the Note IRI guard can stop the delete.
 
     const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
 
@@ -2219,7 +2318,6 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
     });
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
     sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
     const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
 
