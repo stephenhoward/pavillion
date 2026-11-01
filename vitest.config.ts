@@ -11,8 +11,12 @@ const sharedExclude = [
   '**/entrypoint.test.ts', // Docker/container tests - run separately with federation tests
   '**/docker-build.test.ts', // Docker build tests - require Docker environment
   '**/docker-compose.test.ts', // Docker compose tests - require Docker environment
-  // Exclude server integration tests - run separately with test:integration
-  '**/server/**/test/integration/**',
+  // Exclude server integration tests - run separately with test:integration.
+  // Matches any `integration/` directory under src/server, including nested
+  // ones such as common/test/migrations/integration/. This is the only
+  // integration exclusion the unit run has: a CLI --exclude does not reach
+  // the per-project excludes below.
+  '**/server/**/integration/**',
   // Exclude git worktrees used by subagents — stale tests from old worktrees
   // should never be collected in the main project's test run.
   '**/.agents/worktrees/**',

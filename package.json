@@ -22,7 +22,7 @@
     "build:widget-sdk": "vite build --config vite.widget-sdk.config.ts",
     "preview": "vite preview",
     "test": "npx vitest run",
-    "test:unit": "npx vitest run --exclude='**/integration/** --silent'",
+    "test:unit": "npx vitest run --silent",
     "test:coverage": "npx vitest run --exclude='**/integration/**' --coverage",
     "test:coverage:integration": "npx vitest run --config vitest.integration.config.ts --coverage",
     "test:integration": "npx vitest run --config vitest.integration.config.ts --silent",
