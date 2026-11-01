@@ -82,6 +82,92 @@ describe('inbox event listener', () => {
   });
 });
 
+describe('runSerialized', () => {
+  let service: ActivityPubInterface;
+  let eventHandler: ActivityPubEventHandlers;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  /**
+   * Queue an `inboxMessageAdded` handler that stays in flight until the
+   * returned `release` is called.
+   */
+  const queueBlockedHandler = (): { release: () => void } => {
+    let release!: () => void;
+    const gate = new Promise<null>((resolve) => { release = () => resolve(null); });
+    sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk').returns(gate as any);
+    eventBus.emit('inboxMessageAdded', { id: 'blocked' });
+    return { release };
+  };
+
+  beforeEach(() => {
+    eventBus = new EventEmitter();
+    service = new ActivityPubInterface(eventBus);
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob: async () => {} } as any);
+    eventHandler.install(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('on SQLite, waits for a handler already on the dispatch chain before running the task', async () => {
+    const { release } = queueBlockedHandler();
+    const task = sandbox.stub().resolves();
+
+    const run = eventHandler.runSerialized(task);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(task.called, 'task must not start while a handler is in flight').toBe(false);
+
+    release();
+    await run;
+    expect(task.calledOnce).toBe(true);
+  });
+
+  it('on SQLite, holds handlers queued after the task until the task settles', async () => {
+    let finishTask!: () => void;
+    const task = () => new Promise<void>((resolve) => { finishTask = resolve; });
+    const processorStub = sandbox.stub(service, 'processInboxMessage').resolves();
+    sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk').resolves(
+      ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: {} }),
+    );
+
+    const run = eventHandler.runSerialized(task);
+    eventBus.emit('inboxMessageAdded', { id: 'later' });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(processorStub.called, 'a later handler must wait for the task').toBe(false);
+
+    finishTask();
+    await run;
+    await (eventHandler as any)['dispatchQueue'];
+    expect(processorStub.calledOnce).toBe(true);
+  });
+
+  it('rejects to the caller and leaves the chain usable for later handlers', async () => {
+    const failure = new Error('drain failed');
+    const processorStub = sandbox.stub(service, 'processInboxMessage').resolves();
+    sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk').resolves(
+      ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: {} }),
+    );
+
+    await expect(eventHandler.runSerialized(async () => { throw failure; })).rejects.toBe(failure);
+
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'inboxMessageAdded', { id: 'after' });
+    expect(processorStub.calledOnce).toBe(true);
+  });
+
+  it('on PostgreSQL, runs the task at once without waiting for in-flight handlers', async () => {
+    (eventHandler as any)['serializeDispatch'] = false;
+    const { release } = queueBlockedHandler();
+    const task = sandbox.stub().resolves();
+
+    await eventHandler.runSerialized(task);
+
+    expect(task.calledOnce).toBe(true);
+    release();
+  });
+});
+
 describe('outbox event listener', () => {
   let service: ActivityPubInterface;
   let eventHandler: ActivityPubEventHandlers;

@@ -39,6 +39,12 @@ import { parseInboundFepCategories, resolveFepCategoriesToLocalIds } from "@/ser
 import { Op } from "sequelize";
 import config from "config";
 
+/** Options for {@link ProcessInboxService.processInboxMessages}. */
+export interface ProcessInboxMessagesOptions {
+  /** Leave rows written (`createdAt`) less than this many ms ago. */
+  skipNewerThanMs?: number;
+}
+
 /**
  * Cache entry for authorization results
  */
@@ -223,16 +229,34 @@ class ProcessInboxService {
   /**
    * Processes all unprocessed inbox messages in batches.
    *
+   * With `skipNewerThanMs`, rows written (`createdAt`) less than that many
+   * milliseconds before the call are left alone. The cutoff is fixed when
+   * the call starts, so rows inside the window are excluded by the query and
+   * the loop ends once only they remain. `message_time` cannot serve here:
+   * for live deliveries it is the sender's published time, not the write.
+   *
+   * Rows are taken by `message_time`, then by `createdAt`: `clampMessageTime`
+   * floors every activity older than two years to the same instant, so an
+   * old Announce and its Undo can tie, and the backfill writes them oldest
+   * first. `createdAt` has millisecond resolution, so the tie-break is
+   * best-effort: two rows written within the same millisecond can still tie.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's write, in ms
    * @returns {Promise<void>}
    */
-  async processInboxMessages() {
+  async processInboxMessages(options: ProcessInboxMessagesOptions = {}) {
+
+    const where: Record<string, unknown> = { processed_time: null };
+    if ( options.skipNewerThanMs !== undefined ) {
+      where.createdAt = { [Op.lt]: new Date(Date.now() - options.skipNewerThanMs) };
+    }
 
     let messages: ActivityPubInboxMessageEntity[] = [];
 
     do {
       messages = await ActivityPubInboxMessageEntity.findAll({
-        where: { processed_time: null },
-        order: [ ['message_time', 'ASC'] ],
+        where,
+        order: [ ['message_time', 'ASC'], ['createdAt', 'ASC'] ],
         limit: 1000,
       });
 
@@ -250,9 +274,11 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
-    const calendar = await this.calendarInterface.getCalendar(message.calendar_id);
-
     try {
+      // Inside the try: a lookup that throws marks this row as an error like
+      // any other failure. Outside it, the throw would end the drain, and
+      // every later drain would stop at the same row, which sorts first.
+      const calendar = await this.calendarInterface.getCalendar(message.calendar_id);
       if ( ! calendar ) {
         throw new Error("No calendar found for inbox");
       }

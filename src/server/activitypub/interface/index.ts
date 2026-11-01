@@ -11,7 +11,7 @@ import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService, { EventSourceActor, InboxAuthContext, InboxRowInput } from '@/server/activitypub/service/server';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
-import ProcessInboxService from '../service/inbox';
+import ProcessInboxService, { type ProcessInboxMessagesOptions } from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import FederationPublisher, {
   FederationEventInput,
@@ -300,7 +300,8 @@ export default class ActivityPubInterface {
 
   /**
    * Deferred inbox write that does NOT emit `inboxMessageAdded`. The caller
-   * must drain the inbox afterwards via {@link processInboxMessages}. See
+   * does not drain: the row waits for the web process's inbox drain, which
+   * runs with the domain handlers installed. See
    * {@link ActivityPubServerService.enqueueInboxRow}.
    */
   async enqueueInboxRow(input: InboxRowInput): Promise<{ created: boolean }> {
@@ -385,13 +386,19 @@ export default class ActivityPubInterface {
 
   /**
    * Drains the inbox by processing all unprocessed messages in chronological
-   * order (`messageTime ASC` over `processedAt: null`). Used by the follow
-   * backfill worker to flush inserted messages after pagination completes.
+   * order (`message_time`, then `createdAt`, over `processed_time: null`).
+   * Called by the web process's inbox drain (`ActivityPubDomain.startInboxDrain`):
+   * once at startup with no options, taking every row, and on each interval
+   * tick with `skipNewerThanMs`, leaving fresh rows to live dispatch.
    *
+   * `skipNewerThanMs` leaves rows written within that many milliseconds
+   * unprocessed; omit it to drain every unprocessed row.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's write, in ms
    * @returns {Promise<void>}
    */
-  async processInboxMessages(): Promise<void> {
-    return this.inboxService.processInboxMessages();
+  async processInboxMessages(options: ProcessInboxMessagesOptions = {}): Promise<void> {
+    return this.inboxService.processInboxMessages(options);
   }
 
   /**
