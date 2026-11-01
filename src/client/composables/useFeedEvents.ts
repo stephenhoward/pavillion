@@ -1,7 +1,7 @@
-import { ref } from 'vue';
 import type { Ref } from 'vue';
 import FeedService from '@/client/service/feed';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useLatestRequest } from '@/client/composables/useLatestRequest';
 
 /**
  * Return type for the useFeedEvents composable
@@ -21,23 +21,7 @@ export interface UseFeedEventsReturn {
 export function useFeedEvents(): UseFeedEventsReturn {
   const feedService = new FeedService();
   const feedStore = useFeedStore();
-  const isLoading = ref(false);
-  /** The latest request; an older one finishing must not clear isLoading for it. */
-  let activeRequest: { calendarId: string } | null = null;
-
-  const startRequest = (calendarId: string) => {
-    const request = { calendarId };
-    activeRequest = request;
-    isLoading.value = true;
-    return request;
-  };
-
-  const finishRequest = (request: { calendarId: string }) => {
-    if (activeRequest === request) {
-      activeRequest = null;
-      isLoading.value = false;
-    }
-  };
+  const { isLoading, startRequest, finishRequest, isInFlightFor } = useLatestRequest();
 
   /**
    * Load the initial page of feed events for the selected calendar.
@@ -47,7 +31,7 @@ export function useFeedEvents(): UseFeedEventsReturn {
    */
   const loadFeed = async () => {
     const calendarId = feedStore.selectedCalendarId;
-    if (!calendarId || activeRequest?.calendarId === calendarId) {
+    if (!calendarId || isInFlightFor(calendarId)) {
       return;
     }
 

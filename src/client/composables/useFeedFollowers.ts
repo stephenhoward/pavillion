@@ -1,7 +1,7 @@
-import { ref } from 'vue';
 import type { Ref } from 'vue';
 import FeedService from '@/client/service/feed';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useLatestRequest } from '@/client/composables/useLatestRequest';
 
 /**
  * Return type for the useFeedFollowers composable
@@ -19,26 +19,27 @@ export interface UseFeedFollowersReturn {
 export function useFeedFollowers(): UseFeedFollowersReturn {
   const feedService = new FeedService();
   const feedStore = useFeedStore();
-  const isLoading = ref(false);
+  const { isLoading, startRequest, finishRequest } = useLatestRequest();
 
   /**
    * Load the list of calendars following the user.
    */
   const loadFollowers = async () => {
-    if (!feedStore.selectedCalendarId) {
+    const calendarId = feedStore.selectedCalendarId;
+    if (!calendarId) {
       return;
     }
 
-    isLoading.value = true;
+    const request = startRequest(calendarId);
     try {
-      await feedService.loadFollowers(feedStore.selectedCalendarId);
+      await feedService.loadFollowers(calendarId);
     }
     catch (error) {
       console.error('Error loading followers:', error);
       throw error;
     }
     finally {
-      isLoading.value = false;
+      finishRequest(request);
     }
   };
 

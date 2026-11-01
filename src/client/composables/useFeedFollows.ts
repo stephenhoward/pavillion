@@ -1,7 +1,7 @@
-import { ref } from 'vue';
 import type { Ref } from 'vue';
 import FeedService from '@/client/service/feed';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useLatestRequest } from '@/client/composables/useLatestRequest';
 
 /**
  * Return type for the useFeedFollows composable
@@ -31,26 +31,27 @@ export interface UseFeedFollowsReturn {
 export function useFeedFollows(): UseFeedFollowsReturn {
   const feedService = new FeedService();
   const feedStore = useFeedStore();
-  const isLoading = ref(false);
+  const { isLoading, startRequest, finishRequest } = useLatestRequest();
 
   /**
    * Load the list of calendars the user follows.
    */
   const loadFollows = async () => {
-    if (!feedStore.selectedCalendarId) {
+    const calendarId = feedStore.selectedCalendarId;
+    if (!calendarId) {
       return;
     }
 
-    isLoading.value = true;
+    const request = startRequest(calendarId);
     try {
-      await feedService.loadFollows(feedStore.selectedCalendarId);
+      await feedService.loadFollows(calendarId);
     }
     catch (error) {
       console.error('Error loading follows:', error);
       throw error;
     }
     finally {
-      isLoading.value = false;
+      finishRequest(request);
     }
   };
 
@@ -67,18 +68,23 @@ export function useFeedFollows(): UseFeedFollowsReturn {
     autoRepostOriginals: boolean = false,
     autoRepostReposts: boolean = false,
   ): Promise<string | null> => {
-    if (!feedStore.selectedCalendarId) {
+    // Read once: the selection may change while the requests are in flight,
+    // and both must go to the calendar the follow was started on.
+    const calendarId = feedStore.selectedCalendarId;
+    if (!calendarId) {
       return null;
     }
 
     const previousFollowIds = new Set(feedStore.follows.map((f) => f.id));
 
-    await feedService.followCalendar(feedStore.selectedCalendarId, identifier, autoRepostOriginals, autoRepostReposts);
+    await feedService.followCalendar(calendarId, identifier, autoRepostOriginals, autoRepostReposts);
 
-    // Refresh follows list to find the newly added follow
-    await feedService.loadFollows(feedStore.selectedCalendarId);
+    // Find the new follow in the returned list, not the store: after a
+    // switch the service drops the store write and the store holds another
+    // calendar's follows.
+    const follows = await feedService.loadFollows(calendarId);
 
-    const newFollow = feedStore.follows.find((f) => !previousFollowIds.has(f.id));
+    const newFollow = follows.find((f) => !previousFollowIds.has(f.id));
     return newFollow?.calendarActorUuid ?? null;
   };
 

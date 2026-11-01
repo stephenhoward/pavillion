@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
 import i18next from 'i18next';
-import FeedService, { FollowRelationship } from '@/client/service/feed';
+import { createPinia, setActivePinia } from 'pinia';
+import FeedService, { FeedEvent, FollowRelationship } from '@/client/service/feed';
 import { FollowerCalendar } from '@/common/model/follow';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFeedStore } from '@/client/stores/feedStore';
 
 vi.mock('i18next', () => ({
   default: {
@@ -147,6 +150,42 @@ describe('FeedService', () => {
       expect(result.events[1].id).toBe('event-2');
       expect(result.events[1].repostStatus).toBe('manual');
       expect(result.hasMore).toBe(true);
+    });
+  });
+
+  describe('dropping a response after the selection changed', () => {
+    beforeEach(() => {
+      setActivePinia(createPinia());
+      useCalendarStore().selectedCalendarId = testCalendarId;
+    });
+
+    it('loadFollowers leaves the store untouched', async () => {
+      const feedStore = useFeedStore();
+      sandbox.stub(service, 'getFollowers').callsFake(async () => {
+        useCalendarStore().selectedCalendarId = 'other-calendar';
+        return [new FollowerCalendar('follower-1', 'follower@example.com', testCalendarId)];
+      });
+
+      const result = await service.loadFollowers(testCalendarId);
+
+      expect(result).toHaveLength(1);
+      expect(feedStore.followers).toEqual([]);
+    });
+
+    it('loadMoreFeed appends nothing and keeps the page cursor', async () => {
+      const feedStore = useFeedStore();
+      feedStore.setEvents([{ id: 'kept-event' } as FeedEvent]);
+      feedStore.setEventsHasMore(true);
+      sandbox.stub(service, 'getFeed').callsFake(async () => {
+        useCalendarStore().selectedCalendarId = 'other-calendar';
+        return { events: [{ id: 'stale-event' } as FeedEvent], hasMore: false };
+      });
+
+      await service.loadMoreFeed(testCalendarId, 1);
+
+      expect(feedStore.events.map((event) => event.id)).toEqual(['kept-event']);
+      expect(feedStore.eventsPage).toBe(0);
+      expect(feedStore.eventsHasMore).toBe(true);
     });
   });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useFeedFollows } from '@/client/composables/useFeedFollows';
@@ -47,6 +47,13 @@ const handleCloseAddModal = () => {
   showAddModal.value = false;
   nextTick(() => { addModalTriggerRef.value?.focus(); });
 };
+
+// The follow dialog submits against the selected calendar, so one opened on
+// the previous calendar closes when the selection changes. The selection
+// follows the route's :calendar; this is the twin of feed/root.vue's watch.
+watch(() => feedStore.selectedCalendarId, () => {
+  showAddModal.value = false;
+});
 
 const handleFollowSuccess = async () => {
   // Refresh both follows list and feed events after successful follow
