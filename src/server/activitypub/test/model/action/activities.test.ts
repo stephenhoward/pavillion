@@ -755,6 +755,17 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(activity.toObject().object).toEqual(embedded);
     });
 
+    it('should take the id {targetId}/undo for a target given by id', () => {
+      // ActivityPubService.readOutbox finds an undone outbox row by probing
+      // for `{id}/undo`; a different id scheme would silently re-expose
+      // withdrawn reposts in the public outbox.
+      const activity = new UndoActivity(
+        'https://example.com/calendars/cal',
+        'https://example.com/calendars/cal/shares/1',
+      );
+      expect(activity.id).toBe('https://example.com/calendars/cal/shares/1/undo');
+    });
+
     it('should return null when an embedded object carries no string id', () => {
       expect(UndoActivity.fromObject({
         actor: 'https://example.com/users/1',
