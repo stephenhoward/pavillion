@@ -338,7 +338,7 @@ every *State write* enforces it, clearing a label the maintainer left behind.
 | `spec:revise` | The maintainer sent the spec back with a note in the notes field. The next run re-drafts it and returns it as `spec:drafted`. | maintainer only |
 | `spec:approved` | The maintainer approved the spec. The next run decomposes it. | maintainer only |
 | `spec:decomposing` | Decomposition or analysis is in progress, or was interrupted. The next run completes it rather than starting over. | this mode |
-| `spec:ready` | Every leaf has an Implementation Context block; for a single-bead root, the root's own notes hold it. This mode is finished with the root. | this mode |
+| `spec:ready` | Every leaf except `decision`-type `Decide:` leaves has an Implementation Context block; for a single-bead root, the root's own notes hold it. An open `Decide:` leaf awaits the maintainer and blocks its dependents. This mode is finished with the root. | this mode |
 
 ### Shared rules
 
