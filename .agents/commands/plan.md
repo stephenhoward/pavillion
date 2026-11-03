@@ -400,7 +400,8 @@ verbatim, open it with a short plain-language paragraph, and extend it with
 scope and success criteria; do not replace the commissioner's reasoning. If
 the root has children, read them (`bd children <id>`) as part of the brief:
 the design must account for them, but do not restructure them here. As in
-attended DRAFT, skip a sub-step whose field is already populated. Sub-step 1
+attended DRAFT, skip a sub-step whose field is already populated, except the
+description, which is always extended as above. Sub-step 1
 (clarify scope) is answered from the brief; sub-step 2 (visuals) is skipped
 and recorded as a decision; run sub-steps 3–7 (reference implementations,
 product context, standards, technical design, acceptance) as written.
@@ -412,15 +413,16 @@ product context, standards, technical design, acceptance) as written.
   `src/site/routes.ts`, or calendar or series url-name rules (DEC-018);
 - changing federation semantics: which activities are emitted or accepted,
   their type, addressing or object shape, actor-document properties, or inbox
-  and outbox trust rules (DEC-012, DEC-013, DEC-014, and DEC-015 *federated
-  report routing*);
+  and outbox trust rules (DEC-013, DEC-014, and DEC-015 *federated report
+  routing*);
 - a destructive data migration: dropping or renaming a column or table, or
   deleting or irreversibly rewriting rows;
 - contradicting, amending or superseding a decision in `docs/decisions/` whose
-  Status is Accepted, or a still-in-force clause of a Partially superseded
-  one. Decision text has override priority, so changing one is the product
-  owner's call. Proposing a brand-new DEC is not a refusal; record it as a
-  decision made.
+  Status is Accepted, or any still-in-force clause of a decision, whatever its
+  file's Status. Examples: adopting an ActivityPub library (DEC-012), or using
+  `@` in public URLs (DEC-006). Decision text has override priority, so
+  changing one is the product owner's call. Proposing a brand-new DEC is not a
+  refusal; record it as a decision made.
 
 On a refusal, write whatever fields are complete, skip ADVISE (an Advisory
 Review block would make the bead read as advised), record the refusal as the
@@ -440,8 +442,12 @@ single Task batch, same plan template — with these differences:
   still write the fields, the Advisory Review block and the decisions block,
   label the root `spec:blocked`, add no `advised` label, and stop on that root.
 
-**Write.** Write what CONFIRM-AND-WRITE writes, with no approval prompt, in
-**one** `bd update` call carrying the fields, the notes and the labels:
+**Write.** Re-read the root first. If its status is no longer `open`, or it
+now carries a `spec:*` label, someone else has taken it during this run, for
+example a `/clear-backlog` sweep. Write nothing and report it as
+*skipped (taken mid-run)*. Otherwise, write what CONFIRM-AND-WRITE writes, with
+no approval prompt, in **one** `bd update` call carrying the fields, the notes
+and the labels:
 
 ```bash
 F=<session-scratchpad>/<id>
