@@ -94,6 +94,7 @@ Things that look wrong but are not:
 | `agent-discovery` | `.agents/skills/agent-discovery/scripts/agents.ts` | `<suffix>` — list `*-advisor`/`-auditor`/`-verifier` agents |
 | `bead-branch-and-pr` | `.agents/skills/bead-branch-and-pr/scripts/stack.ts` | `safe-to-start`, `plan`, `create`, `submit`, `sync` |
 | `git-cleanup` | `.agents/skills/git-cleanup/scripts/git-cleanup.ts` | `classify`, `execute` |
+| `plan-scheduled` | `.agents/skills/plan-scheduled/scripts/spec.ts` | `select`, `inspect`, `leaves`, `last-block`, `revise-note`, `revision-number`, `gate-misses`, `state-write` |
 
 Each of those directories is self-contained: the CLI, its `lib/`, its
 `test/`, and a local copy of the `run()` helper in `lib/shared.ts` here.
