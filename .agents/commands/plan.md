@@ -354,6 +354,169 @@ share a cap of **2** roots per run; revised roots run first, so they consume
 the cap first, and the drafting pass takes `2 − revised-this-run` roots. The
 approved pass has no cap.
 
+### Approved pass
+
+Takes every root labelled `spec:approved` or `spec:decomposing` to
+`spec:ready`. It runs first in every run and has no cap. Roots are taken by
+priority, then oldest first:
+
+```bash
+bd list --label-any spec:approved,spec:decomposing --no-parent --status open --limit 0 --json \
+  | jq -r 'sort_by(.priority, .created_at) | .[] | [.id, ((.labels // []) | map(select(startswith("spec:"))) | join(",")), .title] | @tsv'
+```
+
+`--label-any` works in bd 1.2.2; `--label-pattern` and `--label-regex` do not
+(see the Selection rule).
+
+**Route.** Re-read each root before starting on it. If its status is no
+longer `open`, or it carries neither label, skip it and report it as
+*skipped (taken mid-run)*. Otherwise route it. "Planned hierarchy heading"
+means `(.notes // "") | test("(^|\n)#{1,6}[ \t]*Planned hierarchy\\b"; "i")`.
+
+| Root | Path |
+|---|---|
+| `spec:decomposing` with a Planned hierarchy heading | **Resume** |
+| `spec:approved` with a Planned hierarchy heading | Relabel it with the step-3 call below, without `--append-notes`, then **Resume**. The block exists, so a plan was recorded; planning again would duplicate children. |
+| anything else | **Plan** |
+
+**Decomposition rules.** These bind the Plan step and the DECOMPOSE subagent.
+Where they conflict with `decompose-bead.md`, they win. That covers its
+three-level patterns in Phase 3 and its "SCOPE TBD" children.
+
+1. At most two levels: root plus leaves. Every new bead's parent is the root.
+   No container children, and no "SCOPE TBD" children. Every leaf meets
+   decompose-bead.md's leaf criteria and is completable by one agent.
+2. No prose gates. A gate is a `bd dep add` on a bead in this repo, or a
+   defer date, or it is dropped. A blocker is never only a note.
+3. No open design forks in a leaf. Pick the option and record why in the
+   leaf's design.
+4. Leaves cite files by path as of decomposition.
+5. Children that already exist were written by the work's commissioner. Adopt
+   them as the starting hierarchy. Do not create a bead that duplicates an
+   existing child's scope. Add siblings under the root for scope nothing
+   covers. You may update an existing child's description, design and
+   acceptance so they agree with the approved design, but not its title.
+   Never close or delete an existing child. If one is redundant, record that
+   in the root's notes for the maintainer.
+6. An oversized existing child is narrowed, not split. Shrink its description
+   to one leaf's worth, add sibling leaves under the root for the rest, and
+   record the narrowing in the root's notes. Splitting it into grandchildren
+   would make it a container, which rule 1 forbids: containers never close,
+   and the sweep skips them.
+
+**Plan.** For a root routed here:
+
+1. Run `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts sizing-check <id>`
+   (prints `{needs_decomposition, reasons[]}`) and `bd children <id> --json`.
+   The root is a **single-bead root** when `needs_decomposition` is false and
+   it has no children. A root with children is decomposed whatever the sizing
+   check says.
+2. Plan the hierarchy yourself, not in a subagent. Apply decompose-bead.md
+   Phases 2–3 under the decomposition rules. Write the block to
+   `<session-scratchpad>/<id>-hierarchy.md`:
+
+   ```
+   ## Planned hierarchy
+
+   | Title | Type | Parent | Depends on | Existing id |
+   |---|---|---|---|---|
+   | <exact title> | task | <root-id> | <titles or ids, or —> | <id, or new> |
+   ```
+
+   Write one row per leaf, and include existing children with their current
+   title and id. For a single-bead root, replace the table with the line
+   `- none: sizing-check needs_decomposition=false; analysed as a single bead`.
+   The block is written in every case so the resume path always reads one.
+3. Append the block and relabel in **one** call, before any subagent runs:
+
+   ```bash
+   bd update <id> --append-notes "$(cat <session-scratchpad>/<id>-hierarchy.md)" \
+     --remove-label spec:approved --add-label spec:decomposing
+   ```
+
+   The plan is on the bead before any child exists. A subagent that is cut
+   partway then never leaves children without a recorded plan.
+4. Go to **Decompose**. For a single-bead root, go to **Analyze**.
+
+**Resume.** Read the **last** Planned hierarchy block and
+`bd children <id> --json`. Do not re-plan. If the block is the `- none` line,
+go to **Analyze**. Otherwise go to **Decompose** with the resume line added.
+
+**Decompose.** Spawn the subagent with the Phase DECOMPOSE prompt, followed
+by:
+
+> Scheduled mode. Phase 3 is satisfied by the root's last `## Planned
+> hierarchy` block. Create exactly what it lists, then run Phases 4–8. Every
+> row is a leaf: create it with the Phase 6 template and give it the root as
+> its parent. Phase 5 creates nothing. Phase 7 adds the block's *Depends on*
+> column as `bd dep add`. Before each `bd create`, check for an exact title
+> match under the parent, and reuse its id if one exists:
+> `bd children <parent> --json | jq -r --arg t "<title>" '.[] | select(.title == $t) | .id'`.
+> Follow these decomposition rules: <the six decomposition rules above, verbatim>.
+
+On the resume path, add: *"Create only the rows of the block whose title has
+no match under its parent. Do not re-plan."*
+
+**Analyze.** List the leaves still to analyse: open beads at any depth under
+the root that have no children and no Implementation Context heading in their
+notes.
+
+```bash
+bd list --all --limit 0 --json | jq -r --arg r <root-id> '
+  (map({key: .id, value: .parent}) | from_entries) as $par
+  | (map(.parent // empty) | unique) as $parents
+  | def under($id): $par[$id] as $p | if $p == null then false elif $p == $r then true else under($p) end;
+  [ .[] | select(under(.id)) | select(.id | IN($parents[]) | not) | select(.status != "closed")
+    | select((.notes // "") | test("(^|\n)#{1,6}[ \t]*Implementation Context\\b"; "i") | not) ]
+  | .[] | [.id, .title] | @tsv'
+```
+
+If it prints nothing, go to the gate. Otherwise spawn the subagent with the
+Phase ANALYZE prompt, followed by:
+
+> Scheduled mode. Analyse only these leaves: <ids from the query>. Do not
+> append a second Implementation Context block to a leaf that already has
+> one. If the root's notes already hold a `# Bead Analysis` heading, skip
+> Phase 5a.
+
+For a single-bead root, skip this step if the root's own notes already hold
+an Implementation Context heading. Otherwise use the Phase ANALYZE prompt
+with its Phase 1.5 sentence ("The bead already has children. Skip Phase
+1.5 … Start from Phase 2") replaced by *"Skip Phase 1.5. Use analysis_mode =
+single and go to Phase 4b."*
+
+**Gate to `spec:ready`.** Re-run the query. For a single-bead root, test the
+root's own notes for the Implementation Context heading instead. If any leaf
+is still unanalysed, leave the root `spec:decomposing` and report those
+leaves; the next run resumes it. Otherwise relabel:
+
+```bash
+bd update <id> --remove-label spec:decomposing --add-label spec:ready
+```
+
+analyze-bead Phase 5a appends `# Bead Analysis`, with its Execution Waves, to
+a decomposed root. If the root's notes have no Bead Analysis heading
+(`(^|\n)#{1,6}[ \t]*Bead Analysis\\b`, flag `i`), write the subagent's
+execution-wave summary under `# Bead Analysis` to
+`<session-scratchpad>/<id>-waves.md`. Then add
+`--append-notes "$(cat <session-scratchpad>/<id>-waves.md)"` to the relabel
+call. Never append it when the heading exists, or every resumed run adds
+another block.
+
+**Why the marker survives a cut.** Each step can be cut by a session limit,
+and each cut is recoverable:
+
+- Before step 3, the root is still `spec:approved` with no block and no
+  children. The next run plans afresh.
+- During Decompose, the root is `spec:decomposing` with a block. The next run
+  creates only the missing rows.
+- During Analyze, analysed leaves carry their heading. The next run analyses
+  only the rest.
+- Before the relabel, the next run's query prints nothing, so the run only
+  relabels.
+
+Out of scope: dispatching workers for `spec:ready` roots.
+
 ### Selection rule (drafting pass)
 
 This is the selection rule; amend it here and nowhere else. One criterion per
@@ -508,6 +671,9 @@ rather than overwriting the earlier run's record. Contents:
 
 - each root touched: id, title, pass, resulting label, advisor verdict lines,
   count of decisions made, and any refusals or errors
+- for each approved-pass root: its leaf count (`1 (the root)` for a
+  single-bead root), or the leaves still unanalysed if it stays
+  `spec:decomposing`
 - the candidates **not taken (cap)**, with priority and title
 
 The report is local and gitignored, so bead IDs are allowed there — they
