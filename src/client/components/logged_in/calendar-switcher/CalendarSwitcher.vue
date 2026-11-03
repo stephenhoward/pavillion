@@ -111,6 +111,10 @@ function closeCreate() {
   font: inherit;
   color: inherit;
   text-align: start;
+  /* The base button reset (components/_buttons.scss) sets nowrap, which the
+     label inherits: a long name then ran past the trigger, under the chevron
+     and over its host's controls. A calendar name wraps like any heading. */
+  white-space: normal;
   cursor: pointer;
   border-radius: var(--pav-border-radius-sm);
 

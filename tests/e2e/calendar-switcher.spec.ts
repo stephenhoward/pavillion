@@ -138,6 +138,51 @@ test.describe('Calendar switcher', () => {
     await expect(trigger).toHaveAccessibleDescription('');
   });
 
+  // A long name wraps inside the switcher instead of running under its
+  // chevron and over the header's actions menu, with spaces to break at or
+  // without. Runs after the test above, so the fresh user has a calendar to
+  // open the switcher from.
+  test('a long calendar name wraps clear of the calendar header actions on a phone', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await loginAsFreshUser(page, env.baseURL);
+    await page.goto(env.baseURL + '/calendar/switcher_fresh');
+
+    const longNames = [
+      { title: 'Monmouth-Independence Climate Action Group Community Calendar', urlName: 'switcher_long' },
+      { title: 'MonmouthIndependenceClimateActionGroupCommunityCalendar', urlName: 'switcher_unbroken' },
+    ];
+
+    for (const { title, urlName } of longNames) {
+      await calendarSwitcherTrigger(page).click();
+      await page.getByRole('dialog', { name: 'Switch calendar' }).getByTestId('switcher-create').click();
+      const sheet = page.getByRole('dialog', { name: 'Create New Calendar' });
+      await sheet.getByLabel('Calendar Title').fill(title);
+      await sheet.getByLabel('Calendar Name').fill(urlName);
+      await sheet.getByRole('button', { name: 'Create Your Calendar' }).click();
+      await expect(page).toHaveURL(new RegExp(`/calendar/${urlName}$`));
+
+      const header = page.locator('.calendar-header');
+      const trigger = calendarSwitcherTrigger(header, title);
+      await expect(trigger).toBeVisible();
+      const label = trigger.locator('.calendar-switcher__label');
+      const chevron = trigger.locator('svg');
+      const actions = header.locator('.header-actions');
+
+      const labelBox = (await label.boundingBox())!;
+      const chevronBox = (await chevron.boundingBox())!;
+      const triggerBox = (await trigger.boundingBox())!;
+      const actionsBox = (await actions.boundingBox())!;
+
+      // The name wraps onto more lines rather than overflowing its own box.
+      expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth), title).toBe(true);
+      expect(labelBox.height, title).toBeGreaterThan(chevronBox.height * 1.5);
+      // Name, chevron and actions menu sit side by side, inside the viewport.
+      expect(labelBox.x + labelBox.width, title).toBeLessThanOrEqual(chevronBox.x);
+      expect(triggerBox.x + triggerBox.width, title).toBeLessThanOrEqual(actionsBox.x);
+      expect(actionsBox.x + actionsBox.width, title).toBeLessThanOrEqual(PHONE.width);
+    }
+  });
+
   test('switching calendar on a settings leaf stays on the same leaf', async ({ page }) => {
     // MultiCalendar owns multicalendar_calendar and edits testuser_calendar;
     // Widget is visible to owner and editor alike.
