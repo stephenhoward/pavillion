@@ -148,8 +148,8 @@ test.describe('Calendar switcher', () => {
     await page.goto(env.baseURL + '/calendar/switcher_fresh');
 
     const longNames = [
-      { title: 'Monmouth-Independence Climate Action Group Community Calendar', urlName: 'switcher_long' },
-      { title: 'MonmouthIndependenceClimateActionGroupCommunityCalendar', urlName: 'switcher_unbroken' },
+      { title: 'Riverside-Lakeshore Neighborhood Association Community Calendar', urlName: 'switcher_long' },
+      { title: 'RiversideLakeshoreNeighborhoodAssociationCommunityCalendar', urlName: 'switcher_unbroken' },
     ];
 
     for (const { title, urlName } of longNames) {
