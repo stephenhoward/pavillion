@@ -314,8 +314,10 @@ untested path.
   they may belong to an attended session.
 - Write no scratchpad under `docs/.scratch/`. Hold the draft in context; any
   file a `bd` call needs goes in the session scratchpad.
-- Skip the CONFIRM-AND-WRITE approval gate, and skip the DECOMPOSE prompt and
-  ANALYZE prompt phases. Step Final is replaced by the per-run report.
+- Skip the CONFIRM-AND-WRITE approval gate and the two menu phases,
+  `### Phase DECOMPOSE prompt` and `### Phase ANALYZE prompt`. The approved
+  pass still spawns the subagents defined under `### Phase DECOMPOSE` and
+  `### Phase ANALYZE`. Step Final is replaced by the per-run report.
 - Add `advised` only when at least one advisor ran and none still requests
   changes. When no advisor plausibly applies, the root is still
   `spec:drafted`, but without `advised` (agent-discovery: never advance as if
@@ -376,7 +378,7 @@ means `(.notes // "") | test("(^|\n)#{1,6}[ \t]*Planned hierarchy\\b"; "i")`.
 | Root | Path |
 |---|---|
 | `spec:decomposing` with a Planned hierarchy heading | **Resume** |
-| `spec:approved` with a Planned hierarchy heading | Relabel it with the step-3 call below, without `--append-notes`, then **Resume**. The block exists, so a plan was recorded; planning again would duplicate children. |
+| `spec:approved` with a Planned hierarchy heading (only after a manual edit, since step 3 writes block and label together) | `bd update <id> --remove-label spec:approved --add-label spec:decomposing`, then **Resume**; planning again would duplicate children |
 | anything else | **Plan** |
 
 **Decomposition rules.** These bind the Plan step and the DECOMPOSE subagent.
@@ -427,6 +429,11 @@ three-level patterns in Phase 3 and its "SCOPE TBD" children.
    title and id. For a single-bead root, replace the table with the line
    `- none: sizing-check needs_decomposition=false; analysed as a single bead`.
    The block is written in every case so the resume path always reads one.
+   Below the block, in the same file, add
+   `## Decisions made for you (decomposition)` in the drafting pass's format.
+   It records each fork picked (rule 3), each child narrowed (rule 6) or
+   judged redundant (rule 5), and the hierarchy shape chosen. Write `none` if
+   there were none.
 3. Append the block and relabel in **one** call, before any subagent runs:
 
    ```bash
@@ -440,26 +447,42 @@ three-level patterns in Phase 3 and its "SCOPE TBD" children.
 
 **Resume.** Read the **last** Planned hierarchy block and
 `bd children <id> --json`. Do not re-plan. If the block is the `- none` line,
-go to **Analyze**. Otherwise go to **Decompose** with the resume line added.
+go to **Analyze**. If every row's title already matches a child of its
+parent, go to **Analyze**. Otherwise go to **Decompose** with the resume line
+added.
 
-**Decompose.** Spawn the subagent with the Phase DECOMPOSE prompt, followed
-by:
+**Decompose.** Spawn the subagent with the prompt under `### Phase DECOMPOSE`,
+followed by:
 
 > Scheduled mode. Phase 3 is satisfied by the root's last `## Planned
 > hierarchy` block. Create exactly what it lists, then run Phases 4–8. Every
 > row is a leaf: create it with the Phase 6 template and give it the root as
-> its parent. Phase 5 creates nothing. Phase 7 adds the block's *Depends on*
-> column as `bd dep add`. Before each `bd create`, check for an exact title
-> match under the parent, and reuse its id if one exists:
+> its parent. Phase 5 creates nothing. Before each `bd create`, check for an
+> exact title match under the parent, and reuse its id if one exists:
 > `bd children <parent> --json | jq -r --arg t "<title>" '.[] | select(.title == $t) | .id'`.
-> Follow these decomposition rules: <the six decomposition rules above, verbatim>.
+> Phase 7 adds the block's *Depends on* column as `bd dep add`, resolving each
+> title to an id with the same lookup, and adding no dependency that already
+> exists. The rules below override decompose-bead.md wherever they conflict,
+> including its three-level patterns and its "SCOPE TBD" children:
+> <the six decomposition rules above, verbatim>.
 
 On the resume path, add: *"Create only the rows of the block whose title has
 no match under its parent. Do not re-plan."*
 
-**Analyze.** List the leaves still to analyse: open beads at any depth under
-the root that have no children and no Implementation Context heading in their
-notes.
+**Analyze.** Branch on the root's shape first.
+
+*Single-bead root* (the block is the `- none` line). If the root's own notes
+hold an Implementation Context heading
+(`(^|\n)#{1,6}[ \t]*Implementation Context\\b`, flag `i`), go to the gate.
+Otherwise spawn the subagent with the prompt under `### Phase ANALYZE`. In
+that prompt, replace the Phase 1.5 sentence ("The bead already has children.
+Skip Phase 1.5 … Start from Phase 2") with *"Skip Phase 1.5. Use
+analysis_mode = single and go to Phase 4b."* Then go to the gate.
+
+*Decomposed root.* List the leaves still to analyse: open beads at any depth
+under the root that have no children and no Implementation Context heading in
+their notes. The walk goes to any depth because an adopted commissioner child
+may already have children of its own; this mode never creates them.
 
 ```bash
 bd list --all --limit 0 --json | jq -r --arg r <root-id> '
@@ -472,48 +495,37 @@ bd list --all --limit 0 --json | jq -r --arg r <root-id> '
 ```
 
 If it prints nothing, go to the gate. Otherwise spawn the subagent with the
-Phase ANALYZE prompt, followed by:
+prompt under `### Phase ANALYZE`, followed by:
 
 > Scheduled mode. Analyse only these leaves: <ids from the query>. Do not
 > append a second Implementation Context block to a leaf that already has
 > one. If the root's notes already hold a `# Bead Analysis` heading, skip
 > Phase 5a.
 
-For a single-bead root, skip this step if the root's own notes already hold
-an Implementation Context heading. Otherwise use the Phase ANALYZE prompt
-with its Phase 1.5 sentence ("The bead already has children. Skip Phase
-1.5 … Start from Phase 2") replaced by *"Skip Phase 1.5. Use analysis_mode =
-single and go to Phase 4b."*
-
-**Gate to `spec:ready`.** Re-run the query. For a single-bead root, test the
-root's own notes for the Implementation Context heading instead. If any leaf
-is still unanalysed, leave the root `spec:decomposing` and report those
-leaves; the next run resumes it. Otherwise relabel:
+**Gate to `spec:ready`.** For a single-bead root, test the root's own notes
+for the Implementation Context heading. For a decomposed root, re-run the
+leaf query. If anything is still unanalysed, leave the root
+`spec:decomposing` and report what remains; the next run resumes it.
+Otherwise relabel:
 
 ```bash
 bd update <id> --remove-label spec:decomposing --add-label spec:ready
 ```
 
 analyze-bead Phase 5a appends `# Bead Analysis`, with its Execution Waves, to
-a decomposed root. If the root's notes have no Bead Analysis heading
-(`(^|\n)#{1,6}[ \t]*Bead Analysis\\b`, flag `i`), write the subagent's
-execution-wave summary under `# Bead Analysis` to
-`<session-scratchpad>/<id>-waves.md`. Then add
+a decomposed root. Sometimes the root's notes have no Bead Analysis heading
+(`(^|\n)#{1,6}[ \t]*Bead Analysis\\b`, flag `i`) while an ANALYZE subagent
+ran this run and returned an execution-wave summary. In that case, write
+that summary under `# Bead Analysis` to
+`<session-scratchpad>/<id>-waves.md`, and add
 `--append-notes "$(cat <session-scratchpad>/<id>-waves.md)"` to the relabel
-call. Never append it when the heading exists, or every resumed run adds
-another block.
+call. In any other case, append nothing. A resumed run that analyses nothing
+has no summary to write, and a second block would duplicate the first.
 
-**Why the marker survives a cut.** Each step can be cut by a session limit,
-and each cut is recoverable:
-
-- Before step 3, the root is still `spec:approved` with no block and no
-  children. The next run plans afresh.
-- During Decompose, the root is `spec:decomposing` with a block. The next run
-  creates only the missing rows.
-- During Analyze, analysed leaves carry their heading. The next run analyses
-  only the rest.
-- Before the relabel, the next run's query prints nothing, so the run only
-  relabels.
+The Planned hierarchy block is what makes a cut run safe. Each step after
+it is idempotent: the title lookup skips children that exist, and the leaf
+query skips leaves already analysed. The next run therefore completes the
+root rather than duplicating it.
 
 Out of scope: dispatching workers for `spec:ready` roots.
 
