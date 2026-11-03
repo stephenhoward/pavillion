@@ -298,135 +298,188 @@ Wait for completion. Capture the execution waves summary.
 
 ## Scheduled mode (`--scheduled`)
 
-Unattended run, modelled on `/clear-backlog --scheduled`. It asks no questions
-and never waits on a human: every question the attended command would have
-asked is answered by best judgement and written down on the bead, and every
-run writes a report file. `--scheduled` takes no bead id and no other flag;
-refuse `--scheduled` combined with a bead id, `--until`, `--reshape` or
-`--readvise`. The selection rule is the whole input, and a hybrid would be an
-untested path.
+Unattended run, modelled on `/clear-backlog --scheduled`. It never waits on a
+human: every question the attended command would ask is answered by best
+judgement and written on the bead, and every run writes a report file.
+Refuse it with a bead id, `--until`, `--reshape` or `--readvise`: the
+selection rule is the whole input, and a hybrid would be an untested path.
 
 **Overrides of the attended flow.** The phases above apply as written, except:
 
-- No AskUserQuestion anywhere. Where the attended flow would ask, decide, and
-  record the question and the answer under *Decisions made for you*.
-- Skip Step 0a. Never list, resume or delete drafts under `docs/.scratch/`;
-  they may belong to an attended session.
-- Write no scratchpad under `docs/.scratch/`. Hold the draft in context; any
-  file a `bd` call needs goes in the session scratchpad.
-- Skip the CONFIRM-AND-WRITE approval gate and the two menu phases,
-  `### Phase DECOMPOSE prompt` and `### Phase ANALYZE prompt`. The approved
-  pass still spawns the subagents defined under `### Phase DECOMPOSE` and
-  `### Phase ANALYZE`. Step Final is replaced by the per-run report.
-- Add `advised` only when at least one advisor ran and none still requests
-  changes. When no advisor plausibly applies, the root is still
-  `spec:drafted`, but without `advised` (agent-discovery: never advance as if
-  review passed).
-- Never change a bead's status. Status `open` is part of the selection rule,
-  so a claimed root would drop out of every later run.
-- Never set `spec:approved` or `spec:revise`.
-- Never add `needs-human` and never call `.agents/tools/bead.ts escalate`.
-  Where agent-discovery would escalate after a persistent REQUEST CHANGES, this
-  mode labels the root `spec:blocked` instead.
-- Do not route on `bead-state-assessment`'s `bead.ts state` or
-  `enrichment-check`. Both match "Advisory Review" and "Implementation
-  Context" as substrings anywhere in `bd show` output, description included,
-  so they misclassify beads whose prose mentions the phrases. Test notes
-  headings with the `jq` filters in this section instead.
+- No AskUserQuestion. Where the attended flow would ask, decide, and record it
+  as *Note blocks* says.
+- Skip Step 0a, and never list, resume, delete or write drafts under
+  `docs/.scratch/`; they may belong to an attended session.
+- Skip the CONFIRM-AND-WRITE approval gate and the menu phases
+  `### Phase DECOMPOSE prompt` and `### Phase ANALYZE prompt`; the approved
+  pass still spawns the `### Phase DECOMPOSE` and `### Phase ANALYZE`
+  subagents. The per-run report replaces Step Final.
+- Add `advised` only when an advisor ran and none still requests changes
+  (agent-discovery: never advance as if review passed).
+- Never change a bead's status: `open` is part of every selection, so a
+  claimed root would drop out of every later run. Never set `spec:approved`
+  or `spec:revise`. Never add `needs-human` or call
+  `.agents/tools/bead.ts escalate`; where agent-discovery would escalate a
+  persistent REQUEST CHANGES, this mode blocks the root.
+- Do not route on `bead.ts state` or `enrichment-check`: both match "Advisory
+  Review" and "Implementation Context" as substrings anywhere in `bd show`,
+  description included. Use the heading test.
 
 ### Labels
 
-This table is the canonical state vocabulary; the passes below refer to it
-rather than restating it. A root carries at most one of these labels. Every
-write in this mode removes the label it leaves, and the maintainer's tooling
-is expected to swap rather than add.
+The canonical state vocabulary, which the passes cite rather than restate. A
+root carries at most one of these labels; every *State write* enforces it.
 
 | Label | Meaning | Set by |
 |---|---|---|
 | `spec:drafted` | Description, design and acceptance written; advisors reviewed (or none applied — then without `advised`). Waiting for the maintainer to approve or revise. | this mode |
-| `spec:blocked` | An advisor still requested changes after one refinement, or drafting was refused. Waiting for the maintainer. | this mode |
+| `spec:blocked` | Drafting or revising was refused in whole or part, an advisor still requested changes after one refinement, a revise reached an already-decomposed root, or decomposition missed its gate three times. Waiting for the maintainer, who restarts it by setting `spec:revise` with a note, never by removing the label. | this mode |
 | `spec:revise` | The maintainer sent the spec back with a note in the notes field. The next run re-drafts it and returns it as `spec:drafted`. | maintainer only |
 | `spec:approved` | The maintainer approved the spec. The next run decomposes it. | maintainer only |
 | `spec:decomposing` | Decomposition or analysis is in progress, or was interrupted. The next run completes it rather than starting over. | this mode |
-| `spec:ready` | Every leaf has an Implementation Context block. This mode is finished with the root. | this mode |
+| `spec:ready` | Every leaf has an Implementation Context block; for a single-bead root, the root's own notes hold it. This mode is finished with the root. | this mode |
+
+### Shared rules
+
+- **Heading test.** "Has an *X* heading" means
+  `(.notes // "") | test("(^|\n)#{1,6}[ \t]*X\\b"; "i")`: any level or case,
+  never a plain substring, which would catch prose such as "advisory review
+  passed". `\b` closes a name ending in a word character.
+- **State write.** A state write to `<target>` is `--remove-label` for each of
+  the six labels except the target, plus `--add-label <target>`; for
+  `spec:drafted`: `--remove-label spec:blocked --remove-label spec:revise --remove-label spec:approved --remove-label spec:decomposing --remove-label spec:ready --add-label spec:drafted`.
+  Every relabel here is one; bd accepts removing an absent label.
+- **One call per write.** Each write is **one** `bd update` with its fields,
+  notes and labels: a cut before it leaves the next run to redo the step from
+  the same input, where split calls could leave an Advisory Review block with
+  no `spec:*` label, and that root would drop out of every pass.
+- **Files.** Pass every text as `"$(cat <file>)"` from a file in the session
+  scratchpad; a heredoc inside `$()` breaks on bash 3.2.
+- **Append only.** Notes take `--append-notes` or `bd note`, never `--notes`;
+  never edit an earlier block. Readers take the **last** block of each name.
+- **Mid-run re-read.** Where a pass says, re-read the root. If it is no
+  longer `open`, or lacks what selected it, someone (a `/clear-backlog`
+  sweep, say) took it this run: write nothing; report *skipped (taken mid-run)*.
+- **needs-human.** Every selection prints the `needs-human` label. Such a root
+  is not selected, takes no cap slot, and is reported *skipped (needs-human)*.
+- **bd 1.2.2.** `--limit 0` is mandatory (`bd list --json` otherwise stops at
+  50 rows). `--label-pattern` and `--label-regex` are ignored and return every
+  row; use `--label` or `--label-any`.
+- **Design rulings.** Maintainer rulings on design forks, made before
+  drafting, live in notes blocks with a Design ruling heading and in a
+  `## Design rulings` description block, kept verbatim. Each is settled: never
+  re-ask, contradict or list it under *Decisions made for you*. It also
+  settles a *Refuse rather than guess* fork: the maintainer's call in advance.
+
+### Note blocks
+
+Tooling outside this command parses these two blocks in the root's notes,
+whatever their suffix, so their shape is a contract.
+**`## Decisions made for you`** holds only questions the attended command
+would have put to the maintainer that no design ruling settles, each on one
+unwrapped line, refusals first:
+
+```
+- **Q:** <question attended mode would have asked> — **A:** <answer> — <why>
+- **Q:** <what was asked or attempted> — **A:** refused — <reason>
+```
+
+The revise pass finds a plain-text note by skipping these lines. An empty
+block is exactly `none`. Below-the-line choices are ordinary design, in the
+design field: implementation details, visuals skipped, how an advisor's
+condition was met.
+
+**`## Advisory Review`** has one line per advisor with its **final** verdict
+only, in the Phase ADVISE format, and per adjustment a verdict-free line
+`- adjusted for <advisor>: <change>`. Consumers scan for `REQUEST CHANGES`,
+so it appears only as a final verdict. With no advisor applicable, the block
+is `- none applicable — <why>`.
+
+### Outcome labels
+
+The drafting and revise passes end each root on one row:
+
+| Outcome | Labels |
+|---|---|
+| advisors ran, none still requests changes | `shaped`, `advised`, state write `spec:drafted` |
+| no advisor plausibly applies | `shaped`, state write `spec:drafted` |
+| REQUEST CHANGES persisted after the refinement | `shaped`, state write `spec:blocked` |
+| any refusal, whole or partial | `shaped`, state write `spec:blocked` |
+
+Drop `shaped` while description, design or acceptance is empty. In the revise
+pass the state write also removes `spec:revise`, and a row without `advised`
+adds `--remove-label advised` only when a field was re-drafted: the label
+describes the current spec, and a refusal that changes nothing leaves the
+reviewed spec in place.
 
 ### Order of work
 
-Each run takes three passes in this order: the **approved pass**, then the
-**revise pass**, then the **drafting pass**. The revise and drafting passes
-share a cap of **2** roots per run; revised roots run first, so they consume
-the cap first, and the drafting pass takes `2 − revised-this-run` roots.
-`revised-this-run` counts every revise-pass root selected, including those
-refused or *skipped (taken mid-run)*. The approved pass has no cap.
+Each run takes the **approved pass** (no cap), the **revise pass**, then the
+**drafting pass**. The last two share a cap of **2** roots per run; revised
+roots run first, so the drafting pass takes `2 − revised-this-run`, which
+counts every revise-pass root selected, refused or *skipped (taken mid-run)*
+included. The rest are *not taken (cap)*.
 
 ### Approved pass
 
-Takes every root labelled `spec:approved` or `spec:decomposing` to
-`spec:ready`. It runs first in every run and has no cap. Roots are taken by
+Takes every `spec:approved` or `spec:decomposing` root to `spec:ready`, by
 priority, then oldest first:
 
 ```bash
 bd list --label-any spec:approved,spec:decomposing --no-parent --status open --limit 0 --json \
-  | jq -r 'sort_by(.priority, .created_at) | .[] | [.id, ((.labels // []) | map(select(startswith("spec:"))) | join(",")), .title] | @tsv'
+  | jq -r 'sort_by(.priority, .created_at) | .[]
+      | [.id, "P\(.priority)", ((.labels // []) | map(select(startswith("spec:") or . == "needs-human")) | join(",")), .title] | @tsv'
 ```
 
-`--label-any` works in bd 1.2.2; `--label-pattern` and `--label-regex` do not
-(see the Selection rule).
-
-**Route.** Re-read each root before starting on it. If its status is no
-longer `open`, or it carries neither label, skip it and report it as
-*skipped (taken mid-run)*. Otherwise route it. "Planned hierarchy heading"
-means `(.notes // "") | test("(^|\n)#{1,6}[ \t]*Planned hierarchy\\b"; "i")`.
+**Route.** Re-read each root before starting (*Mid-run re-read*: it must
+still carry `spec:approved` or `spec:decomposing`). Skip and report one that
+also carries `spec:revise`; the revise pass takes it. Otherwise:
 
 | Root | Path |
 |---|---|
-| `spec:decomposing` with a Planned hierarchy heading | **Resume** |
-| `spec:approved` with a Planned hierarchy heading (only after a manual edit, since step 3 writes block and label together) | `bd update <id> --remove-label spec:approved --add-label spec:decomposing`, then **Resume**; planning again would duplicate children |
+| has a Planned hierarchy heading | **Resume**, after a state write to `spec:decomposing` if it lacks that label; planning again would duplicate children |
 | anything else | **Plan** |
 
-**Decomposition rules.** These bind the Plan step and the DECOMPOSE subagent.
-Where they conflict with `decompose-bead.md`, they win. That covers its
-three-level patterns in Phase 3 and its "SCOPE TBD" children.
+**Decomposition rules.** These bind the Plan step and the DECOMPOSE subagent,
+and win over `decompose-bead.md`, its Phase 3 three-level patterns and
+"SCOPE TBD" children included.
 
-1. At most two levels: root plus leaves. Every new bead's parent is the root.
-   No container children, and no "SCOPE TBD" children. Every leaf meets
-   decompose-bead.md's leaf criteria and is completable by one agent.
+1. At most two levels: every new bead's parent is the root, with no container
+   or "SCOPE TBD" children. Every leaf meets decompose-bead.md's leaf
+   criteria and is completable by one agent.
 2. No prose gates. A gate is a `bd dep add` on a bead in this repo, or a
    defer date, or it is dropped. A blocker is never only a note.
-3. No open design forks in a leaf. Pick the option and record why in the
-   leaf's design. The exception is a fork the drafting pass's *Refuse rather
-   than guess* list covers. Do not pick that one. Instead, make it its own
-   leaf, titled `Decide: <question>`, whose description names the maintainer
-   as the decider and lists the options. Then `bd dep add` every leaf it
-   gates on that decision leaf.
+3. No open design forks in a leaf. Use a design ruling that covers the fork;
+   otherwise pick the option and record why in the leaf's design field. An
+   unruled fork on the *Refuse rather than guess* list is not picked: it
+   becomes its own leaf, `Decide: <question>`, whose description names the
+   maintainer as decider and lists the options, and every leaf it gates gets
+   a `bd dep add` on it.
 4. Leaves cite files by path as of decomposition; analysis re-verifies each
    path exists before writing Implementation Context.
 5. Children that already exist were written by the work's commissioner. Adopt
-   them as the starting hierarchy. Do not create a bead that duplicates an
-   existing child's scope. Add siblings under the root for scope nothing
-   covers. You may update an existing child's description, design and
-   acceptance so they agree with the approved design, but not its title.
-   Never close or delete an existing child. If one is redundant, record that
-   in the root's notes for the maintainer. An existing child that already has
-   children is adopted as it stands. It goes in the block with Type
-   `container`, and each of its children gets a row whose Parent is that
-   child. Record it in the root's notes for the maintainer, since rule 1 would
-   not have created it.
-6. An oversized existing child is narrowed, not split. Shrink its description
+   them as the starting hierarchy, create nothing that duplicates one's
+   scope, and add siblings under the root for scope nothing covers. You may
+   update an existing child's description, design and acceptance to agree
+   with the approved design, but not its title; never close or delete one,
+   and record a redundant one in the decomposition Decisions block. One with
+   children of its own is adopted as it stands, recorded there too: Type
+   `container` in the block, and a row per child whose Parent is that child.
+6. An oversized existing child is narrowed, not split: shrink its description
    to one leaf's worth, add sibling leaves under the root for the rest, and
-   record the narrowing in the root's notes. Splitting it into grandchildren
-   would make it a container, which rule 1 forbids: containers never close,
-   and the sweep skips them.
+   record it in the decomposition Decisions block. Grandchildren would make it
+   a container, which rule 1 forbids: containers never close, and the sweep
+   skips them.
 
 **Plan.** For a root routed here:
 
 1. Run `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts sizing-check <id>`
    (prints `{needs_decomposition, reasons[]}`) and `bd children <id> --json`.
-   The root is a **single-bead root** when `needs_decomposition` is false and
-   it has no children. A root with children is decomposed whatever the sizing
+   It is a **single-bead root** when `needs_decomposition` is false and it
+   has no children. A root with children is decomposed whatever the sizing
    check says.
-2. Plan the hierarchy yourself, not in a subagent. Apply decompose-bead.md
-   Phases 2–3 under the decomposition rules. Write the block to
+2. Plan the hierarchy yourself, not in a subagent: decompose-bead.md
+   Phases 2–3 under the decomposition rules. Write to
    `<session-scratchpad>/<id>-hierarchy.md`:
 
    ```
@@ -437,31 +490,21 @@ three-level patterns in Phase 3 and its "SCOPE TBD" children.
    | <exact title> | task | <root-id> | <titles or ids, or —> | <id, or new> |
    ```
 
-   Write one row per leaf, and include existing children with their current
-   title and id. For a single-bead root, replace the table with the line
-   `- none: sizing-check needs_decomposition=false; analysed as a single bead`.
-   The block is written in every case so the resume path always reads one.
-   Below the block, in the same file, add
-   `## Decisions made for you (decomposition)` in the drafting pass's format.
-   It records each fork picked (rule 3), each child narrowed (rule 6) or
-   judged redundant (rule 5), and the hierarchy shape chosen. Write `none` if
-   there were none.
-3. Append the block and relabel in **one** call, before any subagent runs:
-
-   ```bash
-   bd update <id> --append-notes "$(cat <session-scratchpad>/<id>-hierarchy.md)" \
-     --remove-label spec:approved --add-label spec:decomposing
-   ```
-
-   The plan is on the bead before any child exists. A subagent that is cut
-   partway then never leaves children without a recorded plan.
-4. Go to **Decompose**. For a single-bead root, go to **Analyze**.
+   One row per leaf, existing children included by current title and id. For
+   a single-bead root the table is the line
+   `- none: sizing-check needs_decomposition=false; analysed as a single bead`,
+   so Resume always reads a block. Below it in the same file goes the
+   decomposition Decisions block, `## Decisions made for you (decomposition)`
+   per *Note blocks*: the hierarchy shape chosen, and what rules 5 and 6 record.
+3. Before any subagent runs, in one call, append the file and make a state
+   write to `spec:decomposing`, so a cut subagent never leaves children
+   without a recorded plan.
+4. Go to **Decompose**; for a single-bead root, to **Analyze**.
 
 **Resume.** Read the **last** Planned hierarchy block and
-`bd children <id> --json`. Do not re-plan. If the block is the `- none` line,
-go to **Analyze**. If every row's title already matches a child of its
-parent, go to **Analyze**. Otherwise go to **Decompose** with the resume line
-added.
+`bd children <id> --json`; do not re-plan. Go to **Analyze** if the block is
+the `- none` line or every row's title matches a child of its Parent, else
+to **Decompose**.
 
 **Decompose.** Spawn the subagent with the prompt under `### Phase DECOMPOSE`,
 followed by:
@@ -478,23 +521,15 @@ followed by:
 > including its three-level patterns and its "SCOPE TBD" children:
 > <the six decomposition rules above, verbatim>.
 
-On the resume path, add: *"Create only the rows of the block whose title has
-no match under its parent. Do not re-plan."*
+**Analyze.** *Single-bead root* (the `- none` line): with an Implementation
+Context heading, go to the gate. Otherwise spawn the `### Phase ANALYZE`
+prompt with its Phase 1.5 sentence ("The bead already has children. Skip
+Phase 1.5 … Start from Phase 2") replaced by *"Skip Phase 1.5. Use
+analysis_mode = single and go to Phase 4b."*, then go to the gate.
 
-**Analyze.** Branch on the root's shape first.
-
-*Single-bead root* (the block is the `- none` line). If the root's own notes
-hold an Implementation Context heading
-(`(^|\n)#{1,6}[ \t]*Implementation Context\\b`, flag `i`), go to the gate.
-Otherwise spawn the subagent with the prompt under `### Phase ANALYZE`. In
-that prompt, replace the Phase 1.5 sentence ("The bead already has children.
-Skip Phase 1.5 … Start from Phase 2") with *"Skip Phase 1.5. Use
-analysis_mode = single and go to Phase 4b."* Then go to the gate.
-
-*Decomposed root.* List the leaves still to analyse: open beads at any depth
-under the root that have no children and no Implementation Context heading in
-their notes. The walk goes to any depth because an adopted commissioner child
-may already have children of its own; this mode never creates them.
+*Decomposed root*: list the leaves still to analyse, beads under the root that
+are not closed, have no children and have no Implementation Context heading,
+at any depth, because an adopted commissioner child may have children.
 
 ```bash
 bd list --all --limit 0 --json | jq -r --arg r <root-id> '
@@ -515,179 +550,115 @@ prompt under `### Phase ANALYZE`, followed by:
 > a second Implementation Context block to a leaf that already has one. If the root's notes already hold a `# Bead Analysis` heading, skip
 > Phase 5a.
 
-**Gate to `spec:ready`.** For a single-bead root, test the root's own notes
-for the Implementation Context heading. For a decomposed root, check two
-things:
-- every row of the last Planned hierarchy block has a title that matches a
-  child of its Parent;
-- the leaf query, re-run, prints nothing.
+**Gate to `spec:ready`.** A single-bead root passes when it has an
+Implementation Context heading; a decomposed root, when every row of the last
+Planned hierarchy block matches a child of its Parent by title and the leaf
+query, re-run, prints nothing. On a pass, make a state write to `spec:ready`,
+and if the root has no Bead Analysis heading but an ANALYZE subagent returned
+an execution-wave summary this run, append it under `# Bead Analysis` in the
+same call; otherwise append nothing, as a second block would duplicate it.
 
-If anything is missing or unanalysed, leave the root `spec:decomposing` and
-report what remains; the next run resumes it. Otherwise relabel:
+On a miss the root stays `spec:decomposing` for the next run. Count earlier
+misses with
+`bd show <id> --json | jq -r '(.[0].notes // "") | [match("(^|\n)- gate not met [0-9]{4}-[0-9]{2}-[0-9]{2}:"; "g")] | length'`,
+then in one call append `- gate not met <YYYY-MM-DD>: <what remains>`,
+preceded by a `## Decomposition gate` heading only if the root has none. If
+the count was 2, this is the third miss: the same call appends
+`## Decisions made for you (decomposition gate)` with
+`- **Q:** Finish decomposing this root? — **A:** stopped — <what never completed>`
+and makes a state write to `spec:blocked`.
 
-```bash
-bd update <id> --remove-label spec:decomposing --add-label spec:ready
-```
-
-analyze-bead Phase 5a appends `# Bead Analysis`, with its Execution Waves, to
-a decomposed root. Sometimes the root's notes have no Bead Analysis heading
-(`(^|\n)#{1,6}[ \t]*Bead Analysis\\b`, flag `i`) while an ANALYZE subagent
-ran this run and returned an execution-wave summary. In that case, write
-that summary under `# Bead Analysis` to
-`<session-scratchpad>/<id>-waves.md`, and add
-`--append-notes "$(cat <session-scratchpad>/<id>-waves.md)"` to the relabel
-call. In any other case, append nothing. A resumed run that analyses nothing
-has no summary to write, and a second block would duplicate the first.
-
-The Planned hierarchy block is what makes a cut run safe. Each step after
-it is idempotent: the title lookup skips children that exist, and the leaf
-query skips leaves already analysed. The next run therefore completes the
-root rather than duplicating it.
-
-Out of scope: dispatching workers for `spec:ready` roots.
+The Planned hierarchy block makes a cut run safe: every later step is
+idempotent (the title lookup reuses children, the leaf query skips analysed
+leaves), so the next run completes the root rather than duplicating it.
 
 ### Revise pass
 
-Takes roots the maintainer sent back with `spec:revise`, re-drafts them as
-`--reshape` does and re-advises them as `--readvise` does, under the drafting
-pass's unattended rules, and returns them as `spec:drafted` (or
-`spec:blocked`). It runs after the approved pass and before the drafting pass,
-and takes cap slots first (see Order of work). Roots are taken by priority,
-then oldest first. Take as many as the shared cap allows, and list the rest in
-the report as *not taken (cap)*:
+Re-drafts roots sent back with `spec:revise` as `--reshape` does, re-advises
+them as `--readvise` does, under the drafting pass's rules, and ends each on
+a row of *Outcome labels*. Roots run by priority, then oldest first:
 
 ```bash
 bd list --label spec:revise --no-parent --status open --limit 0 --json \
-  | jq -r 'sort_by(.priority, .created_at) | .[] | [.id, .title] | @tsv'
+  | jq -r 'sort_by(.priority, .created_at) | .[]
+      | [.id, "P\(.priority)", .created_at[0:10], (if any((.labels // [])[]; . == "needs-human") then "needs-human" else "-" end), .title] | @tsv'
 ```
 
-For each selected root, in order:
-
-**0. Check it was only drafted.** A root whose notes hold a Planned hierarchy
-heading (`(^|\n)#{1,6}[ \t]*Planned hierarchy\\b`, flag `i`) has already been
-through the approved pass. Re-drafting its fields would leave its children or
-its Implementation Context describing a different spec. Refuse it: number the
-revision as in step 2, and write only a
+**0. Check it was only drafted.** A root with a Planned hierarchy heading has
+been through the approved pass; re-drafting would leave its children or
+Implementation Context describing a different spec. Refuse it: number the
+revision (step 2) and, in one call, append only a
 `## Decisions made for you (revision N)` block whose first item is
-`- **Q:** Re-draft this root? — **A:** refused — it was already decomposed; revise its leaves or the root by hand`.
-Take the *already decomposed* row of the Write table below, which leaves its
-decomposition label alone.
+`- **Q:** Re-draft this root? — **A:** refused — it was already decomposed; revise its leaves or the root by hand`,
+with a state write to `spec:blocked`.
 
-**1. Read the note.** The maintainer's note is the text appended after the
-items of the last `Decisions made for you` block, whatever its suffix.
-`bd note` appends it on the next line, with no blank line between. It runs to
-the next heading or to the end of the notes. A maintainer writes it as plain
-text: not under a heading, and not starting with `- **`.
+**1. Read the note.** It follows the last `Decisions made for you` heading,
+whatever its suffix. If a heading there ends `revision (<YYYY-MM-DD>)`, as
+the maintainer's tooling writes it, the note is the body of the last such
+block (the date tells it from this mode's `(revision N)` headings).
+Otherwise it is plain text appended by `bd note` after the block's items,
+not under a heading and not starting `- **`. Either runs to the next heading
+or the end.
 
 ```bash
 bd show <id> --json | jq -r '
-  (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you\\b")]
+  (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you\\b"; "i")]
   | if length < 2 then "" else
-      last | split("\n") | .[1:]
-      | until(length == 0 or (.[0] | test("^[ \t]*$|^[ \t]+|^- \\*\\*|^(- )?none[ \t]*$") | not); .[1:])
-      | (map(test("^#{1,6} ")) | index(true)) as $h | (if $h then .[:$h] else . end)
+      (last | split("\n") | .[1:]) as $l
+      | ([$l | to_entries[] | select(.value | test("^#{1,6}[ \t]*[^\n]*\\brevision \\([0-9]{4}-[0-9]{2}-[0-9]{2}\\)"; "i")) | .key] | last) as $t
+      | (if $t then $l[$t + 1:] | until(length == 0 or (.[0] | test("^[ \t]*$") | not); .[1:])
+         else $l | until(length == 0 or (.[0] | test("^[ \t]*$|^[ \t]+|^- \\*\\*|^(- )?none[ \t]*$") | not); .[1:]) end)
+      | (map(test("^#{1,6}[ \t]")) | index(true)) as $h | (if $h then .[:$h] else . end)
+      | until(length == 0 or (last | test("^[ \t]*$") | not); .[:-1])
       | join("\n")
     end'
 ```
 
-The `until` skips the block's own items, which all start `- **` (see
-*Decisions made for you*), and any wrapped continuation lines. The cut that
-follows drops everything from the first later heading onwards.
+The plain-text branch skips the block's `- **` items and wrapped lines; both
+cut at the next heading, so a following Design ruling block is not the note.
+If it prints nothing, a re-draft would be a guess: refuse as in step 0, with
+`- **Q:** Re-draft this root? — **A:** refused — spec:revise with no note after the last Decisions block`.
 
-If it prints nothing, do not re-draft, because a re-draft with no instruction
-would be a guess. Refuse instead, as in step 0, with the first item
-`- **Q:** Re-draft this root? — **A:** refused — spec:revise with no note after the last Decisions block`,
-and take the *refusal, no field re-drafted* row.
-
-**2. Number the revision.** N is 1 + the count of existing
-`Decisions made for you (revision K)` headings:
-
-```bash
-bd show <id> --json | jq -r '(.[0].notes // "") | [match("(^|\n)#{1,6}[ \t]*Decisions made for you \\(revision [0-9]+\\)"; "g")] | length + 1'
-```
-
-Count the Decisions blocks, not the Advisory Review blocks: every revision
-writes a Decisions block, but a refused one writes no Advisory Review.
+**2. Number the revision.** N is 1 + the count of
+`Decisions made for you (revision K)` headings, not Advisory Review ones,
+which a refused revision does not write:
+`bd show <id> --json | jq -r '(.[0].notes // "") | [match("(^|\n)#{1,6}[ \t]*Decisions made for you \\(revision [0-9]+\\)"; "gi")] | length + 1'`.
 
 **3. Re-draft** only the fields the note affects, as `--reshape` re-runs
-DRAFT, holding each replacement in context; nothing is written until step 5.
-Every drafting-pass rule applies: the overrides above, *Refuse rather than
-guess*, and the commissioner's original reasoning stays verbatim in the
-description, without a second opening paragraph. A note that asks for a change
-on the refuse list is refused under that rule. Where the note can be partly
-addressed without it, do that part and refuse the rest.
+DRAFT, holding each in context until step 5. Every drafting-pass rule
+applies: the overrides, *Refuse rather than guess*, and the commissioner's
+reasoning kept verbatim without a second opening paragraph. A design ruling
+appended after the last Decisions block is newer than the spec: apply it. A
+note asking for a change on the refuse list is refused; where it can be
+partly addressed without that change, do that part and refuse the rest.
 
 **4. Re-advise** as `--readvise` re-runs ADVISE: the drafting pass's
 **Advise** step, with the whole revised plan given to every matched advisor.
-Skip it only when step 3 re-drafted no field. A partly addressed note still
-re-advises the part that was done.
+Skip it only when step 3 re-drafted no field.
 
-**5. Write.** Re-read the root first. If its status is no longer `open`, or it
-no longer carries `spec:revise`, write nothing and report it as
-*skipped (taken mid-run)*. Otherwise write everything in **one** `bd update`
-call: the re-drafted fields, the notes and the labels.
-
-```bash
-F=<session-scratchpad>/<id>-rev<N>
-bd update <id> --design "$(cat $F-design.md)" \
-  --append-notes "$(cat $F-notes.md)" \
-  --remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted
-```
-
-Pass `--description`, `--design` and `--acceptance` only for the fields
-re-drafted. Vary only the labels:
-
-| Outcome | Labels |
-|---|---|
-| advisors ran, none still requests changes | `--remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted` |
-| no advisor plausibly applies | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:drafted` |
-| REQUEST CHANGES persisted after the refinement | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:blocked` |
-| refusal, no field re-drafted (step 1, or all of step 3) | `--remove-label spec:revise --add-label spec:blocked` |
-| already decomposed (step 0) | `--remove-label spec:revise`, plus `--add-label spec:blocked` only if the root carries no other `spec:*` label |
-
-Drop `--add-label shaped` where description, design or acceptance is still
-empty. `advised` is removed only when a field was re-drafted, because the
-label describes the current spec. A refusal that changes nothing leaves the
-spec that cleared review in place. A step 0 root that still carries
-`spec:ready` or `spec:decomposing` keeps it and gains no `spec:blocked`, so it
-never carries two state labels. bd accepts removing a label the root does not
-carry.
-
-The notes file holds, in order:
-1. `## Advisory Review (revision N)`: one line per advisor in the Phase ADVISE
-   format, or `- none applicable — <why>`. Omit it when no field was
-   re-drafted;
-2. `## Decisions made for you (revision N)`, in the format below. Its first
-   items say how the note was addressed and, if any part was not, which part
-   and why (a refusal is that item, and comes first). Write each in the Q
-   form, for example
-   `- **Q:** How was the note addressed? — **A:** <what changed> — <why>`.
-
-Append only: never edit or remove an earlier block, and never use `--notes`.
-Readers take the **last** block of each name. Read back with
-`bd show <id> --json | jq -r '.[0].notes'`: the revision blocks follow every
-earlier block, which are unchanged.
-
-One call makes a cut run safe. Cut before it, and the root still carries
-`spec:revise` with its note last and no new block, so the next run redoes the
-revision from the same note.
+**5. Write.** Re-read the root (*Mid-run re-read*: it must still carry
+`spec:revise`), then write as the drafting pass's **Write** does, with only
+the re-drafted fields, from `<session-scratchpad>/<id>-rev<N>-*.md`. The
+notes file holds `## Advisory Review (revision N)` (omitted when no field was
+re-drafted), then `## Decisions made for you (revision N)`, whose first items
+say how the note was addressed and what was not, and why, refusal first:
+`- **Q:** How was the note addressed? — **A:** <what changed> — <why>`. Read
+back with `bd show <id> --json | jq -r '.[0].notes'`: the new blocks follow
+every earlier one, unchanged.
 
 ### Selection rule (drafting pass)
 
 This is the selection rule; amend it here and nowhere else. One criterion per
 `jq` line, so any criterion is a one-line edit. A bead is a candidate when:
 
-- it carries a label matching `office:*`;
-- it has no parent;
-- its status is `open` (not in progress, not closed);
-- it carries no `spec:*` label and no `needs-human` label;
-- its notes contain no Advisory Review heading (any level, case-insensitive —
-  a plain substring would also catch prose such as "advisory review passed");
-- none of its children is `in_progress` or `closed` (a root with started
-  children has shipped work under it; children that are all open are
-  commissioner-written and are part of the brief).
+- it carries a label matching `office:*`, has no parent, and is `open`;
+- it carries no `spec:*` label (nor `needs-human`, per *needs-human*) and has
+  no Advisory Review heading;
+- none of its children is `in_progress` or `closed` (started children mean
+  shipped work; all-open children are commissioner-written, part of the brief).
 
-Candidates are ordered by priority, then oldest first.
+Candidates are ordered by priority, then oldest first. Take as many rows not
+marked `needs-human` as *Order of work* leaves.
 
 ```bash
 bd list --all --limit 0 --json | jq -r '
@@ -696,145 +667,92 @@ bd list --all --limit 0 --json | jq -r '
   | [ .[]
       | select(.parent == null and .status == "open")
       | select(any((.labels // [])[]; startswith("office:")))
-      | select(all((.labels // [])[]; (startswith("spec:") or . == "needs-human") | not))
+      | select(all((.labels // [])[]; startswith("spec:") | not))
       | select((.notes // "") | test("(^|\n)#{1,6}[ \t]*Advisory Review\\b"; "i") | not)
       | select(.id | IN($started[]) | not)
     ]
   | sort_by(.priority, .created_at)
-  | .[] | [.id, "P\(.priority)", .created_at[0:10], .title] | @tsv'
+  | .[] | [.id, "P\(.priority)", .created_at[0:10], (if any((.labels // [])[]; . == "needs-human") then "needs-human" else "-" end), .title] | @tsv'
 ```
-
-`--limit 0` is mandatory: `bd list --json` otherwise stops at 50 rows. Do not
-use `--label-pattern` or `--label-regex`; bd 1.2.2 ignores both and returns
-every row. Take the first `2 − revised-this-run` rows; list the rest in the
-report as *not taken (cap)*.
 
 ### Drafting pass
 
-For each selected root, in order:
-
 **Draft.** Treat the bead's existing description as the brief. Keep it
 verbatim, open it with a short plain-language paragraph, and extend it with
-scope and success criteria; do not replace the commissioner's reasoning. If
-the root has children, read them (`bd children <id>`) as part of the brief:
-the design must account for them, but do not restructure them here. As in
-attended DRAFT, skip a sub-step whose field is already populated, except the
-description, which is always extended as above. Sub-step 1
-(clarify scope) is answered from the brief; sub-step 2 (visuals) is skipped
-and recorded as a decision; run sub-steps 3–7 (reference implementations,
-product context, standards, technical design, acceptance) as written.
+scope and success criteria; do not replace the commissioner's reasoning. Read
+any children (`bd children <id>`) as part of the brief: the design accounts
+for them, but does not restructure them. As in attended DRAFT, skip a
+sub-step whose field is populated, except the description. Sub-step 1 is
+answered from the brief; sub-step 2 (visuals) is skipped, and the design says
+so; sub-steps 3–7 run as written.
 
-**Refuse rather than guess** when drafting would require any of these:
+**Refuse rather than guess** when drafting would require any of these, unless
+a design ruling settles it:
 
 - changing a public URL or slug shape: anything that changes
   `src/common/routing/public-paths.ts`, `src/common/routing/reserved-segments.ts`,
   `src/site/routes.ts`, or calendar or series url-name rules (DEC-018);
 - changing federation semantics: which activities are emitted or accepted,
   their type, addressing or object shape, actor-document properties, or inbox
-  and outbox trust rules (DEC-013, DEC-014, and DEC-015 *federated report
-  routing*);
+  and outbox trust rules (DEC-013, DEC-014, DEC-015 *federated report routing*);
 - a destructive data migration: dropping or renaming a column or table, or
   deleting or irreversibly rewriting rows;
 - contradicting, amending or superseding a decision in `docs/decisions/` whose
   Status is Accepted, or any still-in-force clause of a decision, whatever its
-  file's Status. Examples: adopting an ActivityPub library (DEC-012), or using
-  `@` in public URLs (DEC-006). Decision text has override priority, so
-  changing one is the product owner's call. Proposing a brand-new DEC is not a
-  refusal; record it as a decision made.
+  file's Status, such as adopting an ActivityPub library (DEC-012) or `@` in
+  public URLs (DEC-006). Decision text has override priority, so changing one
+  is the product owner's call. Proposing a brand-new DEC is not a refusal;
+  record it under *Decisions made for you*.
 
 On a refusal, write whatever fields are complete, skip ADVISE (an Advisory
-Review block would make the bead read as advised), record the refusal as the
-first item under *Decisions made for you*, and label the root `spec:blocked`
-(labels per the Write table).
+Review block would make the bead read as advised), make the refusal the first
+*Decisions made for you* item, and end on the refusal row.
 
 **Advise.** Run Phase ADVISE as written — same discovery
 (`npx tsx .agents/skills/agent-discovery/scripts/agents.ts advisor`), same
-single Task batch, same plan template — with these differences:
+single Task batch, same plan template — except:
 
-- On APPROVE WITH CONDITIONS or REQUEST CHANGES, adjust the draft yourself
-  instead of asking, re-run only the affected advisors once, and record each
-  adjustment as a decision.
-- If no advisor plausibly applies, proceed without `advised` and record that
-  as a decision.
-- If any advisor still returns REQUEST CHANGES after the single refinement,
-  still write the fields, the Advisory Review block and the decisions block,
-  label the root `spec:blocked`, add no `advised` label, and stop on that root.
+- On APPROVE WITH CONDITIONS or REQUEST CHANGES, adjust the draft yourself,
+  re-run only the affected advisors once, and add an `- adjusted for` line.
+- If no advisor plausibly applies, proceed without `advised`.
+- If REQUEST CHANGES survives the single refinement, still write the fields
+  and both blocks, end on that row, and stop on that root.
 
-**Write.** Re-read the root first. If its status is no longer `open`, or it
-now carries a `spec:*` label, someone else has taken it during this run, for
-example a `/clear-backlog` sweep. Write nothing and report it as
-*skipped (taken mid-run)*. Otherwise, write what CONFIRM-AND-WRITE writes, with
-no approval prompt, in **one** `bd update` call carrying the fields, the notes
-and the labels:
+**Write.** Re-read the root (*Mid-run re-read*: it must carry no `spec:*`
+label), then write what CONFIRM-AND-WRITE writes, unprompted, in one call
+with the *Outcome labels*, dropping the flag of any field not written:
 
 ```bash
 F=<session-scratchpad>/<id>
 bd update <id> --description "$(cat $F-description.md)" \
   --design "$(cat $F-design.md)" --acceptance "$(cat $F-acceptance.md)" \
   --append-notes "$(cat $F-notes.md)" \
-  --add-label shaped --add-label advised --add-label spec:drafted
+  --add-label shaped --add-label advised <state write to spec:drafted>
 ```
 
-Vary only the labels, and drop the flag of any field not written:
-
-| Outcome | Labels |
-|---|---|
-| advisors ran, none still requests changes | `shaped`, `advised`, `spec:drafted` |
-| no advisor plausibly applies | `shaped`, `spec:drafted` |
-| REQUEST CHANGES persisted after the refinement | `shaped`, `spec:blocked` |
-| refusal, all three fields written | `shaped`, `spec:blocked` |
-| refusal, some field not written | `spec:blocked` |
-
-One call makes a cut run safe. Cut before it, and the root is exactly as the
-commissioner left it, so the next run re-selects it and drafts from the
-original brief without doubling the opening paragraph. Split across calls, a
-cut could leave an Advisory Review block with no `spec:*` label, and that
-root would drop out of every pass. Write each text to a file in the session
-scratchpad first, because a heredoc inside `$()` breaks on bash 3.2. Append
-notes only, with `--append-notes` or `bd note`, never `--notes`.
-
-The notes file holds, in order:
-1. references;
-2. applicable standards;
-3. `## Advisory Review`: one line per advisor in the Phase ADVISE format, or
-   `- none applicable — <why>`. Omit it on a refusal;
-4. `## Decisions made for you`.
-
-Read back with `bd show <id>` and run the CONFIRM-AND-WRITE checklist. Stop
-there: **no decomposition and no analysis in this pass**, and no children
-created.
-
-### Decisions made for you
-
-A bulleted list under `## Decisions made for you` in the root's notes. Each
-item is the question the attended command would have asked, the answer
-chosen, and one line of why:
-
-```
-- **Q:** <question attended mode would have asked> — **A:** <answer> — <why>
-```
-
-Refusals come first, in the same form:
-`- **Q:** <what was asked or attempted> — **A:** refused — <reason>`. Every
-item starts `- **Q:**`, goes on one line and is never wrapped. The revise pass
-finds the maintainer's note by skipping these lines. If the attended command
-would have asked nothing, write `none`.
+The notes file holds references, applicable standards, `## Advisory Review`
+(omitted on a refusal) and `## Decisions made for you`, in that order. A cut
+before the write leaves the root as the commissioner left it, so the next run
+drafts from the original brief without doubling the opening paragraph. Read
+back with `bd show <id>` and run the CONFIRM-AND-WRITE checklist. Stop there:
+**no decomposition and no analysis in this pass**, and no children created.
 
 ### Per-run report
 
 Write `reports/spec-plan/<YYYY-MM-DD>.md` (`$(date +%F)`) in the workspace
 (`reports/` is gitignored — verify with `git check-ignore`, and add the pattern
-if missing). If the file already exists, append a `## Run <HH:MM>` section
-rather than overwriting the earlier run's record. Contents:
+if missing), appending a `## Run <HH:MM>` section if it exists. Contents:
 
 - each root touched: id, title, pass, resulting label, advisor verdict lines,
   count of decisions made, and any refusals or errors
-- for each revise-pass root: its revision number, and whether the note was
-  fully addressed
-- for each approved-pass root: its leaf count (`1 (the root)` for a
-  single-bead root), or the leaves still unanalysed if it stays
-  `spec:decomposing`
-- the candidates **not taken (cap)**, with priority and title
+- each revise-pass root: revision number, and whether the note was fully addressed
+- each approved-pass root: its leaf count (`1 (the root)` for a single-bead
+  root), or the leaves still unanalysed if it stays `spec:decomposing`; each
+  `Decide:` leaf it created, for the maintainer to decide; and whether the
+  gate bound blocked it, with what never completed
+- the roots *skipped (taken mid-run)*, *skipped (needs-human)*, or skipped by
+  the approved pass for also carrying `spec:revise`; and those
+  **not taken (cap)**, with priority and title
 
 The report is local and gitignored, so bead IDs are allowed there — they
 remain forbidden in branches, commits, and PRs.
