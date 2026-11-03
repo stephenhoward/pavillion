@@ -543,6 +543,107 @@ root rather than duplicating it.
 
 Out of scope: dispatching workers for `spec:ready` roots.
 
+### Revise pass
+
+Takes roots the maintainer sent back with `spec:revise`, re-drafts them as
+`--reshape` does and re-advises them as `--readvise` does, under the drafting
+pass's unattended rules, and returns them as `spec:drafted` (or
+`spec:blocked`). It runs after the approved pass and before the drafting pass,
+and takes cap slots first (see Order of work). Roots are taken by priority,
+then oldest first; take the first 2 and list the rest in the report as
+*not taken (cap)*:
+
+```bash
+bd list --label spec:revise --no-parent --status open --limit 0 --json \
+  | jq -r 'sort_by(.priority, .created_at) | .[] | [.id, .title] | @tsv'
+```
+
+For each selected root, in order:
+
+**1. Read the note.** The maintainer's note is the text appended after the
+bullets of the last `Decisions made for you` block, whatever its suffix
+(`bd note` appends it on the next line, with no blank line between):
+
+```bash
+bd show <id> --json | jq -r '
+  (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you")]
+  | if length < 2 then "" else
+      last | split("\n") | .[1:]
+      | until(length == 0 or (.[0] | test("^[ \t]*$|^- \\*\\*Q:\\*\\*|^(- )?none[ \t]*$") | not); .[1:])
+      | join("\n")
+    end'
+```
+
+If it prints nothing, do not re-draft: a re-draft with no instruction would be
+a guess. Number the revision as in step 2, write only a
+`## Decisions made for you (revision N)` block whose first item is the refusal *spec:revise with no note after the last Decisions
+block*, and take the refusal row of the Write table below.
+
+**2. Number the revision.** N is 1 + the count of existing
+`Decisions made for you (revision K)` headings:
+
+```bash
+bd show <id> --json | jq -r '(.[0].notes // "") | [match("(^|\n)#{1,6}[ \t]*Decisions made for you \\(revision [0-9]+\\)"; "g")] | length + 1'
+```
+
+Count the Decisions blocks, not the Advisory Review blocks: every revision
+writes a Decisions block, but a refused one writes no Advisory Review.
+
+**3. Re-draft** only the fields the note affects, as `--reshape` re-runs
+DRAFT, holding each replacement in context; nothing is written until step 5.
+Every drafting-pass rule applies: the overrides above, *Refuse rather than
+guess*, and the commissioner's original reasoning stays verbatim in the
+description, without a second opening paragraph. A note that asks for a change
+on the refuse list is refused under that rule. Where the note can be partly
+addressed without it, do that part and refuse the rest.
+
+**4. Re-advise** as `--readvise` re-runs ADVISE: the drafting pass's
+**Advise** step, with the whole revised plan given to every matched advisor.
+Skip it on a refusal.
+
+**5. Write.** Re-read the root first. If its status is no longer `open`, or it
+no longer carries `spec:revise`, write nothing and report it as
+*skipped (taken mid-run)*. Otherwise write everything in **one** `bd update`
+call: the re-drafted fields, the notes and the labels.
+
+```bash
+F=<session-scratchpad>/<id>-rev<N>
+bd update <id> --design "$(cat $F-design.md)" \
+  --append-notes "$(cat $F-notes.md)" \
+  --remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted
+```
+
+Pass `--description`, `--design` and `--acceptance` only for the fields
+re-drafted. Vary only the labels:
+
+| Outcome | Labels |
+|---|---|
+| advisors ran, none still requests changes | `--remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted` |
+| no advisor plausibly applies | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:drafted` |
+| REQUEST CHANGES persisted after the refinement | `--remove-label spec:revise --remove-label advised --add-label spec:blocked` |
+| refusal, including no note | `--remove-label spec:revise --remove-label advised --add-label spec:blocked` |
+
+Drop `--add-label shaped` where description, design or acceptance is still
+empty. `advised` is removed on every outcome but the first because the label
+describes the current spec, which no longer cleared review. bd accepts
+removing a label the root does not carry.
+
+The notes file holds, in order:
+1. `## Advisory Review (revision N)`: one line per advisor in the Phase ADVISE
+   format, or `- none applicable — <why>`. Omit it on a refusal;
+2. `## Decisions made for you (revision N)`, in the format below. Its first
+   items say how the note was addressed and, if any part was not, which part
+   and why (a refusal is that item, and comes first).
+
+Append only: never edit or remove an earlier block, and never use `--notes`.
+Readers take the **last** block of each name. Read back with
+`bd show <id> --json | jq -r '.[0].notes'`: the revision blocks follow every
+earlier block, which are unchanged.
+
+One call makes a cut run safe. Cut before it, and the root still carries
+`spec:revise` with its note last and no new block, so the next run redoes the
+revision from the same note.
+
 ### Selection rule (drafting pass)
 
 This is the selection rule; amend it here and nowhere else. One criterion per
@@ -697,6 +798,8 @@ rather than overwriting the earlier run's record. Contents:
 
 - each root touched: id, title, pass, resulting label, advisor verdict lines,
   count of decisions made, and any refusals or errors
+- for each revise-pass root: its revision number, and whether the note was
+  fully addressed
 - for each approved-pass root: its leaf count (`1 (the root)` for a
   single-bead root), or the leaves still unanalysed if it stays
   `spec:decomposing`
