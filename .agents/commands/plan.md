@@ -315,7 +315,11 @@ untested path.
 - Write no scratchpad under `docs/.scratch/`. Hold the draft in context; any
   file a `bd` call needs goes in the session scratchpad.
 - Skip the CONFIRM-AND-WRITE approval gate, and skip the DECOMPOSE prompt and
-  ANALYZE prompt phases.
+  ANALYZE prompt phases. Step Final is replaced by the per-run report.
+- Add `advised` only when at least one advisor ran and none still requests
+  changes. When no advisor plausibly applies, the root is still
+  `spec:drafted`, but without `advised` (agent-discovery: never advance as if
+  review passed).
 - Never change a bead's status. Status `open` is part of the selection rule,
   so a claimed root would drop out of every later run.
 - Never set `spec:approved` or `spec:revise`.
@@ -330,9 +334,12 @@ untested path.
 
 ### Labels
 
+This table is the canonical state vocabulary; the passes below refer to it
+rather than restating it.
+
 | Label | Meaning | Set by |
 |---|---|---|
-| `spec:drafted` | Description, design and acceptance written; advisors reviewed. Waiting for the maintainer to approve or revise. | this mode |
+| `spec:drafted` | Description, design and acceptance written; advisors reviewed (or none applied — then without `advised`). Waiting for the maintainer to approve or revise. | this mode |
 | `spec:blocked` | An advisor still requested changes after one refinement, or drafting was refused. Waiting for the maintainer. | this mode |
 | `spec:revise` | The maintainer sent the spec back with a note in the notes field. The next run re-drafts it and returns it as `spec:drafted`. | maintainer only |
 | `spec:approved` | The maintainer approved the spec. The next run decomposes it. | maintainer only |
@@ -372,7 +379,7 @@ bd list --all --limit 0 --json | jq -r '
       | select(.parent == null and .status == "open")
       | select(any((.labels // [])[]; startswith("office:")))
       | select(all((.labels // [])[]; (startswith("spec:") or . == "needs-human") | not))
-      | select((.notes // "") | test("(^|\n)#{1,6}[ \t]*Advisory Review"; "i") | not)
+      | select((.notes // "") | test("(^|\n)#{1,6}[ \t]*Advisory Review\\b"; "i") | not)
       | select(.id | IN($started[]) | not)
     ]
   | sort_by(.priority, .created_at)
@@ -405,7 +412,8 @@ product context, standards, technical design, acceptance) as written.
   `src/site/routes.ts`, or calendar or series url-name rules (DEC-018);
 - changing federation semantics: which activities are emitted or accepted,
   their type, addressing or object shape, actor-document properties, or inbox
-  and outbox trust rules (DEC-012, DEC-013, DEC-014, DEC-015);
+  and outbox trust rules (DEC-012, DEC-013, DEC-014, and DEC-015 *federated
+  report routing*);
 - a destructive data migration: dropping or renaming a column or table, or
   deleting or irreversibly rewriting rows;
 - contradicting, amending or superseding a decision in `docs/decisions/` whose
@@ -416,8 +424,8 @@ product context, standards, technical design, acceptance) as written.
 
 On a refusal, write whatever fields are complete, skip ADVISE (an Advisory
 Review block would make the bead read as advised), record the refusal as the
-first item under *Decisions made for you*, and label the root `spec:blocked`.
-Add `shaped` only if description, design and acceptance were all written.
+first item under *Decisions made for you*, and label the root `spec:blocked`
+(labels per the Write table).
 
 **Advise.** Run Phase ADVISE as written — same discovery
 (`npx tsx .agents/skills/agent-discovery/scripts/agents.ts advisor`), same
@@ -426,36 +434,47 @@ single Task batch, same plan template — with these differences:
 - On APPROVE WITH CONDITIONS or REQUEST CHANGES, adjust the draft yourself
   instead of asking, re-run only the affected advisors once, and record each
   adjustment as a decision.
-- If no advisor plausibly applies, proceed and record that as a decision.
+- If no advisor plausibly applies, proceed without `advised` and record that
+  as a decision.
 - If any advisor still returns REQUEST CHANGES after the single refinement,
   still write the fields, the Advisory Review block and the decisions block,
   label the root `spec:blocked`, add no `advised` label, and stop on that root.
 
-**Write.** Write the fields as CONFIRM-AND-WRITE does, with no approval
-prompt. First `--description`, `--design` and `--acceptance` as separate
-`bd update` calls. Then **one** final call carries the notes and the labels
-together:
+**Write.** Write what CONFIRM-AND-WRITE writes, with no approval prompt, in
+**one** `bd update` call carrying the fields, the notes and the labels:
 
 ```bash
-# drafted
-bd update <id> --append-notes "$(cat <session-scratchpad>/<id>-notes.md)" \
+F=<session-scratchpad>/<id>
+bd update <id> --description "$(cat $F-description.md)" \
+  --design "$(cat $F-design.md)" --acceptance "$(cat $F-acceptance.md)" \
+  --append-notes "$(cat $F-notes.md)" \
   --add-label shaped --add-label advised --add-label spec:drafted
-# blocked (advisor REQUEST CHANGES persisted, or refusal with all three fields written)
-bd update <id> --append-notes "$(cat <session-scratchpad>/<id>-notes.md)" \
-  --add-label shaped --add-label spec:blocked
 ```
 
-Notes and labels share a call so a cut run is safe: cut before it, and the
-root has no Advisory Review heading and no `spec:*` label, so the next run
-re-selects it and redrafts cleanly; split across two calls, a cut between them
-would leave an Advisory Review block with no label and the root would drop out
-of every pass. Write the notes text to a file in the session scratchpad first —
-a heredoc inside `$()` breaks on bash 3.2. Append only: `--append-notes` or
-`bd note`, never `--notes`.
+Vary only the labels, and drop the flag of any field not written:
 
-The notes file holds, in order: references, applicable standards,
-`## Advisory Review` (one line per advisor in the Phase ADVISE format, omitted
-on a refusal), then `## Decisions made for you`.
+| Outcome | Labels |
+|---|---|
+| advisors ran, none still requests changes | `shaped`, `advised`, `spec:drafted` |
+| no advisor plausibly applies | `shaped`, `spec:drafted` |
+| REQUEST CHANGES persisted after the refinement | `shaped`, `spec:blocked` |
+| refusal, all three fields written | `shaped`, `spec:blocked` |
+| refusal, some field not written | `spec:blocked` |
+
+One call makes a cut run safe. Cut before it, and the root is exactly as the
+commissioner left it, so the next run re-selects it and drafts from the
+original brief without doubling the opening paragraph. Split across calls, a
+cut could leave an Advisory Review block with no `spec:*` label, and that
+root would drop out of every pass. Write each text to a file in the session
+scratchpad first, because a heredoc inside `$()` breaks on bash 3.2. Append
+notes only, with `--append-notes` or `bd note`, never `--notes`.
+
+The notes file holds, in order:
+1. references;
+2. applicable standards;
+3. `## Advisory Review`: one line per advisor in the Phase ADVISE format, or
+   `- none applicable — <why>`. Omit it on a refusal;
+4. `## Decisions made for you`.
 
 Read back with `bd show <id>` and run the CONFIRM-AND-WRITE checklist. Stop
 there: **no decomposition and no analysis in this pass**, and no children
