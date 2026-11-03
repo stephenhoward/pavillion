@@ -550,8 +550,8 @@ Takes roots the maintainer sent back with `spec:revise`, re-drafts them as
 pass's unattended rules, and returns them as `spec:drafted` (or
 `spec:blocked`). It runs after the approved pass and before the drafting pass,
 and takes cap slots first (see Order of work). Roots are taken by priority,
-then oldest first; take the first 2 and list the rest in the report as
-*not taken (cap)*:
+then oldest first. Take as many as the shared cap allows, and list the rest in
+the report as *not taken (cap)*:
 
 ```bash
 bd list --label spec:revise --no-parent --status open --limit 0 --json \
@@ -560,24 +560,37 @@ bd list --label spec:revise --no-parent --status open --limit 0 --json \
 
 For each selected root, in order:
 
+**0. Check it was only drafted.** A root whose notes hold a Planned hierarchy
+heading (`(^|\n)#{1,6}[ \t]*Planned hierarchy\\b`, flag `i`) has already been
+through the approved pass. Re-drafting its fields would orphan its children.
+Refuse it: number the revision as in step 2, and write only a
+`## Decisions made for you (revision N)` block. Its first item is the refusal
+*spec:revise on a root already decomposed*. Take the refusal row of the Write
+table below.
+
 **1. Read the note.** The maintainer's note is the text appended after the
-bullets of the last `Decisions made for you` block, whatever its suffix
-(`bd note` appends it on the next line, with no blank line between):
+bullets of the last `Decisions made for you` block, whatever its suffix.
+`bd note` appends it on the next line, with no blank line between. The note
+runs to the next heading or the end of the notes:
 
 ```bash
 bd show <id> --json | jq -r '
-  (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you")]
+  (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you\\b")]
   | if length < 2 then "" else
       last | split("\n") | .[1:]
-      | until(length == 0 or (.[0] | test("^[ \t]*$|^- \\*\\*Q:\\*\\*|^(- )?none[ \t]*$") | not); .[1:])
+      | until(length == 0 or (.[0] | test("^[ \t]*$|^[ \t]+|^- \\*\\*Q:\\*\\*|^(- )?none[ \t]*$") | not); .[1:])
+      | (map(test("^#{1,6} ")) | index(true)) as $h | (if $h then .[:$h] else . end)
       | join("\n")
     end'
 ```
 
-If it prints nothing, do not re-draft: a re-draft with no instruction would be
-a guess. Number the revision as in step 2, write only a
-`## Decisions made for you (revision N)` block whose first item is the refusal *spec:revise with no note after the last Decisions
-block*, and take the refusal row of the Write table below.
+The first `until` skips the block's own items, including any wrapped
+continuation lines. The second drops everything from the first later heading
+onwards.
+
+If it prints nothing, do not re-draft, because a re-draft with no instruction
+would be a guess. Refuse instead, as in step 0. The refusal item reads
+*spec:revise with no note after the last Decisions block*.
 
 **2. Number the revision.** N is 1 + the count of existing
 `Decisions made for you (revision K)` headings:
@@ -620,8 +633,8 @@ re-drafted. Vary only the labels:
 |---|---|
 | advisors ran, none still requests changes | `--remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted` |
 | no advisor plausibly applies | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:drafted` |
-| REQUEST CHANGES persisted after the refinement | `--remove-label spec:revise --remove-label advised --add-label spec:blocked` |
-| refusal, including no note | `--remove-label spec:revise --remove-label advised --add-label spec:blocked` |
+| REQUEST CHANGES persisted after the refinement | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:blocked` |
+| refusal (steps 0, 1 or 3) | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:blocked` |
 
 Drop `--add-label shaped` where description, design or acceptance is still
 empty. `advised` is removed on every outcome but the first because the label
@@ -786,8 +799,9 @@ chosen, and one line of why:
 - **Q:** <question attended mode would have asked> — **A:** <answer> — <why>
 ```
 
-Refusals come first. If the attended command would have asked nothing, write
-`none`.
+Refusals come first. Each item goes on one line and is never wrapped, because
+the revise pass finds the maintainer's note by skipping these lines. If the
+attended command would have asked nothing, write `none`.
 
 ### Per-run report
 
