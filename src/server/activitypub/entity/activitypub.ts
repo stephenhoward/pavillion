@@ -127,7 +127,17 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 }
 
 // messages from the calendar holder to their followers/ the public
-@Table({ tableName: 'ap_outbox'})
+// The index serves per-calendar outbox paging (readOutbox); declared here
+// so sync-built schemas match migration 0048.
+@Table({
+  tableName: 'ap_outbox',
+  indexes: [
+    {
+      fields: ['calendar_id', 'message_time'],
+      name: 'idx_ap_outbox_calendar_message_time',
+    },
+  ],
+})
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 }
 
