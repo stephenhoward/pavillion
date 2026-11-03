@@ -337,7 +337,9 @@ untested path.
 ### Labels
 
 This table is the canonical state vocabulary; the passes below refer to it
-rather than restating it.
+rather than restating it. A root carries at most one of these labels. Every
+write in this mode removes the label it leaves, and the maintainer's tooling
+is expected to swap rather than add.
 
 | Label | Meaning | Set by |
 |---|---|---|
@@ -353,8 +355,9 @@ rather than restating it.
 Each run takes three passes in this order: the **approved pass**, then the
 **revise pass**, then the **drafting pass**. The revise and drafting passes
 share a cap of **2** roots per run; revised roots run first, so they consume
-the cap first, and the drafting pass takes `2 − revised-this-run` roots. The
-approved pass has no cap.
+the cap first, and the drafting pass takes `2 − revised-this-run` roots.
+`revised-this-run` counts every revise-pass root selected, including those
+refused or *skipped (taken mid-run)*. The approved pass has no cap.
 
 ### Approved pass
 
@@ -562,35 +565,39 @@ For each selected root, in order:
 
 **0. Check it was only drafted.** A root whose notes hold a Planned hierarchy
 heading (`(^|\n)#{1,6}[ \t]*Planned hierarchy\\b`, flag `i`) has already been
-through the approved pass. Re-drafting its fields would orphan its children.
-Refuse it: number the revision as in step 2, and write only a
-`## Decisions made for you (revision N)` block. Its first item is the refusal
-*spec:revise on a root already decomposed*. Take the refusal row of the Write
-table below.
+through the approved pass. Re-drafting its fields would leave its children or
+its Implementation Context describing a different spec. Refuse it: number the
+revision as in step 2, and write only a
+`## Decisions made for you (revision N)` block whose first item is
+`- **Q:** Re-draft this root? — **A:** refused — it was already decomposed; revise its leaves or the root by hand`.
+Take the *already decomposed* row of the Write table below, which leaves its
+decomposition label alone.
 
 **1. Read the note.** The maintainer's note is the text appended after the
-bullets of the last `Decisions made for you` block, whatever its suffix.
-`bd note` appends it on the next line, with no blank line between. The note
-runs to the next heading or the end of the notes:
+items of the last `Decisions made for you` block, whatever its suffix.
+`bd note` appends it on the next line, with no blank line between. It runs to
+the next heading or to the end of the notes. A maintainer writes it as plain
+text: not under a heading, and not starting with `- **`.
 
 ```bash
 bd show <id> --json | jq -r '
   (.[0].notes // "") | [splits("(^|\n)#{1,6}[ \t]*Decisions made for you\\b")]
   | if length < 2 then "" else
       last | split("\n") | .[1:]
-      | until(length == 0 or (.[0] | test("^[ \t]*$|^[ \t]+|^- \\*\\*Q:\\*\\*|^(- )?none[ \t]*$") | not); .[1:])
+      | until(length == 0 or (.[0] | test("^[ \t]*$|^[ \t]+|^- \\*\\*|^(- )?none[ \t]*$") | not); .[1:])
       | (map(test("^#{1,6} ")) | index(true)) as $h | (if $h then .[:$h] else . end)
       | join("\n")
     end'
 ```
 
-The first `until` skips the block's own items, including any wrapped
-continuation lines. The second drops everything from the first later heading
-onwards.
+The `until` skips the block's own items, which all start `- **` (see
+*Decisions made for you*), and any wrapped continuation lines. The cut that
+follows drops everything from the first later heading onwards.
 
 If it prints nothing, do not re-draft, because a re-draft with no instruction
-would be a guess. Refuse instead, as in step 0. The refusal item reads
-*spec:revise with no note after the last Decisions block*.
+would be a guess. Refuse instead, as in step 0, with the first item
+`- **Q:** Re-draft this root? — **A:** refused — spec:revise with no note after the last Decisions block`,
+and take the *refusal, no field re-drafted* row.
 
 **2. Number the revision.** N is 1 + the count of existing
 `Decisions made for you (revision K)` headings:
@@ -612,7 +619,8 @@ addressed without it, do that part and refuse the rest.
 
 **4. Re-advise** as `--readvise` re-runs ADVISE: the drafting pass's
 **Advise** step, with the whole revised plan given to every matched advisor.
-Skip it on a refusal.
+Skip it only when step 3 re-drafted no field. A partly addressed note still
+re-advises the part that was done.
 
 **5. Write.** Re-read the root first. If its status is no longer `open`, or it
 no longer carries `spec:revise`, write nothing and report it as
@@ -634,19 +642,26 @@ re-drafted. Vary only the labels:
 | advisors ran, none still requests changes | `--remove-label spec:revise --add-label shaped --add-label advised --add-label spec:drafted` |
 | no advisor plausibly applies | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:drafted` |
 | REQUEST CHANGES persisted after the refinement | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:blocked` |
-| refusal (steps 0, 1 or 3) | `--remove-label spec:revise --remove-label advised --add-label shaped --add-label spec:blocked` |
+| refusal, no field re-drafted (step 1, or all of step 3) | `--remove-label spec:revise --add-label spec:blocked` |
+| already decomposed (step 0) | `--remove-label spec:revise`, plus `--add-label spec:blocked` only if the root carries no other `spec:*` label |
 
 Drop `--add-label shaped` where description, design or acceptance is still
-empty. `advised` is removed on every outcome but the first because the label
-describes the current spec, which no longer cleared review. bd accepts
-removing a label the root does not carry.
+empty. `advised` is removed only when a field was re-drafted, because the
+label describes the current spec. A refusal that changes nothing leaves the
+spec that cleared review in place. A step 0 root that still carries
+`spec:ready` or `spec:decomposing` keeps it and gains no `spec:blocked`, so it
+never carries two state labels. bd accepts removing a label the root does not
+carry.
 
 The notes file holds, in order:
 1. `## Advisory Review (revision N)`: one line per advisor in the Phase ADVISE
-   format, or `- none applicable — <why>`. Omit it on a refusal;
+   format, or `- none applicable — <why>`. Omit it when no field was
+   re-drafted;
 2. `## Decisions made for you (revision N)`, in the format below. Its first
    items say how the note was addressed and, if any part was not, which part
-   and why (a refusal is that item, and comes first).
+   and why (a refusal is that item, and comes first). Write each in the Q
+   form, for example
+   `- **Q:** How was the note addressed? — **A:** <what changed> — <why>`.
 
 Append only: never edit or remove an earlier block, and never use `--notes`.
 Readers take the **last** block of each name. Read back with
@@ -799,9 +814,11 @@ chosen, and one line of why:
 - **Q:** <question attended mode would have asked> — **A:** <answer> — <why>
 ```
 
-Refusals come first. Each item goes on one line and is never wrapped, because
-the revise pass finds the maintainer's note by skipping these lines. If the
-attended command would have asked nothing, write `none`.
+Refusals come first, in the same form:
+`- **Q:** <what was asked or attempted> — **A:** refused — <reason>`. Every
+item starts `- **Q:**`, goes on one line and is never wrapped. The revise pass
+finds the maintainer's note by skipping these lines. If the attended command
+would have asked nothing, write `none`.
 
 ### Per-run report
 
