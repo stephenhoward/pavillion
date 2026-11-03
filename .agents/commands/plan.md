@@ -333,7 +333,7 @@ root carries at most one of these labels; every *State write* enforces it.
 | Label | Meaning | Set by |
 |---|---|---|
 | `spec:drafted` | Description, design and acceptance written; advisors reviewed (or none applied — then without `advised`). Waiting for the maintainer to approve or revise. | this mode |
-| `spec:blocked` | Drafting or revising was refused in whole or part, an advisor still requested changes after one refinement, a revise reached an already-decomposed root, or decomposition missed its gate three times. Waiting for the maintainer, who restarts it by setting `spec:revise` with a note, never by removing the label. | this mode |
+| `spec:blocked` | Drafting or revising was refused in whole or part, an advisor still requested changes after one refinement, a revise reached an already-decomposed root, or decomposition missed its gate three times. Waiting for the maintainer, who restarts it by setting a label, never by removing one: `spec:approved` if its notes hold a Planned hierarchy heading (the approved pass resumes it), otherwise `spec:revise` with a note. | this mode |
 | `spec:revise` | The maintainer sent the spec back with a note in the notes field. The next run re-drafts it and returns it as `spec:drafted`. | maintainer only |
 | `spec:approved` | The maintainer approved the spec. The next run decomposes it. | maintainer only |
 | `spec:decomposing` | Decomposition or analysis is in progress, or was interrupted. The next run completes it rather than starting over. | this mode |
@@ -589,7 +589,7 @@ been through the approved pass; re-drafting would leave its children or
 Implementation Context describing a different spec. Refuse it: number the
 revision (step 2) and, in one call, append only a
 `## Decisions made for you (revision N)` block whose first item is
-`- **Q:** Re-draft this root? — **A:** refused — it was already decomposed; revise its leaves or the root by hand`,
+`- **Q:** Re-draft this root? — **A:** refused — it was already decomposed; edit its leaves by hand, then set spec:approved to resume`,
 with a state write to `spec:blocked`.
 
 **1. Read the note.** It follows the last `Decisions made for you` heading,
