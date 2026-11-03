@@ -391,15 +391,24 @@ three-level patterns in Phase 3 and its "SCOPE TBD" children.
 2. No prose gates. A gate is a `bd dep add` on a bead in this repo, or a
    defer date, or it is dropped. A blocker is never only a note.
 3. No open design forks in a leaf. Pick the option and record why in the
-   leaf's design.
-4. Leaves cite files by path as of decomposition.
+   leaf's design. The exception is a fork the drafting pass's *Refuse rather
+   than guess* list covers. Do not pick that one. Instead, make it its own
+   leaf, titled `Decide: <question>`, whose description names the maintainer
+   as the decider and lists the options. Then `bd dep add` every leaf it
+   gates on that decision leaf.
+4. Leaves cite files by path as of decomposition; analysis re-verifies each
+   path exists before writing Implementation Context.
 5. Children that already exist were written by the work's commissioner. Adopt
    them as the starting hierarchy. Do not create a bead that duplicates an
    existing child's scope. Add siblings under the root for scope nothing
    covers. You may update an existing child's description, design and
    acceptance so they agree with the approved design, but not its title.
    Never close or delete an existing child. If one is redundant, record that
-   in the root's notes for the maintainer.
+   in the root's notes for the maintainer. An existing child that already has
+   children is adopted as it stands. It goes in the block with Type
+   `container`, and each of its children gets a row whose Parent is that
+   child. Record it in the root's notes for the maintainer, since rule 1 would
+   not have created it.
 6. An oversized existing child is narrowed, not split. Shrink its description
    to one leaf's worth, add sibling leaves under the root for the rest, and
    record the narrowing in the root's notes. Splitting it into grandchildren
@@ -455,9 +464,9 @@ added.
 followed by:
 
 > Scheduled mode. Phase 3 is satisfied by the root's last `## Planned
-> hierarchy` block. Create exactly what it lists, then run Phases 4–8. Every
-> row is a leaf: create it with the Phase 6 template and give it the root as
-> its parent. Phase 5 creates nothing. Before each `bd create`, check for an
+> hierarchy` block. Create exactly what it lists, then run Phases 4–8. Never
+> ask; decide, and report the decision. Every new row is a leaf: create it with
+> the Phase 6 template under the Parent its row names. Phase 5 creates nothing. Before each `bd create`, check for an
 > exact title match under the parent, and reuse its id if one exists:
 > `bd children <parent> --json | jq -r --arg t "<title>" '.[] | select(.title == $t) | .id'`.
 > Phase 7 adds the block's *Depends on* column as `bd dep add`, resolving each
@@ -497,16 +506,21 @@ bd list --all --limit 0 --json | jq -r --arg r <root-id> '
 If it prints nothing, go to the gate. Otherwise spawn the subagent with the
 prompt under `### Phase ANALYZE`, followed by:
 
-> Scheduled mode. Analyse only these leaves: <ids from the query>. Do not
-> append a second Implementation Context block to a leaf that already has
-> one. If the root's notes already hold a `# Bead Analysis` heading, skip
+> Scheduled mode. Analyse only these leaves: <ids from the query>. Never ask;
+> flag issues in the report. Verify that every file path a leaf cites exists,
+> and correct it in the Implementation Context if it has moved. Do not append
+> a second Implementation Context block to a leaf that already has one. If the root's notes already hold a `# Bead Analysis` heading, skip
 > Phase 5a.
 
 **Gate to `spec:ready`.** For a single-bead root, test the root's own notes
-for the Implementation Context heading. For a decomposed root, re-run the
-leaf query. If anything is still unanalysed, leave the root
-`spec:decomposing` and report what remains; the next run resumes it.
-Otherwise relabel:
+for the Implementation Context heading. For a decomposed root, check two
+things:
+- every row of the last Planned hierarchy block has a title that matches a
+  child of its Parent;
+- the leaf query, re-run, prints nothing.
+
+If anything is missing or unanalysed, leave the root `spec:decomposing` and
+report what remains; the next run resumes it. Otherwise relabel:
 
 ```bash
 bd update <id> --remove-label spec:decomposing --add-label spec:ready
