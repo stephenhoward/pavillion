@@ -38,6 +38,11 @@ IF an epic ID is provided:
 1. Load the epic: `bd show <epic-id>`.
 2. Check that notes contain an "Epic Analysis" section.
 3. If missing, offer to run `/analyze-bead` first.
+4. If the epic carries the `spec:ready` label (set by `/plan --scheduled` when it finishes a root), release it before any implementer is dispatched:
+   ```bash
+   bd update <epic-id> --remove-label spec:ready
+   ```
+   `/clear-backlog` skips every bead whose parent carries a `spec:*` label, which holds an un-started epic together as one run. Once this run starts the hold has done its job; releasing it means any leaf still open after the run sits under a root with no `spec:*` label, so the backlog sweep picks it up through normal tiering. Releasing the label does not release the epic's `decision`-type `Decide:` leaves: they stay with the maintainer and are never dispatched (Phase 2).
 
 IF no epic ID provided:
 1. List open epics: `bd list --status=open --type=epic`.
@@ -47,8 +52,10 @@ IF no epic ID provided:
 
 ```bash
 bd show <epic-id>   # hierarchy
-bd ready            # unblocked beads
+bd ready --exclude-type decision   # unblocked beads, minus Decide: leaves
 ```
+
+`bd ready` lists `decision`-type beads by default. A `Decide:` leaf (from `/plan --scheduled`) awaits the maintainer's ruling and gates its dependents; never enrich it or dispatch an implementer on it, even when it is ready or named in `--only`. Leaves it blocks become ready only once the maintainer closes it.
 
 For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes have an `Implementation Context` heading) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
 
@@ -148,7 +155,7 @@ One bead at a time, waiting for user approval between each. Useful for debugging
 /spawn-bead-workers <epic-id> --dry-run
 ```
 
-Report the wave plan, enrichment status of each targeted bead, and the auditors you would select per bead (from the `agents auditor` candidate list). Make zero changes.
+Report the wave plan, enrichment status of each targeted bead, and the auditors you would select per bead (from the `agents auditor` candidate list). Make zero changes: if the epic carries `spec:ready`, report that a real run would remove it in Phase 1 rather than removing it.
 
 ### Resume
 
