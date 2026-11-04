@@ -1453,7 +1453,7 @@ class CalendarService {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
-      content?: Record<string, { name?: string; description?: string; imageAlt?: string }>;
+      content?: Record<string, { name?: string; description?: string; imageAlt?: string } | null>;
     },
   ): Promise<Calendar> {
     // Validate required fields
@@ -1541,6 +1541,13 @@ class CalendarService {
     if (settings.content) {
       const calendar = calendarEntity.toModel();
       for (const [language, contentData] of Object.entries(settings.content)) {
+        // A null entry is a removed translation: delete its row. A language
+        // the payload omits is never visited, so it keeps its stored row.
+        if (contentData === null) {
+          await CalendarContentEntity.destroy({ where: { calendar_id: calendarId, language } });
+          continue;
+        }
+
         // Starts from the stored row (the fetch above includes content), so the
         // two `!== undefined` guards below mean an omitted name or description
         // keeps its stored value.

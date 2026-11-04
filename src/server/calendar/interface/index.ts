@@ -732,7 +732,7 @@ export default class CalendarInterface {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
-      content?: Record<string, { name?: string; description?: string; imageAlt?: string }>;
+      content?: Record<string, { name?: string; description?: string; imageAlt?: string } | null>;
     },
   ): Promise<Calendar> {
     return this.calendarService.updateCalendarSettings(account, calendarId, settings);

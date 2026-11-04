@@ -132,4 +132,41 @@ describe('CalendarSettings — language removal wiring', () => {
 
     wrapper.unmount();
   });
+
+  it('sends the removed language as null on the next save, leaving the other language intact', async () => {
+    const calendar = createBilingualCalendar();
+
+    vi.spyOn(CalendarService.prototype, 'getCalendarById').mockResolvedValue(calendar);
+    vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+      status: 'not_covered',
+      features: { widget_embedding: false },
+    } as never);
+    vi.spyOn(Config, 'init').mockResolvedValue({
+      settings: () => ({ siteTitle: 'Test Instance' }),
+    } as never);
+    const updateSpy = vi.spyOn(CalendarService.prototype, 'updateCalendarSettings')
+      .mockResolvedValue(calendar);
+
+    const wrapper = mountSettings();
+    await flushPromises();
+
+    await wrapper.find('.remove-translation-link').trigger('click');
+    await flushPromises();
+
+    // The title input saves on blur; after the removal it shows the
+    // surviving language.
+    await wrapper.find('input.setting-input').trigger('blur');
+    await flushPromises();
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    const [calendarId, settings] = updateSpy.mock.calls[0];
+    expect(calendarId).toBe('calendar-123');
+    expect(settings.content).toHaveProperty('en', null);
+    expect(settings.content?.es).toMatchObject({
+      name: 'Mi Calendario',
+      description: 'Un calendario',
+    });
+
+    wrapper.unmount();
+  });
 });

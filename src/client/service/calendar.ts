@@ -400,6 +400,9 @@ export default class CalendarService {
    * all must therefore send `imageAlt` for every language it sends, or it
    * erases alt text it never meant to touch.
    *
+   * A `null` entry deletes that language's stored translation; a language
+   * left out of `content` is not touched.
+   *
    * @param calendarId The ID of the calendar
    * @param settings The settings to update
    * @returns Promise<Calendar> The updated calendar
@@ -409,7 +412,7 @@ export default class CalendarService {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
-      content?: Record<string, { name?: string; description?: string; imageAlt?: string }>;
+      content?: Record<string, { name?: string; description?: string; imageAlt?: string } | null>;
     },
   ): Promise<Calendar> {
     try {

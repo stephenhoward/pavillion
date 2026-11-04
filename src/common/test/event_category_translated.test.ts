@@ -200,3 +200,59 @@ describe('EventCategoryModel', () => {
     expect(category.isValid()).toBe(false);
   });
 });
+
+describe('EventCategory dropped-language tombstones', () => {
+  test('serializes a dropped language as null so the server deletes it', () => {
+    const category = new EventCategory('cat-123', 'cal-456');
+    category.addContent(new EventCategoryContent('en', 'Meeting'));
+    category.addContent(new EventCategoryContent('fr', 'Réunion'));
+
+    category.dropContent('fr');
+
+    const obj = category.toObject();
+    expect(obj.content).toHaveProperty('fr', null);
+    expect(obj.content.en.name).toBe('Meeting');
+  });
+
+  test('emits no tombstone for a category that has not been saved yet', () => {
+    const category = new EventCategory('', 'cal-456');
+    category.addContent(new EventCategoryContent('en', 'Meeting'));
+    category.addContent(new EventCategoryContent('fr', 'Réunion'));
+
+    category.dropContent('fr');
+
+    expect(category.toObject().content).not.toHaveProperty('fr');
+  });
+
+  test('clears the tombstone when the language is added back with addContent', () => {
+    const category = new EventCategory('cat-123', 'cal-456');
+    category.addContent(new EventCategoryContent('fr', 'Réunion'));
+    category.dropContent('fr');
+
+    category.addContent(new EventCategoryContent('fr', 'Rencontre'));
+
+    expect(category.toObject().content.fr.name).toBe('Rencontre');
+  });
+
+  test('clears the tombstone when the language is re-created through content()', () => {
+    const category = new EventCategory('cat-123', 'cal-456');
+    category.addContent(new EventCategoryContent('fr', 'Réunion'));
+    category.dropContent('fr');
+
+    category.content('fr').name = 'Rencontre';
+
+    expect(category.toObject().content.fr.name).toBe('Rencontre');
+  });
+
+  test('round-trips a tombstone to a category without that language', () => {
+    const category = new EventCategory('cat-123', 'cal-456');
+    category.addContent(new EventCategoryContent('en', 'Meeting'));
+    category.addContent(new EventCategoryContent('fr', 'Réunion'));
+    category.dropContent('fr');
+
+    const restored = EventCategory.fromObject(category.toObject());
+
+    expect(restored.getLanguages()).toEqual(['en']);
+    expect(restored.toObject().content).not.toHaveProperty('fr');
+  });
+});
