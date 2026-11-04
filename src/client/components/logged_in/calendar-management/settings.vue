@@ -476,19 +476,23 @@ const loadSettings = async () => {
  * choice — which is the absence of alt text, not a stored flag — persist,
  * and it is also why a partial payload would silently destroy alt text.
  *
+ * The map starts from the model's `toObject()` so that a translation removed
+ * in this session arrives as a `null` entry, which tells the server to delete
+ * that language's row; without it the row would survive and return on reload.
+ *
  * @param {object} options - How the payload should treat alt text
  * @param {boolean} options.dropImageAlt - Send an empty description in every
  *   language, for the save that removes the image being described. The working
  *   model is left alone so that a failed request changes nothing.
- * @returns {Record<string, { name: string; description: string; imageAlt: string }>}
- *   Content keyed by language code
+ * @returns {Record<string, { name: string; description: string; imageAlt: string } | null>}
+ *   Content keyed by language code; `null` for a removed language
  */
 const buildContentPayload = ({ dropImageAlt = false } = {}) => {
-  const contentPayload: Record<string, { name: string; description: string; imageAlt: string }> = {};
+  const contentPayload: Record<string, { name: string; description: string; imageAlt: string } | null> = {};
   if (localCalendar.value) {
-    for (const lang of localCalendar.value.getLanguages()) {
-      const c = localCalendar.value.content(lang);
-      contentPayload[lang] = {
+    const content: Record<string, Record<string, string> | null> = localCalendar.value.toObject().content;
+    for (const [lang, c] of Object.entries(content)) {
+      contentPayload[lang] = c === null ? null : {
         name: c.name,
         description: c.description,
         imageAlt: dropImageAlt ? '' : c.imageAlt,

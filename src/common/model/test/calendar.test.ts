@@ -177,3 +177,59 @@ describe('Calendar Model', () => {
     });
   });
 });
+
+describe('Calendar dropped-language tombstones', () => {
+  it('serializes a dropped language as null so the server deletes it', () => {
+    const calendar = new Calendar('cal-1', 'my-calendar');
+    calendar.addContent(new CalendarContent('en', 'Community Events'));
+    calendar.addContent(new CalendarContent('fr', 'Événements communautaires'));
+
+    calendar.dropContent('fr');
+
+    const obj = calendar.toObject();
+    expect(obj.content).toHaveProperty('fr', null);
+    expect(obj.content.en.name).toBe('Community Events');
+  });
+
+  it('emits no tombstone for a calendar that has not been saved yet', () => {
+    const calendar = new Calendar('', 'my-calendar');
+    calendar.addContent(new CalendarContent('en', 'Community Events'));
+    calendar.addContent(new CalendarContent('fr', 'Événements communautaires'));
+
+    calendar.dropContent('fr');
+
+    expect(calendar.toObject().content).not.toHaveProperty('fr');
+  });
+
+  it('clears the tombstone when the language is added back with addContent', () => {
+    const calendar = new Calendar('cal-1', 'my-calendar');
+    calendar.addContent(new CalendarContent('fr', 'Événements communautaires'));
+    calendar.dropContent('fr');
+
+    calendar.addContent(new CalendarContent('fr', 'Événements'));
+
+    expect(calendar.toObject().content.fr.name).toBe('Événements');
+  });
+
+  it('clears the tombstone when the language is re-created through content()', () => {
+    const calendar = new Calendar('cal-1', 'my-calendar');
+    calendar.addContent(new CalendarContent('fr', 'Événements communautaires'));
+    calendar.dropContent('fr');
+
+    calendar.content('fr').name = 'Événements';
+
+    expect(calendar.toObject().content.fr.name).toBe('Événements');
+  });
+
+  it('round-trips a tombstone to a calendar without that language', () => {
+    const calendar = new Calendar('cal-1', 'my-calendar');
+    calendar.addContent(new CalendarContent('en', 'Community Events'));
+    calendar.addContent(new CalendarContent('fr', 'Événements communautaires'));
+    calendar.dropContent('fr');
+
+    const restored = Calendar.fromObject(calendar.toObject());
+
+    expect(restored.getLanguages()).toEqual(['en']);
+    expect(restored.toObject().content).not.toHaveProperty('fr');
+  });
+});

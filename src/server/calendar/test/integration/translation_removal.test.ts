@@ -9,10 +9,13 @@ import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import { EventSeriesContentEntity } from '@/server/calendar/entity/event_series_content';
 import { EventContentEntity } from '@/server/calendar/entity/event';
+import { CalendarContentEntity } from '@/server/calendar/entity/calendar';
+import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 /**
- * Integration tests for removing a translation from a series or an event.
+ * Integration tests for removing a translation from a series, an event, a
+ * calendar's settings, or a category.
  *
  * The editor removes a language with `dropContent`, and the model serializes
  * that removal as a `null` entry in the content map. The update endpoints
@@ -30,6 +33,7 @@ describe('Removing a translation (integration)', () => {
   let testCalendar: Calendar;
   let eventBus: EventEmitter;
   let seriesCounter = 0;
+  let calendarCounter = 0;
 
   const nextUrlName = () => `series-drop-${++seriesCounter}`;
 
@@ -136,6 +140,94 @@ describe('Removing a translation (integration)', () => {
       expect(reloaded.getLanguages().sort()).toEqual(['en', 'fr']);
       expect(reloaded.content('en').name).toBe('Concert 2026');
       expect(reloaded.content('fr').name).toBe('Concert du soir');
+    });
+  });
+
+  describe('calendar', () => {
+    const createBilingualCalendar = async () => {
+      const calendar = await calendarInterface.createCalendar(testAccount, `translationremovalcal${++calendarCounter}`);
+      return calendarInterface.updateCalendarSettings(testAccount, calendar.id, {
+        content: {
+          en: { name: 'Community Events', description: 'Events near you', imageAlt: '' },
+          fr: { name: 'Événements communautaires', description: 'Événements près de chez vous', imageAlt: '' },
+        },
+      });
+    };
+
+    it('deletes the stored row for a language dropped from the calendar', async () => {
+      const created = await createBilingualCalendar();
+
+      const edited = (await calendarInterface.getCalendar(created.id))!;
+      edited.dropContent('fr');
+      const updated = await calendarInterface.updateCalendarSettings(testAccount, created.id, {
+        content: edited.toObject().content,
+      });
+
+      expect(updated.getLanguages()).toEqual(['en']);
+      expect(await CalendarContentEntity.findOne({ where: { calendar_id: created.id, language: 'fr' } })).toBeNull();
+
+      const reloaded = (await calendarInterface.getCalendar(created.id))!;
+      expect(reloaded.getLanguages()).toEqual(['en']);
+      expect(reloaded.content('en').name).toBe('Community Events');
+    });
+
+    it('leaves a language that the payload omits untouched', async () => {
+      const created = await createBilingualCalendar();
+
+      await calendarInterface.updateCalendarSettings(testAccount, created.id, {
+        content: { en: { name: 'Community Events 2026', imageAlt: '' } },
+      });
+
+      const reloaded = (await calendarInterface.getCalendar(created.id))!;
+      expect(reloaded.getLanguages().sort()).toEqual(['en', 'fr']);
+      expect(reloaded.content('en').name).toBe('Community Events 2026');
+      expect(reloaded.content('fr').name).toBe('Événements communautaires');
+    });
+  });
+
+  describe('category', () => {
+    let categoryCounter = 0;
+
+    // Category names are unique per calendar and language, so each test gets
+    // its own pair. The interface declares a single-language shape, but the
+    // service it forwards to takes the same content map the API does.
+    const createBilingualCategory = () => {
+      const n = ++categoryCounter;
+      return calendarInterface.createCategory(testAccount, testCalendar.id, {
+        content: {
+          en: { name: `Music ${n}` },
+          fr: { name: `Musique ${n}` },
+        },
+      } as any);
+    };
+
+    it('deletes the stored row for a language dropped from the category', async () => {
+      const created = await createBilingualCategory();
+      expect(created.getLanguages().sort()).toEqual(['en', 'fr']);
+
+      const edited = await calendarInterface.getCategory(created.id, testCalendar.id);
+      edited.dropContent('fr');
+      const updated = await calendarInterface.updateCategory(testAccount, created.id, edited.toObject(), testCalendar.id);
+
+      expect(updated.getLanguages()).toEqual(['en']);
+      expect(await EventCategoryContentEntity.findOne({ where: { category_id: created.id, language: 'fr' } })).toBeNull();
+
+      const reloaded = await calendarInterface.getCategory(created.id, testCalendar.id);
+      expect(reloaded.getLanguages()).toEqual(['en']);
+      expect(reloaded.content('en').name).toBe(created.content('en').name);
+    });
+
+    it('leaves a language that the payload omits untouched', async () => {
+      const created = await createBilingualCategory();
+
+      await calendarInterface.updateCategory(testAccount, created.id, {
+        content: { en: { name: `Live ${created.content('en').name}` } },
+      }, testCalendar.id);
+
+      const reloaded = await calendarInterface.getCategory(created.id, testCalendar.id);
+      expect(reloaded.getLanguages().sort()).toEqual(['en', 'fr']);
+      expect(reloaded.content('en').name).toBe(`Live ${created.content('en').name}`);
+      expect(reloaded.content('fr').name).toBe(created.content('fr').name);
     });
   });
 });
