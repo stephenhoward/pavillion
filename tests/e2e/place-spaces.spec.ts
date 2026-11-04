@@ -90,7 +90,7 @@ async function createPlace(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /^save$/i }).click();
 
   // After save, edit-place.vue navigates to /calendar/<cal>?tab=places.
-  await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}**`, { timeout: 15000 });
+  await page.waitForURL(new RegExp(`/calendar/${ADMIN_CALENDAR}\\?tab=places$`), { timeout: 15000 });
 }
 
 /**
@@ -314,7 +314,7 @@ test.describe('Place + Spaces full scenario', () => {
     // step 3's location picker would not see any Spaces (the server never
     // received them).
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}**`, { timeout: 15000 });
+    await page.waitForURL(new RegExp(`/calendar/${ADMIN_CALENDAR}\\?tab=places$`), { timeout: 15000 });
 
     // 3. Create an event picking the Pacific Room space entry.
     const eventId = await createEventWithLocation(
@@ -438,7 +438,7 @@ test.describe('Place + Spaces full scenario', () => {
 
     // 3. Single Save action commits Place + both Spaces atomically.
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}**`, { timeout: 15000 });
+    await page.waitForURL(new RegExp(`/calendar/${ADMIN_CALENDAR}\\?tab=places$`), { timeout: 15000 });
 
     // 4. Verify the Place is persisted by re-opening it; the Spaces list
     //    should show both server-persisted rows WITHOUT the (new) affordance
@@ -509,7 +509,7 @@ test.describe('Place + Spaces full scenario', () => {
     await stageSpaceInline(page, SOURCE_SPACE);
     await stageSpaceInline(page, TARGET_SPACE);
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}**`, { timeout: 15000 });
+    await page.waitForURL(new RegExp(`/calendar/${ADMIN_CALENDAR}\\?tab=places$`), { timeout: 15000 });
 
     // 2. Create two events that both pick (PLACE, SOURCE_SPACE).
     const sourceHeader = `${PLACE} — ${SOURCE_SPACE}`;
@@ -553,7 +553,7 @@ test.describe('Place + Spaces full scenario', () => {
     // 5. Save the parent Place form. The post-save reassign loop fires the
     //    server-side bulk reassign for the deleted Space's events.
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL(`**/calendar/${ADMIN_CALENDAR}**`, { timeout: 15000 });
+    await page.waitForURL(new RegExp(`/calendar/${ADMIN_CALENDAR}\\?tab=places$`), { timeout: 15000 });
 
     // 6. Re-open the Place and confirm:
     //    - source Space row is gone from the persisted spaces list

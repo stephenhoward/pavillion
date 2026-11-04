@@ -93,8 +93,8 @@ print_error() {
 configure_locale() {
   if locale 2>&1 | grep -q "Cannot set LC_"; then
     print_step "Configuring locale"
-    apt-get update -qq
-    apt-get install -y -qq locales > /dev/null
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq locales > /dev/null
     sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
     locale-gen > /dev/null 2>&1
     update-locale LANG=en_US.UTF-8
@@ -245,8 +245,8 @@ EOF
 configure_firewall() {
   print_step "Step 3: Configuring UFW firewall"
 
-  apt-get update -qq
-  apt-get install -y -qq ufw > /dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw > /dev/null
 
   # Set defaults
   ufw default deny incoming > /dev/null
@@ -284,8 +284,8 @@ install_docker() {
   fi
 
   # Install prerequisites
-  apt-get update -qq
-  apt-get install -y -qq ca-certificates curl gnupg git > /dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg git > /dev/null
 
   # Add Docker's official GPG key
   install -m 0755 -d /etc/apt/keyrings
@@ -303,8 +303,8 @@ install_docker() {
     tee /etc/apt/sources.list.d/docker.list > /dev/null
 
   # Install Docker
-  apt-get update -qq
-  apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null
 
   # Enable and start Docker
   systemctl enable docker > /dev/null 2>&1
@@ -370,7 +370,7 @@ create_runtime_directories() {
 install_webhook() {
   print_step "Step 7: Installing webhook listener (staging mode)"
 
-  apt-get install -y -qq webhook > /dev/null
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq webhook > /dev/null
   print_success "Installed webhook"
 
   # Create systemd service
@@ -451,7 +451,13 @@ run_deploy() {
     compose_profiles="COMPOSE_PROFILES=standalone "
   fi
 
-  su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ${compose_profiles}./bin/deploy.sh --non-interactive --domain=${DOMAIN}"
+  # Checked explicitly: run_deploy is called on the left of `||`, where set -e
+  # does not apply, so an unchecked failure here would fall through to the
+  # success line below.
+  if ! su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ${compose_profiles}./bin/deploy.sh --non-interactive --domain=${DOMAIN}"; then
+    print_error "bin/deploy.sh failed."
+    return 1
+  fi
   print_success "Deploy script completed"
 
   # Persist COMPOSE_PROFILES to .env so future docker compose calls (operator
@@ -545,13 +551,28 @@ print_summary() {
   echo -e "${YELLOW}From now on, connect as:${NC}"
   echo -e "${YELLOW}  ssh ${DEPLOY_USER}@${server_ip}${NC}"
   echo ""
+  if [ "$STANDALONE_MODE" = true ]; then
+    echo -e "${BOLD}Pavillion is running.${NC} The app containers are up and the bundled"
+    echo "Caddy proxy is fetching a TLS certificate for ${DOMAIN}."
+  else
+    echo -e "${BOLD}Pavillion is running${NC} on 127.0.0.1:3000. No proxy was installed"
+    echo "(no --standalone): point your own reverse proxy at 127.0.0.1:3000 first."
+  fi
+  echo ""
   echo -e "${BOLD}Next steps:${NC}"
   echo ""
-  echo "  1. Back up your secrets to a password manager"
-  echo "     ssh ${DEPLOY_USER}@${server_ip} 'cat ${APP_DIR}/.env'"
+  echo "  1. Open https://${DOMAIN} in a browser. The first load may take a few"
+  echo "     seconds while the TLS certificate is issued."
   echo ""
-  echo "  2. Start Pavillion:"
-  echo "     ssh ${DEPLOY_USER}@${server_ip} 'cd ${APP_DIR} && docker compose up -d'"
+  echo "  2. Read the setup token the page asks for:"
+  echo "     ssh ${DEPLOY_USER}@${server_ip}"
+  echo "     cd ${APP_DIR} && docker compose logs app | grep \"Setup token\""
+  echo ""
+  echo "  3. Back up these files off the server — losing them means losing your"
+  echo "     federation identity:"
+  echo "     ${APP_DIR}/.env"
+  echo "     ${APP_DIR}/secrets/"
+  echo "     ${APP_DIR}/config/local.yaml"
   echo ""
 
   if [ "$STAGING_MODE" = true ] && [ -n "${WEBHOOK_SECRET:-}" ]; then
@@ -602,7 +623,12 @@ main() {
   # /opt/pavillion/backups bind-mount target as root.
   clone_repo || print_warning "Clone had errors — see above. Complete manually if needed."
   create_runtime_directories
-  run_deploy || print_warning "Deploy had errors — see above. Complete manually if needed."
+  # A failed deploy ends provisioning: the summary below says the app is
+  # running, which would not be true.
+  if ! run_deploy; then
+    print_warning "Deploy had errors — see above. Complete manually if needed."
+    exit 1
+  fi
 
   if [ "$STAGING_MODE" = true ]; then
     configure_staging || print_warning "Staging configuration had errors — see above."
@@ -611,4 +637,9 @@ main() {
   print_summary
 }
 
-main "$@"
+# Run main only when executed (including when piped to `bash -s`), not when
+# sourced — bin/test/provision_test.sh sources this file to test main() with
+# every host-changing step stubbed.
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+  main "$@"
+fi

@@ -3,7 +3,7 @@
  *
  * Exports:
  *   CLI helpers: bdState, bdSizingCheck, bdEnrichmentCheck
- *   Pure helpers: classifyBeadState, classifySizing
+ *   Pure helpers: classifyBeadState, classifySizing, notesHaveHeading
  *
  * Operator-facing flow: .agents/skills/bead-state-assessment/SKILL.md
  */
@@ -20,6 +20,39 @@ export interface StateVerdict {
 export interface SizingVerdict {
   needs_decomposition: boolean;
   reasons: string[];
+}
+
+// =============================================================================
+// Notes heading test (pure)
+// =============================================================================
+
+/**
+ * The body of the NOTES section of `bd show` text: the lines after a `NOTES`
+ * line, up to the next unindented all-caps section header.
+ */
+function notesSection(content: string): string[] {
+  const lines = content.split('\n');
+  const start = lines.findIndex(l => l.trimEnd() === 'NOTES');
+  if (start === -1) return [];
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^[A-Z][A-Z ]+$/.test(line.trimEnd())) break;
+    body.push(line);
+  }
+  return body;
+}
+
+/**
+ * True when the NOTES section has a markdown heading of any level whose text
+ * starts with `phrase` at a word boundary, case-insensitively — the same rule
+ * as plan-scheduled's `hasHeading`. `bd show` indents notes, so leading
+ * whitespace is allowed. A mention in the description, design or notes prose
+ * never matches.
+ */
+export function notesHaveHeading(content: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const heading = new RegExp(`^[ \\t]*#{1,6}[ \\t]*${escaped}\\b`, 'i');
+  return notesSection(content).some(l => heading.test(l));
 }
 
 // =============================================================================
@@ -64,13 +97,13 @@ export function classifyBeadState(content: string): StateVerdict {
   const hasChildBead = (): boolean =>
     lines.some(l => /^\s+↳ /.test(l));
 
-  // Notes contain "Implementation Context"
+  // Notes have an "Implementation Context" heading — written by analyze-bead
   const hasImplContext = (): boolean =>
-    content.includes('Implementation Context');
+    notesHaveHeading(content, 'Implementation Context');
 
-  // Notes contain "Advisory Review" — written by /plan's ADVISE phase
+  // Notes have an "Advisory Review" heading — written by /plan's ADVISE phase
   const hasAdvisoryReview = (): boolean =>
-    content.includes('Advisory Review');
+    notesHaveHeading(content, 'Advisory Review');
 
   const reasons: string[] = [];
 
@@ -261,7 +294,7 @@ export function bdSizingCheck(beadId: string, deps: SpawnDeps = {}): SizingVerdi
 // =============================================================================
 
 /**
- * Check if a bead's notes contain "Implementation Context".
+ * Check if a bead's notes have an "Implementation Context" heading.
  * Returns true if enriched.
  */
 export function bdEnrichmentCheck(beadId: string, deps: SpawnDeps = {}): boolean {
@@ -270,6 +303,6 @@ export function bdEnrichmentCheck(beadId: string, deps: SpawnDeps = {}): boolean
 
   if (result.exitCode !== 0) return false;
 
-  return result.stdout.includes('Implementation Context');
+  return notesHaveHeading(result.stdout, 'Implementation Context');
 }
 

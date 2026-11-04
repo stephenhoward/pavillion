@@ -57,7 +57,7 @@ bd ready --exclude-type decision   # unblocked beads, minus Decide: leaves
 
 `bd ready` lists `decision`-type beads by default. A `Decide:` leaf (from `/plan --scheduled`) awaits the maintainer's ruling and gates its dependents; never enrich it or dispatch an implementer on it, even when it is ready or named in `--only`. Leaves it blocks become ready only once the maintainer closes it.
 
-For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
+For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes have an `Implementation Context` heading) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
 
 **Enrichment gate (REFUSE to start if any targeted bead lacks Implementation Context).** If any ready or user-selected bead is unenriched:
 

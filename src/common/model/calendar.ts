@@ -81,10 +81,13 @@ class Calendar extends TranslatedModel<CalendarContent> {
       defaultEventImage: this.defaultEventImage?.toObject() ?? null,
       // Owner/admin-tier field: public endpoints must strip via toPublicCalendarObject (or omit from allow-list projection).
       listed: this.listed,
-      content: Object.fromEntries(
-        Object.entries(this._content)
-          .map(([language, strings]: [string, CalendarContent]) => [language, strings.toObject()]),
-      ),
+      content: {
+        ...this.droppedContentTombstones(),
+        ...Object.fromEntries(
+          Object.entries(this._content)
+            .map(([language, strings]: [string, CalendarContent]) => [language, strings.toObject()]),
+        ),
+      },
     };
   };
 

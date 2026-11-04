@@ -60,15 +60,16 @@ function makeSiteConfig(opts?: { instanceDescription?: Record<string, string>; s
  *
  * This fixture is load-bearing, not decoration. discovery.vue builds its tile
  * targets as strings, so no route table can change what the component emits —
- * but a <RouterLink> whose target matches nothing here resolves to an empty
- * `matched`, which is exactly the production failure (SPA-internal navigation
- * renders chrome with no content). Importing the table rather than copying it
- * is what keeps that check honest as the locale alternation grows. Deliberately
- * carries no catch-all, so an unroutable tile target cannot be absorbed by a
- * 404 route that app.ts does not ship either.
+ * but a <RouterLink> whose target no page shape claims resolves to the
+ * not-found catch-all, so a broken tile would send a visitor to the not-found
+ * view instead of the calendar. Importing the table rather than copying it is
+ * what keeps that check honest as the locale alternation grows. The not-found
+ * view gets its own stub so a tile target the catch-all absorbs is told apart
+ * from one a page shape matches.
  */
 function buildRouter() {
   const CalendarStub = { template: '<div class="calendar-stub" />' };
+  const NotFoundStub = { template: '<div class="not-found-stub" />' };
   return createRouter({
     history: createMemoryHistory(),
     routes: buildSiteRoutes({
@@ -77,6 +78,7 @@ function buildRouter() {
       event: CalendarStub,
       instance: CalendarStub,
       series: CalendarStub,
+      notFound: NotFoundStub,
     }),
   });
 }
@@ -351,8 +353,11 @@ describe('discovery.vue - five behavioral states', () => {
     // useLocale.localizedPath() should prefix the route with /es because the
     // visitor is on a non-default-locale URL.
     expect(tile.attributes('href')).toBe('/es/alpha');
-    // ...and that prefixed path must be routable too, not just well-shaped.
-    expect(router.resolve('/es/alpha').matched).not.toHaveLength(0);
+    // ...and that prefixed path must reach the calendar page too, not just be
+    // well-shaped — the prefixed catch-all would otherwise absorb it.
+    const resolved = router.resolve('/es/alpha');
+    expect(resolved.matched.at(-1)?.path).toMatch(/\/:calendar$/);
+    expect(resolved.params.calendar).toBe('alpha');
   });
 
   /**
@@ -361,10 +366,9 @@ describe('discovery.vue - five behavioral states', () => {
    * Most stale links in the public site are plain <a :href>, so a full page
    * load reaches the server and follows its redirect. The discovery tiles are
    * <RouterLink>s: navigation stays inside the SPA, the server never sees it,
-   * and a target the site router cannot match renders the page chrome with no
-   * content. This asserts every emitted tile target actually resolves against
-   * the shipped route shape — it fails on any path prefix the router dropped,
-   * not just the one that broke here.
+   * and a target no page shape matches lands on the not-found view. This
+   * asserts every emitted tile target resolves to the calendar route — it fails
+   * on any path prefix the router dropped, not just the one that broke here.
    */
   it('emits tile targets that the site router can resolve', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(
@@ -393,11 +397,9 @@ describe('discovery.vue - five behavioral states', () => {
 
     for (const target of targets) {
       expect(target).toBeDefined();
-      const resolved = router.resolve(target!);
-      // An unroutable target resolves with an empty `matched` rather than
-      // throwing, so the emptiness check is the assertion that matters.
-      expect(resolved.matched).not.toHaveLength(0);
-      expect(resolved.name).toBe('calendar');
+      // An unroutable target resolves to the not-found catch-all rather than
+      // throwing, so the route name is the assertion that matters.
+      expect(router.resolve(target!).name).toBe('calendar');
     }
 
     expect(targets).toEqual(['/alpha', '/beta']);

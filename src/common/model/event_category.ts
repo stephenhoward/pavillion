@@ -53,10 +53,13 @@ export class EventCategory extends TranslatedModel<EventCategoryContent> {
       id: this.id,
       calendarId: this.calendarId,
       eventCount: this.eventCount,
-      content: Object.fromEntries(
-        Object.entries(this._content)
-          .map(([language, content]: [string, EventCategoryContent]) => [language, content.toObject()]),
-      ),
+      content: {
+        ...this.droppedContentTombstones(),
+        ...Object.fromEntries(
+          Object.entries(this._content)
+            .map(([language, content]: [string, EventCategoryContent]) => [language, content.toObject()]),
+        ),
+      },
     };
   }
 

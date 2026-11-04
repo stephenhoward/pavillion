@@ -220,6 +220,13 @@ test.describe('Category Translation Management', () => {
     const saveButton = page.getByRole('button', { name: /save changes/i });
     await saveButton.click();
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
+
+    // Reopen the same category: the editor is seeded from the saved category
+    // the server returned, so a translation the save failed to delete would
+    // reappear here.
+    await editButton.click();
+    await page.waitForSelector('dialog[open]', { timeout: 5000 });
+    await expect(page.locator('dialog[open] input[type="text"]')).toHaveCount(fieldsAfter);
   });
 
   test('should cancel edit without saving changes', async ({ page }) => {

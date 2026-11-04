@@ -17,6 +17,7 @@ import {
   InvalidSeriesUrlNameError,
   SeriesEventCalendarMismatchError,
 } from '@/common/exceptions/series';
+import { ValidationError } from '@/common/exceptions/base';
 import db from '@/server/common/entity/db';
 
 describe('SeriesService', () => {
@@ -232,6 +233,59 @@ describe('SeriesService', () => {
       await seriesService.createSeries(testAccount, 'calendar-123', seriesData);
 
       expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should persist a supplied focal point and zoom', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
+      const saveStub = sandbox.stub(EventSeriesEntity.prototype, 'save');
+
+      const series = await seriesService.createSeries(testAccount, 'calendar-123', {
+        urlName: 'myseries',
+        mediaFocalPointX: 0.2,
+        mediaFocalPointY: 0.8,
+        mediaZoom: 2.5,
+      });
+
+      const saved = saveStub.firstCall.thisValue as EventSeriesEntity;
+      expect(saved.media_focal_point_x).toBe(0.2);
+      expect(saved.media_focal_point_y).toBe(0.8);
+      expect(saved.media_zoom).toBe(2.5);
+      expect(series.mediaFocalPointX).toBe(0.2);
+      expect(series.mediaFocalPointY).toBe(0.8);
+      expect(series.mediaZoom).toBe(2.5);
+    });
+
+    it('should fall back to the column defaults when no focal point or zoom is supplied', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
+      const saveStub = sandbox.stub(EventSeriesEntity.prototype, 'save');
+
+      await seriesService.createSeries(testAccount, 'calendar-123', { urlName: 'myseries' });
+
+      const saved = saveStub.firstCall.thisValue as EventSeriesEntity;
+      expect(saved.media_focal_point_x).toBe(0.5);
+      expect(saved.media_focal_point_y).toBe(0.5);
+      expect(saved.media_zoom).toBe(1.0);
+    });
+
+    it('should reject an out-of-range focal point before any lookup or write', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      const findOneStub = sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
+      const saveStub = sandbox.stub(EventSeriesEntity.prototype, 'save');
+
+      await expect(
+        seriesService.createSeries(testAccount, 'calendar-123', { urlName: 'myseries', mediaFocalPointX: 1.5 }),
+      ).rejects.toThrow(ValidationError);
+
+      expect(findOneStub.called).toBe(false);
+      expect(saveStub.called).toBe(false);
     });
   });
 
@@ -536,6 +590,115 @@ describe('SeriesService', () => {
       await seriesService.updateSeries(testAccount, 'series-123', { mediaId: null });
 
       expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should persist focal point and zoom when no mediaId is supplied', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+      getStub.onSecondCall().resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      const updateStub = sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      await seriesService.updateSeries(testAccount, 'series-123', {
+        mediaFocalPointX: 0.25,
+        mediaFocalPointY: 0.75,
+        mediaZoom: 1.5,
+      });
+
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.firstCall.args[0]).toEqual({
+        media_focal_point_x: 0.25,
+        media_focal_point_y: 0.75,
+        media_zoom: 1.5,
+      });
+      expect(updateStub.firstCall.args[1]).toEqual({ where: { id: 'series-123' } });
+    });
+
+    it('should write mediaId and the transform in a single update', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+      getStub.onSecondCall().resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+      mockMediaInterface.getMediaById.resolves(new Media('media-456', 'calendar-123', 'abc', 'file.jpg', 'image/jpeg', 1000));
+
+      const updateStub = sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      await seriesService.updateSeries(testAccount, 'series-123', {
+        mediaId: 'media-456',
+        mediaFocalPointX: 0.1,
+        mediaFocalPointY: 0.9,
+        mediaZoom: 3,
+      });
+
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.firstCall.args[0]).toEqual({
+        media_id: 'media-456',
+        media_focal_point_x: 0.1,
+        media_focal_point_y: 0.9,
+        media_zoom: 3,
+      });
+    });
+
+    it('should clear media without resetting the transform when mediaId is null', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      mockSeries.mediaId = 'media-456';
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+      getStub.onSecondCall().resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      const updateStub = sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      await seriesService.updateSeries(testAccount, 'series-123', { mediaId: null });
+
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.firstCall.args[0]).toEqual({ media_id: null });
+    });
+
+    it('should reject an out-of-range zoom without writing', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      const updateStub = sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      await expect(
+        seriesService.updateSeries(testAccount, 'series-123', { mediaZoom: 0.5 }),
+      ).rejects.toThrow(ValidationError);
+
+      expect(updateStub.called).toBe(false);
+    });
+
+    it('should not touch the series row for a content-only update', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+      getStub.onSecondCall().resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      const mockContentEntity = EventSeriesContentEntity.build({
+        series_id: 'series-123',
+        language: 'en',
+        name: 'Old Name',
+      });
+      sandbox.stub(EventSeriesContentEntity, 'findOne').resolves(mockContentEntity);
+      sandbox.stub(mockContentEntity, 'save').resolves(mockContentEntity);
+      const updateStub = sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      await seriesService.updateSeries(testAccount, 'series-123', {
+        content: { en: { name: 'New Name' } },
+      });
+
+      expect(updateStub.called).toBe(false);
     });
   });
 

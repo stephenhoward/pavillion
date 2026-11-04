@@ -133,6 +133,7 @@ describe('reserved route segments', () => {
         event: StubComponent,
         instance: StubComponent,
         series: StubComponent,
+        notFound: StubComponent,
       })
         .map(route => topLevelSegment(route.path))
         .filter((segment): segment is string => segment !== null),

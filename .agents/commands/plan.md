@@ -171,7 +171,7 @@ bd create --title="[Feature Title]" --type=task --priority=2 --silent
 bd update <id> --description="<from scratchpad>"
 bd update <id> --design="<from scratchpad>"
 bd update <id> --acceptance="<from scratchpad>"
-bd update <id> --append-notes="<references + standards + Advisory Review section>"
+bd update <id> --append-notes="<references + standards + ## Advisory Review heading and verdict lines>"
 
 # Apply labels
 bd update <id> --add-label shaped
@@ -305,9 +305,9 @@ whole mode — its `spec:*` label state machine (`spec:drafted`,
 contract and the refuse-rather-than-guess list — is the
 [`plan-scheduled`](../skills/plan-scheduled/SKILL.md) skill. Load it and
 follow it; the phases above apply only as that skill says. Its selections
-and heading tests are `.agents/skills/plan-scheduled/scripts/spec.ts`, not
-`bead.ts state`. Refuse `--scheduled` combined with a bead id, `--until`,
-`--reshape` or `--readvise`.
+and heading tests are `.agents/skills/plan-scheduled/scripts/spec.ts`, which
+applies the same notes-heading rule as `bead.ts state`. Refuse `--scheduled`
+combined with a bead id, `--until`, `--reshape` or `--readvise`.
 
 ## Tips
 

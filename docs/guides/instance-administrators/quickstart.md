@@ -68,15 +68,22 @@ Either path writes the same files: a `.env` file (your secrets, mode 600), a `se
 
 The first time a browser hits your instance, it gets redirected to `/setup`. This page only exists when the database has no admin accounts yet — once you create the first one, the route returns 404 forever.
 
-Until that first account exists, anyone who reaches your domain can load the setup page — so it asks for a setup token, which only someone who can read your server's logs has. Pavillion generates the token each time it starts and writes it to the app log. On the server, from the Pavillion directory (`/opt/pavillion` if you used the provisioning script):
+The setup page opens on a language step: pick your instance's default language and click <Btn>Continue</Btn>. The form that follows asks for:
+
+- **Setup Token** — proof that you can read the server's logs; how to find it is below.
+- **An email address and a password**, with the password typed a second time to confirm it. These become the admin account.
+- **Site Title** — the name shown in the header and the browser tab.
+- **Registration Mode** — how new people get accounts. It defaults to **Invitation**, where any user can invite others; you can change it later.
+
+Until that first account exists, anyone who reaches your domain can load the setup page — which is why it asks for a setup token. Pavillion generates the token each time it starts and writes it to the app log. On the server, from the Pavillion directory (`/opt/pavillion` if you used the provisioning script):
 
 ```bash
-docker compose logs app | grep "Setup token"
+docker compose logs app | grep "Setup token" | tail -1
 ```
 
-Copy the 32-character token into the **Setup Token** field. The token lives only in memory: restarting the app issues a new one and the old one stops working, so if the page rejects a token, check the log again and use the most recent line. Once setup completes, the token is retired.
+The log keeps a line for every start, and the last one is the newest. Copy its 32-character token into the **Setup Token** field. The token lives only in memory: restarting the app issues a new one and the old one stops working, so if the page rejects a token, run the command again. Once setup completes, the token is retired.
 
-Then pick an email address you actually read and a strong password. The setup page creates an account with admin role; sign in with it on the next screen and you land on the dashboard.
+Click <Btn>Complete Setup</Btn>, then <Btn>Continue to Sign In</Btn>. Sign in with the email and password you just chose and you land on **Calendar**.
 
 ::: tip <Lightbulb /> A note on the first email address.
 Use a mailbox you check daily. Password resets, account applications, and moderation and federation-incident notifications go there.
@@ -88,8 +95,8 @@ The one-event smoke test confirms the app is wired end-to-end — database write
 
 After you sign in, Pavillion opens on **Calendar**. With no calendar on the account yet, that page is a single prompt — *Create your first calendar* — with a <Btn>Create Your Calendar</Btn> button. From there:
 
-1. Create a calendar. Pick a short, durable handle — see [Customize your calendar's identity](/guides/calendar-owners/identity) for the longer version of why. A throwaway calendar named `test` is fine for the smoke test; you can delete it later.
-2. Publish one event. Any title, any future date. Save it.
+1. Create a calendar. The **Calendar Name** field is its handle, so pick something short and durable — see [Customize your calendar's identity](/guides/calendar-owners/identity) for the longer version of why. A throwaway calendar named `test` is fine for the smoke test; you can delete it later.
+2. Publish one event. Any title, dated within the next seven days, because the public page opens on the coming two weeks. Click <Btn>Save Changes</Btn>.
 3. Open the calendar's public URL: `https://your-domain/<handle>`. Confirm the event renders, the page loads cleanly, and the link in the address bar is the `https://` version with a valid certificate.
 
 If the public page renders, the app, database, reverse proxy, and TLS are all working. If the page is blank, blocked, or the cert is invalid, stop here — fix the basics before going further. The [Troubleshooting](./troubleshooting) guide has the diagnostic loop.

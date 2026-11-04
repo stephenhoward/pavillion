@@ -154,6 +154,96 @@ describe('classifyBeadState', () => {
     const result = classifyBeadState(content);
     expect(result.state).toBe('complete');
   });
+
+  describe('notes heading detection', () => {
+    const shaped = [
+      '○ pv-abc1 [TASK] · My Bead   [● P1 · OPEN]',
+      '',
+      'DESCRIPTION',
+      '',
+      '  Fix how the Advisory Review and Implementation Context blocks are read.',
+      '',
+      'DESIGN',
+      '',
+      '  Design mentions ## Advisory Review and # Implementation Context inline.',
+      '',
+      'ACCEPTANCE CRITERIA',
+      '',
+      '  - AC1',
+    ];
+
+    it('stays shaped when the phrases appear only outside the notes', () => {
+      const result = classifyBeadState(shaped.join('\n'));
+      expect(result.state).toBe('shaped');
+      expect(result.missing_phases).toContain('advised');
+      expect(result.missing_phases).toContain('analyzed');
+    });
+
+    it('ignores the phrases in notes prose that is not a heading', () => {
+      const content = [
+        ...shaped,
+        '',
+        'NOTES',
+        '',
+        '  Advisory Review passed; Implementation Context to follow.',
+      ].join('\n');
+      const result = classifyBeadState(content);
+      expect(result.state).toBe('shaped');
+    });
+
+    it('detects an indented Advisory Review heading as bd show renders it', () => {
+      const content = [
+        ...shaped,
+        '',
+        'NOTES',
+        '',
+        '  ## Advisory Review                                ',
+        '  - complexity-advisor: APPROVE',
+      ].join('\n');
+      const result = classifyBeadState(content);
+      expect(result.state).toBe('advised');
+      expect(result.missing_phases).not.toContain('advised');
+    });
+
+    it('detects a suffixed, differently cased Advisory Review heading', () => {
+      const content = [...shaped, '', 'NOTES', '', '  ### advisory review (revision 2)'].join('\n');
+      expect(classifyBeadState(content).state).toBe('advised');
+    });
+
+    it('does not match a heading that only starts with the phrase mid-word', () => {
+      const content = [...shaped, '', 'NOTES', '', '  ## Advisory Reviewers'].join('\n');
+      expect(classifyBeadState(content).state).toBe('shaped');
+    });
+
+    it('detects a level-1 Implementation Context heading', () => {
+      const content = [
+        ...shaped,
+        '',
+        'NOTES',
+        '',
+        '  # Implementation Context (2026-10-30)',
+        '  Files: src/foo.ts',
+      ].join('\n');
+      const result = classifyBeadState(content);
+      expect(result.state).toBe('analyzed');
+      expect(result.missing_phases).not.toContain('analyzed');
+    });
+
+    it('stops reading notes at the next section header', () => {
+      const content = [
+        ...shaped,
+        '',
+        'NOTES',
+        '',
+        '  Nothing yet.',
+        '',
+        'COMMENTS',
+        '',
+        '## Advisory Review',
+      ].join('\n');
+      expect(classifyBeadState(content).state).toBe('shaped');
+    });
+  });
 });
 
 // =============================================================================
@@ -272,11 +362,18 @@ describe('bdSizingCheck', () => {
 // =============================================================================
 
 describe('bdEnrichmentCheck', () => {
-  it('returns true when notes contain Implementation Context', () => {
+  it('returns true when notes contain an Implementation Context heading', () => {
     const spawn = seqSpawn(
-      fakeSpawn('Some content\n## Implementation Context\nDetails here'),
+      fakeSpawn('Some content\n\nNOTES\n\n  # Implementation Context\n  Details here'),
     );
     expect(bdEnrichmentCheck('pv-abc1', { spawnFn: spawn as never })).toBe(true);
+  });
+
+  it('returns false when Implementation Context appears only in the description', () => {
+    const spawn = seqSpawn(
+      fakeSpawn('DESCRIPTION\n\n  ## Implementation Context is missing here\n\nNOTES\n\n  None yet.'),
+    );
+    expect(bdEnrichmentCheck('pv-abc1', { spawnFn: spawn as never })).toBe(false);
   });
 
   it('returns false when notes do not contain Implementation Context', () => {
