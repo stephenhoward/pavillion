@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 import config from 'config';
-import { Op } from 'sequelize';
+import { Op, literal } from 'sequelize';
 
 import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from "@/common/model/calendar";
@@ -422,7 +422,9 @@ export default class ActivityPubService {
   /**
    * Retrieve paginated outbox messages for a calendar.
    * Returns only public activity types (Create, Announce, Update, Delete) that
-   * were successfully processed.
+   * were successfully processed, minus any Announce this calendar has since
+   * undone — otherwise a peer backfilling the outbox would show a repost the
+   * calendar withdrew.
    *
    * @param calendarId - The calendar ID to query
    * @param cursor - Optional ISO 8601 timestamp cursor for paging (exclusive upper bound)
@@ -437,30 +439,32 @@ export default class ActivityPubService {
     // short-circuited by the receiver (ProcessInboxService.processCreateEvent),
     // so serving the paired Note here cannot create a duplicate feed event.
     const publicTypes = ['Create', 'Announce', 'Update', 'Delete'];
-    const where: Record<string, any> = {
+    const baseWhere: Record<string, any> = {
       calendar_id: calendarId,
       type: publicTypes,
       processed_status: 'ok',
+      // Any recorded Undo withdraws its target, whatever its delivery status.
+      // Every outbox row is our own activity, and UndoActivity always takes
+      // the id `{targetId}/undo`, so the matching Undo is a primary-key probe
+      // per candidate row: the cost follows the page, not the calendar's
+      // Undo history.
+      [Op.and]: [
+        literal(`NOT EXISTS (SELECT 1 FROM ap_outbox undo_row WHERE undo_row.id = "ActivityPubOutboxMessageEntity"."id" || '/undo' AND undo_row.type = 'Undo')`),
+      ],
     };
 
+    const pageWhere: Record<string, any> = { ...baseWhere };
     if (cursor) {
-      const { Op } = await import('sequelize');
-      where.message_time = { [Op.lt]: cursor };
+      pageWhere.message_time = { [Op.lt]: cursor };
     }
 
     const [items, totalItems] = await Promise.all([
       ActivityPubOutboxMessageEntity.findAll({
-        where,
+        where: pageWhere,
         order: [['message_time', 'DESC']],
         limit,
       }),
-      ActivityPubOutboxMessageEntity.count({
-        where: {
-          calendar_id: calendarId,
-          type: publicTypes,
-          processed_status: 'ok',
-        },
-      }),
+      ActivityPubOutboxMessageEntity.count({ where: baseWhere }),
     ]);
 
     return { items, totalItems };
