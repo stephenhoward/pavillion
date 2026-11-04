@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
 
 const { mockLogError } = vi.hoisted(() => ({ mockLogError: vi.fn() }));
 
@@ -10,10 +11,7 @@ vi.mock('@/server/common/helper/error-logger', () => ({
   logError: mockLogError,
 }));
 
-import ActivityPubDomain, {
-  INBOX_DRAIN_INTERVAL_MS,
-  INBOX_DRAIN_SKIP_NEWER_THAN_MS,
-} from '@/server/activitypub';
+import ActivityPubDomain, { INBOX_DRAIN_SKIP_NEWER_THAN_MS } from '@/server/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
@@ -53,6 +51,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void; reject: (err
   return { promise, resolve, reject };
 }
 
+const INBOX_DRAIN_INTERVAL_MS = config.get<number>('activitypub.inboxDrain.intervalMs');
+
 describe('ActivityPubDomain inbox drain', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
@@ -84,6 +84,19 @@ describe('ActivityPubDomain inbox drain', () => {
     expect(drainStub.firstCall.args[0]?.skipNewerThanMs).toBeUndefined();
   });
 
+  it('does not tick before the configured interval elapses', async () => {
+    stopDrain = domain.startInboxDrain();
+    await settleDrain(domain);
+
+    await vi.advanceTimersByTimeAsync(INBOX_DRAIN_INTERVAL_MS - 1);
+    await settleDrain(domain);
+    expect(drainStub.callCount).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settleDrain(domain);
+    expect(drainStub.callCount).toBe(2);
+  });
+
   it('drains on every interval tick with the skip window', async () => {
     stopDrain = domain.startInboxDrain();
     await settleDrain(domain);
@@ -93,7 +106,7 @@ describe('ActivityPubDomain inbox drain', () => {
     await vi.advanceTimersByTimeAsync(INBOX_DRAIN_INTERVAL_MS);
     await settleDrain(domain);
 
-    expect(INBOX_DRAIN_INTERVAL_MS).toBe(5_000);
+    expect(INBOX_DRAIN_INTERVAL_MS).toBe(30_000);
     expect(drainStub.callCount).toBe(3);
     expect(drainStub.secondCall.args[0]).toEqual({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS });
     expect(drainStub.thirdCall.args[0]).toEqual({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS });

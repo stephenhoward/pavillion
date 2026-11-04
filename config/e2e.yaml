@@ -32,3 +32,9 @@ housekeeping:
   monitoring:
     metrics:
       enabled: false
+
+# Matches the federation lane's drain tick. The single-instance lane never
+# writes backfill rows, so this only keeps the two e2e configs consistent.
+activitypub:
+  inboxDrain:
+    intervalMs: 5000

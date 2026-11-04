@@ -69,3 +69,10 @@ media:
     - '.jpg'
     - '.jpeg'
     - '.heic'
+
+# Inbox drain tick (default 30s). The only e2e lane that exercises the drain
+# is the federation lane; its backfill budget (BACKFILL_DRAIN_MS in
+# tests/e2e/federation/follow-backfill.spec.ts) assumes a 5s tick.
+activitypub:
+  inboxDrain:
+    intervalMs: 5000
