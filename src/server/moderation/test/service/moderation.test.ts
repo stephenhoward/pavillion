@@ -1044,6 +1044,24 @@ describe('ModerationService', () => {
 
         expect(saveStub.calledOnce, 'expired reports no longer occupy the cap').toBe(true);
       });
+
+      it('holds the cap when reports from one instance arrive concurrently', async () => {
+        // On PostgreSQL inbox handlers dispatch concurrently, so a burst of
+        // Flags must not all read the count before any of them is saved.
+        const attempts = MAX_PER_INSTANCE + 3;
+        const results = await Promise.allSettled(
+          Array.from({ length: attempts }, (_, i) => fedService.receiveRemoteReport(remoteReport({
+            forwardedReportId: `https://remote.example/flags/burst-${i}`,
+          }))),
+        );
+
+        expect(filedReports).toHaveLength(MAX_PER_INSTANCE);
+        const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+        expect(rejected).toHaveLength(attempts - MAX_PER_INSTANCE);
+        for (const r of rejected) {
+          expect(r.reason).toBeInstanceOf(FederatedReportRateLimitError);
+        }
+      });
     });
   });
 
