@@ -40,6 +40,12 @@ npx tsx .agents/tools/upgrade-dependencies.ts annotate <pr> <ruling-file> <file>
 
 - `dashboard` (read-only) reads issue #561.
   - `queue`: what to tick, in order, as `{key, peers}`.
+  - `deskFirst`: unticked majors kept out of `queue`, as `{key, packages,
+    reason}`. A package is desk-first when it matches the `automerge: false`
+    rule's `matchPackageNames` in `.github/renovate-config.json` (globs and
+    `/regex/` as Renovate reads them) or is `express`, `express-rate-limit`,
+    `he` or `pg-boss`. A queue entry whose coupled peer is desk-first moves
+    here too.
   - `candidates`: every unticked Pending Approval item with its `packages`
     (`runtime`, `dev`, `types`, `action`, `docker` or `unknown`), `tier`,
     `importFiles`, `releasedAt`, `demands` and `waitsFor`.
@@ -66,7 +72,8 @@ npx tsx .agents/tools/upgrade-dependencies.ts annotate <pr> <ruling-file> <file>
     number. External statuses (not GitHub Actions) cannot be re-run, so a
     PR failing only those classifies without one.
 - `tick` changes one `- [ ]` to `- [x]` and nothing else. It refuses bulk
-  boxes, absent or already-ticked keys, and non-`renovate/*` keys.
+  boxes, absent or already-ticked keys, non-`renovate/*` keys, and
+  desk-first keys.
 - `renovate` dispatches `renovate.yaml` and blocks until that run completes
   or the timeout passes. The default timeout of 15 minutes is longer than
   the Bash tool's limit, so run it in the background.

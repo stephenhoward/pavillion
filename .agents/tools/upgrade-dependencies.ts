@@ -18,9 +18,9 @@ import { annotate, dashboard, prepareWorktree, prs, tick, triggerRenovate } from
 
 const USAGE = `usage: upgrade-dependencies.ts <command>
 
-  dashboard                         admission queue, candidates, ticked keys awaiting Renovate, already-applied keys
+  dashboard                         admission queue, desk-first majors, candidates, ticked keys awaiting Renovate, already-applied keys
   prs                               open major renovate/* PRs (not security), classified from commits and CI
-  tick <key>                        tick exactly one approve-branch checkbox on the dashboard
+  tick <key>                        tick exactly one approve-branch checkbox on the dashboard (never a desk-first key)
   renovate [minutes]                dispatch renovate.yaml and wait for that run (default 15 minutes)
   worktree <branch>                 check a renovate/* branch out in .agents/worktrees/upgrade-dependencies and npm ci
   annotate <pr> <ruling-file> <f>…  append "## Migration made on your behalf" to the PR body
