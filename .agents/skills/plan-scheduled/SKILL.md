@@ -48,9 +48,6 @@ CONFIRM-AND-WRITE, DECOMPOSE, ANALYZE) apply as written, except:
   or `spec:revise`. Never add `needs-human` or call
   `.agents/tools/bead.ts escalate`; where agent-discovery would escalate a
   persistent REQUEST CHANGES, this mode blocks the root.
-- Route on `spec.ts inspect`, never on `bead.ts state` or
-  `enrichment-check`: both match "Advisory Review" and "Implementation
-  Context" as substrings anywhere in `bd show`, description included.
 
 ## Tooling
 
