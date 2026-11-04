@@ -50,7 +50,7 @@ bd show <epic-id>   # hierarchy
 bd ready            # unblocked beads
 ```
 
-For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes contain `Implementation Context`) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
+For each ready leaf bead, run `bd show <bead-id>` and sort into **enriched** (notes have an `Implementation Context` heading) vs. **unenriched** (missing). The deterministic check is `npx tsx .agents/skills/bead-state-assessment/scripts/bead.ts enrichment-check <bead-id>` — exit 0 means enriched, exit 1 means not.
 
 **Enrichment gate (REFUSE to start if any targeted bead lacks Implementation Context).** If any ready or user-selected bead is unenriched:
 

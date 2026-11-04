@@ -32,9 +32,9 @@ not document-structure signals.
 |---|---|
 | `unshaped` | DESCRIPTION is missing, empty, or the bead lacks one of DESIGN / ACCEPTANCE CRITERIA sections. This is a raw idea, not yet ready for any review. |
 | `shaped` | DESCRIPTION is present and non-empty, AND the bead has both DESIGN and ACCEPTANCE CRITERIA sections. Advisors can meaningfully review it. |
-| `advised` | The bead's notes contain "Advisory Review". `/plan`'s ADVISE phase has run advisors over the shaped fields and recorded a verdict line per advisor. The bead has cleared the pre-code review bar. |
+| `advised` | The bead's notes have an "Advisory Review" heading (see [Heading test](#heading-test)). `/plan`'s ADVISE phase has run advisors over the shaped fields and recorded a verdict line per advisor. The bead has cleared the pre-code review bar. |
 | `decomposed` | The bead has a CHILDREN section listing at least one child bead. Epics live here once they have leaves. |
-| `analyzed` | The bead's notes contain "Implementation Context". `/analyze-bead` has enriched the notes with files to modify, relevant tests, skills to apply, standards to follow, and acceptance criteria. An implementer can now be dispatched. |
+| `analyzed` | The bead's notes have an "Implementation Context" heading (see [Heading test](#heading-test)). `/analyze-bead` has enriched the notes with files to modify, relevant tests, skills to apply, standards to follow, and acceptance criteria. An implementer can now be dispatched. |
 | `executing` | Bead's status is IN_PROGRESS. Work is underway. |
 | `complete` | Bead's status is CLOSED. Work is done. |
 
@@ -124,11 +124,21 @@ progresses shaped → advised → decomposed for each cohort.
 
 ### `bead.ts enrichment-check <bead-id>`
 
-Exits 0 (and prints `{"enriched": true}`) if the bead's notes contain
-"Implementation Context", exits 1 otherwise. Implementer subagents use this
+Exits 0 (and prints `{"enriched": true}`) if the bead's notes have an
+"Implementation Context" heading, exits 1 otherwise. Implementer subagents use this
 as a pre-flight assertion per the `implementer-prompt-template` skill's
 refusal protocol. Keeping it separate from `state` means the implementer
 refusal check is a simple exit code, not a JSON parse.
+
+### Heading test
+
+`advised` and `analyzed` (and `enrichment-check`) read only the NOTES section
+of `bd show`, and only its markdown headings: a heading of any level whose
+text starts with the phrase at a word boundary, case-insensitively —
+`## Advisory Review`, `### advisory review (revision 2)` and
+`# Implementation Context (2026-10-30)` all match. A mention in the
+description, design or notes prose never does. This is the same rule as
+`plan-scheduled`'s `spec.ts` heading test.
 
 ### `bead.ts sizing-check <bead-id>`
 
