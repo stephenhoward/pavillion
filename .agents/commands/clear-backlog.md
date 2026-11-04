@@ -31,8 +31,9 @@ human-in-loop work. Do not force them through this command.
 - `--scheduled` — unattended weekly mode. Implies `--include-b`; asks no
   questions and never waits on a human (anything that would have been a
   confirmation or a "needs your decision" prompt goes into the report
-  instead); runs the **queue gate** before dispatching anything and writes the
-  per-run **report file** — see "Scheduled mode" below. Mutually exclusive
+  instead); runs the **queue gate** before dispatching anything, ships at most
+  **5 Tier-A PRs**, and writes the per-run **report file** as it goes — see
+  "Scheduled mode" below. Mutually exclusive
   with `--confirm`. The queue gate runs ONLY in this mode: a manual
   invocation (any other argument combination) never checks the queue.
 - `--bead-ids <id>[,<id>...]` — skip selection/triage; run exactly these beads
@@ -208,6 +209,10 @@ Dispatch one **lightweight implementer** subagent per surviving Tier A bead.
   conflict at merge time. Serial is safer; if parallelizing, group only
   disjoint-file beads in a batch and note any same-file pair so the user knows
   the merge order is non-trivial.
+- **`--scheduled` only — hard cap: 5 Tier-A PRs per run.** Tier-A beads
+  beyond the cap are not dispatched; list them in the report as *deferred
+  (Tier-A cap)* with the reason each was a Tier-A candidate, so a future run or
+  a human can pick them up. Manual runs have no Tier-A cap.
 
 Render the lightweight-implementer prompt below for each bead, substituting the
 bead id and a one-paragraph scope summary drawn from the bead.
@@ -250,8 +255,10 @@ Tier A implementer with the chosen option baked into its scope.
 
 ### PHASE 5: Report & surface decisions
 
-Emit a final report (in `--scheduled` mode, written to the report file — see
-"Scheduled mode" — instead of awaiting a human):
+Emit a final report with the sections below. In `--scheduled` mode the report
+file already holds every line except the tally and suggested-next — each was
+appended when it happened (see "Scheduled mode") — so Phase 5 appends only
+those two:
 
 - **Shipped** table: `bead | PR # | one-line what`. Each bead is held
   `in_progress` with its PR noted; a later run's settle step closes it once
@@ -303,25 +310,37 @@ Unattended weekly run. Everything above applies, plus:
 PRs that are passing CI and have no unresolved change request. If that count
 is **10 or more**, or the **oldest** such PR is **older than 7 days**, stand
 down: dispatch nothing and write a short report recording the gate reading.
-The two values are fixed constants sized to the maintainer's review capacity —
-they change only by a deliberate edit to this command, never inline by a
-running agent. The gate exists so an unattended run cannot pile PRs onto an
-already-full review queue; a human running this command by hand is making that
-call themselves, which is why manual invocations skip the gate entirely.
 
-**Per-run report.** Write `reports/clear-backlog/<YYYY-MM-DD>.md` in the
-workspace (`reports/` is gitignored — verify, and add the pattern if
-missing). Contents:
+**Tier-A cap.** At most **5 Tier-A PRs** per scheduled run (Phase 3); the
+3-PR Tier-B cap applies as in every `--include-b` run.
 
-- the queue-gate reading (counts and verdict, even when the run proceeded)
-- the **shipped** table: PR number and a one-line what
-- the **settled** list: each bead closed or reopened by Phase 0b, with its
-  pull request number
-- every **Tier-B decision** with the advisor's rationale
-- the **needs-decision** and **deferred (Tier-B cap)** lists, with reasons
-- the **spec in flight** list, with the matching label
-- the before/after open-bead tally, with PRs opened and beads closed by
-  merge counted separately
+The queue-gate values and the Tier-A cap are fixed constants sized to the
+maintainer's review capacity — they change only by a deliberate edit to this
+command, never inline by a running agent. The gate and the cap exist so an
+unattended run cannot pile PRs onto an already-full review queue; a human
+running this command by hand is making that call themselves, which is why
+manual invocations skip the gate and have no Tier-A cap.
+
+**Per-run report, written as the run goes.** The report lives at
+`reports/clear-backlog/<YYYY-MM-DD>.md` in the workspace (`reports/` is
+gitignored — verify, and add the pattern if missing). It is written
+incrementally so a run cut off mid-sweep still leaves a record of what it did:
+
+1. **Create it before the first dispatch** — after the queue gate and Phase
+   0b — with the queue-gate reading (counts and verdict) and the **settled**
+   list (each bead Phase 0b closed or reopened, with its pull request number).
+   A stand-down run writes the gate reading and stops.
+2. **Append each line when it happens**, not at the end:
+   - a **needs-decision** line (with the reason) and a **spec in flight**
+     line (with the matching label) as Phase 2 drops the bead;
+   - a **deferred (Tier-A cap)** or **deferred (Tier-B cap)** line, with
+     reasons, when the cap leaves the bead undispatched;
+   - each **Tier-B decision**, with the advisor's rationale, when the advisor
+     returns;
+   - a **shipped** line (PR number and a one-line what) when the implementer
+     reports its PR, or a needs-decision line if it refused on a blocker.
+3. **Phase 5 appends only** the before/after open-bead tally (PRs opened and
+   beads closed by merge counted separately) and the suggested-next summary.
 
 The report is local and gitignored, so bead IDs are allowed there — they
 remain forbidden in branches, commits, and PRs.
