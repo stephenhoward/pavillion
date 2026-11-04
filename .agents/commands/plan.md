@@ -13,6 +13,7 @@ Single state-routed entry point for taking work from idea → ready-for-implemen
 /plan --until analyzed         # full pipeline to ready-for-spawn
 /plan pv-xxxx --reshape        # force re-run of DRAFT phase
 /plan pv-xxxx --readvise       # force re-run of ADVISE phase
+/plan --scheduled              # unattended: approved, revise, drafting passes; see "Scheduled mode"
 ```
 
 ## Important Guidelines
@@ -23,6 +24,7 @@ Single state-routed entry point for taking work from idea → ready-for-implemen
 - **Keep it lightweight** — This is planning, not exhaustive documentation
 - **Output to bead** — All durable content writes to bead fields, not committed spec folders
 - **Use the scratchpad as a review surface** — A spec scratchpad under `docs/.scratch/` (gitignored) holds the full plan for human review before it lands on the bead. After the bead is written, the scratchpad is deleted.
+- **`--scheduled` overrides the AskUserQuestion and scratchpad rules above** — see "Scheduled mode"
 
 ## Phases
 
@@ -293,6 +295,19 @@ Wait for completion. Capture the execution waves summary.
 | `notes` | Context: references, applicable standards, visuals, Advisory Review |
 | `shaped` label | Description + design + acceptance are populated |
 | `advised` label | Advisors have reviewed and signed off |
+
+## Scheduled mode (`--scheduled`)
+
+Unattended run: no questions, no scratchpad, a report file per run. The
+whole mode — its `spec:*` label state machine (`spec:drafted`,
+`spec:blocked`, `spec:revise`, `spec:approved`, `spec:decomposing`,
+`spec:ready`), its approved, revise and drafting passes, the notes-block
+contract and the refuse-rather-than-guess list — is the
+[`plan-scheduled`](../skills/plan-scheduled/SKILL.md) skill. Load it and
+follow it; the phases above apply only as that skill says. Its selections
+and heading tests are `.agents/skills/plan-scheduled/scripts/spec.ts`, not
+`bead.ts state`. Refuse `--scheduled` combined with a bead id, `--until`,
+`--reshape` or `--readvise`.
 
 ## Tips
 
