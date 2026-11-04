@@ -285,6 +285,16 @@ rateLimit:
         # large to brute-force and this is an abuse cap, not a guessing wall.
         max: 20  # 20 confirmation attempts per IP per 15 minutes
 
+# ActivityPub federation
+activitypub:
+  inboxDrain:
+    # How often the web process drains unprocessed ap_inbox rows. The only rows
+    # a tick ever finds are backfill rows the worker wrote after a follow; live
+    # POSTs are dispatched as they arrive. The 10s skip window, not this tick,
+    # is what keeps a tick off a row the live handler is still dispatching, so
+    # this value is a latency choice only.
+    intervalMs: 30000  # 30 seconds
+
 # Housekeeping configuration for automated server maintenance
 housekeeping:
   enabled: true

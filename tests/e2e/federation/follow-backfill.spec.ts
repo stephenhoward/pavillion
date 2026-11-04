@@ -59,6 +59,10 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 // through the inbox. These constants mirror the pattern from auto-repost.spec.ts
 // (which uses ~10s for a single Create) plus headroom for the GET/pagination.
 const FOLLOW_PROCESS_MS = 3_000;
+// Holds only because config/federation.yaml sets
+// activitypub.inboxDrain.intervalMs to 5s: a backfill row waits out the 10s
+// skip window, then the next tick. Raise that interval and this budget must
+// grow with it.
 const BACKFILL_DRAIN_MS = 15_000;
 
 // After a follow, each test polls for its follower-visible end state rather

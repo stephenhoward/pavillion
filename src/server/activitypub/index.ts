@@ -1,4 +1,5 @@
 import { Application } from 'express';
+import config from 'config';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ActivityPubAPI from '@/server/activitypub/api/v1';
@@ -9,9 +10,6 @@ import ModerationInterface from '../moderation/interface';
 import HousekeepingInterface from '../housekeeping/interface';
 import type { ProcessInboxMessagesOptions } from '@/server/activitypub/service/inbox';
 import { logError } from '@/server/common/helper/error-logger';
-
-/** How often the web process drains unprocessed inbox rows. */
-export const INBOX_DRAIN_INTERVAL_MS = 5_000;
 
 /**
  * Interval ticks leave rows written this recently to the live
@@ -66,10 +64,11 @@ export default class ActivityPubDomain {
 
   /**
    * Start draining unprocessed inbox rows in this process: once now, taking
-   * every row, then every {@link INBOX_DRAIN_INTERVAL_MS}, leaving rows
+   * every row, then every `activitypub.inboxDrain.intervalMs`, leaving rows
    * written within {@link INBOX_DRAIN_SKIP_NEWER_THAN_MS} to live dispatch.
    * This is what dispatches rows the worker's backfill writes, and rows a
-   * restart left behind.
+   * restart left behind. The interval is a latency choice; the skip window
+   * is the correctness choice and does not move with it.
    *
    * Called by the web process once every domain has installed its handlers,
    * never from {@link initialize}, so test suites that initialize the domain
@@ -97,10 +96,11 @@ export default class ActivityPubDomain {
         .finally(() => { this.inboxDrain = null; });
     };
 
+    const intervalMs = config.get<number>('activitypub.inboxDrain.intervalMs');
     drain({});
     const interval = setInterval(
       () => drain({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS }),
-      INBOX_DRAIN_INTERVAL_MS,
+      intervalMs,
     );
     return () => clearInterval(interval);
   }
