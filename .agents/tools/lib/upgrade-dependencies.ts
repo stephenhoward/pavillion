@@ -28,6 +28,19 @@ export const RENOVATE_LOGIN = 'renovate-bot';
 /** Dashboard checkboxes this command must never tick. */
 const FORBIDDEN_KEYS = ['approve-all-pending-prs', 'create-all-rate-limited-prs'];
 
+export const RENOVATE_CONFIG = '.github/renovate-config.json';
+
+/**
+ * Desk-first packages the Renovate config does not already keep reviewed.
+ * Their majors are the maintainer's to admit, never this command's.
+ */
+const DESK_FIRST_PACKAGES: Record<string, string> = {
+  'express': 'the HTTP framework every route runs on',
+  'express-rate-limit': 'auth and abuse throttling',
+  'he': 'HTML entity handling on federated content',
+  'pg-boss': 'the job queue',
+};
+
 // =============================================================================
 // Process helper
 // =============================================================================
@@ -320,6 +333,96 @@ export function admissionQueue(ordered: Candidate[]): Admission[] {
   return queue;
 }
 
+// =============================================================================
+// Desk-first majors
+// =============================================================================
+
+export interface DeskFirstRule {
+  patterns: string[];
+  reason: string;
+}
+
+export interface DeskFirstItem {
+  key: string;
+  packages: string[];
+  reason: string;
+}
+
+interface RenovateConfig {
+  packageRules?: { description?: string; matchPackageNames?: string[]; automerge?: boolean }[];
+}
+
+/**
+ * A `matchPackageNames` entry tested the way Renovate tests it: `/re/flags`
+ * is a regex, anything else a case-insensitive glob where `**` crosses `/`.
+ */
+export function matchesPackagePattern(name: string, pattern: string): boolean {
+  const regex = /^\/(.+)\/([a-z]*)$/.exec(pattern);
+  if (regex) return new RegExp(regex[1], regex[2]).test(name);
+  const source = pattern.split(/(\*\*|\*|\?)/).map(part =>
+    part === '**' ? '.*'
+      : part === '*' ? '[^/]*'
+        : part === '?' ? '[^/]'
+          : part.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('');
+  return new RegExp(`^${source}$`, 'i').test(name);
+}
+
+/** The Renovate config's `automerge: false` package rule, then the constants. */
+export function deskFirstRules(config: RenovateConfig): DeskFirstRule[] {
+  const reviewed = config.packageRules?.find(r => r.automerge === false && r.matchPackageNames);
+  const rules: DeskFirstRule[] = reviewed
+    ? [{
+      patterns: reviewed.matchPackageNames ?? [],
+      reason: `${RENOVATE_CONFIG}'s automerge: false rule "${reviewed.description ?? 'unnamed'}"`,
+    }]
+    : [];
+  for (const [name, why] of Object.entries(DESK_FIRST_PACKAGES)) {
+    rules.push({ patterns: [name], reason: `desk-first constant in upgrade-dependencies.ts: ${why}` });
+  }
+  return rules;
+}
+
+/** Why the first matching package is desk-first, or null when none is. */
+export function deskFirstReason(packages: string[], rules: DeskFirstRule[]): string | null {
+  for (const name of packages) {
+    for (const rule of rules) {
+      const pattern = rule.patterns.find(p => matchesPackagePattern(name, p));
+      if (pattern) return `${name} matches "${pattern}" in ${rule.reason}`;
+    }
+  }
+  return null;
+}
+
+function loadDeskFirstRules(): DeskFirstRule[] {
+  return deskFirstRules(JSON.parse(readFileSync(RENOVATE_CONFIG, 'utf-8')) as RenovateConfig);
+}
+
+/**
+ * Take desk-first candidates out of the queue, along with any entry whose
+ * coupled peers include one, and report every one of them with its reason.
+ */
+export function splitDeskFirst(
+  queue: Admission[],
+  candidates: Candidate[],
+  rules: DeskFirstRule[],
+): { queue: Admission[]; deskFirst: DeskFirstItem[] } {
+  const reasons = new Map<string, string>();
+  for (const c of candidates) {
+    const reason = deskFirstReason(c.packages.map(p => p.name), rules);
+    if (reason) reasons.set(c.key, reason);
+  }
+  const kept = queue.filter((entry) => {
+    if (reasons.has(entry.key)) return false;
+    const peer = entry.peers.find(k => reasons.has(k));
+    if (peer) reasons.set(entry.key, `coupled with ${peer}, which is desk-first: ${reasons.get(peer)}`);
+    return !peer;
+  });
+  const deskFirst = candidates
+    .filter(c => reasons.has(c.key))
+    .map(c => ({ key: c.key, packages: c.packages.map(p => p.name), reason: reasons.get(c.key) ?? '' }));
+  return { queue: kept, deskFirst };
+}
+
 /** Tier, then oldest release first, then dashboard order for undated items. */
 export function admissionOrder(candidates: Candidate[]): Candidate[] {
   return [...candidates].sort((a, b) =>
@@ -474,7 +577,13 @@ function withTempFile<T>(content: string, fn: (path: string) => T): T {
 
 export function tick(key: string, deps: SpawnDeps = {}): void {
   const spawn = deps.spawnFn ?? nodeSpawnSync;
-  const updated = tickPendingApproval(readDashboard(deps), key);
+  const body = readDashboard(deps);
+  const item = parsePendingApproval(body).find(i => i.key === key);
+  const reason = item ? deskFirstReason(parseUpdateTitle(item.title).packages, loadDeskFirstRules()) : null;
+  if (reason) {
+    throw new Error(`refusing to tick ${key}: it is desk-first (${reason}); the maintainer admits it by hand`);
+  }
+  const updated = tickPendingApproval(body, key);
   const r = withTempFile(updated, path =>
     exec('gh', ['issue', 'edit', String(DASHBOARD_ISSUE), '--body-file', path], spawn));
   if (r.exitCode !== 0) throw new Error(`gh issue edit failed: ${r.stderr}`);
@@ -523,6 +632,8 @@ function releasedAt(
 export interface DashboardReport {
   /** What to tick, in order, with coupled pairs folded into their primary. */
   queue: Admission[];
+  /** Unticked majors kept out of `queue` for the maintainer, each with why. */
+  deskFirst: DeskFirstItem[];
   /** Unticked majors, in admission order, with tier and coupling detail. */
   candidates: Candidate[];
   /** Ticked by an earlier run; Renovate has not opened the PR yet. */
@@ -584,8 +695,10 @@ export function dashboard(deps: SpawnDeps = {}): DashboardReport {
   }
 
   const ordered = admissionOrder(candidates);
+  const { queue, deskFirst } = splitDeskFirst(admissionQueue(ordered), ordered, loadDeskFirstRules());
   return {
-    queue: admissionQueue(ordered),
+    queue,
+    deskFirst,
     candidates: ordered,
     awaitingRenovate: items.filter(i => i.checked),
     alreadyApplied,

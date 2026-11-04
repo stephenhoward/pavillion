@@ -16,9 +16,11 @@ import {
   classifyDemand,
   classifyPr,
   commitOrigin,
+  dashboard,
   dashboardMajors,
   firstStableRelease,
   isMajorTitle,
+  matchesPackagePattern,
   MIGRATION_HEADING,
   newestPeers,
   packageSource,
@@ -27,6 +29,7 @@ import {
   prepareWorktree,
   rangeAdmitsMajor,
   rollup,
+  splitDeskFirst,
   tick,
   tickPendingApproval,
   tierFor,
@@ -286,6 +289,75 @@ describe('admissionQueue', () => {
       candidate('vue-router', 3, '2025-02-01', 1, [], ['vite']),
     ]);
     expect(queue).toEqual([{ key: 'vite', peers: [] }]);
+  });
+});
+
+// Target majors far above package.json, so no item reads as already applied.
+const DESK_FIRST_DASHBOARD = `## Pending Approval
+
+ - [ ] <!-- approve-branch=renovate/stripe-99.x -->fix(deps): update dependency stripe to v99
+ - [ ] <!-- approve-branch=renovate/pg-boss-99.x -->fix(deps): update dependency pg-boss to v99
+ - [ ] <!-- approve-branch=renovate/vite-tsconfig-paths-99.x -->chore(deps): update dependency vite-tsconfig-paths to v99
+`;
+
+/** Serves DESK_FIRST_DASHBOARD; git grep and npm view find nothing; records issue edits. */
+function deskFirstSpawn(edits: string[][]) {
+  return (cmd: string, args: string[]) => {
+    if (cmd === 'gh' && args[1] === 'view') return fakeSpawn(JSON.stringify({ body: DESK_FIRST_DASHBOARD }));
+    if (cmd === 'gh' && args[1] === 'edit') {
+      edits.push(args);
+      return fakeSpawn('');
+    }
+    return fakeSpawn('', 1);
+  };
+}
+
+describe('desk-first majors', () => {
+  it('keeps desk-first majors out of the queue and reports each with a reason', () => {
+    const report = dashboard({ spawnFn: deskFirstSpawn([]) as never });
+    expect(report.queue).toEqual([{ key: 'renovate/vite-tsconfig-paths-99.x', peers: [] }]);
+    expect(report.deskFirst.map(d => d.key)).toEqual(['renovate/stripe-99.x', 'renovate/pg-boss-99.x']);
+    expect(report.deskFirst[0].reason).toMatch(/automerge: false rule "Payments, auth and federation stay reviewed"/);
+    expect(report.deskFirst[1].reason).toMatch(/pg-boss/);
+  });
+
+  it('refuses to tick a desk-first key, naming the rule, and leaves the dashboard alone', () => {
+    const edits: string[][] = [];
+    expect(() => tick('renovate/stripe-99.x', { spawnFn: deskFirstSpawn(edits) as never }))
+      .toThrow(/desk-first.*"Payments, auth and federation stay reviewed"/);
+    expect(edits).toEqual([]);
+  });
+
+  it('drops a queue entry whose coupled peer is desk-first', () => {
+    const rules = [{ patterns: ['@stripe/**'], reason: 'payments' }];
+    const pkg = (name: string) => [{ name, source: 'runtime' as const }];
+    const split = splitDeskFirst(
+      [{ key: 'checkout', peers: ['stripe-js'] }, { key: 'vite', peers: [] }],
+      [
+        { ...candidate('checkout', 2, null, 0, ['stripe-js']), packages: pkg('checkout') },
+        { ...candidate('stripe-js', 2, null, 1), packages: pkg('@stripe/stripe-js') },
+        { ...candidate('vite', 1, null, 2), packages: pkg('vite') },
+      ],
+      rules,
+    );
+    expect(split.queue).toEqual([{ key: 'vite', peers: [] }]);
+    const why = '@stripe/stripe-js matches "@stripe/**" in payments';
+    expect(split.deskFirst).toEqual([
+      { key: 'checkout', packages: ['checkout'], reason: `coupled with stripe-js, which is desk-first: ${why}` },
+      { key: 'stripe-js', packages: ['@stripe/stripe-js'], reason: why },
+    ]);
+  });
+
+  it.each([
+    ['stripe', 'stripe', true],
+    ['@stripe/**', '@stripe/stripe-js', true],
+    ['passport**', 'passport-local', true],
+    ['passport**', 'passport', true],
+    ['stripe', 'stripe-mock', false],
+    ['/^pg-/', 'pg-boss', true],
+    ['Express', 'express', true],
+  ])('pattern %s matches %s → %s', (pattern, name, expected) => {
+    expect(matchesPackagePattern(name, pattern)).toBe(expected);
   });
 });
 

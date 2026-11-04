@@ -91,6 +91,15 @@ federation job never costs an advisor pass.
 From `dashboard.json`, list `awaitingRenovate` under *Pending — awaiting
 Renovate* and `alreadyApplied` under *Pending — already applied*.
 
+Desk-first majors — payments, auth, federation and the job queue: the
+`automerge: false` rule's `matchPackageNames` in `.github/renovate-config.json`
+plus `express`, `express-rate-limit`, `he` and `pg-boss` — are never this
+command's to admit. `dashboard` keeps them, and any entry coupled to one, out
+of `queue` and lists them in `deskFirst`; report each under *Needs your
+decision* with its `reason`. Never tick one, and never admit one with
+`--admit`: `tick` refuses a desk-first key, naming the rule. The maintainer
+ticks it by hand.
+
 ## Phase 1: Queue gate (`--scheduled` only)
 
 Run `/clear-backlog`'s gate: count open non-draft PRs that pass CI and have no
