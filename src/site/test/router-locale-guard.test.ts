@@ -47,9 +47,9 @@ const StubComponent = { template: '<div />' };
  * A copy of it here could not stay honest: the locale-prefixed shapes derive
  * their alternation from AVAILABLE_LANGUAGES, so a literal `es|fr` would go on
  * passing while quietly ceasing to describe what ships. The factory binds the
- * views, so this file supplies stubs and keeps to the routing question.
- *
- * A test-only route must go in `routes` below, never here.
+ * views, so this file supplies stubs and keeps to the routing question. It
+ * includes the shipped not-found catch-all, so a `name === 'not-found'`
+ * assertion below is about the fallback a visitor actually sees.
  */
 const siteRoutes: RouteRecordRaw[] = buildSiteRoutes({
   discovery: StubComponent,
@@ -57,6 +57,7 @@ const siteRoutes: RouteRecordRaw[] = buildSiteRoutes({
   event: StubComponent,
   instance: StubComponent,
   series: StubComponent,
+  notFound: StubComponent,
 });
 
 /**
@@ -78,20 +79,6 @@ function localePrefixedTemplate(suffix: string): string {
   return record.path;
 }
 
-/**
- * The production table plus a test-only catch-all, so the fall-through cases
- * below have a named route to assert on.
- *
- * app.ts ships no catch-all: 'not-found' exists here and nowhere else. A test
- * that asserts `name === 'not-found'` is therefore saying "no site route
- * claims this path", not "the site renders a 404 page" — it does not. See the
- * unmatched-path test for what production actually does.
- */
-const routes: RouteRecordRaw[] = [
-  ...siteRoutes,
-  { path: '/:pathMatch(.*)*', component: StubComponent, name: 'not-found' },
-];
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -110,7 +97,7 @@ describe('Vue Router locale-aware navigation guard', () => {
     // Create a fresh router with memory history for each test
     router = createRouter({
       history: createMemoryHistory(),
-      routes,
+      routes: siteRoutes,
     });
 
     installLocaleGuard(router);
@@ -167,23 +154,12 @@ describe('Vue Router locale-aware navigation guard', () => {
       expect(router.currentRoute.value.name).toBe('not-found');
     });
 
-    it('should leave the site root unmatched by every shipped route', async () => {
-      // Runs against the production table with no test-only catch-all, so this
-      // pins what the browser really does: '/:calendar' requires a non-empty
-      // segment, so '/' matches nothing and <RouterView /> renders a blank
-      // page. That blank page is a known gap, not a designed 404 — asserting
-      // an empty `matched` keeps this test honest about it. Fixing it means
-      // adding a route to app.ts, which is a product decision tracked
-      // separately; when that lands, this test must change with it.
-      const productionRouter = createRouter({
-        history: createMemoryHistory(),
-        routes: siteRoutes,
-      });
-
-      await productionRouter.push('/');
-
-      expect(productionRouter.currentRoute.value.matched).toHaveLength(0);
-      expect(productionRouter.currentRoute.value.name).toBeUndefined();
+    it('should render the not-found view for the site root', async () => {
+      // '/:calendar' requires a non-empty segment, so the site root falls to the
+      // catch-all. The server never hands '/' to the site shell (the client SPA
+      // owns it, per DEC-018), so this pins the table, not a page a visitor sees.
+      await router.push('/');
+      expect(router.currentRoute.value.name).toBe('not-found');
     });
 
     it('should not call changeLanguage for unprefixed routes', async () => {
@@ -272,8 +248,10 @@ describe('Vue Router locale-aware navigation guard', () => {
     });
 
     it('should fall through to 404 for a non-slug :startTime on a locale-prefixed route', async () => {
+      // The prefixed catch-all claims it, keeping the locale for the guard.
       await router.push('/es/mycalendar/events/event-123/not-a-slug');
-      expect(router.currentRoute.value.name).toBe('not-found');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/:pathMatch(.*)*'));
+      expect(router.currentRoute.value.params.locale).toBe('es');
     });
 
     it('should preserve query parameters on locale-prefixed routes', async () => {
@@ -325,6 +303,37 @@ describe('Vue Router locale-aware navigation guard', () => {
       // with a locale param.
       await router.push('/xx/mycalendar');
       expect(changeLanguageSpy.called).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Unmatched paths — the shipped not-found fallback
+  // -------------------------------------------------------------------------
+
+  describe('unmatched paths', () => {
+    it('should render the not-found view for an unmatched multi-segment path', async () => {
+      await router.push('/foo/bar/baz');
+      expect(router.currentRoute.value.name).toBe('not-found');
+    });
+
+    it('should render the not-found view for a tail under /discover', async () => {
+      // The server serves '/discover' tail-tolerantly; the site table has only
+      // the bare segment, so any tail lands on the fallback.
+      await router.push('/discover/anything');
+      expect(router.currentRoute.value.name).toBe('not-found');
+    });
+
+    it('should keep the locale and switch language on an unmatched locale-prefixed path', async () => {
+      await router.push('/es/foo/bar/baz');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/:pathMatch(.*)*'));
+      expect(router.currentRoute.value.params.locale).toBe('es');
+      expect(changeLanguageSpy.calledWith('es')).toBe(true);
+    });
+
+    it('should still resolve a single segment after a locale prefix as a calendar', async () => {
+      await router.push('/es/foo');
+      expect(matchedPath()).toBe(localePrefixedTemplate('/:calendar'));
+      expect(router.currentRoute.value.params.calendar).toBe('foo');
     });
   });
 
