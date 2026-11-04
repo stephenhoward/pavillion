@@ -21,6 +21,7 @@ import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
 import { isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
+import { validateMediaTransform } from '@/server/calendar/service/media_transform';
 
 /**
  * Service for managing event series within calendars.
@@ -69,7 +70,8 @@ class SeriesService {
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws InvalidSeriesUrlNameError if urlName format is invalid
    * @throws SeriesUrlNameAlreadyExistsError if urlName is already taken in this calendar
-   * @throws ValidationError if any language's imageAlt is invalid
+   * @throws ValidationError if the focal point or zoom is out of range, or any
+   *   language's imageAlt is invalid
    */
   async createSeries(account: Account, calendarId: string, seriesData: Record<string, any>): Promise<EventSeries> {
     // Validate every language's imageAlt before the series row or any content
@@ -84,6 +86,7 @@ class SeriesService {
     // trip first. Consequence: a request that is both unauthorized and
     // malformed now reports the malformed alt text rather than the permission
     // failure, which is already how the three sibling methods answer.
+    validateMediaTransform(seriesData);
     validateContentImageAlts(seriesData.content);
 
     // Get calendar and verify ownership/editor permissions
@@ -125,6 +128,10 @@ class SeriesService {
       calendar_id: calendarId,
       url_name: urlName,
       media_id: seriesData.mediaId ?? null,
+      // Absent or null falls through to the column defaults (0.5, 0.5, 1.0).
+      media_focal_point_x: seriesData.mediaFocalPointX ?? undefined,
+      media_focal_point_y: seriesData.mediaFocalPointY ?? undefined,
+      media_zoom: seriesData.mediaZoom ?? undefined,
     });
     await seriesEntity.save();
 
@@ -226,7 +233,8 @@ class SeriesService {
    * @throws CalendarNotFoundError if calendar doesn't exist
    * @throws InsufficientCalendarPermissionsError if user lacks editor permission
    * @throws Error if urlName change is attempted
-   * @throws ValidationError if any language's imageAlt is invalid
+   * @throws ValidationError if the focal point or zoom is out of range, or any
+   *   language's imageAlt is invalid
    */
   async updateSeries(account: Account, seriesId: string, seriesData: Record<string, any>, calendarId?: string): Promise<EventSeries> {
     // Validate every language's imageAlt before the media_id update or the
@@ -238,6 +246,7 @@ class SeriesService {
     // ahead of its own EventEntity.findByPk, so a request that is both
     // unresolvable (or unauthorized) and malformed reports the malformed alt
     // text on all four enforcement sites alike.
+    validateMediaTransform(seriesData);
     validateContentImageAlts(seriesData.content);
 
     // Get series to verify it exists
@@ -264,6 +273,16 @@ class SeriesService {
       throw new InsufficientCalendarPermissionsError();
     }
 
+    // Collect the series-row columns this request changes. The image transform
+    // is written independently of mediaId, and clearing the media (mediaId:
+    // null) leaves the stored transform alone, as it does for events.
+    const seriesUpdate: {
+      media_id?: string | null;
+      media_focal_point_x?: number;
+      media_focal_point_y?: number;
+      media_zoom?: number;
+    } = {};
+
     // Validate mediaId ownership if provided via MediaInterface
     if (seriesData.mediaId !== undefined) {
       if (seriesData.mediaId !== null) {
@@ -272,20 +291,28 @@ class SeriesService {
           throw new Error('Media not found or does not belong to this calendar');
         }
       }
+      seriesUpdate.media_id = seriesData.mediaId;
+    }
+    if (seriesData.mediaFocalPointX != null) {
+      seriesUpdate.media_focal_point_x = seriesData.mediaFocalPointX;
+    }
+    if (seriesData.mediaFocalPointY != null) {
+      seriesUpdate.media_focal_point_y = seriesData.mediaFocalPointY;
+    }
+    if (seriesData.mediaZoom != null) {
+      seriesUpdate.media_zoom = seriesData.mediaZoom;
+    }
 
-      // Update media_id on the entity
-      await EventSeriesEntity.update(
-        { media_id: seriesData.mediaId },
-        { where: { id: seriesId } },
-      );
+    if (Object.keys(seriesUpdate).length > 0) {
+      await EventSeriesEntity.update(seriesUpdate, { where: { id: seriesId } });
+    }
 
-      // Notify media domain if a new media was attached (non-null)
-      if (seriesData.mediaId !== null && seriesData.mediaId !== series.mediaId) {
-        this.eventBus.emit('mediaAttachedToSeries', {
-          mediaId: seriesData.mediaId,
-          seriesId,
-        });
-      }
+    // Notify media domain if a new media was attached (non-null)
+    if (seriesData.mediaId !== undefined && seriesData.mediaId !== null && seriesData.mediaId !== series.mediaId) {
+      this.eventBus.emit('mediaAttachedToSeries', {
+        mediaId: seriesData.mediaId,
+        seriesId,
+      });
     }
 
     // Handle content updates
