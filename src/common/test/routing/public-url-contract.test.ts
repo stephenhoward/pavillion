@@ -6,10 +6,11 @@
  * Each side already has its own suite — src/server/common/test/app_routes.test.ts
  * pins what the server serves, src/site/test/router-locale-guard.test.ts pins
  * what the site router matches — and both stay green when the two disagree. A
- * path the server hands to the site shell that the site router cannot match
- * renders the header and footer with no content in between. That shipped once
- * (8f47ac27 emitted a '/view/…' target into a <RouterLink>) and a human found
- * it by reading code.
+ * path the server hands to the site shell that no site page shape matches falls
+ * to the not-found catch-all, so a broken link shows a visitor "not found"
+ * where a page should be. That shipped once, before the catch-all existed, as
+ * chrome with no content (8f47ac27 emitted a '/view/…' target into a
+ * <RouterLink>) and a human found it by reading code.
  *
  * All three are imported from the modules that ship them, never mirrored:
  * `createRouter` from @/server/app_routes, `buildSiteRoutes` from @/site/routes
@@ -129,17 +130,38 @@ const { handlers, disposition } = buildServerProbe();
 
 const StubComponent = { template: '<div />' };
 
+// Its own stub, so a path the catch-alls absorb is told apart from one a page
+// shape matches: with the catch-alls shipped, every path resolves to something.
+const NotFoundStub = { template: '<div />' };
+
 const siteRoutes: RouteRecordRaw[] = buildSiteRoutes({
   discovery: StubComponent,
   calendar: StubComponent,
   event: StubComponent,
   instance: StubComponent,
   series: StubComponent,
+  notFound: NotFoundStub,
 });
 
-// No catch-all: app.ts ships none, so `matched: []` here is what the browser
-// really does with an unroutable path.
 const siteRouter = createSiteRouter({ history: createMemoryHistory(), routes: siteRoutes });
+
+/**
+ * Whether the site router renders the not-found view for a path.
+ *
+ * @param path - A path the site SPA might be handed
+ * @returns True when one of the catch-alls, not a page shape, claims the path
+ */
+function rendersNotFound(path: string): boolean {
+  return siteRouter.resolve(path).matched.at(-1)?.components?.default === NotFoundStub;
+}
+
+/**
+ * The site route shapes that describe a served page: every record except the
+ * catch-alls. A not-found fallback is not a served shape — no link should
+ * target it and the server has no disposition for it — so instantiating its
+ * ':pathMatch' template would only test that the fallback catches itself.
+ */
+const servedShapes: RouteRecordRaw[] = siteRoutes.filter(route => !route.path.includes(':pathMatch'));
 
 // ---------------------------------------------------------------------------
 // Instantiating the site route shapes into concrete paths
@@ -223,7 +245,7 @@ function buildCorpus(routes: RouteRecordRaw[]): CorpusEntry[] {
   });
 }
 
-const corpus = buildCorpus(siteRoutes);
+const corpus = buildCorpus(servedShapes);
 
 /**
  * The '/view'-prefixed ancestor of a corpus path, which the server must 301.
@@ -269,9 +291,16 @@ async function legacyRedirectTarget(path: string): Promise<string> {
 
 describe('public URL contract (server route table ↔ site SPA route table)', () => {
   describe('the corpus this join is built from', () => {
-    it('instantiates every shape in the shipped site route table', () => {
-      expect(new Set(corpus.map(entry => entry.template)).size).toBe(siteRoutes.length);
-      expect(corpus.length).toBeGreaterThan(siteRoutes.length - 1);
+    it('instantiates every served shape in the shipped site route table', () => {
+      expect(new Set(corpus.map(entry => entry.template)).size).toBe(servedShapes.length);
+      expect(corpus.length).toBeGreaterThan(servedShapes.length - 1);
+    });
+
+    it('leaves out only the catch-alls, which render the not-found view', () => {
+      const excluded = siteRoutes.filter(route => !servedShapes.includes(route));
+
+      expect(excluded).not.toEqual([]);
+      expect(excluded.map(route => route.component)).toEqual(excluded.map(() => NotFoundStub));
     });
 
     it('throws rather than skipping a route param it has no sample for', () => {
@@ -297,12 +326,12 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
   });
 
   // Direction 2: no unmatchable served path. This is the 8f47ac27 bug class —
-  // the server renders the shell, the SPA matches nothing, the visitor gets
-  // chrome with a hole in it.
+  // the server renders the shell, no page shape matches, and the visitor gets
+  // the not-found view where a page should be.
   describe('every served path the site shell receives is matchable', () => {
     it('resolves each corpus path against the real site router', () => {
-      const observed = corpus.map(entry => [entry.path, siteRouter.resolve(entry.path).matched.length > 0]);
-      const expected = corpus.map(entry => [entry.path, true]);
+      const observed = corpus.map(entry => [entry.path, rendersNotFound(entry.path)]);
+      const expected = corpus.map(entry => [entry.path, false]);
 
       expect(observed).toEqual(expected);
     });
@@ -371,8 +400,8 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
       // mean the filter stopped working, not that the contract holds.
       expect(servedToSite).not.toEqual([]);
 
-      const observed = servedToSite.map(segment => [segment, siteRouter.resolve(`/${segment}`).matched.length > 0]);
-      expect(observed).toEqual(servedToSite.map(segment => [segment, true]));
+      const observed = servedToSite.map(segment => [segment, rendersNotFound(`/${segment}`)]);
+      expect(observed).toEqual(servedToSite.map(segment => [segment, false]));
     });
   });
 
@@ -395,21 +424,21 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
         const twin = viewTwin(entry);
         const target = await legacyRedirectTarget(twin);
 
-        observed.push([twin, target, siteRouter.resolve(target).matched.length > 0]);
+        observed.push([twin, target, rendersNotFound(target)]);
       }
 
-      expect(observed).toEqual(corpus.map(entry => [viewTwin(entry), entry.path, true]));
+      expect(observed).toEqual(corpus.map(entry => [viewTwin(entry), entry.path, false]));
     });
 
-    it('matches no /view path inside the SPA, which is the 8f47ac27 failure mode stated', () => {
+    it('renders the not-found view for every /view path inside the SPA, which is the 8f47ac27 failure mode stated', () => {
       // The companion negative is what makes the pair a regression test rather
       // than a redirect test. A <RouterLink> to '/view/mycalendar' updates
-      // currentRoute.path while matching nothing — the server never sees the
-      // navigation, so the 301 above cannot save it.
-      expect(siteRouter.resolve('/view/mycalendar').matched).toHaveLength(0);
+      // currentRoute.path while no page shape matches it — the server never sees
+      // the navigation, so the 301 above cannot save it.
+      expect(siteRouter.resolve('/view/mycalendar').name).toBe('not-found');
 
-      const observed = corpus.map(entry => [viewTwin(entry), siteRouter.resolve(viewTwin(entry)).matched.length]);
-      expect(observed).toEqual(corpus.map(entry => [viewTwin(entry), 0]));
+      const observed = corpus.map(entry => [viewTwin(entry), rendersNotFound(viewTwin(entry))]);
+      expect(observed).toEqual(corpus.map(entry => [viewTwin(entry), true]));
     });
   });
 
@@ -452,10 +481,11 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
     // builder's output rather than navigating to a prefixed route), so the named
     // routes are exactly the set a builder must be able to address. A page shape
     // added to the table with no builder to emit it is a page nothing links to.
+    // 'not-found' is named but excluded: no builder may emit a link to it.
     it('covers every named shape in the site route table', () => {
       const addressable = siteRoutes
         .map(route => route.name)
-        .filter((name): name is string => typeof name === 'string');
+        .filter((name): name is string => typeof name === 'string' && name !== 'not-found');
       const covered = builderPaths.map(([, path]) => siteRouter.resolve(path).name);
 
       expect([...new Set(covered)].sort()).toEqual([...addressable].sort());
@@ -547,27 +577,27 @@ describe('public URL contract (server route table ↔ site SPA route table)', ()
   // tables are asymmetric by design, and a set-equality assertion would fail on
   // correct code.
   describe('the two places the tables disagree on purpose', () => {
-    it('sends the domain root to the client shell, so the site router matching nothing is correct', () => {
+    it('sends the domain root to the client shell, so the site router having no page for it is correct', () => {
       // DEC-018: "The client SPA keeps '/' and its own top-level segments." The
-      // site router having no route for '/' is therefore not an orphan. That it
-      // renders blank rather than a 404 is a separate known gap, documented at
-      // src/site/test/router-locale-guard.test.ts ('should leave the site root
-      // unmatched by every shipped route').
+      // site router having no page shape for '/' is therefore not an orphan; its
+      // catch-all claims '/' only because it claims everything, and the site
+      // shell is never handed the path.
       expect(disposition('/')).toBe('client_index');
-      expect(siteRouter.resolve('/').matched).toHaveLength(0);
+      expect(rendersNotFound('/')).toBe(true);
     });
 
     it('serves a non-slug :startTime to the site shell even though the site router rejects it', () => {
       // The server's page regexes are prefix-shaped ('(?:/.*)?$'), so the server
       // hands the site shell any depth under a non-reserved first segment and
       // lets the SPA decide. Here the SPA decides no: the
-      // ':startTime(INSTANCE_SLUG_PATTERN)' constraint rejects the segment. Answering a
-      // 404-shaped public URL is the site SPA's job, not the server's, so this
-      // pair is the division of labour working — not a hole to close.
+      // ':startTime(INSTANCE_SLUG_PATTERN)' constraint rejects the segment and the
+      // not-found catch-all answers. Answering a 404-shaped public URL is the
+      // site SPA's job, not the server's, so this pair is the division of labour
+      // working — not a hole to close.
       const path = '/mycalendar/events/event-123/not-a-slug';
 
       expect(disposition(path)).toBe('site_index');
-      expect(siteRouter.resolve(path).matched).toHaveLength(0);
+      expect(siteRouter.resolve(path).name).toBe('not-found');
     });
   });
 });

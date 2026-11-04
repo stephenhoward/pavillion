@@ -27,6 +27,7 @@ const router = createRouter({
     event: { template: '<div>event</div>' },
     instance: { template: '<div>instance</div>' },
     series: { template: '<div>series</div>' },
+    notFound: { template: '<div>not found</div>' },
   }),
 });
 

@@ -27,6 +27,7 @@ export interface SiteRouteComponents {
   event: SiteRouteComponent;
   instance: SiteRouteComponent;
   series: SiteRouteComponent;
+  notFound: SiteRouteComponent;
 }
 
 /**
@@ -49,8 +50,17 @@ export interface SiteRouteComponents {
  * and in the server's page regexes from the same source.
  * src/common/test/routing/public-url-contract.test.ts joins the two.
  *
+ * Each block ends with a catch-all bound to the not-found view. The server
+ * hands the site shell any depth under a non-reserved first segment (and any
+ * tail under '/discover'), so a path no page shape claims would otherwise
+ * render the header and footer with nothing between them. vue-router ranks a
+ * repeatable '(.*)' param below every other shape, so the catch-alls only
+ * claim what nothing else does; the prefixed one keeps ':locale' so the guard
+ * in app.ts still switches language. They are not served shapes: no builder
+ * in src/common/routing/public-paths.ts emits a link to either.
+ *
  * @param components - The view component to bind to each page shape
- * @returns The site route records, unprefixed shapes first
+ * @returns The site route records, unprefixed shapes first, each block ending in its catch-all
  */
 export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [
@@ -59,6 +69,7 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
     { path: '/:calendar/events/:event', component: components.event, name: 'event' },
     { path: `/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: components.instance, name: 'instance' },
     { path: '/:calendar/series/:series', component: components.series, name: 'series' },
+    { path: '/:pathMatch(.*)*', component: components.notFound, name: 'not-found' },
   ];
 
   const nonDefaultLocales = AVAILABLE_LANGUAGES
@@ -75,6 +86,7 @@ export function buildSiteRoutes(components: SiteRouteComponents): RouteRecordRaw
       { path: `/:locale(${pattern})/:calendar/events/:event`, component: components.event },
       { path: `/:locale(${pattern})/:calendar/events/:event/:startTime(${INSTANCE_SLUG_PATTERN})`, component: components.instance },
       { path: `/:locale(${pattern})/:calendar/series/:series`, component: components.series },
+      { path: `/:locale(${pattern})/:pathMatch(.*)*`, component: components.notFound },
     );
   }
 

@@ -12,6 +12,7 @@ import EventView from '@/site/components/event.vue';
 import EventInstanceView from '@/site/components/event-instance.vue';
 import SeriesView from '@/site/components/series-view.vue';
 import Discovery from '@/site/components/discovery.vue';
+import NotFound from '@/site/components/not-found.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import { buildSiteRoutes, siteScrollBehavior } from '@/site/routes';
@@ -35,6 +36,7 @@ Config.init().then( async (config) => {
       event: EventView,
       instance: EventInstanceView,
       series: SeriesView,
+      notFound: NotFound,
     }),
     scrollBehavior: siteScrollBehavior,
   });
