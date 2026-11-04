@@ -417,10 +417,13 @@ const handleLoadEvents = async (filters) => {
     align-items: center;
     gap: 1rem;
 
+    /* min-width: 0 lets the group shrink below its content at every width,
+       so a long calendar name wraps and the actions keep their space. */
     .header-title-group {
       display: flex;
       flex-direction: column;
       gap: 0.25rem;
+      min-width: 0;
     }
 
     h1 {
@@ -441,6 +444,9 @@ const handleLoadEvents = async (filters) => {
       font-size: var(--pav-font-size-body-small);
       color: var(--pav-color-text-secondary);
       text-decoration: none;
+      /* The address has no spaces to wrap at; break it anywhere rather than
+         let it run under the actions. */
+      overflow-wrap: anywhere;
 
       &:hover,
       &:focus-visible {
@@ -477,10 +483,6 @@ const handleLoadEvents = async (filters) => {
 
       h1 {
         font-size: 1.5rem;
-      }
-
-      .header-title-group {
-        min-width: 0;
       }
     }
   }
