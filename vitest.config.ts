@@ -34,7 +34,7 @@ export default defineConfig({
     // Shared by every project below: vitest 4 refuses to run projects with
     // differing maxWorkers unless they are given distinct group orders.
     maxWorkers: 4,
-    // Two-project layout:
+    // Project layout:
     //  - default: vmThreads pool for the bulk of unit tests (Sequelize
     //    isolation, low RPC overhead).
     //  - dompurify-isolated: forks pool + node environment for any test
@@ -44,6 +44,12 @@ export default defineConfig({
     //    pool handles it natively. Add a test file here when its module
     //    graph reaches `renderPolicyMarkdown` or any other consumer of
     //    isomorphic-dompurify.
+    //  - dns-mock-isolated: forks pool for tests that `vi.mock('dns')`. A
+    //    vmThreads worker evaluates ip-validation.ts once and reuses it for
+    //    every later file, so the first file to load it fixes which dns
+    //    (real or that file's mock) its load-time promisify(dns.lookup)
+    //    captures. Forks gives each file a fresh module graph. Add a test
+    //    file here when it mocks dns.
     projects: [
       {
         plugins: [vue()],
@@ -109,6 +115,26 @@ export default defineConfig({
             'src/client/test/routing/calendar-settings-gate.test.ts',
             'src/client/test/routing/settings-links-contract.test.ts',
             'src/client/test/routing/settings-legacy-redirect.test.ts',
+            // Tests that vi.mock('dns'): run in dns-mock-isolated.
+            'src/server/common/test/helper/ip-validation-dns.test.ts',
+            'src/server/activitypub/test/helper/remote-fetch.test.ts',
+            'src/server/activitypub/test/helper/http_signature.test.ts',
+          ],
+          env: { NODE_ENV: 'test' },
+        },
+      },
+      {
+        plugins: [vue()],
+        resolve: { alias: sharedAliases },
+        test: {
+          name: 'dns-mock-isolated',
+          environment: 'node',
+          globals: true,
+          pool: 'forks',
+          include: [
+            'src/server/common/test/helper/ip-validation-dns.test.ts',
+            'src/server/activitypub/test/helper/remote-fetch.test.ts',
+            'src/server/activitypub/test/helper/http_signature.test.ts',
           ],
           env: { NODE_ENV: 'test' },
         },
