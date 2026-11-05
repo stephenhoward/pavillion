@@ -1,4 +1,4 @@
-import { Model, Table, Column, PrimaryKey, ForeignKey, DataType, BeforeUpdate } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, ForeignKey, DataType, BeforeCreate, BeforeUpdate } from 'sequelize-typescript';
 import { FundingPlan } from '@/common/model/funding-plan';
 // Types used in decorated signatures must be type-only imports under
 // isolatedModules + emitDecoratorMetadata.
@@ -74,6 +74,20 @@ class FundingPlanEntity extends Model {
   declare suspended_at: Date | null;
 
   /**
+   * When the plan entered 'past_due', or null while it is in any other status.
+   *
+   * The clock the dunning grace period runs from, read by
+   * FundingService.planAccessExpiry and suspendExpiredFundingPlans. Written
+   * only by the status hooks below, on the transition into and out of
+   * 'past_due', so no other write to the row — a cancel, a resume, a provider
+   * echo of a schedule or billing-cycle change — can restart the grace.
+   * Deliberately absent from the domain model: it is a gate input, not
+   * something any caller reports.
+   */
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare past_due_since: Date | null;
+
+  /**
    * Convert entity to domain model
    */
   toModel(): FundingPlan {
@@ -134,6 +148,8 @@ class FundingPlanEntity extends Model {
     const previousStatus = instance.previous('status') as FundingPlanStatus;
     const newStatus = instance.status;
 
+    FundingPlanEntity.trackPastDueSince(instance, previousStatus);
+
     // Set suspended_at timestamp when transitioning to suspended
     if (newStatus === 'suspended' && previousStatus !== 'suspended') {
       instance.suspended_at = new Date();
@@ -158,6 +174,35 @@ class FundingPlanEntity extends Model {
     if (newStatus === 'active' && previousStatus === 'cancelled') {
       instance.cancelled_at = null;
       instance.cancel_at = null;
+    }
+  }
+
+  /**
+   * A plan the provider reports past due from the start (an `incomplete`
+   * first payment, or a status the adapter does not recognise) is created
+   * in 'past_due', so its grace starts at creation.
+   */
+  @BeforeCreate
+  static stampPastDueOnCreate(instance: FundingPlanEntity) {
+    FundingPlanEntity.trackPastDueSince(instance, undefined);
+  }
+
+  /**
+   * Keep past_due_since in step with the status: stamped on entering
+   * 'past_due', cleared on leaving it (to 'active', 'suspended' or
+   * 'cancelled'), and left alone by every write that keeps the plan past due.
+   *
+   * @param instance - Plan being written
+   * @param previousStatus - Status before this write, undefined on create
+   */
+  private static trackPastDueSince(instance: FundingPlanEntity, previousStatus: FundingPlanStatus | undefined) {
+    if (instance.status === 'past_due') {
+      if (previousStatus !== 'past_due') {
+        instance.past_due_since = new Date();
+      }
+    }
+    else if (instance.past_due_since !== null && instance.past_due_since !== undefined) {
+      instance.past_due_since = null;
     }
   }
 }

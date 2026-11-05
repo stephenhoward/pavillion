@@ -22,6 +22,7 @@ import type AccountsInterface from '@/server/accounts/interface';
 import type EmailInterface from '@/server/email/interface';
 import { MailData } from '@/server/common/email/types';
 import { initI18Next } from '@/server/common/test/lib/i18next';
+import { backdatePastDue } from '@/server/funding/test/fixtures/past-due';
 import {
   ActiveFundingPlanExistsError,
   DuplicateCalendarFundingPlanError,
@@ -91,6 +92,9 @@ describe('Funding Plan System Integration Tests', () => {
    * Install the real funding event handlers on the suite's bus, with a stub
    * mail transport and an accounts lookup that knows only the plan owner.
    *
+   * Each call installs another full set of handlers on the same bus, so call
+   * it once per test: a second call would send every email twice.
+   *
    * @param account - The plan-owning account
    * @returns The emails the handlers send, in order
    */
@@ -115,26 +119,18 @@ describe('Funding Plan System Integration Tests', () => {
   const settleEmits = () => _clock.runAllAsync();
 
   /**
-   * Backdate a plan's last write, which is where both the suspension job and
-   * the past-due grace window measure from. Written in the format Sequelize
-   * itself stores, because the gate reads the value back through the model
-   * (the job only compares it in SQL).
-   */
-  async function backdatePlan(planId: string, updatedAt: Date): Promise<void> {
-    const stored = updatedAt.toISOString().replace('T', ' ').replace('Z', ' +00:00');
-    await db.query('UPDATE funding_plan SET updatedAt = ? WHERE id = ?', {
-      replacements: [stored, planId],
-    });
-  }
-
-  /**
    * A failed payment through suspension and back, as Stripe actually drives
    * it: the provider keeps the subscription past_due and keeps retrying long
    * after Pavillion's grace period has suspended the plan locally.
    */
   describe('dunning: past-due grace and held suspension', () => {
+    const DAY = 24 * 60 * 60 * 1000;
     const graceExpired = new Date('2026-01-07T12:00:00Z');
 
+    /**
+     * An instance with a 7-day grace period and one account whose active
+     * monthly plan covers one calendar.
+     */
     async function seedDunningPlan() {
       await FundingSettingsEntity.build({
         id: uuidv4(),
@@ -173,15 +169,52 @@ describe('Funding Plan System Integration Tests', () => {
       });
       await plan.save();
 
-      return { account, plan, providerConfig };
+      const calendar = CalendarEntity.build({
+        id: uuidv4(),
+        url_name: `dunning-cal-${uuidv4().slice(0, 8)}`,
+        languages: 'en',
+        default_date_range: 'month',
+      });
+      await calendar.save();
+
+      await CalendarFundingPlanEntity.build({
+        id: uuidv4(),
+        funding_plan_id: plan.id,
+        calendar_id: calendar.id,
+        amount: 1000000,
+        end_time: null,
+      }).save();
+
+      return { account, plan, providerConfig, calendar };
     }
 
-    const providerReport = (eventId: string, eventType: string, status: 'active' | 'past_due'): WebhookEvent => ({
+    const providerReport = (
+      eventId: string,
+      eventType: string,
+      status: 'active' | 'past_due',
+      extra: Partial<WebhookEvent> = {},
+    ): WebhookEvent => ({
       eventId,
       eventType,
       subscriptionId: 'sub_dunning',
       status,
       rawPayload: {},
+      ...extra,
+    });
+
+    it('should stamp the failure instant on the plan and clear it once the provider reports it paid', async () => {
+      const { plan, providerConfig } = await seedDunningPlan();
+
+      await service.processWebhookEvent(
+        providerReport('evt_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await plan.reload();
+      expect(plan.past_due_since).toEqual(new Date('2026-01-15T12:00:00Z'));
+
+      await service.processWebhookEvent(
+        providerReport('evt_paid', 'invoice.payment_succeeded', 'active'), providerConfig.id);
+      await plan.reload();
+      expect(plan.status).toBe('active');
+      expect(plan.past_due_since).toBeNull();
     });
 
     it('should email once for the failure and once for the suspension over a full retry cycle', async () => {
@@ -191,7 +224,7 @@ describe('Funding Plan System Integration Tests', () => {
       await service.processWebhookEvent(
         providerReport('evt_first_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
 
-      await backdatePlan(plan.id, graceExpired);
+      await backdatePastDue(plan.id, graceExpired);
       await service.suspendExpiredFundingPlans();
       await plan.reload();
       expect(plan.status).toBe('suspended');
@@ -208,7 +241,7 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.suspended_at).toEqual(suspendedAt);
 
       // A grace period later the job finds nothing past due to suspend again.
-      await backdatePlan(plan.id, graceExpired);
+      _clock.tick(8 * DAY);
       await service.suspendExpiredFundingPlans();
 
       await settleEmits();
@@ -223,7 +256,7 @@ describe('Funding Plan System Integration Tests', () => {
       const { account, plan, providerConfig } = await seedDunningPlan();
       await service.processWebhookEvent(
         providerReport('evt_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
-      await backdatePlan(plan.id, graceExpired);
+      await backdatePastDue(plan.id, graceExpired);
       await service.suspendExpiredFundingPlans();
       await settleEmits();
 
@@ -240,6 +273,63 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.suspended_at).toBeNull();
       expect(reactivated.callCount).toBe(1);
       expect(sentEmails).toHaveLength(0);
+    });
+
+    /**
+     * Every write below lands on a plan that is past due and never pays. None
+     * of them may move the end of its grace period: if one did, a holder could
+     * repeat it once per grace period and keep paid features until the
+     * provider gave up.
+     */
+    describe('grace measured from the failure, not the last write', () => {
+      const writesToAPastDuePlan: Array<[string, (planId: string, providerConfigId: string) => Promise<void>]> = [
+        ['a cancel followed by a resume', async (planId) => {
+          sandbox.stub(ProviderFactory, 'getAdapter').returns({
+            cancelSubscription: sandbox.stub().resolves(),
+            resumeSubscription: sandbox.stub().resolves(),
+          } as any);
+          await service.cancel(planId, false);
+          await service.resume(planId);
+        }],
+        ['a provider report that only schedules a cancellation', async (_planId, providerConfigId) => {
+          await service.processWebhookEvent(providerReport(
+            'evt_schedule_only', 'customer.subscription.updated', 'past_due',
+            { cancelAt: new Date('2026-02-01T00:00:00Z') },
+          ), providerConfigId);
+        }],
+        ['a provider report that only moves the billing period', async (_planId, providerConfigId) => {
+          await service.processWebhookEvent(providerReport(
+            'evt_period_only', 'customer.subscription.updated', 'past_due',
+            {
+              currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+              currentPeriodEnd: new Date('2027-01-01T00:00:00Z'),
+            },
+          ), providerConfigId);
+        }],
+      ];
+
+      it.each(writesToAPastDuePlan)('should not restart the grace period on %s', async (_label, write) => {
+        const { plan, providerConfig, calendar } = await seedDunningPlan();
+        await service.processWebhookEvent(
+          providerReport('evt_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+
+        // Six days into a seven-day grace: still covered.
+        _clock.tick(6 * DAY);
+        expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(true);
+
+        await write(plan.id, providerConfig.id);
+        await plan.reload();
+        expect(plan.status).toBe('past_due');
+        expect(plan.past_due_since).toEqual(new Date('2026-01-15T12:00:00Z'));
+
+        // Eight days after the failure: covered by neither the gate nor the job.
+        _clock.tick(2 * DAY);
+        expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
+
+        await service.suspendExpiredFundingPlans();
+        await plan.reload();
+        expect(plan.status).toBe('suspended');
+      });
     });
   });
 
@@ -304,13 +394,7 @@ describe('Funding Plan System Integration Tests', () => {
     expect(plan.status).toBe('past_due');
 
     // Step 2: Advance time beyond grace period (8 days)
-    const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
-    await db.query(
-      'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
-      {
-        replacements: [eightDaysAgo.toISOString(), plan.id],
-      },
-    );
+    await backdatePastDue(plan.id, new Date('2026-01-07T12:00:00Z'));
 
     // Step 3: Run grace period check job
     await checkGracePeriodExpiry();
@@ -1495,14 +1579,8 @@ describe('Funding Plan System Integration Tests', () => {
     });
     await plan.save();
 
-    // Set updatedAt to 9 days ago (clearly past grace period)
-    const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
-    await db.query(
-      'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
-      {
-        replacements: [nineDaysAgo.toISOString(), plan.id],
-      },
-    );
+    // Past due since 9 days ago (clearly past grace period)
+    await backdatePastDue(plan.id, new Date('2026-01-06T12:00:00Z'));
 
     // Run grace period check
     await checkGracePeriodExpiry();
@@ -1653,7 +1731,7 @@ describe('Funding Plan System Integration Tests', () => {
     it('should close the gate for a past_due plan once its grace period has expired', async () => {
       await enableInstanceFunding();
       const calendar = await createCoveredCalendar({ status: 'past_due' });
-      await backdatePlan((await pastDuePlan()).id, new Date('2026-01-07T12:00:00Z'));
+      await backdatePastDue((await pastDuePlan()).id, new Date('2026-01-07T12:00:00Z'));
 
       // Closed whether or not the suspension job has run yet ...
       expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);

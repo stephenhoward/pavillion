@@ -540,7 +540,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         cancelled_at?: Date | null;
         cancel_at?: Date | null;
         current_period_end?: Date | null;
-        updatedAt?: Date;
+        past_due_since?: Date | null;
       } | null,
     ): void {
       /** The allocation row as the query in `options` would see it, or null. */
@@ -554,7 +554,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
           cancelled_at: null,
           cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
-          updatedAt: new Date(),
+          past_due_since: null,
           ...plan,
         };
 
@@ -662,7 +662,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         const accountId = uuidv4();
 
         await onlyThePlanDecides(accountId, calendarId);
-        stubAllocation(calendarId, { status: 'past_due', updatedAt: new Date(Date.now() - 2 * DAY) });
+        stubAllocation(calendarId, { status: 'past_due', past_due_since: new Date(Date.now() - 2 * DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
         expect(status).toBe('covered');
@@ -673,7 +673,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         const accountId = uuidv4();
 
         await onlyThePlanDecides(accountId, calendarId);
-        stubAllocation(calendarId, { status: 'past_due', updatedAt: new Date(Date.now() - 8 * DAY) });
+        stubAllocation(calendarId, { status: 'past_due', past_due_since: new Date(Date.now() - 8 * DAY) });
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
         expect(status).toBe('not_covered');

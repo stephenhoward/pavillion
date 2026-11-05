@@ -208,6 +208,66 @@ describe('Funding Plan Entities', () => {
 
         expect(entity.cancel_at).toBe(row.cancel_at);
       });
+
+      /**
+       * past_due_since is the dunning clock: it may be written only by the
+       * transition into past_due, so nothing else done to a past-due row can
+       * restart its grace period.
+       */
+      describe('past_due_since', () => {
+        it('should stamp the instant an active plan becomes past due', () => {
+          const before = Date.now();
+          const entity = buildPlan('active');
+
+          entity.status = 'past_due';
+          FundingPlanEntity.validateStatusTransition(entity);
+
+          expect(entity.past_due_since!.getTime()).toBeGreaterThanOrEqual(before);
+        });
+
+        it('should keep the recorded instant across saves that leave the plan past due', () => {
+          // A cancel, a resume, a provider echo of a schedule or a period:
+          // each saves the row without changing its status.
+          const pastDueSince = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+          const row = { ...planRow('past_due'), cancel_at: null, past_due_since: pastDueSince };
+          const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+          entity.cancel_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          FundingPlanEntity.validateStatusTransition(entity);
+
+          expect(entity.past_due_since).toBe(pastDueSince);
+        });
+
+        it.each(['active', 'suspended', 'cancelled'] as const)(
+          'should clear the instant when a past-due plan becomes %s',
+          (status) => {
+            const row = { ...planRow('past_due'), past_due_since: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+            const entity = FundingPlanEntity.build(row, { isNewRecord: false, raw: true });
+
+            entity.status = status;
+            FundingPlanEntity.validateStatusTransition(entity);
+
+            expect(entity.past_due_since).toBeNull();
+          },
+        );
+
+        it('should stamp a plan created past due', () => {
+          const before = Date.now();
+          const entity = buildPlan('past_due');
+
+          FundingPlanEntity.stampPastDueOnCreate(entity);
+
+          expect(entity.past_due_since!.getTime()).toBeGreaterThanOrEqual(before);
+        });
+
+        it('should leave a plan created active unstamped', () => {
+          const entity = buildPlan('active');
+
+          FundingPlanEntity.stampPastDueOnCreate(entity);
+
+          expect(entity.past_due_since ?? null).toBeNull();
+        });
+      });
     });
   });
 

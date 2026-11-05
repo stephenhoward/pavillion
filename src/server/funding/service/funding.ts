@@ -1732,8 +1732,8 @@ export default class FundingService {
    *    plan the provider still calls past_due and keeps retrying, so the
    *    provider's next past_due report says nothing new and is not applied.
    *    Applied, it would hand the plan back to the job's past_due scan with a
-   *    fresh `updatedAt`, to be suspended — and announced — a second time a
-   *    grace period later. A suspended plan leaves suspension only when the
+   *    fresh `past_due_since` — a second grace period of coverage — to be
+   *    suspended and announced a second time when that ran out. A suspended plan leaves suspension only when the
    *    provider reports it paid ('active') or ended ('cancelled').
    *  - A plan that is 'cancelled' once the event has been applied is finalized:
    *    the calendar allocations it was paying for get their `end_time` written,
@@ -2142,8 +2142,8 @@ export default class FundingService {
    * Called by scheduled job to handle expired grace periods
    *
    * The scan is an unlocked snapshot, so each plan is re-read FOR UPDATE and
-   * suspended only if it still matches the scan: 'past_due', last updated
-   * before the grace-period cutoff. Without that, a webhook landing
+   * suspended only if it still matches the scan: 'past_due', and past due
+   * since before the grace-period cutoff. Without that, a webhook landing
    * between scan and write — Stripe's own `unpaid` → 'suspended', or a
    * recovered payment → 'active' — would be overwritten from the stale
    * snapshot, and a webhook suspension would be announced a second time (one
@@ -2154,12 +2154,17 @@ export default class FundingService {
     const gracePeriodMs = settings.gracePeriodDays * 24 * 60 * 60 * 1000;
     const cutoffDate = new Date(Date.now() - gracePeriodMs);
 
-    // The scan's filter, reused under the lock below.
+    // The scan's filter, reused under the lock below. Measured from
+    // past_due_since, which only the transition into past_due writes, so no
+    // later write to the row (a cancel, a resume, a provider echo) restarts
+    // the grace. A past-due row with no recorded instant counts as expired,
+    // as the access gate reads it (planAccessExpiry).
     const expiredWhere = {
       status: 'past_due',
-      updatedAt: {
-        [Op.lt]: cutoffDate,
-      },
+      [Op.or]: [
+        { past_due_since: { [Op.lt]: cutoffDate } },
+        { past_due_since: { [Op.is]: null as any } },
+      ],
     };
 
     const expiredFundingPlans = await FundingPlanEntity.findAll({ where: expiredWhere });
@@ -2799,12 +2804,14 @@ export default class FundingService {
    *    flight or lost: it keeps a paying customer from being cut off the
    *    instant their period rolls over. It is not the dunning window, which
    *    is the next boundary.
-   *  - updatedAt plus the instance grace period, on a past_due plan only. This
-   *    is the dunning window (DEC-022): a plan whose payment failed keeps its
-   *    calendars covered until the grace period ends. It is measured exactly
-   *    as suspendExpiredFundingPlans measures it, from the plan's last write,
-   *    so coverage ends at the instant the job becomes entitled to suspend the
-   *    plan — whether or not the job has run yet. The provider usually
+   *  - past_due_since plus the instance grace period, on a past_due plan
+   *    only. This is the dunning window (DEC-022): a plan whose payment failed
+   *    keeps its calendars covered until the grace period ends. It is measured
+   *    exactly as suspendExpiredFundingPlans measures it, from the instant the
+   *    plan became past due, so coverage ends when the job becomes entitled to
+   *    suspend the plan — whether or not the job has run yet. Never from
+   *    updatedAt: a cancel, a resume or any provider echo moves that, and a
+   *    holder who never pays could keep pushing the grace forward with them. The provider usually
    *    advances current_period_end when it opens the unpaid invoice, so
    *    without this boundary a past-due plan would ride the new period's end.
    *
@@ -2812,7 +2819,7 @@ export default class FundingService {
    *
    * Four stored values can end a calendar's coverage. They are not competing
    * answers to one question; each answers a different one, and only two are
-   * read here (updatedAt, above, is the dunning clock rather than an
+   * read here (past_due_since, above, is the dunning clock rather than an
    * end-of-entitlement marker):
    *
    *  1. CalendarFundingPlanEntity.end_time — when THIS CALENDAR's allocation
@@ -2847,11 +2854,12 @@ export default class FundingService {
   private planAccessExpiry(plan: FundingPlanEntity, gracePeriodDays: number): Date | null {
     const graceMs = Math.max(gracePeriodDays, 0) * 24 * 60 * 60 * 1000;
 
-    // An unreadable last write would make the dunning boundary NaN, which no
-    // comparison picks as earliest, so it would silently round permissive.
-    // Read it as the epoch instead: grace long over, access denied.
+    // A missing or unreadable instant would make the dunning boundary absent
+    // or NaN, and either one lets the period end weeks ahead stand alone:
+    // permissive. Read it as the epoch instead — grace long over, access
+    // denied — which is also how the suspension job treats a NULL.
     const pastDueSince = plan.status === 'past_due'
-      ? (Number.isFinite(plan.updatedAt?.getTime()) ? plan.updatedAt.getTime() : 0)
+      ? (Number.isFinite(plan.past_due_since?.getTime()) ? plan.past_due_since!.getTime() : 0)
       : null;
 
     const boundaries = [

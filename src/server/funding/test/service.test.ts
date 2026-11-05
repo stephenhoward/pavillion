@@ -761,7 +761,7 @@ describe('FundingService', () => {
       const mockEntity = {
         id: fundingPlanId,
         status: 'past_due',
-        updatedAt: pastDueDate,
+        past_due_since: pastDueDate,
         save: sandbox.stub().resolves(),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -1428,7 +1428,7 @@ describe('FundingService', () => {
         cancelled_at?: Date | null;
         cancel_at?: Date | null;
         current_period_end?: Date | null;
-        updatedAt?: Date;
+        past_due_since?: Date | null;
       } | null,
     ): sinon.SinonStub {
       /** The allocation row as the query in `options` would see it, or null. */
@@ -1442,7 +1442,7 @@ describe('FundingService', () => {
           cancelled_at: null,
           cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
-          updatedAt: new Date(),
+          past_due_since: null,
           ...plan,
         };
 
@@ -1599,16 +1599,17 @@ describe('FundingService', () => {
 
       /**
        * A past-due plan keeps its calendars covered through the instance grace
-       * period (DEC-022). The grace is measured from the plan's last write,
-       * as the suspension job measures it, so coverage ends at the instant the
-       * job becomes entitled to suspend — whether or not it has run yet.
+       * period (DEC-022). The grace is measured from past_due_since, the
+       * instant the plan became past due, as the suspension job measures it,
+       * so coverage ends at the instant the job becomes entitled to suspend —
+       * whether or not it has run yet.
        */
       it('should keep the gate open for a past_due plan inside its grace period', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
         // Payment failed two days ago; the instance grace period is 7 days.
-        stubAllocation({ status: 'past_due', updatedAt: new Date(Date.now() - 2 * DAY) });
+        stubAllocation({ status: 'past_due', past_due_since: new Date(Date.now() - 2 * DAY) });
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 
@@ -1623,7 +1624,7 @@ describe('FundingService', () => {
         // period end weeks ahead must not stretch the dunning window.
         stubAllocation({
           status: 'past_due',
-          updatedAt: new Date(Date.now() - 8 * DAY),
+          past_due_since: new Date(Date.now() - 8 * DAY),
           current_period_end: new Date(Date.now() + 30 * DAY),
         });
 
@@ -1632,13 +1633,33 @@ describe('FundingService', () => {
         expect(allowed).toBe(false);
       });
 
-      it('should close the gate for a past_due plan whose last write cannot be read', async () => {
+      // A missing or unparseable instant must not leave the period end weeks
+      // ahead as the only boundary standing.
+      it.each([
+        ['missing', null],
+        ['unreadable', new Date(Number.NaN)],
+      ])('should close the gate for a past_due plan whose past-due instant is %s', async (_label, pastDueSince) => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
-        // An unparseable timestamp must not leave the period end weeks ahead
-        // as the only boundary standing.
-        stubAllocation({ status: 'past_due', updatedAt: new Date(Number.NaN) });
+        stubAllocation({ status: 'past_due', past_due_since: pastDueSince });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should ignore later writes to a past_due plan when measuring its grace', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Past due for eight days but written a minute ago — a resume, or a
+        // provider echo. The grace runs from the failure, not the last write.
+        stubAllocation({
+          status: 'past_due',
+          past_due_since: new Date(Date.now() - 8 * DAY),
+          updatedAt: new Date(Date.now() - 60 * 1000),
+        } as any);
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 
@@ -1653,7 +1674,7 @@ describe('FundingService', () => {
         // ago. Earliest boundary wins: grace never outlasts a cancellation.
         stubAllocation({
           status: 'past_due',
-          updatedAt: new Date(Date.now() - DAY),
+          past_due_since: new Date(Date.now() - DAY),
           cancel_at: new Date(Date.now() - HOUR),
         });
 
