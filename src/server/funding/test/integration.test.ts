@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
+import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
@@ -645,6 +646,81 @@ describe('Funding Plan System Integration Tests', () => {
    * history when a fresh checkout creates the next — so newest-first alone
    * would let a plan that has ended hide the one the account is paying for.
    */
+  /**
+   * Disconnecting a provider removes its billing portal, which is the only way
+   * a suspended plan can be reactivated. Both disconnect paths therefore count
+   * every plan that has not ended, not just active and past_due ones.
+   */
+  describe('provider disconnect guards', () => {
+    async function seedProviderWithPlan(status: 'suspended' | 'cancelled') {
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'disconnect@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: 'sub_disconnect',
+        provider_customer_id: 'cus_disconnect',
+        status,
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: status === 'cancelled' ? new Date() : null,
+        cancel_at: null,
+        suspended_at: status === 'suspended' ? new Date() : null,
+      });
+      await plan.save();
+
+      return { providerConfig, plan };
+    }
+
+    it('should refuse to disconnect a provider whose only plan is suspended', async () => {
+      const { providerConfig } = await seedProviderWithPlan('suspended');
+
+      await expect(service.disconnectProvider('stripe')).rejects.toThrow('have not ended');
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).not.toBeNull();
+    });
+
+    it('should disconnect a provider whose plans have all been cancelled', async () => {
+      const { providerConfig } = await seedProviderWithPlan('cancelled');
+
+      expect(await service.disconnectProvider('stripe')).toBe(true);
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).toBeNull();
+    });
+
+    it('should ask for confirmation before the admin flow disconnects a provider with a suspended plan', async () => {
+      const { providerConfig } = await seedProviderWithPlan('suspended');
+      const connections = new ProviderConnectionService(eventBus);
+
+      const result = await connections.disconnectProvider('stripe', false);
+
+      expect(result.requiresConfirmation).toBe(true);
+      expect(result.activeFundingPlanCount).toBe(1);
+      expect(await connections.getActiveFundingPlanCount('stripe')).toBe(1);
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).not.toBeNull();
+    });
+
+    it('should let the admin flow disconnect a provider whose plans have all been cancelled without confirmation', async () => {
+      const { providerConfig } = await seedProviderWithPlan('cancelled');
+      const connections = new ProviderConnectionService(eventBus);
+
+      const result = await connections.disconnectProvider('stripe', false);
+
+      expect(result.requiresConfirmation).toBeUndefined();
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).toBeNull();
+    });
+  });
+
   describe('getStatus', () => {
     async function seedAccountPlans(statuses: Array<'active' | 'past_due' | 'suspended' | 'cancelled'>) {
       const providerConfig = await createProviderConfig('stripe');

@@ -342,19 +342,20 @@ export default class FundingService {
       return false;
     }
 
-    // Check if any active funding plans use this provider
-    const activeFundingPlans = await FundingPlanEntity.count({
+    // Refuse while any plan on this provider has not ended — the same
+    // "unended" rule the checkout gate and getStatus use. A suspended plan
+    // counts: its only way back is updating payment details in this
+    // provider's billing portal, which disconnecting would remove.
+    const unendedFundingPlans = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
-        status: {
-          [Op.in]: ['active', 'past_due'],
-        },
+        status: { [Op.ne]: 'cancelled' },
       },
     });
 
-    if (activeFundingPlans > 0) {
+    if (unendedFundingPlans > 0) {
       throw new Error(
-        `Cannot disconnect provider with ${activeFundingPlans} active funding plan(s)`,
+        `Cannot disconnect provider with ${unendedFundingPlans} funding plan(s) that have not ended`,
       );
     }
 
