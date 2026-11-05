@@ -241,8 +241,14 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.cancelled_at).toBeNull();
     });
 
-    it('should announce, and email, a repeated period-end cancel only once', async () => {
-      const { account, plan, mockAdapter } = await seedCoveredAccount();
+    /**
+     * Install the real funding event handlers on the suite's bus, with a stub
+     * mail transport and an accounts lookup that knows only the plan owner.
+     *
+     * @param account - The plan-owning account
+     * @returns The emails the handlers send, in order
+     */
+    function captureDunningEmails(account: AccountEntity): MailData[] {
       const sentEmails: MailData[] = [];
       const handlers = new FundingEventHandlers({
         sendEmail: async (data: MailData) => { sentEmails.push(data); return null; },
@@ -252,6 +258,39 @@ describe('Funding Plan System Integration Tests', () => {
           (id === account.id ? new Account(account.id, 'owner', account.email) : undefined),
       } as unknown as AccountsInterface);
       handlers.install(eventBus);
+      return sentEmails;
+    }
+
+    /**
+     * Lifecycle emits are deferred past commit with setImmediate, which this
+     * suite's fake clock holds; run every queued timer (and the handler
+     * microtasks between them) before counting.
+     */
+    const settleEmits = () => _clock.runAllAsync();
+
+    /** Stripe's echo of a period-end cancellation: still active, cancel_at set. */
+    const scheduledCancellation = (eventId: string): WebhookEvent => ({
+      eventId,
+      eventType: 'customer.subscription.updated',
+      subscriptionId: 'sub_user_cancel',
+      status: 'active',
+      cancelAt: periodEnd,
+      rawPayload: {},
+    });
+
+    /** Stripe's report that the subscription has ended. */
+    const subscriptionDeleted = (eventId: string): WebhookEvent => ({
+      eventId,
+      eventType: 'customer.subscription.deleted',
+      subscriptionId: 'sub_user_cancel',
+      status: 'cancelled',
+      cancelAt: null,
+      rawPayload: {},
+    });
+
+    it('should announce, and email, a repeated period-end cancel only once', async () => {
+      const { account, plan, mockAdapter } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
       const emitted = sandbox.spy();
       eventBus.on('funding:plan:cancelled', emitted);
 
@@ -259,13 +298,63 @@ describe('Funding Plan System Integration Tests', () => {
       await service.cancel(plan.id, false);
       await service.cancel(plan.id, false);
 
-      // The emit is deferred past commit with setImmediate, which this suite's
-      // fake clock holds; run every queued timer (and the handler microtasks
-      // between them) before counting.
-      await _clock.runAllAsync();
+      await settleEmits();
       expect(emitted.callCount).toBe(1);
       expect(sentEmails).toHaveLength(1);
       expect(mockAdapter.cancelSubscription.callCount).toBe(1);
+    });
+
+    it('should email the owner once when the cancellation is scheduled from the billing portal', async () => {
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].emailAddress).toBe('cancel@example.com');
+      expect(sentEmails[0].textMessage).toContain('until the end of the current billing period');
+    });
+
+    it('should email the owner once when the provider ends a subscription nobody cancelled', async () => {
+      // Stripe ending the subscription after its payment retries run out, or
+      // an operator deleting it from the Stripe dashboard.
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(subscriptionDeleted('evt_provider_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].textMessage).toContain('Calendars it covered no longer have access');
+    });
+
+    it('should email once for an in-app cancel, whatever the provider echoes afterwards', async () => {
+      const { account, plan, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.cancel(plan.id, false);
+      await service.processWebhookEvent(scheduledCancellation('evt_echo_updated'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_echo_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+    });
+
+    it('should not email again when a provider cancellation is replayed', async () => {
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+      // The same delivery retried, then a later event that still carries the
+      // schedule (Stripe sends one on every subscription change).
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel_later'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_portal_deleted'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_portal_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
     });
 
     it('should finalize the plan and close its allocations when the deletion event arrives', async () => {

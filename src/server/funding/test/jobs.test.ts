@@ -361,4 +361,115 @@ describe('Funding Plan Scheduled Jobs', () => {
       expect(veryRecentPlan.suspended_at).toBeNull();
     });
   });
+
+  /*
+   * The scan is an unlocked snapshot. These hand the job a scan result that
+   * has gone stale and let the real database answer the locked re-read.
+   */
+  describe('suspendExpiredFundingPlans with a stale scan', () => {
+    /**
+     * Seed a plan in its current state and return a copy of it as the scan saw
+     * it: past due since well before the cutoff.
+     *
+     * @param status - The plan's status by the time the row is locked
+     * @param updatedAt - When the plan was last written, by then
+     */
+    async function seedStaleCandidate(status: 'past_due' | 'suspended' | 'active', updatedAt: Date) {
+      await FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      }).save();
+
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: `stale-${uuidv4()}@example.com`,
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const providerConfig = ProviderConfigEntity.build({
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Credit Card',
+        credentials: '{}',
+        webhook_secret: 'test_secret',
+      });
+      await providerConfig.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: `sub_${uuidv4()}`,
+        provider_customer_id: 'cus_stale',
+        status,
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: null,
+        suspended_at: null,
+      });
+      await plan.save();
+      await db.query('UPDATE funding_plan SET updatedAt = ? WHERE id = ?', {
+        replacements: [updatedAt.toISOString(), plan.id],
+      });
+
+      // Only the scan is replaced. Sequelize's findOne is built on findAll, so
+      // the locked re-read (the one query naming an id) goes to the database.
+      const realFindAll = FundingPlanEntity.findAll.bind(FundingPlanEntity);
+      sandbox.stub(FundingPlanEntity, 'findAll').callsFake(((options: any) =>
+        (options?.where?.id
+          ? realFindAll(options)
+          : Promise.resolve([{ id: plan.id, status: 'past_due' }]))) as any);
+      const emitted = sandbox.spy();
+      eventBus.on('funding:plan:suspended', emitted);
+
+      return { plan, emitted };
+    }
+
+    it('should not suspend, or announce, a plan a webhook already suspended', async () => {
+      const { plan, emitted } = await seedStaleCandidate('suspended', new Date('2026-01-05T12:00:00Z'));
+
+      await _service.suspendExpiredFundingPlans();
+      await _clock.runAllAsync();
+
+      await plan.reload();
+      expect(plan.suspended_at).toBeNull();
+      expect(emitted.called).toBe(false);
+    });
+
+    it('should not suspend a plan whose grace period restarted after the scan', async () => {
+      // Past due again when the row is locked, but only since yesterday: it
+      // recovered and failed once more between scan and lock.
+      const { plan, emitted } = await seedStaleCandidate('past_due', new Date('2026-01-14T12:00:00Z'));
+
+      await _service.suspendExpiredFundingPlans();
+      await _clock.runAllAsync();
+
+      await plan.reload();
+      expect(plan.status).toBe('past_due');
+      expect(emitted.called).toBe(false);
+    });
+
+    it('should suspend, and announce once, a plan the scan read correctly', async () => {
+      const { plan, emitted } = await seedStaleCandidate('past_due', new Date('2026-01-05T12:00:00Z'));
+
+      await _service.suspendExpiredFundingPlans();
+      await _clock.runAllAsync();
+
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      expect(emitted.callCount).toBe(1);
+    });
+  });
 });

@@ -3,7 +3,7 @@
   "title": "Payment Not Received",
   "greeting": "Hello,",
   "message": "We couldn't collect the latest payment for your {{planName}}.",
-  "status_detail": "Your plan is now past due. The calendars it covers keep their features for a short grace period, after which the plan will be suspended if the payment is still outstanding.",
+  "status_detail": "Your plan is now past due. The calendars it covers keep extended features for a short grace period, after which the plan will be suspended if the payment is still outstanding.",
   "plan_name_monthly": "monthly funding plan supporting {{domain}}",
   "plan_name_yearly": "yearly funding plan supporting {{domain}}",
   "action_message": "Please check your payment details to keep your plan active.",

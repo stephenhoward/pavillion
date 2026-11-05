@@ -692,7 +692,7 @@ describe('FundingService', () => {
       const mockEntity = {
         id: fundingPlanId,
         status: 'past_due',
-        updated_at: pastDueDate,
+        updatedAt: pastDueDate,
         save: sandbox.stub().resolves(),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -702,7 +702,7 @@ describe('FundingService', () => {
       };
 
       sandbox.stub(FundingPlanEntity, 'findAll').resolves([mockEntity] as any);
-      sandbox.stub(FundingPlanEntity, 'findByPk').resolves(mockEntity as any);
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockEntity as any);
 
       const mockSettings = {
         toModel: () => {
@@ -717,33 +717,6 @@ describe('FundingService', () => {
 
       expect(mockEntity.status).toBe('suspended');
       expect(mockEntity.save.called).toBe(true);
-    });
-
-    it('should leave a plan alone that a webhook moved after the scan', async () => {
-      // The scan saw 'past_due'; by the time the row is locked a webhook has
-      // already suspended it (Stripe `unpaid`) and announced that. Suspending
-      // again would announce it twice — a second dunning email.
-      const fundingPlanId = uuidv4();
-      const scanned = { id: fundingPlanId, status: 'past_due' };
-      const current = {
-        id: fundingPlanId,
-        status: 'suspended',
-        save: sandbox.stub().resolves(),
-      };
-
-      sandbox.stub(FundingPlanEntity, 'findAll').resolves([scanned] as any);
-      sandbox.stub(FundingPlanEntity, 'findByPk').resolves(current as any);
-      sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
-        toModel: () => new FundingSettings(),
-      } as any);
-      const emitted = sandbox.spy();
-      eventBus.on('funding:plan:suspended', emitted);
-
-      await service.suspendExpiredFundingPlans();
-      await new Promise(resolve => setImmediate(resolve));
-
-      expect(current.save.called).toBe(false);
-      expect(emitted.called).toBe(false);
     });
   });
 

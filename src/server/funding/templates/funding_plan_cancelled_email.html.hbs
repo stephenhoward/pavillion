@@ -78,7 +78,7 @@
                 {{#if atPeriodEnd}}{{t 'status_period_end'}}{{else}}{{t 'status_immediate'}}{{/if}}
             </div>
 
-            <p>{{t 'action_message'}}</p>
+            <p>{{#if atPeriodEnd}}{{t 'action_message_period_end'}}{{else}}{{t 'action_message'}}{{/if}}</p>
 
             <p style="text-align: center;">
                 <a href="{{actionUrl}}" class="button">

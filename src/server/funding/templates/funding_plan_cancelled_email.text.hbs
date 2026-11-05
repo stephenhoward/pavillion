@@ -6,7 +6,7 @@
 
 {{#if atPeriodEnd}}{{{t 'status_period_end'}}}{{else}}{{{t 'status_immediate'}}}{{/if}}
 
-{{{t 'action_message'}}}
+{{#if atPeriodEnd}}{{{t 'action_message_period_end'}}}{{else}}{{{t 'action_message'}}}{{/if}}
 
 {{{t 'action_button'}}}
 {{{actionUrl}}}

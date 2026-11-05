@@ -77,6 +77,31 @@ describe('PlanCancelledEmail', () => {
     expect(message.htmlMessage).toContain('Calendars it covered no longer have access');
   });
 
+  it('offers a new plan after an immediate cancellation', () => {
+    const message = new PlanCancelledEmail('owner@example.com', 'monthly', false).buildMessage('en');
+
+    expect(message.textMessage).toContain('You can start a new funding plan at any time.');
+    expect(message.textMessage).not.toContain('Changed your mind?');
+  });
+
+  it('offers to keep the plan, not to start a new one, during a period-end cancellation', () => {
+    // A new checkout is refused while the plan winds down; the linked page
+    // offers to keep it instead.
+    const message = new PlanCancelledEmail('owner@example.com', 'monthly', true).buildMessage('en');
+
+    expect(message.textMessage).toContain('Changed your mind? You can keep your plan');
+    expect(message.htmlMessage).toContain('Changed your mind? You can keep your plan');
+    expect(message.textMessage).not.toContain('start a new funding plan');
+    expect(message.htmlMessage).not.toContain('start a new funding plan');
+  });
+
+  it('translates the period-end offer', () => {
+    expect(new PlanCancelledEmail('owner@example.com', 'monthly', true).buildMessage('es').textMessage)
+      .toContain('¿Has cambiado de opinión?');
+    expect(new PlanCancelledEmail('owner@example.com', 'monthly', true).buildMessage('fr').textMessage)
+      .toContain('Vous avez changé d\'avis ?');
+  });
+
   it('says coverage runs to the period end for a period-end cancellation', () => {
     const message = new PlanCancelledEmail('owner@example.com', 'yearly', true).buildMessage('en');
 

@@ -3,7 +3,7 @@
   "title": "Plan de financement suspendu",
   "greeting": "Bonjour,",
   "message": "Votre {{planName}} a été suspendu car un paiement n'a pas pu être encaissé.",
-  "status_detail": "Les calendriers couverts par ce plan n'ont plus accès aux fonctionnalités qui dépendent de la couverture d'un plan de financement jusqu'à sa réactivation.",
+  "status_detail": "Les calendriers couverts par ce plan n'ont plus accès aux fonctionnalités étendues jusqu'à sa réactivation.",
   "plan_name_monthly": "plan de financement mensuel qui soutient {{domain}}",
   "plan_name_yearly": "plan de financement annuel qui soutient {{domain}}",
   "action_message": "Mettez à jour vos informations de paiement pour réactiver votre plan.",
