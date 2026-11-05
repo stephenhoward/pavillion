@@ -463,10 +463,15 @@ const resendInvitation = async (invitationId) => {
     state.invitationOperations[invitationId] = 'resending';
 
     await calendarService.resendInvitation(props.calendarId, invitationId);
+    // When the invitee already has an account, the resend grants editor
+    // access and removes the invitation, so reload the lists.
+    await loadEditors();
 
     // Show success message
     state.success = t('invitation_resent_success');
     clearMessages();
+
+    emit('editorsUpdated');
   }
   catch (error) {
     console.error('Error resending invitation:', error);

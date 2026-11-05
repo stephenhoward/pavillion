@@ -725,6 +725,30 @@ describe('Editors Component', () => {
       expect(wrapper.vm.state.success).toBeTruthy();
     });
 
+    it('reloads the lists after a resend that granted access to an existing account', async () => {
+      calendarServiceMock.listCalendarEditors
+        .mockResolvedValueOnce({
+          activeEditors: [],
+          pendingInvitations: [testInvitation],
+        })
+        .mockResolvedValueOnce({
+          activeEditors: [new CalendarEditor('3', 'test-calendar', testInvitation.email)],
+          pendingInvitations: [],
+        });
+      calendarServiceMock.resendInvitation.mockResolvedValue(undefined);
+
+      const wrapper = mountEditors();
+      await flushPromises();
+
+      await wrapper.vm.resendInvitation('inv-1');
+      await flushPromises();
+
+      expect(calendarServiceMock.listCalendarEditors).toHaveBeenCalledTimes(2);
+      expect(wrapper.vm.state.pendingInvitations).toEqual([]);
+      expect(wrapper.vm.state.editors).toHaveLength(1);
+      expect(wrapper.emitted('editorsUpdated')).toBeTruthy();
+    });
+
     it('handles cancel invitation errors', async () => {
       calendarServiceMock.listCalendarEditors.mockResolvedValue({
         activeEditors: [],

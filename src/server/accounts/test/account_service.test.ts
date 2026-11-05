@@ -961,6 +961,7 @@ describe('acceptAccountInvite', () => {
   it('accepts invitation and grants access to multiple calendars for same email', async () => {
     // Mock the primary invitation entity with a calendar_id
     const primaryInvitation = AccountInvitationEntity.build({
+      id: 'invitation-1',
       invitation_code: 'test_code',
       email: 'test_email@example.com',
       calendar_id: 'calendar-1',
@@ -974,11 +975,13 @@ describe('acceptAccountInvite', () => {
     // Mock findAll to return multiple invitations for the same email
     let findAllStub = acceptSandbox.stub(AccountInvitationEntity, 'findAll');
     const invitation2 = AccountInvitationEntity.build({
+      id: 'invitation-2',
       email: 'test_email@example.com',
       calendar_id: 'calendar-2',
       invited_by: 'inviter-2',
     });
     const invitation3 = AccountInvitationEntity.build({
+      id: 'invitation-3',
       email: 'test_email@example.com',
       calendar_id: null, // Non-calendar invitation
       invited_by: 'inviter-1',
@@ -1030,9 +1033,9 @@ describe('acceptAccountInvite', () => {
       testAccount.id,
     )).toBe(true);
 
-    // Verify all invitations are cleaned up
+    // Every invitation is settled (two granted, one with no calendar), so all are removed
     expect(destroyStub.calledWith({
-      where: { email: 'test_email@example.com' },
+      where: { id: ['invitation-1', 'invitation-2', 'invitation-3'] },
     })).toBe(true);
   });
 });
