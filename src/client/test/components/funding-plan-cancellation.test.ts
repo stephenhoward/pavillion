@@ -25,6 +25,7 @@ const serviceMocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
   getCalendarsInFundingPlan: vi.fn(),
   cancel: vi.fn(),
+  resume: vi.fn(),
   getPortalUrl: vi.fn(),
 }));
 
@@ -34,6 +35,7 @@ vi.mock('@/client/service/funding', () => {
     getStatus = serviceMocks.getStatus;
     getCalendarsInFundingPlan = serviceMocks.getCalendarsInFundingPlan;
     cancel = serviceMocks.cancel;
+    resume = serviceMocks.resume;
     getPortalUrl = serviceMocks.getPortalUrl;
 
     static formatCurrency(amount: number, currency: string): string {
@@ -103,6 +105,12 @@ describe('funding-plan.vue cancellation states', () => {
             cancel_funding_plan_button: 'Cancel Plan',
             manage_payment_button: 'Manage Payment Method',
             cancellation_info: 'Your funding plan will remain active until {{date}}',
+            resume_funding_plan_button: 'Keep My Plan',
+            resume_success: 'Your funding plan will continue.',
+            resume_error: 'Failed to keep your funding plan.',
+            no_funding_plan: 'No Active Funding Plan',
+            no_plan_redirect: 'Open the General page of any calendar you own.',
+            covered_calendars_title: 'Calendars on This Plan',
           },
         },
       },
@@ -168,6 +176,61 @@ describe('funding-plan.vue cancellation states', () => {
     expect(wrapper.text()).toContain(cancelledOn);
     expect(wrapper.find('.status-message.info').text()).toContain(periodEnd);
     expect(wrapper.text()).not.toContain('Cancel Plan');
+  });
+
+  it('should offer to keep a plan whose cancellation is pending, and withdraw the cancellation on request', async () => {
+    const cancelling = { ...continuingPlan, cancelAt: '2026-02-01T00:00:00.000Z' };
+    serviceMocks.resume.mockResolvedValue(true);
+    const wrapper = await mountWithStatus(cancelling);
+    serviceMocks.getStatus.mockResolvedValue(continuingPlan);
+
+    const keep = wrapper.findAll('button').find((b) => b.text() === 'Keep My Plan');
+    expect(keep).toBeDefined();
+
+    await keep!.trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(serviceMocks.resume).toHaveBeenCalledOnce();
+    expect(wrapper.find('.success-message').text()).toBe('Your funding plan will continue.');
+    // Back to a continuing plan: no boundary, cancel offered again.
+    expect(wrapper.find('.status-message.info').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Cancel Plan');
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should report a failed resume and keep the cancellation on screen', async () => {
+    serviceMocks.resume.mockResolvedValue(false);
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: '2026-02-01T00:00:00.000Z' });
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Keep My Plan')!.trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.error-message').text()).toBe('Failed to keep your funding plan.');
+    expect(wrapper.text()).toContain('Keep My Plan');
+  });
+
+  it('should not offer to keep a plan that is simply continuing', async () => {
+    const wrapper = await mountWithStatus(continuingPlan);
+
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should point an account whose plan has ended at starting a new one', async () => {
+    const wrapper = await mountWithStatus({
+      ...continuingPlan,
+      status: 'cancelled',
+      cancelledAt: '2026-01-10T00:00:00.000Z',
+    });
+
+    // The ended plan is history, not something to keep or resume: the way
+    // back is a fresh checkout from a calendar, which the checkout gate allows
+    // because it counts only a plan that is still active.
+    expect(wrapper.find('.no-funding-plan').text()).toContain('Open the General page of any calendar you own.');
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+    // Nothing is covered by an ended plan, so there is no list to show.
+    expect(wrapper.find('.covered-calendars').exists()).toBe(false);
   });
 
   it('should render real dates and a resolved billing cycle from the camelCase payload', async () => {

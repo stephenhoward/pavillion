@@ -200,6 +200,22 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Withdraw a scheduled period-end cancellation
+   *
+   * The inverse of cancelSubscription's period-end branch. Stripe clears
+   * `cancel_at` along with the flag, and reports the result on the next
+   * `customer.subscription.updated` with `cancel_at: null`.
+   *
+   * @param subscriptionId - Provider's subscription ID
+   * @param options - Per-request options (idempotency key)
+   */
+  async resumeSubscription(subscriptionId: string, options?: ProviderRequestOptions): Promise<void> {
+    await this.stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false,
+    }, this.requestOptions(options, 'resume'));
+  }
+
+  /**
    * Stripe supports in-place subscription amount updates
    *
    * @returns True

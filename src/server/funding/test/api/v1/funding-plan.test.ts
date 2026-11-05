@@ -8,7 +8,7 @@ import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
-import { MissingRequiredFieldError } from '@/common/exceptions/funding';
+import { MissingRequiredFieldError, FundingPlanNotResumableError } from '@/common/exceptions/funding';
 
 describe('User Funding Plan API Routes', () => {
   let router: express.Router;
@@ -455,6 +455,60 @@ describe('User Funding Plan API Routes', () => {
       expect(response.body).toEqual({ success: true });
       expect(getStatusStub.calledWith('test-account-id')).toBe(true);
       expect(cancelStub.calledWith('sub-1', false)).toBe(true);
+    });
+  });
+
+  describe('POST /resume', () => {
+    function bindResume() {
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, fundingPlanHandlers.resume.bind(fundingPlanHandlers));
+    }
+
+    it('should withdraw the pending cancellation on the account\'s plan', async () => {
+      const mockPlan = new FundingPlan('plan-1');
+      mockPlan.status = 'active';
+      mockPlan.cancelAt = new Date('2027-01-01T00:00:00Z');
+
+      const getStatusStub = sandbox.stub(service, 'getStatus').resolves(mockPlan);
+      const resumeStub = sandbox.stub(service, 'resume').resolves();
+      bindResume();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .expect(200);
+
+      expect(response.body).toEqual({ success: true });
+      expect(getStatusStub.calledWith('test-account-id')).toBe(true);
+      expect(resumeStub.calledWith('plan-1')).toBe(true);
+    });
+
+    it('should answer 409 when the plan has nothing left to resume', async () => {
+      const mockPlan = new FundingPlan('plan-1');
+      mockPlan.status = 'cancelled';
+      sandbox.stub(service, 'getStatus').resolves(mockPlan);
+      sandbox.stub(service, 'resume').rejects(new FundingPlanNotResumableError('plan-1'));
+      bindResume();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .expect(409);
+
+      expect(response.body.errorName).toBe('FundingPlanNotResumableError');
+    });
+
+    it('should answer 404 when the account has no plan', async () => {
+      sandbox.stub(service, 'getStatus').resolves(undefined);
+      const resumeStub = sandbox.stub(service, 'resume').resolves();
+      bindResume();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .expect(404);
+
+      expect(response.body.errorName).toBe('FundingPlanNotFoundError');
+      expect(resumeStub.called).toBe(false);
     });
   });
 

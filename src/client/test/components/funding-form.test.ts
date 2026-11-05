@@ -644,6 +644,41 @@ describe('FundingForm', () => {
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
+
+    it('explains that the account already holds a plan when the checkout is refused as a conflict', async () => {
+      // One account, one plan: a plan that is still running — including one
+      // winding down to a scheduled cancellation — refuses a second checkout.
+      // Retrying cannot change that, so the generic "please try again" would
+      // send the user round the same loop.
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+      mockCreateCheckoutSession.mockRejectedValue({
+        response: { status: 409, data: { errorName: 'ActiveFundingPlanExistsError' } },
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      const error = wrapper.find('.error-message');
+      expect(error.text()).toContain('already has a funding plan');
+      expect(error.text()).not.toContain('Please try again');
+      expect(mockLoadStripe).not.toHaveBeenCalled();
+    });
+
+    it('keeps the retry message for a failure that retrying can fix', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+      mockCreateCheckoutSession.mockRejectedValue({ response: { status: 500, data: {} } });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.error-message').text()).toBe('Failed to start your funding plan. Please try again.');
+    });
   });
 
   describe('PayPal (inert in v1)', () => {

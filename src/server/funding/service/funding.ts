@@ -44,6 +44,7 @@ import {
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
   ActiveFundingPlanExistsError,
+  FundingPlanNotResumableError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   WebhookSignatureError,
@@ -1155,11 +1156,10 @@ export default class FundingService {
     //
     // Which leaves the resubscribe-during-the-cancellation-window case, and the
     // answer to that is NOT to relax this gate. A customer who changes their
-    // mind before the boundary should have the pending cancellation *reversed*
-    // on the plan they already hold — clear `cancel_at` and send
-    // `cancel_at_period_end: false` to the provider — so they resume rather than
-    // accumulate a second subscription. That path belongs to pv-jdot.3.3; this
-    // gate is what holds the invariant until it lands.
+    // mind before the boundary has the pending cancellation *reversed* on the
+    // plan they already hold (`resume`), so they keep one subscription rather
+    // than accumulating a second. Once the plan has finalized to 'cancelled'
+    // it no longer counts here, and a fresh checkout is the way back.
     //
     // What this gate actually provides is the common case, and no more. It is
     // an unlocked read one or more HTTP round trips before the only site that
@@ -1456,13 +1456,83 @@ export default class FundingService {
   }
 
   /**
-   * Get funding plan status for an account
+   * Withdraw a pending period-end cancellation, keeping the plan the account
+   * already holds
+   *
+   * This is how a customer changes their mind before the boundary. It never
+   * creates a second plan — the checkout gate still counts a winding-down plan
+   * as the account's one plan — it clears `cancel_at` on this one and tells the
+   * provider to renew. The provider's next `customer.subscription.updated`
+   * reports `cancel_at: null`, which processWebhookEvent applies as the same
+   * clear, so the two writes converge.
+   *
+   * Only a plan with a boundary still ahead of it can be resumed. One already
+   * 'cancelled' has had its subscription deleted at the provider, and one whose
+   * boundary has passed is waiting on that deletion; for both, a fresh checkout
+   * is the way back.
+   *
+   * Like `cancel`, the row is locked before the provider call so a concurrent
+   * cancel queues behind this one, and the provider call runs before the local
+   * write so a refusal leaves the cancellation in place.
+   *
+   * @param fundingPlanId - Funding plan ID
+   * @throws FundingPlanNotFoundError when the plan does not exist
+   * @throws FundingPlanNotResumableError when there is no pending cancellation
+   *   that can still be withdrawn
+   */
+  async resume(fundingPlanId: string): Promise<void> {
+    await db.transaction(async (t: Transaction) => {
+      const entity = await FundingPlanEntity.findByPk(fundingPlanId, {
+        transaction: t,
+        lock: Transaction.LOCK.UPDATE,
+      });
+      if (!entity) {
+        throw new FundingPlanNotFoundError(fundingPlanId);
+      }
+
+      if (entity.status === 'cancelled' || !entity.cancel_at || entity.cancel_at.getTime() <= Date.now()) {
+        throw new FundingPlanNotResumableError(fundingPlanId);
+      }
+
+      const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
+        transaction: t,
+      });
+      if (!providerEntity) {
+        throw new Error('Provider configuration not found');
+      }
+
+      const adapter = ProviderFactory.getAdapter(providerEntity);
+      await adapter.resumeSubscription(entity.provider_subscription_id, {
+        idempotencyKey: buildProviderIdempotencyKey('plan-resume', entity.id),
+      });
+
+      entity.cancel_at = null;
+      await entity.save({ transaction: t });
+    });
+  }
+
+  /**
+   * Get the funding plan an account is on
+   *
+   * An account accumulates plan rows: a plan that finalized to 'cancelled'
+   * stays behind as history when a fresh checkout creates the next one. Any
+   * plan that has not ended — active (including one winding down to its
+   * `cancel_at` boundary), past_due or suspended — is therefore preferred over
+   * a cancelled one, however much newer the cancelled row is. Only when every
+   * plan has ended is the most recent cancelled plan reported, so the account
+   * can see that its plan ended rather than that it never had one.
    *
    * @param accountId - Account ID
-   * @returns Funding plan or null if none exists
+   * @returns The account's current plan, its most recent ended plan when none
+   *   is current, or undefined if it has never held one
    */
   async getStatus(accountId: string): Promise<FundingPlan | undefined> {
-    const entity = await FundingPlanEntity.findOne({
+    const current = await FundingPlanEntity.findOne({
+      where: { account_id: accountId, status: { [Op.ne]: 'cancelled' } },
+      order: [['createdAt', 'DESC']],
+    });
+
+    const entity = current ?? await FundingPlanEntity.findOne({
       where: { account_id: accountId },
       order: [['createdAt', 'DESC']],
     });

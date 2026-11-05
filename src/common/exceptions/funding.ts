@@ -105,6 +105,20 @@ export class ActiveFundingPlanExistsError extends Error {
   }
 }
 
+/**
+ * Thrown when a funding plan has no pending cancellation that can still be
+ * reversed: none was scheduled, the plan has already ended, or the boundary
+ * it was cancelling at has passed. A plan that has ended is replaced by a
+ * fresh checkout, never revived.
+ */
+export class FundingPlanNotResumableError extends Error {
+  constructor(fundingPlanId: string) {
+    super(`Funding plan ${fundingPlanId} has no pending cancellation to resume`);
+    this.name = 'FundingPlanNotResumableError';
+    Object.setPrototypeOf(this, FundingPlanNotResumableError.prototype);
+  }
+}
+
 export class ProviderNotConfiguredError extends Error {
   constructor(message?: string) {
     super(message || 'No Stripe provider configured or enabled');

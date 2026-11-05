@@ -205,6 +205,10 @@ export default class FundingInterface {
     return this.fundingService.cancel(fundingPlanId, immediate);
   }
 
+  async resume(fundingPlanId: string): Promise<void> {
+    return this.fundingService.resume(fundingPlanId);
+  }
+
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
     return this.fundingService.getBillingPortalUrl(accountId, returnUrl);
   }

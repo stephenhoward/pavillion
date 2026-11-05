@@ -24,6 +24,7 @@
 
   "plan_started_success": "Thank you for supporting this instance. Your funding plan is active.",
   "plan_start_error": "Failed to start your funding plan. Please try again.",
+  "plan_already_exists_error": "Your account already has a funding plan. Manage it from your account's Funding Plan settings — including keeping it, if you cancelled it.",
 
   "checkout_done_button": "Done",
   "checkout_try_again_button": "Try Again",
@@ -49,6 +50,9 @@
   "cancel_confirm": "Cancel your funding plan? Your subscription ends at the close of the current billing period, and you'll keep extended features until then. Your calendars stay up either way.",
   "cancel_success": "Funding plan cancelled. You'll keep extended features until the end of your billing period.",
   "cancel_error": "Failed to cancel funding plan. Please try again.",
+  "resume_funding_plan_button": "Keep My Plan",
+  "resume_success": "Your funding plan will continue, and renews as usual at the end of the current billing period.",
+  "resume_error": "Failed to keep your funding plan. Please try again.",
 
   "portal_error": "Failed to access billing portal. Please try again.",
 

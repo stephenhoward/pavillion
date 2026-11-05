@@ -85,6 +85,29 @@ function formatCalendarAmount(amount: number): string {
 }
 
 /**
+ * Withdraw the pending cancellation, keeping the plan the account already
+ * holds. Changing one's mind before the boundary is never a second checkout.
+ */
+async function resumeFundingPlan() {
+  processing.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    if (await fundingService.resume()) {
+      successMessage.value = t('resume_success');
+      await loadData();
+    }
+    else {
+      errorMessage.value = t('resume_error');
+    }
+  }
+  finally {
+    processing.value = false;
+  }
+}
+
+/**
  * Load funding options and current status
  */
 async function loadData() {
@@ -188,8 +211,11 @@ onMounted(async () => {
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
     <div v-else class="funding-plan-content">
-      <!-- No funding plan - Direct user to calendar management -->
-      <div v-if="!hasFundingPlan && options?.enabled" class="no-funding-plan">
+      <!--
+        No funding plan, or only one that has ended - direct the user to
+        calendar management, where a fresh checkout starts the next plan
+      -->
+      <div v-if="(!hasFundingPlan || isCancelled) && options?.enabled" class="no-funding-plan">
         <h2>{{ t("no_funding_plan") }}</h2>
         <p>{{ t("no_plan_redirect") }}</p>
       </div>
@@ -250,6 +276,16 @@ onMounted(async () => {
           </button>
 
           <button
+            v-if="pendingCancellation"
+            type="button"
+            class="btn btn--primary"
+            :disabled="processing"
+            @click="resumeFundingPlan"
+          >
+            {{ t("resume_funding_plan_button") }}
+          </button>
+
+          <button
             v-if="canCancel"
             type="button"
             class="danger"
@@ -261,8 +297,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Covered calendars list -->
-      <div v-if="hasFundingPlan" class="covered-calendars">
+      <!-- Covered calendars list; an ended plan covers nothing -->
+      <div v-if="hasFundingPlan && !isCancelled" class="covered-calendars">
         <h2>{{ t("covered_calendars_title") }}</h2>
 
         <div v-if="coveredCalendars.length === 0" class="covered-calendars-empty">

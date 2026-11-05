@@ -24,6 +24,7 @@ import { initI18Next } from '@/server/common/test/lib/i18next';
 import {
   ActiveFundingPlanExistsError,
   DuplicateCalendarFundingPlanError,
+  FundingPlanNotResumableError,
 } from '@/common/exceptions/funding';
 
 initI18Next();
@@ -507,6 +508,203 @@ describe('Funding Plan System Integration Tests', () => {
       await allocation.reload();
       expect(plan.status).toBe('cancelled');
       expect(allocation.end_time).not.toBeNull();
+    });
+
+    /**
+     * Drive a period-end cancellation all the way to the provider's deletion
+     * event, leaving the plan finalized as 'cancelled'.
+     */
+    async function finalizeCancellation(providerConfigId: string) {
+      await service.processWebhookEvent({
+        eventId: 'evt_integration_finalize',
+        eventType: 'customer.subscription.deleted',
+        subscriptionId: 'sub_user_cancel',
+        status: 'cancelled',
+        cancelAt: null,
+        rawPayload: {},
+      }, providerConfigId);
+    }
+
+    describe('resuming before the boundary', () => {
+      it('should reverse the pending cancellation on the plan the account already holds', async () => {
+        const { account, plan, allocation, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+
+        await service.resume(plan.id);
+
+        await plan.reload();
+        await allocation.reload();
+        expect(resumeSubscription.calledOnce).toBe(true);
+        expect(resumeSubscription.firstCall.args[0]).toBe('sub_user_cancel');
+        expect(plan.status).toBe('active');
+        expect(plan.cancel_at).toBeNull();
+        expect(allocation.end_time).toBeNull();
+        // One account, one plan: resuming is never a second subscription.
+        expect(await FundingPlanEntity.count({ where: { account_id: account.id } })).toBe(1);
+      });
+
+      it('should refuse to resume a plan that has already ended', async () => {
+        const { plan, providerConfig, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+        await finalizeCancellation(providerConfig.id);
+
+        // The provider has deleted the subscription; there is nothing left to
+        // un-cancel. A fresh checkout is the way back.
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should refuse to resume once the cancellation boundary has passed', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        plan.cancel_at = new Date('2026-01-10T00:00:00Z');
+        await plan.save();
+
+        // Still 'active' only because the deletion event has not arrived; the
+        // provider has already ended the subscription it would be asked to keep.
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should refuse to resume a plan with no pending cancellation', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should leave the cancellation in place when the provider refuses to resume', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        Object.assign(mockAdapter, { resumeSubscription: sandbox.stub().rejects(new Error('stripe down')) });
+        await service.cancel(plan.id, false);
+
+        await expect(service.resume(plan.id)).rejects.toThrow('stripe down');
+
+        await plan.reload();
+        expect(plan.cancel_at).toEqual(periodEnd);
+      });
+    });
+
+    it('should let an account whose only plan has ended start a fresh checkout', async () => {
+      const settings = FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      });
+      await settings.save();
+
+      const { account, plan, providerConfig, mockAdapter } = await seedCoveredAccount();
+      await service.cancel(plan.id, false);
+      await finalizeCancellation(providerConfig.id);
+
+      // The checkout gate counts only an 'active' plan, so a finalized one is
+      // history rather than the account's one plan.
+      const session = await service.createCheckoutSession(account.id, 'monthly', 'https://pavillion.dev/return');
+
+      expect(session.sessionId).toBe('cs_test_abc123');
+      expect(mockAdapter.createCheckoutSession.calledOnce).toBe(true);
+    });
+  });
+
+  /**
+   * Which plan GET /v1/status reports when an account has held more than one.
+   * An account accumulates rows over time — a finalized plan stays behind as
+   * history when a fresh checkout creates the next — so newest-first alone
+   * would let a plan that has ended hide the one the account is paying for.
+   */
+  describe('getStatus', () => {
+    async function seedAccountPlans(statuses: Array<'active' | 'past_due' | 'suspended' | 'cancelled'>) {
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'status@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      // Oldest first; the fake clock is frozen, so step it to give each row a
+      // distinct createdAt.
+      const plans: FundingPlanEntity[] = [];
+      for (const status of statuses) {
+        _clock.tick(60 * 1000);
+        const plan = FundingPlanEntity.build({
+          id: uuidv4(),
+          account_id: account.id,
+          provider_config_id: providerConfig.id,
+          provider_subscription_id: `sub_${uuidv4()}`,
+          provider_customer_id: 'cus_status',
+          status,
+          billing_cycle: 'monthly',
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          cancelled_at: status === 'cancelled' ? new Date() : null,
+          cancel_at: null,
+          suspended_at: null,
+        });
+        await plan.save();
+        plans.push(plan);
+      }
+
+      return { account, plans };
+    }
+
+    it('should prefer an active plan over a newer cancelled one', async () => {
+      const { account, plans: [active] } = await seedAccountPlans(['active', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(active.id);
+      expect(status?.status).toBe('active');
+    });
+
+    it('should prefer a past_due plan over a newer cancelled one', async () => {
+      const { account, plans: [pastDue] } = await seedAccountPlans(['past_due', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(pastDue.id);
+    });
+
+    it('should report a plan that is winding down to its boundary over a newer cancelled one', async () => {
+      // A period-end cancellation stays 'active' until the boundary: it is
+      // still the plan the account is covered by, not one on its way out of
+      // the list.
+      const { account, plans: [cancelling] } = await seedAccountPlans(['active', 'cancelled']);
+      cancelling.cancel_at = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+      await cancelling.save();
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(cancelling.id);
+      expect(status?.cancelAt).toEqual(cancelling.cancel_at);
+    });
+
+    it('should report the most recent cancelled plan when nothing else is live', async () => {
+      const { account, plans: [, newest] } = await seedAccountPlans(['cancelled', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(newest.id);
+      expect(status?.status).toBe('cancelled');
+    });
+
+    it('should report nothing for an account that has never held a plan', async () => {
+      expect(await service.getStatus(uuidv4())).toBeUndefined();
     });
   });
 

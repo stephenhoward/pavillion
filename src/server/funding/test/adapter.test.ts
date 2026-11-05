@@ -52,6 +52,7 @@ describe('Payment Provider Adapters', () => {
       // Required methods (including the 3 new checkout/price methods)
       const requiredMethods = [
         'cancelSubscription',
+        'resumeSubscription',
         'supportsAmountUpdates',
         'updateSubscriptionAmount',
         'getSubscription',
@@ -65,7 +66,7 @@ describe('Payment Provider Adapters', () => {
       ];
 
       expect(requiredProps.length).toBe(1);
-      expect(requiredMethods.length).toBe(11);
+      expect(requiredMethods.length).toBe(12);
 
       // Verify StripeAdapter implements the interface
       const stripeAdapter = new StripeAdapter(
@@ -1302,6 +1303,15 @@ describe('Payment Provider Adapters', () => {
 
         const requestOptions = mockStripe.subscriptions.update.firstCall.args[2];
         expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:cancel-at-period-end');
+      });
+
+      it('should withdraw a period-end cancellation with its own idempotency key', async () => {
+        await stripeAdapter.resumeSubscription('sub_1', options);
+
+        const [subscriptionId, params, requestOptions] = mockStripe.subscriptions.update.firstCall.args;
+        expect(subscriptionId).toBe('sub_1');
+        expect(params).toEqual({ cancel_at_period_end: false });
+        expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:resume');
       });
 
       it('should send distinct keys for each mutating call in an amount update', async () => {

@@ -727,6 +727,22 @@ export default class FundingService {
   }
 
   /**
+   * Withdraw a pending period-end cancellation, keeping the current plan
+   *
+   * @returns {Promise<boolean>} True if the plan will continue
+   */
+  async resume(): Promise<boolean> {
+    try {
+      const response = await axios.post('/api/funding/v1/resume');
+      return response.status === 200;
+    }
+    catch (error) {
+      console.error('Failed to resume funding plan:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get billing portal URL for managing payment method
    *
    * @param {string} returnUrl - Absolute URL the portal sends the supporter back
