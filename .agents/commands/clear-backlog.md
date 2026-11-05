@@ -200,7 +200,8 @@ and do not tag them `needs-human`. This check runs in every mode,
 
 ### PHASE 3: Execute Tier A (default)
 
-Dispatch one **lightweight implementer** subagent per surviving Tier A bead.
+Dispatch one **lightweight implementer** subagent per surviving Tier A bead,
+on Sonnet (Agent tool `model: "sonnet"`; see "Model rule" below).
 
 - **Default: serial**, one branch/PR per bead. Wait for each to finish, confirm
   it shipped (or handle its blocker), then dispatch the next.
@@ -222,9 +223,10 @@ passed, repeat Phase 2 + Phase 3 for the Tier B set, with three additions:
 
 1. **Advisor first.** Before dispatching a Tier-B implementer, send the bead's
    real decision (the naming/scoping call, caller-migration pattern, or
-   interface shape) to the Tier-B advisor. The implementer receives the
-   advisor's decision baked into its scope — it executes the choice, it does
-   not re-open it.
+   interface shape) to the Tier-B advisor. The Tier-B implementer is the
+   lightweight implementer, dispatched on Sonnet (`model: "sonnet"`) like
+   Tier A, and receives the advisor's decision baked into its scope — it
+   executes the choice, it does not re-open it.
 2. **`[Tier B]` PR convention.** The PR title carries a `[Tier B]` prefix, and
    the PR description includes the advisor's rationale **verbatim** under a
    `## Decision made on your behalf` heading, so the reviewer can re-derive
@@ -279,10 +281,15 @@ those two:
 
 A dedicated subagent that makes every judgment call the orchestrator is not
 allowed to make itself. Dispatch it on the **strongest available model**
-(currently `claude-fable-5`); the orchestrator itself runs on an Opus-class
-model — orchestration is procedural, the advisor moments are the only genuine
-judgment in the sweep, and isolating them produces a discrete, auditable
-decision artifact instead of an orchestrator grading its own homework.
+(Agent tool `model: "fable"`, currently Fable 5.1, `claude-fable-5-1`).
+Isolating the advisor moments produces a discrete, auditable decision artifact
+instead of an orchestrator grading its own homework.
+
+**Model rule.** The advisor decides on the strongest model; implementers
+produce on Sonnet (`model: "sonnet"`); the orchestrator stays on its lead
+model. Orchestration is procedural and the implementers execute decisions
+already made, so the advisor moments are the only genuine judgment in the
+sweep and the only place the strongest model is spent.
 
 Consulted at exactly two points:
 
@@ -347,7 +354,8 @@ remain forbidden in branches, commits, and PRs.
 
 ## The lightweight implementer (variant of `implementer-prompt-template`)
 
-Dispatch a **general-purpose** subagent per bead. The prompt MUST include:
+Dispatch a **general-purpose** subagent per bead on Sonnet
+(`model: "sonnet"`), for Tier A and Tier B alike. The prompt MUST include:
 
 - **Read the bead first** (`bd show <id>`), including its NOTES/DESIGN. The bead
   is the source of truth; do not paste its body into the prompt — summarize the
