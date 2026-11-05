@@ -195,6 +195,69 @@ describe('Funding Provider UI Components', () => {
   });
 
   /**
+   * Test 1a: A configured provider that is switched off takes no payments, and
+   * the admin is told so rather than shown a plain "Connected" badge.
+   */
+  it('tells the admin payments are off when the configured provider is disabled', async () => {
+    mockService.getProviders.mockResolvedValue([
+      {
+        id: 'provider-1',
+        provider_type: 'stripe',
+        enabled: false,
+        display_name: 'Stripe',
+        configured: true,
+      },
+    ]);
+
+    wrapper = mountFunding();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const stripeItem = wrapper.find('.provider-item');
+    const disabledBadge = stripeItem.find('.connected-badge--disabled');
+    expect(disabledBadge.exists()).toBe(true);
+    expect(disabledBadge.text()).toBe(adminTranslations.funding.connected_disabled_badge);
+    expect(stripeItem.findAll('.connected-badge').some(b => b.text() === 'Connected')).toBe(false);
+
+    const alert = wrapper.find('.alert--warning');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain(adminTranslations.funding.provider_disabled_message);
+    expect(alert.text()).toContain(adminTranslations.funding.provider_disabled_description);
+    expect(alert.text()).not.toContain(adminTranslations.funding.setup_provider_message);
+  });
+
+  it('shows no set-up warning when a configured provider is enabled', async () => {
+    mockService.getProviders.mockResolvedValue([
+      {
+        id: 'provider-1',
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Stripe',
+        configured: true,
+      },
+    ]);
+
+    wrapper = mountFunding();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(wrapper.find('.alert--warning').exists()).toBe(false);
+    expect(wrapper.find('.connected-badge--disabled').exists()).toBe(false);
+    expect(wrapper.find('.provider-item .connected-badge').text()).toBe(adminTranslations.funding.connected_badge);
+  });
+
+  it('asks the admin to add a provider when none is configured', async () => {
+    wrapper = mountFunding();
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const alert = wrapper.find('.alert--warning');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain(adminTranslations.funding.setup_provider_message);
+    expect(alert.text()).not.toContain(adminTranslations.funding.provider_disabled_message);
+  });
+
+  /**
    * Test 1b: PayPal is descoped for v1 (DEC-007) — it must never reach the UI,
    * whether the API reports it configured or unconfigured.
    */

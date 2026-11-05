@@ -84,6 +84,11 @@ const hasConfiguredProvider = computed(() => {
   return providers.value?.some(provider => provider.configured) ?? false;
 });
 
+// Computed property to check if any configured provider can take payments
+const hasEnabledProvider = computed(() => {
+  return providers.value?.some(provider => provider.configured && provider.enabled) ?? false;
+});
+
 // Computed property to get list of configured providers only
 const configuredProviders = computed(() => {
   return providers.value?.filter(provider => provider.configured) ?? [];
@@ -745,8 +750,8 @@ onMounted(async () => {
             </label>
           </div>
 
-          <!-- Show provider setup message when enabled but no providers configured -->
-          <div v-if="enabled && !hasConfiguredProvider" class="alert alert--warning">
+          <!-- Show provider setup message when enabled but no provider can take payments -->
+          <div v-if="enabled && !hasEnabledProvider" class="alert alert--warning">
             <svg class="alert__icon"
                  width="20"
                  height="20"
@@ -757,7 +762,11 @@ onMounted(async () => {
                  aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <div class="alert__content">
+            <div v-if="hasConfiguredProvider" class="alert__content">
+              <p class="alert__title">{{ t("provider_disabled_message") }}</p>
+              <p class="alert__message">{{ t("provider_disabled_description") }}</p>
+            </div>
+            <div v-else class="alert__content">
               <p class="alert__title">{{ t("setup_provider_message") }}</p>
               <p class="alert__message">{{ t("add_first_provider_description") }}</p>
             </div>
@@ -827,7 +836,8 @@ onMounted(async () => {
                   <div class="provider-info">
                     <div class="provider-name-row">
                       <h3 class="provider-name">{{ provider.display_name }}</h3>
-                      <span class="connected-badge">{{ t("connected_badge") }}</span>
+                      <span v-if="provider.enabled" class="connected-badge">{{ t("connected_badge") }}</span>
+                      <span v-else class="connected-badge connected-badge--disabled">{{ t("connected_disabled_badge") }}</span>
                     </div>
                     <span class="provider-type">{{ provider.provider_type }}</span>
                   </div>
@@ -1691,6 +1701,11 @@ onMounted(async () => {
             font-weight: var(--pav-font-weight-medium);
             background: var(--pav-color-emerald-100);
             color: var(--pav-color-emerald-700);
+
+            &--disabled {
+              background: var(--pav-color-amber-100);
+              color: var(--pav-color-amber-700);
+            }
           }
         }
 
