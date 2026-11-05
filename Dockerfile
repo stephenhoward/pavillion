@@ -130,8 +130,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only (tsx is now in dependencies)
-RUN npm ci --omit=dev && npm cache clean --force
+# Install production dependencies only (tsx is now in dependencies), then
+# remove npm, npx and corepack in the same layer. The entrypoint starts the
+# app and runs migrations with node_modules/.bin/tsx, so nothing at runtime
+# needs them, and the copies bundled with the base image carry their own
+# dependency tree that the lockfile does not pin.
+RUN npm ci --omit=dev && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Copy built frontend assets from builder stage
 COPY --from=builder /app/dist ./dist

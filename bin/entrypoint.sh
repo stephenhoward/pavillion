@@ -179,8 +179,9 @@ wait_for_db() {
 run_migrations() {
   log_info "Running database migrations..."
 
-  # Run migrations using the migration runner
-  if npx tsx -e "
+  # Run migrations using the migration runner. Called only on the production
+  # path, whose image ships no npm or npx, so tsx is invoked from node_modules.
+  if ./node_modules/.bin/tsx -e "
     import { runMigrations } from './src/server/common/migrations/runner.ts';
     import db from './src/server/common/entity/db.ts';
     import path from 'path';
@@ -254,14 +255,17 @@ start_app() {
       exec npm run dev
     fi
   else
-    # Production mode
+    # Production mode. The production image ships no npm or npx, so this runs
+    # what the package.json "start" script runs, directly, keeping the exec so
+    # dumb-init signals reach node.
+    export NODE_ENV=production
     if is_worker_mode "$@"; then
       log_info "[Worker] Starting Pavillion worker..."
       log_info "[Worker] HTTP server disabled in worker mode"
-      exec npm start -- --worker
+      exec ./node_modules/.bin/tsx src/server/app.ts --worker
     else
       log_info "Starting Pavillion application (web mode)..."
-      exec npm start
+      exec ./node_modules/.bin/tsx src/server/app.ts
     fi
   fi
 }
