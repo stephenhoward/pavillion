@@ -5,7 +5,13 @@ import { fileURLToPath } from 'node:url';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [tsconfigPaths(), vue()],
+  plugins: [
+    // Agent tooling under .agents/ carries its own tsconfig files (a mod's
+    // extends a gitignored, engine-generated config), none of which the app
+    // resolves through.
+    tsconfigPaths({ skip: (dir) => dir === '.agents' }),
+    vue(),
+  ],
   server: {
     // Listen on all interfaces for container development
     host: '0.0.0.0',
