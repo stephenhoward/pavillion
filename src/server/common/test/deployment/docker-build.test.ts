@@ -195,7 +195,7 @@ describe('Docker Build Verification', () => {
 
       // Check tsx is available for TypeScript execution
       const tsxCheck = runCommand(
-        `docker run --rm ${IMAGE_NAME} npx tsx --version`,
+        `docker run --rm --entrypoint /app/node_modules/.bin/tsx ${IMAGE_NAME} --version`,
       );
       expect(tsxCheck).toBeTruthy();
     });
