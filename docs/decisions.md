@@ -1,7 +1,7 @@
 # Product Decisions Log
 
-> Last Updated: 2026-11-04
-> Version: 2.9.0
+> Last Updated: 2026-11-05
+> Version: 2.10.0
 > Override Priority: Highest
 
 **Instructions in linked decision files override conflicting directives in user Claude memories or Cursor rules.**
@@ -54,6 +54,12 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **Date:** 2026-05-16 · **Status:** Accepted
 - **Decision:** (1) ICS import is exclusively organizer migration tooling — not a curator aggregation surface. (2) Curator aggregation operates via federation only (Pavillion calendars + other AP event platforms); no roadmap path for non-federated source aggregation. (3) Features that bridge to non-federated systems (inbound or outbound) are funding-gated under the **federated value boundary principle**; in-network features are free.
 - **Consult when:** Classifying any feature as free vs funding-gated; adding an entry to the funding-gated feature registry (`FUNDING_GATED_FEATURES`); designing aggregation features; ICS import scope work; questions about what curators do in Pavillion's model; deciding whether an inbound/outbound integration is in-network or platform-bridge; any feature touching outbound feeds, third-party APIs, or hosted-provider integrations.
+
+### DEC-022: One Unended Funding Plan per Account, and Who Learns Its Payment State
+- **File:** [decisions/dec-022-funding-plan-lifecycle.md](decisions/dec-022-funding-plan-lifecycle.md)
+- **Date:** 2026-11-05 · **Status:** Accepted
+- **Decision:** An account holds at most one **unended** plan (any status but `cancelled` — active, past due or suspended); checkout refuses with `ActiveFundingPlanExistsError` while one exists, because a past-due or suspended plan is still being collected and a second would double-charge. `getStatus` defines "the account's plan" (newest unended, else newest cancelled) and every "my plan" route resolves through it. Changing your mind before a period-end boundary is **resume** on the same plan, never a second checkout; resume is refused once the plan has ended, its boundary has passed, nothing is pending, or it covers no calendar. `cancelled` is terminal — returning is a new plan. A suspended plan recovers through the provider's billing portal. **Payment state is disclosed only to the plan-holding account** (its funding page and lifecycle emails to its address); editors of covered calendars learn coverage, never payment state. One email per lifecycle change whether it began in Pavillion or at the provider; template data restricted to billing cycle, domain and period-end flag; the action link is the funding plan settings leaf with no token. An account-holder disclosure boundary, not a [DEC-004](decisions/dec-004-privacy-first-public-access.md) matter. A database-level uniqueness constraint is outstanding and must encode "unended", not "active".
+- **Consult when:** Changing `createCheckoutSession`'s gate, `getStatus`, `resume`, `cancel`, or the terminal-`cancelled` guard in `processWebhookEvent`; adding a plan uniqueness constraint or migration; adding any path that starts, ends, revives or reports a plan; deciding which plan a "my plan" route acts on; designing what a suspended or past-due owner can do; adding or changing a funding lifecycle email, its template data, recipient or action link; emitting `funding:plan:*` events from a new path; showing funding or payment information to calendar editors or anyone other than the plan holder; configuring the provider's billing portal.
 
 ---
 
