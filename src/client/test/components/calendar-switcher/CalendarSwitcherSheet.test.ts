@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
 import Sheet from '@/client/components/logged_in/calendar-switcher/CalendarSwitcherSheet.vue';
 import CalendarService from '@/client/service/calendar';
+import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -112,5 +113,47 @@ describe('CalendarSwitcherSheet', () => {
     const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
     expect(wrapper.findAll('[data-testid="switcher-row"]').length).toBe(0);
     expect(wrapper.find('[data-testid="switcher-create"]').exists()).toBe(true);
+  });
+
+  describe('revalidation with the real calendar service', () => {
+    let listModels: sinon.SinonStub;
+
+    /** Store a token for `id` that expires `secondsFromNow` from now. */
+    function tokenFor(id: string, secondsFromNow: number) {
+      const exp = Math.floor(Date.now() / 1000) + secondsFromNow;
+      localStorage.setItem('jw_token', JSON.stringify({ exp, id, isAdmin: false, email: `${id}@example.com` }));
+    }
+
+    beforeEach(() => {
+      ensureLoaded.restore();
+      localStorage.clear();
+      listModels = sandbox.stub(ModelService, 'listModels');
+      listModels.withArgs('/api/v1/calendars').resolves({
+        items: [{ id: 'b1', urlName: 'account-b-cal', userRelationship: 'owner' }],
+      });
+      useCalendarStore().setCalendarInfos(
+        [new CalendarInfo(new Calendar('a1', 'account-a-cal'), 'owner')],
+        'account-a',
+      );
+    });
+
+    afterEach(() => localStorage.clear());
+
+    it('lists the new account\'s calendars after an account switch', async () => {
+      tokenFor('account-b', 3600);
+      const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
+      await flushPromises();
+      const rows = wrapper.findAll('[data-testid="switcher-row"]');
+      expect(rows.map((r) => r.attributes('data-url-name'))).toEqual(['account-b-cal']);
+    });
+
+    it('keeps the account\'s calendars, and does not fetch, when the token has expired', async () => {
+      tokenFor('account-a', -60);
+      const wrapper = mountComponent(Sheet, makeRouter(), { pinia, props: { routeName: 'feed', currentUrlName: null } });
+      await flushPromises();
+      const rows = wrapper.findAll('[data-testid="switcher-row"]');
+      expect(rows.map((r) => r.attributes('data-url-name'))).toEqual(['account-a-cal']);
+      sinon.assert.notCalled(listModels);
+    });
   });
 });

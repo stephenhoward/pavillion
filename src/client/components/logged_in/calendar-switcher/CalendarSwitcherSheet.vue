@@ -27,11 +27,12 @@ const rows = computed<CalendarInfo[]>(() => [...store.ownedCalendars, ...store.e
 
 const nameOf = (info: CalendarInfo) => calendarDisplayName(info.calendar);
 
-// Revalidate on open: a no-op for the same account, while a different
-// signed-in account resets and refetches, so the sheet never lists a
-// previous account's calendars. A failed load keeps the list for the same
-// account; for a different account the store was reset before the fetch,
-// so the list is already empty.
+// Revalidate on open: a no-op for the same account or when no live token
+// names one (an expired session), while a different signed-in account
+// resets and refetches, so the sheet never lists a previous account's
+// calendars. A failed load keeps the list for the same account; for a
+// different account the store was reset before the fetch, so the list is
+// already empty.
 onMounted(() => {
   new CalendarService().ensureCalendarsLoaded().catch((error) => {
     console.error('Error loading calendars:', error);
