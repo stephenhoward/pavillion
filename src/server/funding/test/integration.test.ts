@@ -88,6 +88,162 @@ describe('Funding Plan System Integration Tests', () => {
   }
 
   /**
+   * Install the real funding event handlers on the suite's bus, with a stub
+   * mail transport and an accounts lookup that knows only the plan owner.
+   *
+   * @param account - The plan-owning account
+   * @returns The emails the handlers send, in order
+   */
+  function captureDunningEmails(account: AccountEntity): MailData[] {
+    const sentEmails: MailData[] = [];
+    const handlers = new FundingEventHandlers({
+      sendEmail: async (data: MailData) => { sentEmails.push(data); return null; },
+    } as unknown as EmailInterface);
+    handlers.setAccountsInterface({
+      getAccountById: async (id: string) =>
+        (id === account.id ? new Account(account.id, 'owner', account.email) : undefined),
+    } as unknown as AccountsInterface);
+    handlers.install(eventBus);
+    return sentEmails;
+  }
+
+  /**
+   * Lifecycle emits are deferred past commit with setImmediate, which this
+   * suite's fake clock holds; run every queued timer (and the handler
+   * microtasks between them) before counting.
+   */
+  const settleEmits = () => _clock.runAllAsync();
+
+  /**
+   * Backdate a plan's last write, which is where both the suspension job and
+   * the past-due grace window measure from. Written in the format Sequelize
+   * itself stores, because the gate reads the value back through the model
+   * (the job only compares it in SQL).
+   */
+  async function backdatePlan(planId: string, updatedAt: Date): Promise<void> {
+    const stored = updatedAt.toISOString().replace('T', ' ').replace('Z', ' +00:00');
+    await db.query('UPDATE funding_plan SET updatedAt = ? WHERE id = ?', {
+      replacements: [stored, planId],
+    });
+  }
+
+  /**
+   * A failed payment through suspension and back, as Stripe actually drives
+   * it: the provider keeps the subscription past_due and keeps retrying long
+   * after Pavillion's grace period has suspended the plan locally.
+   */
+  describe('dunning: past-due grace and held suspension', () => {
+    const graceExpired = new Date('2026-01-07T12:00:00Z');
+
+    async function seedDunningPlan() {
+      await FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      }).save();
+
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'dunning@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: 'sub_dunning',
+        provider_customer_id: 'cus_dunning',
+        status: 'active',
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: null,
+        suspended_at: null,
+      });
+      await plan.save();
+
+      return { account, plan, providerConfig };
+    }
+
+    const providerReport = (eventId: string, eventType: string, status: 'active' | 'past_due'): WebhookEvent => ({
+      eventId,
+      eventType,
+      subscriptionId: 'sub_dunning',
+      status,
+      rawPayload: {},
+    });
+
+    it('should email once for the failure and once for the suspension over a full retry cycle', async () => {
+      const { account, plan, providerConfig } = await seedDunningPlan();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(
+        providerReport('evt_first_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+
+      await backdatePlan(plan.id, graceExpired);
+      await service.suspendExpiredFundingPlans();
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      const suspendedAt = plan.suspended_at;
+
+      // Stripe keeps retrying the invoice and keeps calling the subscription
+      // past due. Each report must leave the local suspension in place.
+      await service.processWebhookEvent(
+        providerReport('evt_retry_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await service.processWebhookEvent(
+        providerReport('evt_still_past_due', 'customer.subscription.updated', 'past_due'), providerConfig.id);
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      expect(plan.suspended_at).toEqual(suspendedAt);
+
+      // A grace period later the job finds nothing past due to suspend again.
+      await backdatePlan(plan.id, graceExpired);
+      await service.suspendExpiredFundingPlans();
+
+      await settleEmits();
+      expect(sentEmails.map((email) => email.subject)).toEqual([
+        'A payment for your funding plan didn\'t go through',
+        'Your funding plan has been suspended',
+      ]);
+      expect((await service.getStatus(account.id))?.status).toBe('suspended');
+    });
+
+    it('should reactivate a suspended plan when the provider reports it paid, without emailing', async () => {
+      const { account, plan, providerConfig } = await seedDunningPlan();
+      await service.processWebhookEvent(
+        providerReport('evt_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await backdatePlan(plan.id, graceExpired);
+      await service.suspendExpiredFundingPlans();
+      await settleEmits();
+
+      const sentEmails = captureDunningEmails(account);
+      const reactivated = sandbox.spy();
+      eventBus.on('funding:plan:reactivated', reactivated);
+
+      await service.processWebhookEvent(
+        providerReport('evt_recovered', 'invoice.payment_succeeded', 'active'), providerConfig.id);
+      await settleEmits();
+
+      await plan.reload();
+      expect(plan.status).toBe('active');
+      expect(plan.suspended_at).toBeNull();
+      expect(reactivated.callCount).toBe(1);
+      expect(sentEmails).toHaveLength(0);
+    });
+  });
+
+  /**
    * Integration Test 2: Payment failure flow (active -> past_due -> suspended)
    */
   it('should handle complete payment failure flow through suspension', async () => {
@@ -242,33 +398,6 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.cancel_at).toEqual(periodEnd);
       expect(plan.cancelled_at).toBeNull();
     });
-
-    /**
-     * Install the real funding event handlers on the suite's bus, with a stub
-     * mail transport and an accounts lookup that knows only the plan owner.
-     *
-     * @param account - The plan-owning account
-     * @returns The emails the handlers send, in order
-     */
-    function captureDunningEmails(account: AccountEntity): MailData[] {
-      const sentEmails: MailData[] = [];
-      const handlers = new FundingEventHandlers({
-        sendEmail: async (data: MailData) => { sentEmails.push(data); return null; },
-      } as unknown as EmailInterface);
-      handlers.setAccountsInterface({
-        getAccountById: async (id: string) =>
-          (id === account.id ? new Account(account.id, 'owner', account.email) : undefined),
-      } as unknown as AccountsInterface);
-      handlers.install(eventBus);
-      return sentEmails;
-    }
-
-    /**
-     * Lifecycle emits are deferred past commit with setImmediate, which this
-     * suite's fake clock holds; run every queued timer (and the handler
-     * microtasks between them) before counting.
-     */
-    const settleEmits = () => _clock.runAllAsync();
 
     /** Stripe's echo of a period-end cancellation: still active, cancel_at set. */
     const scheduledCancellation = (eventId: string): WebhookEvent => ({
@@ -804,6 +933,27 @@ describe('Funding Plan System Integration Tests', () => {
     it('should report nothing for an account that has never held a plan', async () => {
       expect(await service.getStatus(uuidv4())).toBeUndefined();
     });
+
+    // The funding page's covered-calendars list resolves the same plan the
+    // status card shows, so a plan in dunning still lists what it covers.
+    it.each(['past_due', 'suspended'] as const)(
+      'should list the calendars a %s plan covers, past a newer cancelled plan',
+      async (status) => {
+        const { account, plans: [current] } = await seedAccountPlans([status, 'cancelled']);
+        const calendarId = uuidv4();
+        await CalendarFundingPlanEntity.build({
+          id: uuidv4(),
+          funding_plan_id: current.id,
+          calendar_id: calendarId,
+          amount: 1000000,
+          end_time: null,
+        }).save();
+
+        const covered = await service.getCalendarsInFundingPlan(account.id);
+
+        expect(covered.map((item) => item.calendarId)).toEqual([calendarId]);
+      },
+    );
   });
 
   /**
@@ -1483,6 +1633,34 @@ describe('Funding Plan System Integration Tests', () => {
       const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
 
       expect(access).toBe(false);
+    });
+
+    /** The one past_due plan the test seeded, read back by its status. */
+    async function pastDuePlan(): Promise<FundingPlanEntity> {
+      return (await FundingPlanEntity.findOne({ where: { status: 'past_due' } }))!;
+    }
+
+    it('should keep the gate open for a past_due plan inside its grace period', async () => {
+      await enableInstanceFunding();
+      // Written at the fake clock's now, so the 7-day grace has just begun.
+      const calendar = await createCoveredCalendar({ status: 'past_due' });
+
+      const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
+
+      expect(access).toBe(true);
+    });
+
+    it('should close the gate for a past_due plan once its grace period has expired', async () => {
+      await enableInstanceFunding();
+      const calendar = await createCoveredCalendar({ status: 'past_due' });
+      await backdatePlan((await pastDuePlan()).id, new Date('2026-01-07T12:00:00Z'));
+
+      // Closed whether or not the suspension job has run yet ...
+      expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
+
+      // ... and still closed once it has.
+      await service.suspendExpiredFundingPlans();
+      expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
     });
   });
 });

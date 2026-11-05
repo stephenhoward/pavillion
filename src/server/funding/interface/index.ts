@@ -264,7 +264,7 @@ export default class FundingInterface {
   // Calendar funding plan operations
 
   /**
-   * Get all calendars in the account's active funding plan
+   * Get the calendars the account's funding plan holds open allocations for
    *
    * @param accountId - Account ID to look up
    * @returns Array of covered calendar allocations (calendarId, amount, createdAt)

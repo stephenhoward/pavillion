@@ -820,9 +820,9 @@ export class StripeAdapter implements PaymentProviderAdapter {
       // ProviderSubscription.status is not optional — this feeds the status a
       // brand-new local plan is created with, and there is no prior value to
       // leave alone. An unrecognised Stripe status therefore falls back to
-      // `past_due`: it withholds access without being terminal, so a plan
-      // created during a status we do not yet understand can still recover
-      // when the next event names one we do.
+      // `past_due`: it is not terminal, so a plan created during a status we
+      // do not yet understand can still recover when the next event names one
+      // we do, and it grants access only through the dunning grace period.
       status: this.mapStripeStatus(subscription.status) ?? 'past_due',
       currentPeriodStart: period.start,
       currentPeriodEnd: period.end,
@@ -847,8 +847,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * session reads `complete`, which can precede the subscription leaving
    * `incomplete`, so mapping it to `cancelled` would kill a plan the customer
    * is in the middle of paying for and leave no way back. `past_due` says the
-   * same thing — payment outstanding, access withheld — without being terminal,
-   * and the dunning job already understands it.
+   * same thing — payment outstanding — without being terminal, and the dunning
+   * job already understands it. It does grant the plan's calendars coverage
+   * through the instance grace period (DEC-022); for `incomplete` that window
+   * is normally cut short by Stripe expiring the subscription to
+   * `incomplete_expired` (→ `cancelled`) within a day.
+   *
+   * `unpaid` and `paused` map to `suspended`, but Pavillion also suspends on
+   * its own once the grace period runs out while Stripe still says `past_due`.
+   * FundingService therefore holds a suspended plan against a later `past_due`
+   * report; only `active` or `cancelled` lifts a suspension.
    *
    * An unrecognised status returns undefined rather than guessing. Stripe adds
    * statuses; a `default:` that fed the terminal state would let a future one

@@ -472,4 +472,82 @@ describe('Funding Plan Scheduled Jobs', () => {
       expect(emitted.callCount).toBe(1);
     });
   });
+
+  /*
+   * The provider keeps a subscription past_due while it retries, long after
+   * the job has suspended the plan locally. Its reports must not hand the plan
+   * back to the job for a second suspension.
+   */
+  describe('suspendExpiredFundingPlans after the provider reports past due again', () => {
+    it('should not suspend, or announce, a plan a second time', async () => {
+      await FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      }).save();
+
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: `resuspend-${uuidv4()}@example.com`,
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const providerConfig = ProviderConfigEntity.build({
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Credit Card',
+        credentials: '{}',
+        webhook_secret: 'test_secret',
+      });
+      await providerConfig.save();
+
+      const subscriptionId = `sub_${uuidv4()}`;
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: subscriptionId,
+        provider_customer_id: 'cus_resuspend',
+        status: 'suspended',
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: null,
+        suspended_at: new Date('2026-01-10T12:00:00Z'),
+      });
+      await plan.save();
+
+      const emitted = sandbox.spy();
+      eventBus.on('funding:plan:suspended', emitted);
+
+      await _service.processWebhookEvent({
+        eventId: `evt_${uuidv4()}`,
+        eventType: 'invoice.payment_failed',
+        subscriptionId,
+        status: 'past_due',
+        rawPayload: {},
+      }, providerConfig.id);
+      await db.query('UPDATE funding_plan SET updatedAt = ? WHERE id = ?', {
+        replacements: [new Date('2026-01-05T12:00:00Z').toISOString(), plan.id],
+      });
+
+      await _service.suspendExpiredFundingPlans();
+      await _clock.runAllAsync();
+
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      expect(plan.suspended_at).toEqual(new Date('2026-01-10T12:00:00Z'));
+      expect(emitted.called).toBe(false);
+    });
+  });
 });

@@ -847,15 +847,15 @@ export default class FundingService {
   }
 
   /**
-   * Get all active calendar allocations for an account's funding plan
+   * Get the open calendar allocations of an account's funding plan
    *
-   * Resolves the active funding plan for the account, then queries
-   * CalendarFundingPlanEntity for active allocations (end_time IS NULL).
-   * Returns an empty array if the account has no active funding plan
-   * (does not throw an error).
+   * Resolves the plan through getStatus, as every other plan-level read does,
+   * so a past-due or suspended plan lists the calendars it still holds open
+   * allocations for. An ended plan covers nothing and returns an empty array,
+   * as does an account with no plan (neither throws).
    *
    * @param accountId - Account ID
-   * @returns Array of active calendar allocations with calendarId, amount, and createdAt
+   * @returns Array of open calendar allocations with calendarId, amount, and createdAt
    */
   async getCalendarsInFundingPlan(
     accountId: string,
@@ -864,22 +864,20 @@ export default class FundingService {
       throw new ValidationError('Invalid accountId: must be a valid UUID');
     }
 
-    const fundingPlanEntity = await FundingPlanEntity.findOne({
-      where: { account_id: accountId, status: 'active' },
-    });
+    const fundingPlan = await this.getStatus(accountId);
 
-    if (!fundingPlanEntity) {
+    if (!fundingPlan || fundingPlan.status === 'cancelled') {
       return [];
     }
 
-    const activeAllocations = await CalendarFundingPlanEntity.findAll({
+    const openAllocations = await CalendarFundingPlanEntity.findAll({
       where: {
-        funding_plan_id: fundingPlanEntity.id,
+        funding_plan_id: fundingPlan.id,
         end_time: { [Op.is]: null as any },
       },
     });
 
-    return activeAllocations.map((alloc) => ({
+    return openAllocations.map((alloc) => ({
       calendarId: alloc.calendar_id,
       amount: alloc.amount,
       createdAt: alloc.created_at,
@@ -1720,7 +1718,7 @@ export default class FundingService {
   /**
    * Process webhook event from payment provider
    *
-   * Two rules govern how a provider event may move a local plan:
+   * Three rules govern how a provider event may move a local plan:
    *
    *  - 'cancelled' is terminal here. A provider that reports any other status
    *    for a plan already cancelled locally is ignored, not applied. The
@@ -1730,6 +1728,13 @@ export default class FundingService {
    *    its `cancelled_at` as well. Resubscribing creates a new plan
    *    (processCheckoutCompleted); it never revives a cancelled one, so
    *    nothing legitimate needs this transition.
+   *  - Pavillion owns 'suspended' (DEC-022). The grace-period job suspends a
+   *    plan the provider still calls past_due and keeps retrying, so the
+   *    provider's next past_due report says nothing new and is not applied.
+   *    Applied, it would hand the plan back to the job's past_due scan with a
+   *    fresh `updatedAt`, to be suspended — and announced — a second time a
+   *    grace period later. A suspended plan leaves suspension only when the
+   *    provider reports it paid ('active') or ended ('cancelled').
    *  - A plan that is 'cancelled' once the event has been applied is finalized:
    *    the calendar allocations it was paying for get their `end_time` written,
    *    so the coverage record shows when it actually ended rather than staying
@@ -1825,6 +1830,18 @@ export default class FundingService {
             fundingPlanId: fundingPlanRecord.id,
             reportedStatus: event.status,
           }, 'Ignoring provider status for a funding plan that is already cancelled');
+        }
+        else if (previousStatus === 'suspended' && event.status === 'past_due') {
+          // Expected on every retry the provider makes after our grace period
+          // suspended the plan, so logged quietly. Nothing is emitted: the
+          // owner already has this episode's payment-failed and suspension
+          // emails, and the plan stays out of the suspension job's past_due
+          // scan, so no second suspension email follows either.
+          logger.info({
+            eventId: event.eventId,
+            eventType: event.eventType,
+            fundingPlanId: fundingPlanRecord.id,
+          }, 'Keeping a suspended funding plan suspended against a provider past_due report');
         }
         else {
           fundingPlanRecord.status = event.status;
@@ -2699,8 +2716,8 @@ export default class FundingService {
 
   /**
    * Check whether the calendar has a funding plan allocation that still grants
-   * access: an active allocation, on an active plan, inside the plan's access
-   * boundary.
+   * access: an active allocation, on an active or past-due plan, inside the
+   * plan's access boundary.
    *
    * Stricter than hasActiveFundingPlan, which trusts the plan's status alone
    * and therefore keeps granting access to a plan whose ending was never
@@ -2740,7 +2757,10 @@ export default class FundingService {
       },
       include: [{
         model: FundingPlanEntity,
-        where: { status: 'active' },
+        // Suspended and cancelled plans grant nothing. A past-due one keeps
+        // its calendars covered through the dunning grace (DEC-022), which
+        // planAccessExpiry bounds.
+        where: { status: { [Op.in]: ['active', 'past_due'] } },
         required: true,
       }],
     });
@@ -2758,13 +2778,13 @@ export default class FundingService {
    * The instant at which a funding plan stops granting access to its
    * calendars, or null if nothing on the plan sets an end.
    *
-   * These dates never widen access: the caller has already required
-   * status 'active', so a plan Stripe moved to past_due or suspended is
-   * denied by the join before any date is read. The boundaries only
-   * discriminate among plans that still claim to be active.
+   * These dates never widen access: the caller has already required status
+   * 'active' or 'past_due', so a suspended or cancelled plan is denied by the
+   * join before any date is read. The boundaries only discriminate among
+   * plans whose status still grants.
    *
-   * Two candidate boundaries are considered and the EARLIEST wins, because a
-   * gate helper must never round permissive:
+   * Up to three candidate boundaries are considered and the EARLIEST wins,
+   * because a gate helper must never round permissive:
    *
    *  - cancel_at, the instant a scheduled cancellation takes effect. A
    *    cancel-at-period-end leaves the plan 'active' — the customer is paid up
@@ -2777,15 +2797,23 @@ export default class FundingService {
    *    silent-renewal-failure and missed-deletion cases. The grace window
    *    exists for the plan that is still 'active' with a renewal webhook in
    *    flight or lost: it keeps a paying customer from being cut off the
-   *    instant their period rolls over. It is not the dunning window —
-   *    suspendExpiredFundingPlans measures its own grace from updatedAt on
-   *    past_due rows, and those rows never reach this helper.
+   *    instant their period rolls over. It is not the dunning window, which
+   *    is the next boundary.
+   *  - updatedAt plus the instance grace period, on a past_due plan only. This
+   *    is the dunning window (DEC-022): a plan whose payment failed keeps its
+   *    calendars covered until the grace period ends. It is measured exactly
+   *    as suspendExpiredFundingPlans measures it, from the plan's last write,
+   *    so coverage ends at the instant the job becomes entitled to suspend the
+   *    plan — whether or not the job has run yet. The provider usually
+   *    advances current_period_end when it opens the unpaid invoice, so
+   *    without this boundary a past-due plan would ride the new period's end.
    *
    * ## Precedence among the end-of-entitlement markers
    *
    * Four stored values can end a calendar's coverage. They are not competing
    * answers to one question; each answers a different one, and only two are
-   * read here:
+   * read here (updatedAt, above, is the dunning clock rather than an
+   * end-of-entitlement marker):
    *
    *  1. CalendarFundingPlanEntity.end_time — when THIS CALENDAR's allocation
    *     ends, whatever the plan goes on to do. Applied by qualifyingFundingPlan's
@@ -2819,11 +2847,19 @@ export default class FundingService {
   private planAccessExpiry(plan: FundingPlanEntity, gracePeriodDays: number): Date | null {
     const graceMs = Math.max(gracePeriodDays, 0) * 24 * 60 * 60 * 1000;
 
+    // An unreadable last write would make the dunning boundary NaN, which no
+    // comparison picks as earliest, so it would silently round permissive.
+    // Read it as the epoch instead: grace long over, access denied.
+    const pastDueSince = plan.status === 'past_due'
+      ? (Number.isFinite(plan.updatedAt?.getTime()) ? plan.updatedAt.getTime() : 0)
+      : null;
+
     const boundaries = [
       plan.cancel_at,
       plan.current_period_end
         ? new Date(plan.current_period_end.getTime() + graceMs)
         : null,
+      pastDueSince !== null ? new Date(pastDueSince + graceMs) : null,
     ].filter((boundary): boundary is Date => boundary instanceof Date);
 
     if (boundaries.length === 0) {
