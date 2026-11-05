@@ -68,6 +68,7 @@ describe('ProviderConnectionService', () => {
       const mockEntity = {
         id: entityId,
         provider_type: 'stripe',
+        enabled: false,
         _decryptedCredentials: undefined as string | undefined,
         _decryptedWebhookSecret: undefined as string | undefined,
         save: sandbox.stub().resolves(),
@@ -84,7 +85,9 @@ describe('ProviderConnectionService', () => {
 
       expect(result).toEqual({ connectionVerified: true });
       expect(buildStub.calledOnce).toBe(true);
-      expect(mockEntity.save.calledOnce).toBe(true);
+      // Saved once with credentials, once more to enable after verification
+      expect(mockEntity.save.calledTwice).toBe(true);
+      expect(mockEntity.enabled).toBe(true);
 
       // Verify the decrypted credentials were set correctly
       const storedCreds = JSON.parse(mockEntity._decryptedCredentials!);
@@ -109,6 +112,7 @@ describe('ProviderConnectionService', () => {
       const mockEntity = {
         id: entityId,
         provider_type: 'stripe',
+        enabled: false,
         _decryptedCredentials: undefined as string | undefined,
         _decryptedWebhookSecret: undefined as string | undefined,
         save: sandbox.stub().resolves(),
@@ -124,7 +128,9 @@ describe('ProviderConnectionService', () => {
       const result = await service.configureStripe(validCredentials, adminUser);
 
       expect(result).toEqual({ connectionVerified: true });
-      expect(mockEntity.save.calledOnce).toBe(true);
+      // A verified configure enables a provider that was pre-created disabled
+      expect(mockEntity.save.calledTwice).toBe(true);
+      expect(mockEntity.enabled).toBe(true);
       expect(mockEntity._decryptedWebhookSecret).toBe('whsec_abc123def456');
 
       const storedCreds = JSON.parse(mockEntity._decryptedCredentials!);
@@ -137,11 +143,13 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(null);
 
-      sandbox.stub(ProviderConfigEntity, 'build').returns({
+      const mockEntity = {
         id: entityId,
         provider_type: 'stripe',
+        enabled: false,
         save: sandbox.stub().resolves(),
-      } as any);
+      };
+      sandbox.stub(ProviderConfigEntity, 'build').returns(mockEntity as any);
 
       sandbox.stub(ProviderFactory, 'clearCache');
       mockStripeAdapter.validateCredentials.resolves(false);
@@ -150,6 +158,9 @@ describe('ProviderConnectionService', () => {
       const result = await service.configureStripe(validCredentials, adminUser);
 
       expect(result).toEqual({ connectionVerified: false });
+      // An unverified key must not become the checkout provider
+      expect(mockEntity.enabled).toBe(false);
+      expect(mockEntity.save.calledOnce).toBe(true);
     });
 
     it('should return connectionVerified false when ProviderFactory.getAdapter throws', async () => {
@@ -157,11 +168,13 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(null);
 
-      sandbox.stub(ProviderConfigEntity, 'build').returns({
+      const mockEntity = {
         id: entityId,
         provider_type: 'stripe',
+        enabled: false,
         save: sandbox.stub().resolves(),
-      } as any);
+      };
+      sandbox.stub(ProviderConfigEntity, 'build').returns(mockEntity as any);
 
       sandbox.stub(ProviderFactory, 'clearCache');
       sandbox.stub(ProviderFactory, 'getAdapter').throws(new Error('Invalid credentials format'));
@@ -169,6 +182,9 @@ describe('ProviderConnectionService', () => {
       const result = await service.configureStripe(validCredentials, adminUser);
 
       expect(result).toEqual({ connectionVerified: false });
+      // An unverified key must not become the checkout provider
+      expect(mockEntity.enabled).toBe(false);
+      expect(mockEntity.save.calledOnce).toBe(true);
     });
 
     it('should throw error for missing publishable_key', async () => {

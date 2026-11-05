@@ -82,6 +82,8 @@ export class ProviderConnectionService {
    * Validates key formats, encrypts, and stores Stripe credentials.
    * After saving, attempts to verify the connection by calling
    * the Stripe API. Verification failure never aborts the save.
+   * A verified configure also enables the provider so it can take
+   * payments; an unverified save leaves the enabled flag untouched.
    *
    * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
    * @param adminUser - Admin user performing the configuration
@@ -164,6 +166,12 @@ export class ProviderConnectionService {
       logger.warn('Stripe connection test failed after save', {
         errorType: err instanceof Error ? err.constructor.name : 'unknown',
       });
+    }
+
+    // Only verified credentials may become the checkout provider
+    if (connectionVerified && !entity.enabled) {
+      entity.enabled = true;
+      await entity.save();
     }
 
     return { connectionVerified };
