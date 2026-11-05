@@ -200,19 +200,37 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Withdraw a scheduled period-end cancellation
+   * Withdraw a scheduled cancellation
    *
-   * The inverse of cancelSubscription's period-end branch. Stripe clears
-   * `cancel_at` along with the flag, and reports the result on the next
-   * `customer.subscription.updated` with `cancel_at: null`.
+   * The inverse of cancelSubscription's period-end branch, but it has to cover
+   * more than that branch writes: a cancellation scheduled for a specific date
+   * (from the Stripe dashboard or the billing portal) lives in `cancel_at`, and
+   * clearing `cancel_at_period_end` leaves it standing. So the subscription
+   * Stripe returns is checked, and a `cancel_at` still on it is unset in a
+   * second request (the two parameters are sent separately rather than
+   * together, since Stripe treats them as alternative ways of scheduling).
+   *
+   * Throws when Stripe still reports a scheduled cancellation afterwards. The
+   * caller clears its own boundary only once this returns, so a throw keeps the
+   * local record saying what Stripe will actually do: delete the subscription.
    *
    * @param subscriptionId - Provider's subscription ID
    * @param options - Per-request options (idempotency key)
    */
   async resumeSubscription(subscriptionId: string, options?: ProviderRequestOptions): Promise<void> {
-    await this.stripe.subscriptions.update(subscriptionId, {
+    let subscription = await this.stripe.subscriptions.update(subscriptionId, {
       cancel_at_period_end: false,
     }, this.requestOptions(options, 'resume'));
+
+    if (subscription.cancel_at !== null) {
+      subscription = await this.stripe.subscriptions.update(subscriptionId, {
+        cancel_at: '',
+      }, this.requestOptions(options, 'resume-clear-cancel-at'));
+    }
+
+    if (subscription.cancel_at !== null) {
+      throw new Error(`Stripe subscription ${subscriptionId} still has a scheduled cancellation after resume`);
+    }
   }
 
   /**

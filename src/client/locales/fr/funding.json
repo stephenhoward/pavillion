@@ -53,6 +53,7 @@
   "resume_funding_plan_button": "Conserver mon plan",
   "resume_success": "Votre plan de financement continuera et sera renouvelé normalement à la fin de la période de facturation en cours.",
   "resume_error": "Échec de la conservation de votre plan de financement. Veuillez réessayer.",
+  "resume_not_possible": "Cette annulation ne peut plus être retirée, car le plan a pris fin ou se termine maintenant. Pour soutenir à nouveau cette instance, démarrez un nouveau plan depuis la page Général d'un calendrier dont vous êtes propriétaire.",
 
   "portal_error": "Impossible d'accéder au portail de facturation. Veuillez réessayer.",
 

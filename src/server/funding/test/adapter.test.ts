@@ -1306,12 +1306,39 @@ describe('Payment Provider Adapters', () => {
       });
 
       it('should withdraw a period-end cancellation with its own idempotency key', async () => {
+        mockStripe.subscriptions.update.resolves({ id: 'sub_1', cancel_at: null });
+
         await stripeAdapter.resumeSubscription('sub_1', options);
 
+        expect(mockStripe.subscriptions.update.calledOnce).toBe(true);
         const [subscriptionId, params, requestOptions] = mockStripe.subscriptions.update.firstCall.args;
         expect(subscriptionId).toBe('sub_1');
         expect(params).toEqual({ cancel_at_period_end: false });
         expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:resume');
+      });
+
+      it('should also unset a cancellation scheduled for a specific date', async () => {
+        // A dashboard or portal cancellation set for a date survives clearing
+        // cancel_at_period_end. Left alone, Stripe would still delete the
+        // subscription while the local record said the plan continues.
+        mockStripe.subscriptions.update
+          .onFirstCall().resolves({ id: 'sub_1', cancel_at: 1798761600 })
+          .onSecondCall().resolves({ id: 'sub_1', cancel_at: null });
+
+        await stripeAdapter.resumeSubscription('sub_1', options);
+
+        expect(mockStripe.subscriptions.update.calledTwice).toBe(true);
+        const [subscriptionId, params, requestOptions] = mockStripe.subscriptions.update.secondCall.args;
+        expect(subscriptionId).toBe('sub_1');
+        expect(params).toEqual({ cancel_at: '' });
+        expect(requestOptions.idempotencyKey).toBe('pavillion:op:entity-1:nonce-1:resume-clear-cancel-at');
+      });
+
+      it('should throw when Stripe still reports a scheduled cancellation', async () => {
+        mockStripe.subscriptions.update.resolves({ id: 'sub_1', cancel_at: 1798761600 });
+
+        await expect(stripeAdapter.resumeSubscription('sub_1', options))
+          .rejects.toThrow('still has a scheduled cancellation');
       });
 
       it('should send distinct keys for each mutating call in an amount update', async () => {

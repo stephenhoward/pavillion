@@ -53,6 +53,7 @@
   "resume_funding_plan_button": "Conservar mi plan",
   "resume_success": "Tu plan de financiación continuará y se renovará como de costumbre al final del período de facturación actual.",
   "resume_error": "No se pudo conservar tu plan de financiación. Por favor intenta de nuevo.",
+  "resume_not_possible": "Esta cancelación ya no se puede retirar porque el plan ha terminado o está terminando ahora. Para volver a apoyar esta instancia, inicia un nuevo plan desde la página General de cualquier calendario de tu propiedad.",
 
   "portal_error": "No se pudo acceder al portal de facturación. Por favor intenta de nuevo.",
 

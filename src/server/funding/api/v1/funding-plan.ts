@@ -5,6 +5,7 @@ import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
 import { FundingPlanNotFoundError, FundingPlanNotResumableError } from '@/common/exceptions/funding';
 import { logError } from '@/server/common/helper/error-logger';
+import { limitFundingPlanChangeByAccount } from '@/server/common/middleware/rate-limiters';
 
 /**
  * User funding plan route handlers
@@ -30,8 +31,10 @@ export default class FundingPlanRoutes {
     // All user funding plan endpoints require authentication
     router.get('/options', ExpressHelper.loggedInOnly, this.getOptions.bind(this));
     router.get('/status', ExpressHelper.loggedInOnly, this.getStatus.bind(this));
-    router.post('/cancel', ExpressHelper.loggedInOnly, this.cancel.bind(this));
-    router.post('/resume', ExpressHelper.loggedInOnly, this.resume.bind(this));
+    // Both reach the payment provider with the instance's credentials, so each
+    // account's plan changes are bounded.
+    router.post('/cancel', ExpressHelper.loggedInOnly, limitFundingPlanChangeByAccount, this.cancel.bind(this));
+    router.post('/resume', ExpressHelper.loggedInOnly, limitFundingPlanChangeByAccount, this.resume.bind(this));
     router.get('/portal', ExpressHelper.loggedInOnly, this.getPortal.bind(this));
 
     app.use(routePrefix, router);

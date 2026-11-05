@@ -4,10 +4,12 @@ import request from 'supertest';
 import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';
 import FundingPlanRoutes from '@/server/funding/api/v1/funding-plan';
+import ExpressHelper from '@/server/common/helper/express';
 import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
+import { limitFundingPlanChangeByAccount } from '@/server/common/middleware/rate-limiters';
 import { MissingRequiredFieldError, FundingPlanNotResumableError } from '@/common/exceptions/funding';
 
 describe('User Funding Plan API Routes', () => {
@@ -35,6 +37,34 @@ describe('User Funding Plan API Routes', () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  /**
+   * The handler tests below bind handlers directly, so the limiter is never in
+   * their path. This installs the real router and reads its route stack, so a
+   * plan-changing route that drops the per-account limiter fails here.
+   */
+  describe('rate limiter wiring', () => {
+    it.each(['/cancel', '/resume'])(
+      'should wire limitFundingPlanChangeByAccount after loggedInOnly on POST %s',
+      (path) => {
+        const app = express();
+        fundingPlanHandlers.installHandlers(app, '/api/funding/v1');
+
+        const layers = (app as any)._router.stack
+          .filter((layer: any) => layer.name === 'router')
+          .flatMap((layer: any) => layer.handle.stack)
+          .filter((layer: any) => layer.route?.path === path && layer.route.methods.post);
+
+        expect(layers.length).toBe(1);
+        const handlers = layers[0].route.stack.map((l: any) => l.handle);
+        // loggedInOnly is a middleware array; its last element is the check
+        // that refuses an unauthenticated request.
+        const authCheck = ExpressHelper.loggedInOnly[ExpressHelper.loggedInOnly.length - 1];
+        expect(handlers.indexOf(authCheck)).toBeGreaterThanOrEqual(0);
+        expect(handlers.indexOf(limitFundingPlanChangeByAccount)).toBeGreaterThan(handlers.indexOf(authCheck));
+      },
+    );
   });
 
   describe('GET /options', () => {
@@ -496,6 +526,20 @@ describe('User Funding Plan API Routes', () => {
         .expect(409);
 
       expect(response.body.errorName).toBe('FundingPlanNotResumableError');
+    });
+
+    it('should answer a provider failure with the generic 500 body', async () => {
+      const mockPlan = new FundingPlan('plan-1');
+      sandbox.stub(service, 'getStatus').resolves(mockPlan);
+      sandbox.stub(service, 'resume').rejects(new Error('Stripe: No such subscription: sub_123'));
+      bindResume();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .expect(500);
+
+      // Provider detail stays in the server log, never in the response.
+      expect(response.body).toEqual({ error: 'Internal server error' });
     });
 
     it('should answer 404 when the account has no plan', async () => {

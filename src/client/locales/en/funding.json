@@ -53,6 +53,7 @@
   "resume_funding_plan_button": "Keep My Plan",
   "resume_success": "Your funding plan will continue, and renews as usual at the end of the current billing period.",
   "resume_error": "Failed to keep your funding plan. Please try again.",
+  "resume_not_possible": "This cancellation can no longer be withdrawn, because the plan has ended or is ending now. To support this instance again, start a new plan from the General page of any calendar you own.",
 
   "portal_error": "Failed to access billing portal. Please try again.",
 

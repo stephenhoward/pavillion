@@ -1473,7 +1473,17 @@ export default class FundingService {
    *
    * Like `cancel`, the row is locked before the provider call so a concurrent
    * cancel queues behind this one, and the provider call runs before the local
-   * write so a refusal leaves the cancellation in place.
+   * write so a refusal leaves the cancellation in place. The adapter refuses
+   * too when the provider still reports a scheduled cancellation afterwards
+   * (one set for a specific date, say), so the local boundary is only cleared
+   * once the provider has actually dropped its own.
+   *
+   * The same asymmetry as `cancel` applies: if the provider call succeeds and
+   * the commit then fails, the provider will renew while the plan here still
+   * carries `cancel_at`. That fails safe — the customer is shown, and the
+   * access check enforces, an earlier end than the one they are paying past —
+   * and the provider's `customer.subscription.updated`, which reports
+   * `cancel_at: null`, clears the stale boundary through processWebhookEvent.
    *
    * @param fundingPlanId - Funding plan ID
    * @throws FundingPlanNotFoundError when the plan does not exist

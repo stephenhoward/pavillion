@@ -19,6 +19,7 @@ import {
   limitWidgetConfigByAccount,
   limitCalendarFundingPlanByAccount,
   limitCheckoutSessionByAccount,
+  limitFundingPlanChangeByAccount,
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
   limitImportSourceCreateByAccount,
@@ -346,6 +347,11 @@ describe('rate-limiters', () => {
     it('should export limitCheckoutSessionByAccount limiter', () => {
       expect(limitCheckoutSessionByAccount).toBeDefined();
       expect(typeof limitCheckoutSessionByAccount).toBe('function');
+    });
+
+    it('should export limitFundingPlanChangeByAccount limiter', () => {
+      expect(limitFundingPlanChangeByAccount).toBeDefined();
+      expect(typeof limitFundingPlanChangeByAccount).toBe('function');
     });
 
     it('should export limitImportSourceVerifyBySource limiter', () => {

@@ -538,6 +538,10 @@ describe('Funding Plan System Integration Tests', () => {
         await allocation.reload();
         expect(resumeSubscription.calledOnce).toBe(true);
         expect(resumeSubscription.firstCall.args[0]).toBe('sub_user_cancel');
+        // A fresh nonce per attempt, scoped to this operation and this plan, so
+        // a replay de-duplicates at the provider without colliding with a cancel.
+        expect(resumeSubscription.firstCall.args[1].idempotencyKey)
+          .toMatch(new RegExp(`^pavillion:plan-resume:${plan.id}:[0-9a-f-]{36}$`));
         expect(plan.status).toBe('active');
         expect(plan.cancel_at).toBeNull();
         expect(allocation.end_time).toBeNull();
