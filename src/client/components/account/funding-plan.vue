@@ -289,8 +289,13 @@ onMounted(async () => {
         </div>
 
         <div class="funding-plan-actions">
+          <!--
+            Suspended included: updating the payment details in the provider's
+            portal is how a suspended plan is reactivated, and the suspension
+            email sends the owner here to do it.
+          -->
           <button
-            v-if="isActive || isPastDue"
+            v-if="isActive || isPastDue || isSuspended"
             type="button"
             class="btn btn--secondary"
             @click="openBillingPortal"

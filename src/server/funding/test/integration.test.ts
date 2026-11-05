@@ -575,6 +575,24 @@ describe('Funding Plan System Integration Tests', () => {
         expect(resumeSubscription.called).toBe(false);
       });
 
+      it('should refuse to resume a plan whose last calendar has been removed', async () => {
+        // Removing the last calendar closes its allocation at the period end
+        // and cancels the plan at the same boundary. Resuming would have the
+        // provider renew a subscription that covers nothing.
+        const { plan, allocation, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+        allocation.end_time = periodEnd;
+        await allocation.save();
+
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+
+        await plan.reload();
+        expect(resumeSubscription.called).toBe(false);
+        expect(plan.cancel_at).toEqual(periodEnd);
+      });
+
       it('should refuse to resume a plan with no pending cancellation', async () => {
         const { plan, mockAdapter } = await seedCoveredAccount();
         const resumeSubscription = sandbox.stub().resolves();
@@ -720,7 +738,7 @@ describe('Funding Plan System Integration Tests', () => {
    * `where` clause or the unique index that actually hold the line.
    */
   describe('one plan per account, one plan per calendar', () => {
-    async function seedAccountWithPlan(status: 'active' | 'suspended') {
+    async function seedAccountWithPlan(status: 'active' | 'past_due' | 'suspended') {
       const providerConfig = await createProviderConfig('stripe');
 
       const settings = FundingSettingsEntity.build({
@@ -775,6 +793,23 @@ describe('Funding Plan System Integration Tests', () => {
       ).rejects.toThrow(ActiveFundingPlanExistsError);
     });
 
+    it.each(['past_due', 'suspended'] as const)(
+      'should refuse a second checkout while the account\'s plan is %s',
+      async (status) => {
+        // The subscription still exists at the provider and its unpaid invoice
+        // can still collect. A second subscription bought meanwhile would
+        // charge the account twice; the way back is the billing portal.
+        const { account } = await seedAccountWithPlan(status);
+        const createCheckoutSession = sandbox.stub().resolves({ clientSecret: 's', sessionId: 'cs_test_x' });
+        sandbox.stub(ProviderFactory, 'getAdapter').returns({ createCheckoutSession } as any);
+
+        await expect(
+          service.createCheckoutSession(account.id, 'monthly', 'https://pavillion.dev/return'),
+        ).rejects.toThrow(ActiveFundingPlanExistsError);
+        expect(createCheckoutSession.called).toBe(false);
+      },
+    );
+
     it('should record a cancellation the new subscription already carries', async () => {
       // A checkout can complete against a subscription that is already
       // scheduled to cancel — created through the provider's own surfaces, or
@@ -815,8 +850,9 @@ describe('Funding Plan System Integration Tests', () => {
 
     it('should move a calendar stranded on a suspended plan rather than failing the add', async () => {
       // The sequence the unique index would otherwise turn into a 500 with no
-      // way out: plan suspended (allocations stay open), user buys a new plan
-      // without that calendar, then adds it. A pre-check scoped to the active
+      // way out: plan suspended (allocations stay open), a new plan arrives
+      // past the checkout gate without that calendar (a session opened before
+      // the suspension, say), then the calendar is added. A pre-check scoped to the active
       // plan sees nothing, the insert hits the index, and the calendar becomes
       // uncoverable — removeCalendarFromFundingPlan only looks under the active
       // plan, so it would answer 404.
@@ -939,10 +975,12 @@ describe('Funding Plan System Integration Tests', () => {
     });
 
     it('should close a suspended plan\'s allocation when the calendar is bought again', async () => {
-      // A suspended plan keeps its allocations open and does not block a fresh
-      // checkout, so this is the reachable sequence that would otherwise hand
-      // the unique index a second open row and leave the provider retrying the
-      // webhook forever.
+      // A suspended plan keeps its allocations open. The checkout gate refuses
+      // a new plan while it is suspended, but a checkout can still complete
+      // past it (a session opened before the suspension), and that sequence
+      // would otherwise hand the unique index a second open row and leave the
+      // provider retrying the webhook forever. Driven through the webhook, so
+      // the gate is not in the path.
       const { account, plan, providerConfig } = await seedAccountWithPlan('suspended');
       const calendarId = uuidv4();
 

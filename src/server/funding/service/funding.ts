@@ -696,11 +696,12 @@ export default class FundingService {
       // calendar already open under a *different* plan and hand the index an
       // insert it must reject.
       //
-      // That is a reachable purchase, not a corrupt-database hypothetical: a
-      // plan that goes `suspended` keeps its allocations open, and a suspended
-      // plan neither blocks a fresh checkout nor gets its calendars closed. So
-      // an account can hold a live plan while a stranded row from the suspended
-      // one still covers the calendar it is now trying to add.
+      // A plan that goes `suspended` keeps its allocations open and does not
+      // get its calendars closed. The checkout gate refuses a new plan while
+      // one is suspended, but a second plan can still arrive past it (a session
+      // opened before the suspension, or one of the races that gate's comment
+      // lists), so an account can hold a live plan while a stranded row from
+      // the suspended one still covers the calendar it is now trying to add.
       const openElsewhere = await CalendarFundingPlanEntity.findOne({
         where: {
           calendar_id: calendarId,
@@ -1150,31 +1151,34 @@ export default class FundingService {
     // Validate return URL origin (defense in depth)
     this.validateReturnUrlOrigin(returnUrl);
 
-    // One account, one plan. A plan that is winding down towards its `cancel_at`
-    // boundary is still that one plan and still blocks a second: it is active,
-    // it is being honoured, and its calendars are covered by it.
+    // One account, one plan, and any plan that has not ended is that plan —
+    // the same rule getStatus reports by. That covers:
     //
-    // Which leaves the resubscribe-during-the-cancellation-window case, and the
-    // answer to that is NOT to relax this gate. A customer who changes their
-    // mind before the boundary has the pending cancellation *reversed* on the
-    // plan they already hold (`resume`), so they keep one subscription rather
-    // than accumulating a second. Once the plan has finalized to 'cancelled'
-    // it no longer counts here, and a fresh checkout is the way back.
+    //  - an active plan, including one winding down towards its `cancel_at`
+    //    boundary: it is being honoured and its calendars are covered by it. A
+    //    customer who changes their mind before the boundary has the pending
+    //    cancellation *reversed* on that plan (`resume`), never a second one.
+    //  - a past_due or suspended plan: its subscription still exists at the
+    //    provider, and the unpaid invoice can still collect — on retry, or when
+    //    the customer updates their payment details in the billing portal. A
+    //    second subscription bought meanwhile would charge the account twice.
+    //    The way back is that portal, not a new checkout.
+    //
+    // Only once a plan has finalized to 'cancelled' does it stop counting, and
+    // a fresh checkout is then the way back.
     //
     // What this gate actually provides is the common case, and no more. It is
     // an unlocked read one or more HTTP round trips before the only site that
     // creates a plan (processCheckoutCompleted), and `funding_plan` carries no
     // unique constraint on account_id, provider_subscription_id or
-    // provider_event_id to catch what slips past. At least three routes reach
-    // two plans on one account anyway: concurrent creation for a single
-    // subscription, two checkout sessions paid in parallel, and a suspended
-    // plan revived through the billing portal after a second was bought — the
-    // terminal-status guard in processWebhookEvent does not cover that last one
-    // because it only pins 'cancelled'. Closing those needs a database-level
+    // provider_event_id to catch what slips past. Two plans on one account are
+    // still reachable through concurrent creation for a single subscription,
+    // two checkout sessions paid in parallel, or a session opened before the
+    // existing plan's state changed. Closing those needs a database-level
     // constraint and a decision about what to do with the loser; pv-ez63 owns
     // it.
     const existingPlan = await FundingPlanEntity.findOne({
-      where: { account_id: accountId, status: 'active' },
+      where: { account_id: accountId, status: { [Op.ne]: 'cancelled' } },
     });
 
     if (existingPlan) {
@@ -1466,10 +1470,13 @@ export default class FundingService {
    * reports `cancel_at: null`, which processWebhookEvent applies as the same
    * clear, so the two writes converge.
    *
-   * Only a plan with a boundary still ahead of it can be resumed. One already
-   * 'cancelled' has had its subscription deleted at the provider, and one whose
-   * boundary has passed is waiting on that deletion; for both, a fresh checkout
-   * is the way back.
+   * Only a plan with a boundary still ahead of it and at least one calendar
+   * still on it can be resumed. One already 'cancelled' has had its
+   * subscription deleted at the provider, and one whose boundary has passed is
+   * waiting on that deletion; for both, a fresh checkout is the way back. One
+   * whose every allocation has been closed is cancelling because its last
+   * calendar was removed, and resuming it would renew a plan that covers
+   * nothing.
    *
    * Like `cancel`, the row is locked before the provider call so a concurrent
    * cancel queues behind this one, and the provider call runs before the local
@@ -1501,6 +1508,20 @@ export default class FundingService {
       }
 
       if (entity.status === 'cancelled' || !entity.cancel_at || entity.cancel_at.getTime() <= Date.now()) {
+        throw new FundingPlanNotResumableError(fundingPlanId);
+      }
+
+      // A plan with no calendar still on it is cancelling because its last
+      // calendar was removed. Withdrawing that cancellation would have the
+      // provider renew a subscription that covers nothing.
+      const openAllocation = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: entity.id,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: t,
+      });
+      if (!openAllocation) {
         throw new FundingPlanNotResumableError(fundingPlanId);
       }
 
@@ -2044,13 +2065,14 @@ export default class FundingService {
         // plan closes whatever allocation was still open for the same calendar
         // under an earlier one.
         //
-        // Not defensive tidying — without it this insert fails. A plan that
-        // went `suspended` keeps its allocations open (it may yet be revived)
-        // and does not block a fresh checkout, so buying a new plan for the
-        // same calendar is an ordinary, reachable sequence that would otherwise
-        // present the unique index on (calendar_id) WHERE end_time IS NULL with
-        // a second open row. The webhook would then fail, and the provider
-        // would retry it forever.
+        // Belt and braces, but load-bearing when it fires. A plan that went
+        // `suspended` keeps its allocations open (it may yet be revived). The
+        // checkout gate refuses a new plan while one is suspended, but a
+        // checkout can still complete past it — a session opened before the
+        // suspension, or one of the races the gate's comment lists — and
+        // without this close it would present the unique index on
+        // (calendar_id) WHERE end_time IS NULL with a second open row. The
+        // webhook would then fail, and the provider would retry it forever.
         //
         // addCalendarToFundingPlan carries the matching close for the same
         // reason. The two must stay symmetric: every path that opens an

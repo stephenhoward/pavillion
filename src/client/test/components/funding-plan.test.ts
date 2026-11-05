@@ -69,6 +69,8 @@ describe('Funding Plan UI Components', () => {
             billing_cycle_monthly: 'Monthly',
             billing_cycle_yearly: 'Yearly',
             cancel_success: 'Your funding plan has been cancelled',
+            status_suspended: 'Suspended',
+            suspended_message: 'Update your payment details to reactivate it.',
           },
         },
       },
@@ -216,6 +218,30 @@ describe('Funding Plan UI Components', () => {
     expect(fundingStubs.cancel).toHaveBeenCalledOnce();
     expect(wrapper.find('.success-message').text()).toBe('Your funding plan has been cancelled');
     expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
+  });
+
+  it('offers the billing portal to a suspended plan, where its payment details are updated', async () => {
+    // The suspension email sends the owner here to update their payment
+    // details; the portal is the only place that can be done.
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+    fundingStubs.getStatus.mockResolvedValue({ ...activePlan, status: 'suspended' });
+    const getPortalUrl = vi.spyOn(FundingService.prototype, 'getPortalUrl')
+      .mockResolvedValue('https://billing.stripe.com/p/session/test');
+    vi.stubGlobal('location', { origin: window.location.origin, href: '' });
+
+    const wrapper = await mountAccount();
+
+    expect(wrapper.find('.status-message.error').text()).toBe('Update your payment details to reactivate it.');
+    const portalButton = wrapper.find('.funding-plan-actions button.btn--secondary');
+    expect(portalButton.text()).toBe('Manage Payment Method');
+    // Nothing to cancel on a suspended plan from here.
+    expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
+
+    await portalButton.trigger('click');
+    await flushPromises();
+
+    expect(getPortalUrl).toHaveBeenCalledOnce();
+    expect(window.location.href).toBe('https://billing.stripe.com/p/session/test');
   });
 
   it('sends the billing portal back to the funding plan page on this origin', async () => {

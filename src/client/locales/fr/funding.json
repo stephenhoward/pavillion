@@ -24,7 +24,7 @@
 
   "plan_started_success": "Merci de soutenir cette instance. Votre plan de financement est actif.",
   "plan_start_error": "Échec du démarrage de votre plan de financement. Veuillez réessayer.",
-  "plan_already_exists_error": "Votre compte a déjà un plan de financement. Gérez-le depuis les paramètres Plan de financement de votre compte, y compris pour le conserver si vous l'avez annulé.",
+  "plan_already_exists_error": "Votre compte a déjà un plan de financement. Gérez-le depuis les paramètres Plan de financement de votre compte, où vous pouvez mettre à jour vos informations de paiement ou conserver un plan que vous avez annulé.",
 
   "checkout_done_button": "Terminé",
   "checkout_try_again_button": "Réessayer",
@@ -43,7 +43,7 @@
 
   "cancellation_info": "Votre plan de financement restera actif jusqu'au {{date}}",
   "past_due_warning": "Votre paiement n'a pas abouti. Mettez à jour votre mode de paiement pour continuer à soutenir cette instance.",
-  "suspended_message": "Votre plan de financement est suspendu car le paiement a continué d'échouer. Veuillez contacter le support.",
+  "suspended_message": "Votre plan de financement est suspendu car le paiement a continué d'échouer. Mettez à jour vos informations de paiement pour le réactiver.",
 
   "manage_payment_button": "Gérer le mode de paiement",
   "cancel_funding_plan_button": "Annuler le plan",
@@ -53,7 +53,7 @@
   "resume_funding_plan_button": "Conserver mon plan",
   "resume_success": "Votre plan de financement continuera et sera renouvelé normalement à la fin de la période de facturation en cours.",
   "resume_error": "Échec de la conservation de votre plan de financement. Veuillez réessayer.",
-  "resume_not_possible": "Cette annulation ne peut plus être retirée, car le plan a pris fin ou se termine maintenant. Pour soutenir à nouveau cette instance, démarrez un nouveau plan depuis la page Général d'un calendrier dont vous êtes propriétaire.",
+  "resume_not_possible": "Cette annulation ne peut plus être retirée : le plan a pris fin ou aucun calendrier n'y figure plus. Pour soutenir à nouveau cette instance, démarrez un nouveau plan depuis la page Général d'un calendrier dont vous êtes propriétaire.",
 
   "portal_error": "Impossible d'accéder au portail de facturation. Veuillez réessayer.",
 

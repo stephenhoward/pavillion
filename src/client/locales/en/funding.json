@@ -24,7 +24,7 @@
 
   "plan_started_success": "Thank you for supporting this instance. Your funding plan is active.",
   "plan_start_error": "Failed to start your funding plan. Please try again.",
-  "plan_already_exists_error": "Your account already has a funding plan. Manage it from your account's Funding Plan settings — including keeping it, if you cancelled it.",
+  "plan_already_exists_error": "Your account already has a funding plan. Manage it from your account's Funding Plan settings, where you can update your payment details or keep a plan you cancelled.",
 
   "checkout_done_button": "Done",
   "checkout_try_again_button": "Try Again",
@@ -43,7 +43,7 @@
 
   "cancellation_info": "Your funding plan will remain active until {{date}}",
   "past_due_warning": "Your payment didn't go through. Update your payment method to keep supporting this instance.",
-  "suspended_message": "Your funding plan is suspended because payment kept failing. Please contact support.",
+  "suspended_message": "Your funding plan is suspended because payment kept failing. Update your payment details to reactivate it.",
 
   "manage_payment_button": "Manage Payment Method",
   "cancel_funding_plan_button": "Cancel Plan",
@@ -53,7 +53,7 @@
   "resume_funding_plan_button": "Keep My Plan",
   "resume_success": "Your funding plan will continue, and renews as usual at the end of the current billing period.",
   "resume_error": "Failed to keep your funding plan. Please try again.",
-  "resume_not_possible": "This cancellation can no longer be withdrawn, because the plan has ended or is ending now. To support this instance again, start a new plan from the General page of any calendar you own.",
+  "resume_not_possible": "This cancellation can no longer be withdrawn: the plan has ended, or no calendars remain on it. To support this instance again, start a new plan from the General page of any calendar you own.",
 
   "portal_error": "Failed to access billing portal. Please try again.",
 
