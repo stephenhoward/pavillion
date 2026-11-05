@@ -27,6 +27,7 @@ import { EventEmitter } from 'events';
 import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
 import { isValidLanguageCode } from '@/common/i18n/languages';
 import { ValidationError } from '@/common/exceptions/base';
+import { EditorAlreadyExistsError } from '@/common/exceptions/editor';
 import { isValidEmail, normalizeEmail } from '@/common/validation/email';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
@@ -128,6 +129,16 @@ export default class AccountService {
     const invitation = await AccountInvitationEntity.findByPk(id, { include: [ 'inviter' ] });
     if (!invitation) {
       return undefined;
+    }
+
+    // The invitee already has an account (for example, an earlier accept
+    // created it but this invitation's editor grant failed). Sending the
+    // invitation again would lead to an accept that cannot create the
+    // account, so grant what the invitation carries and remove it instead.
+    const existingAccount = await this.getAccountByEmail(invitation.email);
+    if (existingAccount) {
+      await this.settleInvitationForExistingAccount(invitation, existingAccount);
+      return invitation.toModel();
     }
 
     // Reset expiration time to 1 week from now
@@ -557,12 +568,17 @@ export default class AccountService {
 
     const accountInfo = await this._setupAccount(invitation.email, password);
 
-    const calendars = await this.processCalendarInvitations(invitation, accountInfo.account );
+    const { calendars, settledInvitationIds } = await this.processCalendarInvitations(invitation, accountInfo.account );
 
-    // Clean up all invitation records for this email
-    await AccountInvitationEntity.destroy({
-      where: { email: invitation.email },
-    });
+    // Remove only the invitations that are settled: those carrying no
+    // calendar and those whose editor grant succeeded. An invitation whose
+    // grant failed stays, so the inviter still sees it pending and can
+    // resend it (resendInvite grants access once the account exists).
+    if (settledInvitationIds.length > 0) {
+      await AccountInvitationEntity.destroy({
+        where: { id: settledInvitationIds },
+      });
+    }
 
     return {
       account: accountInfo.account,
@@ -570,31 +586,40 @@ export default class AccountService {
     };
   }
 
-  private async processCalendarInvitations(invitation: AccountInvitationEntity, account: Account): Promise<string[]> {
-
-    if ( !this.calendarInterface ) {
-      return [];
-    }
+  /**
+   * Grants calendar editor access for every invitation sent to the
+   * invitation's email.
+   *
+   * @returns the calendars access was granted to, and the ids of the
+   *   invitations that are settled (no calendar, or a grant that succeeded)
+   */
+  private async processCalendarInvitations(invitation: AccountInvitationEntity, account: Account): Promise<{ calendars: string[], settledInvitationIds: string[] }> {
 
     // Retrieve ALL invitations sent to this email so we can grant
-    // access to all relevant calendars and clean up all invitation records
+    // access to all relevant calendars and settle every invitation record
     const allInvitations = await AccountInvitationEntity.findAll({
       where: { email: invitation.email },
       include: [{ model: AccountEntity, as: 'inviter' } ],
     });
 
-    // Process all calendar editor invitations for this email and collect calendar info
-    const processedCalendars = new Set<string>();
+    const grantedCalendars = new Set<string>();
+    const settledInvitationIds: string[] = [];
 
     for (const inv of allInvitations) {
-      if ( ! inv.calendar_id || processedCalendars.has(inv.calendar_id)) {
-        continue; // Skip if no calendar ID or already processed
+      if ( !inv.calendar_id || grantedCalendars.has(inv.calendar_id)) {
+        settledInvitationIds.push(inv.id);
+        continue;
+      }
+
+      if ( !this.calendarInterface ) {
+        logger.error({ invitationId: inv.id }, 'Calendar interface unavailable; leaving calendar invitation pending');
+        continue;
       }
 
       const grantingAccount = await this.getAccountById(inv.invited_by);
       if (!grantingAccount) {
         logger.error({ invitationId: inv.id }, 'Inviting account not found for invitation');
-        continue; // Skip this invitation but continue with others
+        continue; // Leave this invitation pending but continue with others
       }
 
       try {
@@ -603,13 +628,51 @@ export default class AccountService {
           inv.calendar_id,
           account.id,
         );
-        processedCalendars.add(inv.calendar_id);
+        grantedCalendars.add(inv.calendar_id);
+        settledInvitationIds.push(inv.id);
       }
       catch (error) {
         logError(error, `[Accounts] Failed to grant calendar editor access for calendar ${inv.calendar_id}`);
       }
     }
-    return Array.from(processedCalendars);
+
+    return {
+      calendars: Array.from(grantedCalendars),
+      settledInvitationIds,
+    };
+  }
+
+  /**
+   * Settles an invitation whose email already has an account: grants the
+   * calendar editor access it carries (if any) and removes it. Accepting the
+   * invitation would otherwise try to create the account again.
+   *
+   * @throws Error if the invitation carries a calendar and access cannot be granted
+   */
+  private async settleInvitationForExistingAccount(invitation: AccountInvitationEntity, account: Account): Promise<void> {
+    if (invitation.calendar_id) {
+      if (!this.calendarInterface) {
+        throw new Error('CalendarInterface not available');
+      }
+
+      const grantingAccount = await this.getAccountById(invitation.invited_by);
+      if (!grantingAccount) {
+        throw new Error('Inviting account not found for invitation');
+      }
+
+      try {
+        await this.calendarInterface.grantEditAccess(grantingAccount, invitation.calendar_id, account.id);
+      }
+      catch (error) {
+        // Access granted by another route since the invitation was sent
+        // leaves nothing to do but remove the invitation.
+        if (!(error instanceof EditorAlreadyExistsError)) {
+          throw error;
+        }
+      }
+    }
+
+    await invitation.destroy();
   }
 
   /**
@@ -651,9 +714,38 @@ export default class AccountService {
       throw new noAccountApplicationExistsError();
     }
 
-    const accountInfo = await this._setupAccount(application.email);
+    let accountInfo: AccountInfo;
+    try {
+      accountInfo = await this._setupAccount(application.email);
+    }
+    catch (error) {
+      if (!(error instanceof AccountAlreadyExistsError)) {
+        throw error;
+      }
 
-    // Send email before destroying the application
+      // An earlier approval created the account but failed before the
+      // application was removed (typically the acceptance email). Approving
+      // again finishes that approval instead of failing on the account.
+      const existingAccount = await this.getAccountByEmail(application.email);
+      if (!existingAccount) {
+        throw error;
+      }
+
+      const secrets = await AccountSecretsEntity.findByPk(existingAccount.id);
+      if (secrets?.password) {
+        // The applicant already has a working login; there is nothing to send.
+        await application.destroy();
+        return existingAccount;
+      }
+
+      accountInfo = {
+        account: existingAccount,
+        password_code: await this.generatePasswordResetCodeForAccount(existingAccount),
+      };
+    }
+
+    // Send email before destroying the application, so a failed send leaves
+    // the application in place for the admin to approve again.
     const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
     await this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
 

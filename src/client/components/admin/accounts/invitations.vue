@@ -269,6 +269,9 @@ const onInvited = async () => {
 const resendInvitation = async (invitation) => {
   try {
     await authn.resend_invitation(invitation.id);
+    // When the invitee already has an account, the resend settles the
+    // invitation instead of emailing it, so reload the list.
+    await loadInvitations();
     state.successMessage = t('resend_success', { email: invitation.email });
     setTimeout(() => {
       state.successMessage = null;

@@ -177,6 +177,34 @@ describe('Admin Invitations Component', () => {
       expect(wrapper.vm.state.successMessage).toBeTruthy();
     });
 
+    it('reloads the list after a resend that settled the invitation', async () => {
+      const testInvitation = {
+        id: 'inv-1',
+        email: 'user1@example.com',
+        invitedBy: 'admin-id',
+        calendarId: 'calendar-1',
+        expirationTime: new Date(Date.now() + 86400000).toISOString(),
+        code: 'code1',
+      };
+
+      listModelsSpy
+        .mockResolvedValueOnce(ListResult.fromArray([testInvitation]))
+        .mockResolvedValueOnce(ListResult.fromArray([]));
+
+      const { wrapper, authnMock } = mountInvitationsComponent();
+      currentWrapper = wrapper;
+      authnMock.resend_invitation.mockResolvedValue({});
+
+      await flushPromises();
+      expect(wrapper.vm.store.invitations).toHaveLength(1);
+
+      await wrapper.vm.resendInvitation(wrapper.vm.store.invitations[0]);
+      await flushPromises();
+
+      expect(listModelsSpy).toHaveBeenCalledTimes(2);
+      expect(wrapper.vm.store.invitations).toHaveLength(0);
+    });
+
     it('handles resend invitation error', async () => {
       const testInvitations = [
         {
