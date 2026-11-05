@@ -86,6 +86,42 @@ describe('calendar store across an account switch', () => {
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('account-a-cal');
   });
 
+  it('keeps the list, account and current calendar, and does not fetch, when the token has expired', async () => {
+    currentId = 'account-a';
+    await loginAs('account-a');
+    const service = new CalendarService();
+    await service.ensureCalendarsLoaded();
+    useCalendarStore().setSelectedCalendar('account-a-cal');
+
+    const claims = JSON.parse(localStorage.getItem('jw_token') as string);
+    localStorage.setItem('jw_token', JSON.stringify({ ...claims, exp: Math.floor(Date.now() / 1000) - 60 }));
+    await service.ensureCalendarsLoaded();
+
+    const store = useCalendarStore();
+    sinon.assert.calledOnce(listStub);
+    expect(store.loaded).toBe(true);
+    expect(store.accountId).toBe('account-a');
+    expect(store.selectedCalendarId).toBe('account-a-cal');
+    expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBe('account-a-cal');
+  });
+
+  it('writes a load started with no session to the account that answered it', async () => {
+    let release: () => void = () => {};
+    listStub.withArgs('/api/v1/calendars').callsFake(() => new Promise((resolve) => {
+      release = () => resolve({ items: [{ id: 'account-a-cal', urlName: 'account-a-cal', userRelationship: 'owner' }] });
+    }));
+    const service = new CalendarService();
+    const load = service.ensureCalendarsLoaded();
+
+    await loginAs('account-a');
+    release();
+    await load;
+
+    const store = useCalendarStore();
+    expect(store.loaded).toBe(true);
+    expect(store.accountId).toBe('account-a');
+  });
+
   it('leaves nothing of the first account behind when the refetch fails', async () => {
     currentId = 'account-a';
     await loginAs('account-a');

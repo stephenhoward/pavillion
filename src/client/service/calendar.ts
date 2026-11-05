@@ -54,12 +54,14 @@ export default class CalendarService {
    * change the store cannot apply locally. A store loaded for a different
    * account (another account signed in through the session-expired modal,
    * with no logout between) is reset, list and selection, before refetching,
-   * so a failed refetch leaves nothing of the previous account behind.
+   * so a failed refetch leaves nothing of the previous account behind. An
+   * expired or absent token keeps the store as loaded (list, account and
+   * selection) until a signed-in account differs.
    * @returns Promise<Array<CalendarInfo>> The calendars with relationship info
    */
   async ensureCalendarsLoaded(forceLoad = false): Promise<CalendarInfo[]> {
     const accountId = currentAccountId();
-    if (this.store.loaded && (this.store.accountId ?? null) !== accountId) {
+    if (accountId !== null && this.store.loaded && (this.store.accountId ?? null) !== accountId) {
       this.store.resetCalendars();
     }
     if (!forceLoad && this.store.loaded) {
@@ -87,8 +89,12 @@ export default class CalendarService {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
       const infos = calendarsData.items.map((data) => CalendarInfo.fromObject(data));
       // A load that finishes after another account signed in must not overwrite the store.
-      if (currentAccountId() === accountId) {
-        this.store.setCalendarInfos(infos, accountId);
+      // A request started with no session can only complete through the
+      // session-expired modal's same-account replay (a different account
+      // aborts the queue), so the account signed in when it resolves owns it.
+      const owner = currentAccountId();
+      if (accountId === null || owner === accountId) {
+        this.store.setCalendarInfos(infos, owner);
       }
       return infos;
     }

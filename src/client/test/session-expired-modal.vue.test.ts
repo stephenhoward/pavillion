@@ -14,6 +14,8 @@ import { useEventStore } from '@/client/stores/eventStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { CURRENT_CALENDAR_STORAGE_KEY } from '@/client/service/current-calendar-storage';
+import CalendarService from '@/client/service/calendar';
+import ModelService from '@/client/service/models';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
@@ -184,6 +186,28 @@ describe('SessionExpiredModal Behavior', () => {
     expect(authn.drainPendingRequests.calledOnce).toBe(true);
     expect(authn.abortPendingRequests.called).toBe(false);
     expect(replaceSpy.called).toBe(false);
+    expect(calendarStore.accountId).toBe('account-a');
+    expect(calendarStore.selectedCalendarId).toBe('account-a-cal');
+  });
+
+  it('replays the same account\'s requests after a calendar load ran on the expired token', async () => {
+    // Opening the calendar switcher (or any other ensureCalendarsLoaded
+    // caller) after the token expired must not erase the "before" account.
+    signInAs('account-a');
+    const calendarStore = loadCalendarsFor('account-a');
+    const expiredExp = Math.floor(Date.now() / 1000) - 60;
+    localStorage.setItem('jw_token', JSON.stringify({ exp: expiredExp, id: 'account-a', isAdmin: false, email: 'account-a@example.com' }));
+    const listStub = sandbox.stub(ModelService, 'listModels');
+    await new CalendarService().ensureCalendarsLoaded();
+    sinon.assert.notCalled(listStub);
+
+    const { wrapper, authn } = mountedSessionExpiredModal({ sandbox, pinia });
+    signInAs('account-a');
+    await wrapper.findComponent(LoginForm).vm.$emit('success');
+    await wrapper.vm.$nextTick();
+
+    expect(authn.drainPendingRequests.calledOnce).toBe(true);
+    expect(authn.abortPendingRequests.called).toBe(false);
     expect(calendarStore.accountId).toBe('account-a');
     expect(calendarStore.selectedCalendarId).toBe('account-a-cal');
   });
