@@ -1,0 +1,15 @@
+{
+  "subject": "Un paiement de votre plan de financement n'a pas abouti",
+  "title": "Paiement non reçu",
+  "greeting": "Bonjour,",
+  "message": "Nous n'avons pas pu encaisser le dernier paiement de votre {{planName}}.",
+  "status_detail": "Votre plan est désormais en retard de paiement. Les calendriers qu'il couvre conservent leurs fonctionnalités pendant une courte période de grâce, après laquelle le plan sera suspendu si le paiement n'est toujours pas réglé.",
+  "plan_name_monthly": "plan de financement mensuel qui soutient {{domain}}",
+  "plan_name_yearly": "plan de financement annuel qui soutient {{domain}}",
+  "action_message": "Veuillez vérifier vos informations de paiement pour garder votre plan actif.",
+  "action_button": "Voir le plan de financement",
+  "copy_link_text": "Ou copiez ce lien :",
+  "signature": "Merci,",
+  "team_name": "L'équipe Pavillion",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

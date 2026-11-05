@@ -1,0 +1,15 @@
+{
+  "subject": "No se pudo procesar un pago de tu plan de financiación",
+  "title": "Pago no recibido",
+  "greeting": "Hola,",
+  "message": "No pudimos cobrar el último pago de tu {{planName}}.",
+  "status_detail": "Tu plan tiene un pago pendiente. Los calendarios que cubre conservan sus funciones durante un breve período de gracia; después, el plan se suspenderá si el pago sigue pendiente.",
+  "plan_name_monthly": "plan de financiación mensual que apoya a {{domain}}",
+  "plan_name_yearly": "plan de financiación anual que apoya a {{domain}}",
+  "action_message": "Revisa tus datos de pago para mantener tu plan activo.",
+  "action_button": "Revisar plan de financiación",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

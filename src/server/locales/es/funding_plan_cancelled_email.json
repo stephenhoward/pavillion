@@ -1,0 +1,16 @@
+{
+  "subject": "Tu plan de financiación ha sido cancelado",
+  "title": "Plan de financiación cancelado",
+  "greeting": "Hola,",
+  "message": "Tu {{planName}} ha sido cancelado. Gracias por apoyar a esta instancia.",
+  "status_immediate": "Los calendarios que cubría ya no tienen acceso a las funciones que dependen de la cobertura de un plan de financiación.",
+  "status_period_end": "Los calendarios que cubre conservan sus funciones hasta el final del período de facturación actual, y el plan no se renovará después.",
+  "plan_name_monthly": "plan de financiación mensual que apoya a {{domain}}",
+  "plan_name_yearly": "plan de financiación anual que apoya a {{domain}}",
+  "action_message": "Puedes iniciar un nuevo plan de financiación en cualquier momento.",
+  "action_button": "Ver plan de financiación",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

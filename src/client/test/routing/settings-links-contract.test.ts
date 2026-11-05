@@ -45,4 +45,10 @@ describe('settings links built outside the SPA', () => {
 
     expect(resolved.href).toBe('/settings/admin/accounts');
   });
+
+  it('resolves funding_plan to the path fundingPlanPath() builds', () => {
+    const resolved = createTestRouter().resolve({ name: 'funding_plan' });
+
+    expect(resolved.href).toBe('/settings/account/funding');
+  });
 });

@@ -1,0 +1,15 @@
+{
+  "subject": "Your funding plan has been suspended",
+  "title": "Funding Plan Suspended",
+  "greeting": "Hello,",
+  "message": "Your {{planName}} has been suspended because a payment could not be collected.",
+  "status_detail": "The calendars this plan covers no longer have access to features that depend on funding plan coverage until the plan is reactivated.",
+  "plan_name_monthly": "monthly funding plan supporting {{domain}}",
+  "plan_name_yearly": "yearly funding plan supporting {{domain}}",
+  "action_message": "Update your payment details to reactivate your plan.",
+  "action_button": "Review Funding Plan",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}
