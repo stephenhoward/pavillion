@@ -447,8 +447,9 @@ describe('widget event-detail-overlay slug routing', () => {
     expect(calledEventId).toBe('evt-1');
     // parseInstanceSlug('20260508-1800') → 2026-05-08T18:00:00Z DateTime
     expect(calledStartTime.toISO()).toBe('2026-05-08T18:00:00.000Z');
-    // Calendar urlName forwarded so reposted-event categories scope to the
-    // display calendar via the backend's `?calendar=` query param.
+    // Calendar urlName forwarded as the backend's `?calendar=` query param,
+    // which scopes reposted-event categories to the display calendar and
+    // 404s an event that calendar neither owns nor reposts (DEC-020).
     expect(calledCalendar).toBe('test_calendar');
     // The fallback list-scan path must NOT run when the slug path is taken.
     expect(loadCalendarEventsMock).not.toHaveBeenCalled();

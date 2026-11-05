@@ -48,6 +48,11 @@ export default class PublicCalendarInterface {
     return this.calendarInterface.getEventById(eventId, displayCalendarId);
   }
 
+  /** Proxy — see EventService.isEventVisibleOnCalendar for semantics. */
+  async isEventVisibleOnCalendar(eventId: string, calendarId: string): Promise<boolean> {
+    return this.calendarInterface.isEventVisibleOnCalendar(eventId, calendarId);
+  }
+
   /**
    * Get a single event instance with full schedule and location content data.
    * Returns schedule data with human-readable recurrence text and

@@ -383,6 +383,29 @@ class EventService {
   }
 
   /**
+   * Whether an event is visible on the given calendar.
+   *
+   * The per-event form of {@link listEventIdsForCalendar}: it must answer from
+   * the same three sources — own events (`event.calendar_id`), `event_repost`
+   * links, and `ap_shared_event` rows (reached through the ActivityPub
+   * interface, which also covers remote-origin events with a null
+   * `calendar_id` that this calendar reposts). Keep the two in step.
+   *
+   * @param eventId - the event to check
+   * @param calendarId - the calendar the event would be shown on
+   * @returns true when the calendar owns or reposts the event
+   */
+  async isEventVisibleOnCalendar(eventId: string, calendarId: string): Promise<boolean> {
+    const [ownedCount, repostCount, sharedCalendarIds] = await Promise.all([
+      EventEntity.count({ where: { id: eventId, calendar_id: calendarId } }),
+      EventRepostEntity.count({ where: { event_id: eventId, calendar_id: calendarId } }),
+      this.activityPubInterface!.getCalendarIdsForSharedEvent(eventId),
+    ]);
+
+    return ownedCount > 0 || repostCount > 0 || sharedCalendarIds.includes(calendarId);
+  }
+
+  /**
    * Resolve the repostStatus lookup for a calendar's reposted/shared events.
    *
    * Consults both repost sources for the calendar and builds a unified map
