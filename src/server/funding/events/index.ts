@@ -53,6 +53,12 @@ export default class FundingEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
+    // Said once here so a miswired server is visible at startup; the per-event
+    // warning in notifyPlanOwner still records each notice that went unsent.
+    if (!this.emailInterface) {
+      logger.warn('Funding plan dunning emails disabled: no email interface provided');
+    }
+
     // The bus never awaits a listener, so each email handler goes through the
     // failure-catching wrapper: a rejected send is logged, not left unhandled.
     const guard = <T>(handler: (payload: T) => Promise<void>) =>

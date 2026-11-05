@@ -1379,6 +1379,15 @@ export default class FundingService {
    * cancel racing an allocation change queues behind it instead of cancelling
    * at the provider while the other transaction is still pushing a new total.
    * Same Postgres-only caveat as `resolveActiveFundingPlan`.
+   *
+   * A cancel that would change nothing is a no-op: no provider call, no write,
+   * no event. That covers any cancel of a plan already 'cancelled', and a
+   * period-end cancel of a plan whose `cancel_at` is already set. Each emitted
+   * cancellation sends the owner an email, so a repeated request (a double
+   * click, a scripted loop) must not emit again. The check runs after the
+   * locked read, so two concurrent requests serialize and the second sees the
+   * first's write. An immediate cancel of a plan pending period-end
+   * cancellation still proceeds: it ends coverage now, which is a real change.
    */
   async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
     const run = async (t: Transaction): Promise<void> => {
@@ -1388,6 +1397,11 @@ export default class FundingService {
       });
       if (!entity) {
         throw new Error('Funding plan not found');
+      }
+
+      if (entity.status === 'cancelled' || (!immediate && entity.cancel_at)) {
+        logger.info({ fundingPlanId: entity.id, immediate }, 'Funding plan cancellation already recorded; nothing to do');
+        return;
       }
 
       // Get provider configuration
@@ -1983,6 +1997,13 @@ export default class FundingService {
    * Suspend funding plans that have exceeded grace period
    *
    * Called by scheduled job to handle expired grace periods
+   *
+   * The scan is an unlocked snapshot, so each plan is re-read FOR UPDATE and
+   * suspended only if it is still 'past_due'. Without that, a webhook landing
+   * between scan and write — Stripe's own `unpaid` → 'suspended', or a
+   * recovered payment → 'active' — would be overwritten from the stale
+   * snapshot, and a webhook suspension would be announced a second time (one
+   * more dunning email). `processWebhookEvent` takes the same row lock.
    */
   async suspendExpiredFundingPlans(): Promise<void> {
     const settings = await this.getSettings();
@@ -1998,13 +2019,23 @@ export default class FundingService {
       },
     });
 
-    for (const fundingPlanRecord of expiredFundingPlans) {
-      fundingPlanRecord.status = 'suspended';
-      fundingPlanRecord.suspended_at = new Date();
-      await fundingPlanRecord.save();
+    for (const candidate of expiredFundingPlans) {
+      await db.transaction(async (t: Transaction) => {
+        const fundingPlanRecord = await FundingPlanEntity.findByPk(candidate.id, {
+          transaction: t,
+          lock: Transaction.LOCK.UPDATE,
+        });
+        if (!fundingPlanRecord || fundingPlanRecord.status !== 'past_due') {
+          return;
+        }
 
-      this.eventBus.emit('funding:plan:suspended', {
-        fundingPlan: fundingPlanRecord.toModel(),
+        fundingPlanRecord.status = 'suspended';
+        fundingPlanRecord.suspended_at = new Date();
+        await fundingPlanRecord.save({ transaction: t });
+
+        emitAfterTx(this.eventBus, 'funding:plan:suspended', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        }, t);
       });
     }
   }

@@ -15,10 +15,18 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { ProviderConfig } from '@/common/model/funding-plan';
 import { WebhookEvent } from '@/server/funding/service/provider/adapter';
 import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
+import FundingEventHandlers from '@/server/funding/events';
+import { Account } from '@/common/model/account';
+import type AccountsInterface from '@/server/accounts/interface';
+import type EmailInterface from '@/server/email/interface';
+import { MailData } from '@/server/common/email/types';
+import { initI18Next } from '@/server/common/test/lib/i18next';
 import {
   ActiveFundingPlanExistsError,
   DuplicateCalendarFundingPlanError,
 } from '@/common/exceptions/funding';
+
+initI18Next();
 
 /**
  * Integration tests for funding plan payment system
@@ -231,6 +239,33 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.status).toBe('active');
       expect(plan.cancel_at).toEqual(periodEnd);
       expect(plan.cancelled_at).toBeNull();
+    });
+
+    it('should announce, and email, a repeated period-end cancel only once', async () => {
+      const { account, plan, mockAdapter } = await seedCoveredAccount();
+      const sentEmails: MailData[] = [];
+      const handlers = new FundingEventHandlers({
+        sendEmail: async (data: MailData) => { sentEmails.push(data); return null; },
+      } as unknown as EmailInterface);
+      handlers.setAccountsInterface({
+        getAccountById: async (id: string) =>
+          (id === account.id ? new Account(account.id, 'owner', account.email) : undefined),
+      } as unknown as AccountsInterface);
+      handlers.install(eventBus);
+      const emitted = sandbox.spy();
+      eventBus.on('funding:plan:cancelled', emitted);
+
+      // A double click on the cancel button.
+      await service.cancel(plan.id, false);
+      await service.cancel(plan.id, false);
+
+      // The emit is deferred past commit with setImmediate, which this suite's
+      // fake clock holds; run every queued timer (and the handler microtasks
+      // between them) before counting.
+      await _clock.runAllAsync();
+      expect(emitted.callCount).toBe(1);
+      expect(sentEmails).toHaveLength(1);
+      expect(mockAdapter.cancelSubscription.callCount).toBe(1);
     });
 
     it('should finalize the plan and close its allocations when the deletion event arrives', async () => {
