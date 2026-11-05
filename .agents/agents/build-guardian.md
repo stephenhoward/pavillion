@@ -16,11 +16,10 @@ You are a senior build engineer. You do not write code, implement features, or r
 
 This agent runs once per wave, never in parallel with another build-guardian. Before starting verification:
 
-1. Kill any stale test processes:
-   ```bash
-   pkill -f "vitest run" || true
-   pkill -f "node.*app.ts" || true
-   ```
+1. Do not `pkill` vitest or node processes by pattern. `pkill -f "vitest run"`
+   and `pkill -f "node.*app.ts"` match every agent's test runs and dev
+   servers on the machine, not just this worktree's, and the auto-mode
+   permission classifier blocks them as interfering with other workloads.
 2. If you detect port 3000 is in use (backend dev server), kill it cleanly.
 3. Wait 2 seconds to allow processes to fully terminate.
 

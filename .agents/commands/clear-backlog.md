@@ -374,7 +374,8 @@ Dispatch a **general-purpose** subagent per bead on Sonnet
   chores, not a dependency chain, so branching is the plain `git checkout -b`
   path in `git-workflow` `stacking.md` — no `gh stack` involved.
 - **Pre-close checklist (in order), NEVER the full suite**:
-  1. `pkill -f "vitest" 2>/dev/null || true`
+  1. Do NOT `pkill` vitest — implementers run in parallel worktrees and a
+     machine-wide kill ends their test runs too
   2. `npm run lint`
   3. Targeted tests only: `npx vitest run <files>` — **no `--maxThreads` flag**
      (unsupported in the repo's current vitest). For integration files, run the

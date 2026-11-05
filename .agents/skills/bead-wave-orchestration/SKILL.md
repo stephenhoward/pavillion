@@ -65,14 +65,10 @@ any of them corrupts the orchestration contract.
    the independently-green invariant (`git-workflow/stacking.md`). It runs
    only after that level's implementer has closed and its per-bead
    auditors have reported.
-5. **Kill stale vitest processes before any test run.** Every agent that
-   runs tests — implementers in their pre-close checklist and the
-   build-guardian at wave end — begins with:
-   ```bash
-   pkill -f "vitest" 2>/dev/null || true
-   ```
-   Zombie watcher processes from prior runs hold ports and cause
-   mysterious hangs.
+5. **Never kill test processes machine-wide.** Chains run in parallel
+   worktrees on one host, so `pkill -f "vitest"` from any agent kills every
+   other agent's run. `vitest run` exits on its own; an
+   agent stops only a background run it started, by its task ID.
 6. **Never run the full suite outside build-guardian.** Implementers run
    lint + targeted tests only. The full suite (lint → unit → integration →
    build → e2e) is the build-guardian's job, once per stack level. This is
@@ -129,7 +125,7 @@ finishes).
 Implementers receive the canonical prompt from
 [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md).
 Each implementer independently runs its own pre-close checklist
-(`pkill -f "vitest"`, `npm run lint`, `npx vitest run <file1> <file2>
+(`npm run lint`, `npx vitest run <file1> <file2>
 --maxWorkers=2` — integration files instead need
 `--config vitest.integration.config.ts`; see the template skill) and
 calls `bd close {bead_id}` only when lint and
@@ -184,7 +180,6 @@ that level's submit)**
   level's branch at its stack position. It runs the full sequential
   suite internally:
   ```
-  pkill -f "vitest" 2>/dev/null || true
   npm run lint
   npx vitest run (unit)
   npx vitest run (integration)
