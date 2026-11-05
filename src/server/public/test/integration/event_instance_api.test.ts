@@ -681,4 +681,84 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
       expect(response.body.event.series).toBeNull();
     });
   });
+
+  /**
+   * DEC-020 deep links: when `?calendar=` is supplied, the event must be
+   * visible on that calendar (owned or reposted), or the response is 404.
+   */
+  describe('?calendar= binds the response to the named calendar', () => {
+    beforeAll(async () => {
+      const otherCal = await request(env.app)
+        .post('/api/v1/calendars')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ urlName: 'otherinstancecal', languages: 'en' });
+      if (otherCal.status !== 201 && otherCal.status !== 200) {
+        throw new Error(`Failed to create second calendar: ${otherCal.status} ${JSON.stringify(otherCal.body)}`);
+      }
+    });
+
+    it('returns the instance when ?calendar= names the owning calendar', async () => {
+      const eventId = await createOneShotEvent(
+        '2034-02-10T18:00:00Z',
+        '2034-02-10T19:00:00Z',
+        'Calendar Bound Owner',
+      );
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20340210-1800?calendar=instancecal`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.event.id).toBe(eventId);
+    });
+
+    it('returns 404 when ?calendar= names a calendar that neither owns nor reposts the event', async () => {
+      const eventId = await createOneShotEvent(
+        '2034-02-11T18:00:00Z',
+        '2034-02-11T19:00:00Z',
+        'Calendar Bound Other',
+      );
+
+      const instanceRes = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20340211-1800?calendar=otherinstancecal`);
+      expect(instanceRes.status).toBe(404);
+      expect(instanceRes.body).toEqual({ error: 'instance not found', errorName: 'NotFoundError' });
+
+      const eventRes = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}?calendar=otherinstancecal`);
+      expect(eventRes.status).toBe(404);
+      expect(eventRes.body).toEqual({ error: 'event not found', errorName: 'EventNotFoundError' });
+    });
+
+    it('returns 404 when ?calendar= names an unknown calendar', async () => {
+      const eventId = await createOneShotEvent(
+        '2034-02-12T18:00:00Z',
+        '2034-02-12T19:00:00Z',
+        'Calendar Bound Unknown',
+      );
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20340212-1800?calendar=nosuchcalendar`);
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('NotFoundError');
+    });
+
+    it('does not materialize an occurrence for a non-member ?calendar= request', async () => {
+      const eventId = await createRecurringEvent(
+        '2034-03-02T18:00:00Z',
+        '2034-03-02T19:00:00Z',
+        '2035-03-02T18:00:00Z',
+        'Calendar Bound No Materialize',
+      );
+      // 2034-05-11 is 10 weeks after 2034-03-02 — far enough not to be pre-materialized.
+      const where = { event_id: eventId, start_time: new Date('2034-05-11T18:00:00Z') };
+      expect(await EventInstanceEntity.findOne({ where })).toBeNull();
+
+      const response = await request(env.app)
+        .get(`/api/public/v1/events/${eventId}/instances/20340511-1800?calendar=otherinstancecal`);
+
+      expect(response.status).toBe(404);
+      expect(await EventInstanceEntity.findOne({ where })).toBeNull();
+    });
+  });
 });

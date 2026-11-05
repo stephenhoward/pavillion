@@ -360,6 +360,11 @@ export default class CalendarInterface {
     return this.eventService.getEventById(eventId, displayCalendarId);
   }
 
+  /** Proxy — see EventService.isEventVisibleOnCalendar for semantics. */
+  async isEventVisibleOnCalendar(eventId: string, calendarId: string): Promise<boolean> {
+    return this.eventService.isEventVisibleOnCalendar(eventId, calendarId);
+  }
+
   async createEvent(account: Account, eventParams: Record<string, any>): Promise<CalendarEvent> {
     return this.eventService.createEvent(account, eventParams);
   }

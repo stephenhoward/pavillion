@@ -611,10 +611,18 @@ export default class CalendarRoutes {
     }
 
     try {
-      // Optional `?calendar=<urlName>` scopes category mappings to the display
-      // calendar. Without this, reposted events would expose the originating
-      // calendar's categories instead of the calendar the visitor is viewing.
-      const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
+      // Optional `?calendar=<urlName>` names the display calendar: it scopes
+      // category mappings (reposted events show the reposting calendar's
+      // categories) and binds the response to events that calendar shows.
+      const display = await this.resolveDisplayCalendar(req.query.calendar, eventId);
+      if (!display.visible) {
+        res.status(404).json({
+          "error": "event not found",
+          errorName: 'EventNotFoundError',
+        });
+        return;
+      }
+      const displayCalendarId = display.calendarId;
 
       // getEventById throws EventNotFoundError for unknown ids — catch below.
       // Caveat: on this single-event path repostStatus / isRepost are
@@ -641,17 +649,27 @@ export default class CalendarRoutes {
   }
 
   /**
-   * Resolve a `?calendar=<urlName>` query param to a calendar id, or undefined.
-   * Silently ignores unknown / malformed values so a bad query string never
-   * 404s the detail page; the handler simply falls back to the originating
-   * calendar's categories (the prior behavior).
+   * Resolve a `?calendar=<urlName>` query param against the requested event.
+   *
+   * When `?calendar=` is supplied, the response is 404 unless the event is
+   * visible on that calendar (DEC-020: the widget for calendar A renders only
+   * events A owns or reposts). Absent or blank → visible with no display
+   * calendar; a known calendar that owns or reposts the event → visible with
+   * its id; an unknown calendar or a non-member → not visible.
    */
-  private async resolveDisplayCalendarId(rawCalendar: unknown): Promise<string | undefined> {
-    if (typeof rawCalendar !== 'string') return undefined;
+  private async resolveDisplayCalendar(
+    rawCalendar: unknown,
+    eventId: string,
+  ): Promise<{ visible: true; calendarId?: string } | { visible: false }> {
+    if (typeof rawCalendar !== 'string') return { visible: true };
     const urlName = rawCalendar.trim();
-    if (!urlName) return undefined;
+    if (!urlName) return { visible: true };
     const calendar = await this.service.getCalendarByName(urlName);
-    return calendar?.id;
+    if (!calendar) return { visible: false };
+    if (!await this.service.isEventVisibleOnCalendar(eventId, calendar.id)) {
+      return { visible: false };
+    }
+    return { visible: true, calendarId: calendar.id };
   }
 
   async getEventInstance(req: Request, res: Response) {
@@ -681,9 +699,18 @@ export default class CalendarRoutes {
     }
 
     try {
-      // Optional `?calendar=<urlName>` scopes category mappings to the display
-      // calendar so reposted events show the reposting calendar's categories.
-      const displayCalendarId = await this.resolveDisplayCalendarId(req.query.calendar);
+      // Optional `?calendar=<urlName>` names the display calendar — see
+      // resolveDisplayCalendar. Checked before materializing, so a non-member
+      // request never writes an instance row.
+      const display = await this.resolveDisplayCalendar(req.query.calendar, eventId);
+      if (!display.visible) {
+        res.status(404).json({
+          "error": "instance not found",
+          errorName: 'NotFoundError',
+        });
+        return;
+      }
+      const displayCalendarId = display.calendarId;
 
       const instance = await this.service.findOrMaterializeInstanceWithDetails(
         eventId,

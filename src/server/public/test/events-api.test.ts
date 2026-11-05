@@ -631,6 +631,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
       event.schedules = [];
 
       const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar').resolves(true);
       const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
 
       router.get('/handler/:id', (req, res) => {
@@ -641,15 +642,32 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
       expect(response.status).toBe(200);
       expect(calendarStub.calledOnceWith('mitown')).toBe(true);
+      expect(visibleStub.calledOnceWithExactly(EVENT_UUID, 'display-cal-id')).toBe(true);
       expect(eventStub.calledOnceWith(EVENT_UUID, 'display-cal-id')).toBe(true);
     });
 
-    it('silently ignores an unknown ?calendar=<urlName> and falls back to default category scoping', async () => {
-      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
-      event.schedules = [];
+    it('returns 404 without loading the event when ?calendar= names a calendar the event is not visible on', async () => {
+      const otherCalendar = new Calendar('other-cal-id', 'elsewhere');
 
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(otherCalendar);
+      apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar').resolves(false);
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById');
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=elsewhere`);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'event not found', errorName: 'EventNotFoundError' });
+      expect(eventStub.called).toBe(false);
+    });
+
+    it('returns 404 without loading the event when ?calendar= names an unknown calendar', async () => {
       apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(null);
-      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar');
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById');
 
       router.get('/handler/:id', (req, res) => {
         routes.getEvent(req, res);
@@ -657,8 +675,30 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
       const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?calendar=ghost`);
 
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'event not found', errorName: 'EventNotFoundError' });
+      expect(visibleStub.called).toBe(false);
+      expect(eventStub.called).toBe(false);
+    });
+
+    it('loads the event with no display calendar when ?calendar= is absent', async () => {
+      const event = new CalendarEvent(EVENT_UUID, 'source-cal-id');
+      event.schedules = [];
+
+      const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar');
+      const eventStub = apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+
+      router.get('/handler/:id', (req, res) => {
+        routes.getEvent(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
+
       expect(response.status).toBe(200);
-      expect(eventStub.calledOnceWith(EVENT_UUID, undefined)).toBe(true);
+      expect(calendarStub.called).toBe(false);
+      expect(visibleStub.called).toBe(false);
+      expect(eventStub.calledOnceWithExactly(EVENT_UUID, undefined)).toBe(true);
     });
 
     // Regression: a request for an unknown event id used to crash
@@ -825,6 +865,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
       const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
 
       const calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(displayCalendar);
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar').resolves(true);
       const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
 
       router.get('/handler/:eventId/:startTime', (req, res) => {
@@ -836,10 +877,67 @@ describe('Public API - toPublicEventObject shape contract', () => {
 
       expect(response.status).toBe(200);
       expect(calendarStub.calledOnceWith('mitown')).toBe(true);
+      expect(visibleStub.calledOnceWithExactly(EVENT_UUID, 'display-cal-id')).toBe(true);
       expect(stub.calledOnce).toBe(true);
       const [eventIdArg, _startArg, displayCalendarIdArg] = stub.firstCall.args;
       expect(eventIdArg).toBe(EVENT_UUID);
       expect(displayCalendarIdArg).toBe('display-cal-id');
+    });
+
+    it('returns 404 without materializing when ?calendar= names a calendar the event is not visible on', async () => {
+      const otherCalendar = new Calendar('other-cal-id', 'elsewhere');
+
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(otherCalendar);
+      apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar').resolves(false);
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}?calendar=elsewhere`);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'instance not found', errorName: 'NotFoundError' });
+      expect(stub.called).toBe(false);
+    });
+
+    it('returns 404 without materializing when ?calendar= names an unknown calendar', async () => {
+      apiSandbox.stub(publicInterface, 'getCalendarByName').resolves(null);
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar');
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails');
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get(`/handler/${EVENT_UUID}/${VALID_SLUG}?calendar=ghost`);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'instance not found', errorName: 'NotFoundError' });
+      expect(visibleStub.called).toBe(false);
+      expect(stub.called).toBe(false);
+    });
+
+    it('materializes with no display calendar when ?calendar= is absent', async () => {
+      const event = new CalendarEvent('event-1', 'source-cal-id');
+      event.schedules = [];
+      const instance = new CalendarEventInstance('inst-1', event, DateTime.utc(2026, 5, 8, 18, 0), null);
+
+      const visibleStub = apiSandbox.stub(publicInterface, 'isEventVisibleOnCalendar');
+      const stub = apiSandbox.stub(publicInterface, 'findOrMaterializeInstanceWithDetails').resolves(instance);
+
+      router.get('/handler/:eventId/:startTime', (req, res) => {
+        routes.getEventInstance(req, res);
+      });
+
+      const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}/${VALID_SLUG}`);
+
+      expect(response.status).toBe(200);
+      expect(visibleStub.called).toBe(false);
+      expect(stub.firstCall.args[2]).toBeUndefined();
     });
   });
 
