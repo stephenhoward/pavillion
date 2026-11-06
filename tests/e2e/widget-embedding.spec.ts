@@ -319,7 +319,10 @@ test.describe('Widget Embedding', () => {
 
     const isoDate = (date: Date) => date.toISOString().slice(0, 10);
     const startDate = isoDate(new Date());
-    const endDate = isoDate(new Date(Date.now() + 75 * 24 * 60 * 60 * 1000));
+    // A short range keeps the frame short. The popover's close waits on two
+    // animation frames, and in Linux WebKit a frame of a 9000px iframe takes
+    // seconds, long enough to outlast the assertion after Escape.
+    const endDate = isoDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
     // A known page behind the host, so the last Back has somewhere to land
     // other than about:blank.
