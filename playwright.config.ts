@@ -23,7 +23,8 @@ import { defineConfig, devices } from '@playwright/test';
  * - This creates cross-origin testing (port 8080 vs port 3100-3200)
  *
  * Usage:
- *   npm run test:e2e
+ *   npm run test:e2e          (Chromium, every spec)
+ *   npm run test:e2e:webkit   (iPhone 13 WebKit, the widget and public-calendar specs)
  *
  * For federation tests (requires Docker):
  *   npm run test:federation
@@ -78,6 +79,11 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/widget-embedding.spec.ts', '**/public-calendar.spec.ts'],
     },
   ],
 

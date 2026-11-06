@@ -388,7 +388,8 @@ test.describe('Widget Embedding', () => {
       await doc.fonts.ready;
       const unstyled = [html, ...html.querySelectorAll('body, body *')]
         .map((el) => getComputedStyle(el).fontFamily)
-        .filter((family) => !family.startsWith('"Creato Display"'));
+        // Chromium quotes the family name in computed style; WebKit does not.
+        .filter((family) => !family.replace(/"/g, '').startsWith('Creato Display'));
       // fonts.check() is true when no @font-face matches at all, so count
       // the declared faces that actually loaded instead.
       const loaded = [...doc.fonts]
@@ -524,7 +525,16 @@ test.describe('Widget Embedding', () => {
       (window as any).__frameHeights = heights;
       new ResizeObserver(() => heights.push(frame.getBoundingClientRect().height)).observe(frame);
     }, WIDGET_FRAME);
-    const takeHeights = () => page.evaluate(() => (window as any).__frameHeights.splice(0) as number[]);
+    // ResizeObserver reports on the host's next rendering update, which can land
+    // after a settled height has already been read, so wait for the records.
+    const takeHeights = async () => {
+      const heights: number[] = [];
+      await expect.poll(async () => {
+        heights.push(...await page.evaluate(() => (window as any).__frameHeights.splice(0) as number[]));
+        return heights.length;
+      }).toBeGreaterThan(0);
+      return heights;
+    };
 
     await iframe.locator('article.event-card .event-title-link').first().click();
     await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
@@ -535,7 +545,6 @@ test.describe('Widget Embedding', () => {
     expect(detailHeight).toBeLessThan(listHeight);
     // Never below where it started or where it settled: no loading-state dip.
     const toDetail = await takeHeights();
-    expect(toDetail.length).toBeGreaterThan(0);
     expect(Math.min(...toDetail)).toBeGreaterThanOrEqual(Math.min(listHeight, detailHeight) - 1);
 
     await iframe.locator('.back-link').first().click();
@@ -543,7 +552,6 @@ test.describe('Widget Embedding', () => {
     await expectDocumentFitsFrame(page);
     const backHeight = await frameHeight(page);
     const toList = await takeHeights();
-    expect(toList.length).toBeGreaterThan(0);
     expect(Math.min(...toList)).toBeGreaterThanOrEqual(Math.min(detailHeight, backHeight) - 1);
   });
 
@@ -589,6 +597,7 @@ test.describe('Widget Embedding', () => {
     await frameElement.waitFor({ timeout: 15000 });
     const iframe = page.frameLocator('iframe[src*="/widget/"]');
     await expect(iframe.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expectDocumentFitsFrame(page);
     const fullHeight = await frameElement.evaluate((el) => el.getBoundingClientRect().height);
 
     // The popover is absolutely positioned, so it adds nothing to the height

@@ -30,3 +30,9 @@ jobs:
           chmod +x docker/federation/ssl/generate-certs.sh
           docker/federation/ssl/generate-certs.sh
       - run: npm run test:e2e
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      # The config's only reporter is html and this job uploads no artifact,
+      # so without the list reporter a failure prints no test name or error.
+      - name: Run WebKit e2e
+        run: npm run test:e2e:webkit -- --reporter=list
