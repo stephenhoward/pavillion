@@ -47,7 +47,7 @@
 
   "manage_payment_button": "Gestionar Método de Pago",
   "cancel_funding_plan_button": "Cancelar Plan",
-  "cancel_confirm": "¿Cancelar tu plan de financiación? Tu suscripción termina al cierre del período de facturación actual, y conservarás las funciones extendidas hasta entonces. Tus calendarios siguen en línea de todas formas.",
+  "cancel_confirm": "¿Cancelar tu plan de financiación? Tu plan termina al cierre del período de facturación actual, y conservarás las funciones extendidas hasta entonces. Tus calendarios siguen en línea de todas formas.",
   "cancel_success": "Plan de financiación cancelado. Conservarás las funciones extendidas hasta el final de tu período de facturación.",
   "cancel_error": "No se pudo cancelar el plan de financiación. Por favor intenta de nuevo.",
   "resume_funding_plan_button": "Conservar mi plan",

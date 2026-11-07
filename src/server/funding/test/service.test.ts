@@ -2217,6 +2217,45 @@ describe('FundingService', () => {
       expect(params.currency).toBe('USD');
     });
 
+    it('should pass the instance title as the product name', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+      service.setConfigurationInterface({
+        getAllSettings: sandbox.stub().resolves({ siteTitle: 'Pavillion Staging' }),
+      } as any);
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+
+      expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('Pavillion Staging');
+    });
+
+    it('should fall back to the configured domain when the instance title is empty', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+      service.setConfigurationInterface({
+        getAllSettings: sandbox.stub().resolves({ siteTitle: '' }),
+      } as any);
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+
+      expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('pavillion.dev');
+    });
+
+    it('should fall back to the configured domain when no configuration interface is injected', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+
+      expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('pavillion.dev');
+    });
+
     it('should use yearly price for yearly billing cycle', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();

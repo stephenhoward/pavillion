@@ -428,6 +428,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // to resolve the circular dependency (CalendarDomain needs FundingInterface,
   // FundingDomain needs CalendarInterface for ownership/existence checks).
   fundingDomain.setCalendarInterface(calendarDomain.interface);
+  fundingDomain.setConfigurationInterface(configurationDomain.interface);
 
   // Initialize moderation domain before ActivityPub (ActivityPub inbox needs ModerationInterface)
   const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);

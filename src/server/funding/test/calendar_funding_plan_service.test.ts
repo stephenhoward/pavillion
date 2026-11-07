@@ -248,10 +248,15 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
       } as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
+      service.setConfigurationInterface({
+        getAllSettings: sandbox.stub().resolves({ siteTitle: 'Pavillion Staging' }),
+      } as any);
+
       await service.addCalendarToFundingPlan(accountId, calendarId, MIN_PWYC_AMOUNT);
 
       expect(createStub.calledOnce).toBe(true);
       expect(mockAdapter.updateSubscriptionAmount.calledOnce).toBe(true);
+      expect(mockAdapter.updateSubscriptionAmount.firstCall.args[3]).toBe('Pavillion Staging');
     });
 
     it('should throw ValidationError for invalid UUID parameters', async () => {

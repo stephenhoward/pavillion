@@ -12,6 +12,7 @@ export interface CreateCheckoutSessionParams {
   calendarIds?: string[];
   returnUrl: string;
   colorMode?: 'light' | 'dark'; // Client theme for checkout branding
+  productName: string; // Name shown to the payer on checkout, receipts and the portal
 }
 
 /**
@@ -176,12 +177,14 @@ export interface PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param productName - Product name shown to the payer
    * @param options - Per-request options (idempotency key)
    */
   updateSubscriptionAmount(
     providerSubscriptionId: string,
     newAmount: number,
     currency: string,
+    productName: string,
     options?: ProviderRequestOptions,
   ): Promise<void>;
 
@@ -249,6 +252,7 @@ export interface PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval ('month' or 'year')
+   * @param productName - Product name shown to the payer
    * @param options - Per-request options (idempotency key)
    * @returns Provider price ID
    */
@@ -256,6 +260,7 @@ export interface PaymentProviderAdapter {
     amount: number,
     currency: string,
     interval: 'month' | 'year',
+    productName: string,
     options?: ProviderRequestOptions,
   ): Promise<string>;
 }

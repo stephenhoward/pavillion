@@ -251,12 +251,14 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param productName - Product name shown to the payer
    * @param options - Per-request options (idempotency key)
    */
   async updateSubscriptionAmount(
     providerSubscriptionId: string,
     newAmount: number,
     currency: string,
+    productName: string,
     options?: ProviderRequestOptions,
   ): Promise<void> {
     // Retrieve the current subscription to get the existing item
@@ -278,7 +280,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         interval: currentInterval,
       },
       product_data: {
-        name: 'Pavillion Subscription',
+        name: productName,
       },
     }, this.requestOptions(options, 'price'));
 
@@ -689,7 +691,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     if (!priceId && params.amount) {
       // PWYC: create a price on the fly
-      priceId = await this.createPrice(params.amount, params.currency, params.interval, options);
+      priceId = await this.createPrice(params.amount, params.currency, params.interval, params.productName, options);
     }
 
     if (!priceId) {
@@ -772,6 +774,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval ('month' or 'year')
+   * @param productName - Product name shown to the payer
    * @param options - Per-request options (idempotency key)
    * @returns Stripe Price ID
    */
@@ -779,6 +782,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
     amount: number,
     currency: string,
     interval: 'month' | 'year',
+    productName: string,
     options?: ProviderRequestOptions,
   ): Promise<string> {
     const price = await this.stripe.prices.create({
@@ -788,7 +792,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         interval,
       },
       product_data: {
-        name: 'Pavillion Subscription',
+        name: productName,
       },
     }, this.requestOptions(options, 'price'));
 
