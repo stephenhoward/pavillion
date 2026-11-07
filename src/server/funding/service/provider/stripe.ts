@@ -200,6 +200,40 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Withdraw a scheduled cancellation
+   *
+   * The inverse of cancelSubscription's period-end branch, but it has to cover
+   * more than that branch writes: a cancellation scheduled for a specific date
+   * (from the Stripe dashboard or the billing portal) lives in `cancel_at`, and
+   * clearing `cancel_at_period_end` leaves it standing. So the subscription
+   * Stripe returns is checked, and a `cancel_at` still on it is unset in a
+   * second request (the two parameters are sent separately rather than
+   * together, since Stripe treats them as alternative ways of scheduling).
+   *
+   * Throws when Stripe still reports a scheduled cancellation afterwards. The
+   * caller clears its own boundary only once this returns, so a throw keeps the
+   * local record saying what Stripe will actually do: delete the subscription.
+   *
+   * @param subscriptionId - Provider's subscription ID
+   * @param options - Per-request options (idempotency key)
+   */
+  async resumeSubscription(subscriptionId: string, options?: ProviderRequestOptions): Promise<void> {
+    let subscription = await this.stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false,
+    }, this.requestOptions(options, 'resume'));
+
+    if (subscription.cancel_at !== null) {
+      subscription = await this.stripe.subscriptions.update(subscriptionId, {
+        cancel_at: '',
+      }, this.requestOptions(options, 'resume-clear-cancel-at'));
+    }
+
+    if (subscription.cancel_at !== null) {
+      throw new Error(`Stripe subscription ${subscriptionId} still has a scheduled cancellation after resume`);
+    }
+  }
+
+  /**
    * Stripe supports in-place subscription amount updates
    *
    * @returns True
@@ -786,9 +820,9 @@ export class StripeAdapter implements PaymentProviderAdapter {
       // ProviderSubscription.status is not optional — this feeds the status a
       // brand-new local plan is created with, and there is no prior value to
       // leave alone. An unrecognised Stripe status therefore falls back to
-      // `past_due`: it withholds access without being terminal, so a plan
-      // created during a status we do not yet understand can still recover
-      // when the next event names one we do.
+      // `past_due`: it is not terminal, so a plan created during a status we
+      // do not yet understand can still recover when the next event names one
+      // we do, and it grants access only through the dunning grace period.
       status: this.mapStripeStatus(subscription.status) ?? 'past_due',
       currentPeriodStart: period.start,
       currentPeriodEnd: period.end,
@@ -813,8 +847,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * session reads `complete`, which can precede the subscription leaving
    * `incomplete`, so mapping it to `cancelled` would kill a plan the customer
    * is in the middle of paying for and leave no way back. `past_due` says the
-   * same thing — payment outstanding, access withheld — without being terminal,
-   * and the dunning job already understands it.
+   * same thing — payment outstanding — without being terminal, and the dunning
+   * job already understands it. It does grant the plan's calendars coverage
+   * through the instance grace period (DEC-022); for `incomplete` that window
+   * is normally cut short by Stripe expiring the subscription to
+   * `incomplete_expired` (→ `cancelled`) within a day.
+   *
+   * `unpaid` and `paused` map to `suspended`, but Pavillion also suspends on
+   * its own once the grace period runs out while Stripe still says `past_due`.
+   * FundingService therefore holds a suspended plan against a later `past_due`
+   * report; only `active` or `cancelled` lifts a suspension.
    *
    * An unrecognised status returns undefined rather than guessing. Stripe adds
    * statuses; a `default:` that fed the terminal state would let a future one

@@ -214,6 +214,21 @@ export const limitCheckoutSessionByAccount: RequestHandler = isRateLimitEnabled(
   : noOpMiddleware;
 
 /**
+ * Funding plan change rate limiter for authenticated users.
+ * Limits: 10 requests per account per 15 minutes (default config).
+ * Bounds POST /cancel and POST /resume, each of which makes a provider call
+ * against the account's subscription, so neither can be used to hammer the
+ * payment provider with the instance's credentials.
+ */
+export const limitFundingPlanChangeByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.fundingPlanChange.byAccount.max'),
+    config.get<number>('rateLimit.fundingPlanChange.byAccount.windowMs'),
+    'funding-plan-change',
+  )
+  : noOpMiddleware;
+
+/**
  * Stripe funding webhook rate limiter by IP address.
  * Limits: 300 requests per IP per minute (default config).
  *

@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
+import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
@@ -15,10 +16,20 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { ProviderConfig } from '@/common/model/funding-plan';
 import { WebhookEvent } from '@/server/funding/service/provider/adapter';
 import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
+import FundingEventHandlers from '@/server/funding/events';
+import { Account } from '@/common/model/account';
+import type AccountsInterface from '@/server/accounts/interface';
+import type EmailInterface from '@/server/email/interface';
+import { MailData } from '@/server/common/email/types';
+import { initI18Next } from '@/server/common/test/lib/i18next';
+import { backdatePastDue } from '@/server/funding/test/fixtures/past-due';
 import {
   ActiveFundingPlanExistsError,
   DuplicateCalendarFundingPlanError,
+  FundingPlanNotResumableError,
 } from '@/common/exceptions/funding';
+
+initI18Next();
 
 /**
  * Integration tests for funding plan payment system
@@ -76,6 +87,251 @@ describe('Funding Plan System Integration Tests', () => {
     await entity.save();
     return entity;
   }
+
+  /**
+   * Install the real funding event handlers on the suite's bus, with a stub
+   * mail transport and an accounts lookup that knows only the plan owner.
+   *
+   * Each call installs another full set of handlers on the same bus, so call
+   * it once per test: a second call would send every email twice.
+   *
+   * @param account - The plan-owning account
+   * @returns The emails the handlers send, in order
+   */
+  function captureDunningEmails(account: AccountEntity): MailData[] {
+    const sentEmails: MailData[] = [];
+    const handlers = new FundingEventHandlers({
+      sendEmail: async (data: MailData) => { sentEmails.push(data); return null; },
+    } as unknown as EmailInterface);
+    handlers.setAccountsInterface({
+      getAccountById: async (id: string) =>
+        (id === account.id ? new Account(account.id, 'owner', account.email) : undefined),
+    } as unknown as AccountsInterface);
+    handlers.install(eventBus);
+    return sentEmails;
+  }
+
+  /**
+   * Lifecycle emits are deferred past commit with setImmediate, which this
+   * suite's fake clock holds; run every queued timer (and the handler
+   * microtasks between them) before counting.
+   */
+  const settleEmits = () => _clock.runAllAsync();
+
+  /**
+   * A failed payment through suspension and back, as Stripe actually drives
+   * it: the provider keeps the subscription past_due and keeps retrying long
+   * after Pavillion's grace period has suspended the plan locally.
+   */
+  describe('dunning: past-due grace and held suspension', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const graceExpired = new Date('2026-01-07T12:00:00Z');
+
+    /**
+     * An instance with a 7-day grace period and one account whose active
+     * monthly plan covers one calendar.
+     */
+    async function seedDunningPlan() {
+      await FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      }).save();
+
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'dunning@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: 'sub_dunning',
+        provider_customer_id: 'cus_dunning',
+        status: 'active',
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: null,
+        suspended_at: null,
+      });
+      await plan.save();
+
+      const calendar = CalendarEntity.build({
+        id: uuidv4(),
+        url_name: `dunning-cal-${uuidv4().slice(0, 8)}`,
+        languages: 'en',
+        default_date_range: 'month',
+      });
+      await calendar.save();
+
+      await CalendarFundingPlanEntity.build({
+        id: uuidv4(),
+        funding_plan_id: plan.id,
+        calendar_id: calendar.id,
+        amount: 1000000,
+        end_time: null,
+      }).save();
+
+      return { account, plan, providerConfig, calendar };
+    }
+
+    const providerReport = (
+      eventId: string,
+      eventType: string,
+      status: 'active' | 'past_due',
+      extra: Partial<WebhookEvent> = {},
+    ): WebhookEvent => ({
+      eventId,
+      eventType,
+      subscriptionId: 'sub_dunning',
+      status,
+      rawPayload: {},
+      ...extra,
+    });
+
+    it('should stamp the failure instant on the plan and clear it once the provider reports it paid', async () => {
+      const { plan, providerConfig } = await seedDunningPlan();
+
+      await service.processWebhookEvent(
+        providerReport('evt_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await plan.reload();
+      expect(plan.past_due_since).toEqual(new Date('2026-01-15T12:00:00Z'));
+
+      await service.processWebhookEvent(
+        providerReport('evt_paid', 'invoice.payment_succeeded', 'active'), providerConfig.id);
+      await plan.reload();
+      expect(plan.status).toBe('active');
+      expect(plan.past_due_since).toBeNull();
+    });
+
+    it('should email once for the failure and once for the suspension over a full retry cycle', async () => {
+      const { account, plan, providerConfig } = await seedDunningPlan();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(
+        providerReport('evt_first_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+
+      await backdatePastDue(plan.id, graceExpired);
+      await service.suspendExpiredFundingPlans();
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      const suspendedAt = plan.suspended_at;
+
+      // Stripe keeps retrying the invoice and keeps calling the subscription
+      // past due. Each report must leave the local suspension in place.
+      await service.processWebhookEvent(
+        providerReport('evt_retry_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await service.processWebhookEvent(
+        providerReport('evt_still_past_due', 'customer.subscription.updated', 'past_due'), providerConfig.id);
+      await plan.reload();
+      expect(plan.status).toBe('suspended');
+      expect(plan.suspended_at).toEqual(suspendedAt);
+
+      // A grace period later the job finds nothing past due to suspend again.
+      _clock.tick(8 * DAY);
+      await service.suspendExpiredFundingPlans();
+
+      await settleEmits();
+      expect(sentEmails.map((email) => email.subject)).toEqual([
+        'A payment for your funding plan didn\'t go through',
+        'Your funding plan has been suspended',
+      ]);
+      expect((await service.getStatus(account.id))?.status).toBe('suspended');
+    });
+
+    it('should reactivate a suspended plan when the provider reports it paid, without emailing', async () => {
+      const { account, plan, providerConfig } = await seedDunningPlan();
+      await service.processWebhookEvent(
+        providerReport('evt_failure', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+      await backdatePastDue(plan.id, graceExpired);
+      await service.suspendExpiredFundingPlans();
+      await settleEmits();
+
+      const sentEmails = captureDunningEmails(account);
+      const reactivated = sandbox.spy();
+      eventBus.on('funding:plan:reactivated', reactivated);
+
+      await service.processWebhookEvent(
+        providerReport('evt_recovered', 'invoice.payment_succeeded', 'active'), providerConfig.id);
+      await settleEmits();
+
+      await plan.reload();
+      expect(plan.status).toBe('active');
+      expect(plan.suspended_at).toBeNull();
+      expect(reactivated.callCount).toBe(1);
+      expect(sentEmails).toHaveLength(0);
+    });
+
+    /**
+     * Every write below lands on a plan that is past due and never pays. None
+     * of them may move the end of its grace period: if one did, a holder could
+     * repeat it once per grace period and keep paid features until the
+     * provider gave up.
+     */
+    describe('grace measured from the failure, not the last write', () => {
+      const writesToAPastDuePlan: Array<[string, (planId: string, providerConfigId: string) => Promise<void>]> = [
+        ['a cancel followed by a resume', async (planId) => {
+          sandbox.stub(ProviderFactory, 'getAdapter').returns({
+            cancelSubscription: sandbox.stub().resolves(),
+            resumeSubscription: sandbox.stub().resolves(),
+          } as any);
+          await service.cancel(planId, false);
+          await service.resume(planId);
+        }],
+        ['a provider report that only schedules a cancellation', async (_planId, providerConfigId) => {
+          await service.processWebhookEvent(providerReport(
+            'evt_schedule_only', 'customer.subscription.updated', 'past_due',
+            { cancelAt: new Date('2026-02-01T00:00:00Z') },
+          ), providerConfigId);
+        }],
+        ['a provider report that only moves the billing period', async (_planId, providerConfigId) => {
+          await service.processWebhookEvent(providerReport(
+            'evt_period_only', 'customer.subscription.updated', 'past_due',
+            {
+              currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+              currentPeriodEnd: new Date('2027-01-01T00:00:00Z'),
+            },
+          ), providerConfigId);
+        }],
+      ];
+
+      it.each(writesToAPastDuePlan)('should not restart the grace period on %s', async (_label, write) => {
+        const { plan, providerConfig, calendar } = await seedDunningPlan();
+        await service.processWebhookEvent(
+          providerReport('evt_failed', 'invoice.payment_failed', 'past_due'), providerConfig.id);
+
+        // Six days into a seven-day grace: still covered.
+        _clock.tick(6 * DAY);
+        expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(true);
+
+        await write(plan.id, providerConfig.id);
+        await plan.reload();
+        expect(plan.status).toBe('past_due');
+        expect(plan.past_due_since).toEqual(new Date('2026-01-15T12:00:00Z'));
+
+        // Eight days after the failure: covered by neither the gate nor the job.
+        _clock.tick(2 * DAY);
+        expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
+
+        await service.suspendExpiredFundingPlans();
+        await plan.reload();
+        expect(plan.status).toBe('suspended');
+      });
+    });
+  });
 
   /**
    * Integration Test 2: Payment failure flow (active -> past_due -> suspended)
@@ -138,13 +394,7 @@ describe('Funding Plan System Integration Tests', () => {
     expect(plan.status).toBe('past_due');
 
     // Step 2: Advance time beyond grace period (8 days)
-    const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
-    await db.query(
-      'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
-      {
-        replacements: [eightDaysAgo.toISOString(), plan.id],
-      },
-    );
+    await backdatePastDue(plan.id, new Date('2026-01-07T12:00:00Z'));
 
     // Step 3: Run grace period check job
     await checkGracePeriodExpiry();
@@ -231,6 +481,95 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.status).toBe('active');
       expect(plan.cancel_at).toEqual(periodEnd);
       expect(plan.cancelled_at).toBeNull();
+    });
+
+    /** Stripe's echo of a period-end cancellation: still active, cancel_at set. */
+    const scheduledCancellation = (eventId: string): WebhookEvent => ({
+      eventId,
+      eventType: 'customer.subscription.updated',
+      subscriptionId: 'sub_user_cancel',
+      status: 'active',
+      cancelAt: periodEnd,
+      rawPayload: {},
+    });
+
+    /** Stripe's report that the subscription has ended. */
+    const subscriptionDeleted = (eventId: string): WebhookEvent => ({
+      eventId,
+      eventType: 'customer.subscription.deleted',
+      subscriptionId: 'sub_user_cancel',
+      status: 'cancelled',
+      cancelAt: null,
+      rawPayload: {},
+    });
+
+    it('should announce, and email, a repeated period-end cancel only once', async () => {
+      const { account, plan, mockAdapter } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+      const emitted = sandbox.spy();
+      eventBus.on('funding:plan:cancelled', emitted);
+
+      // A double click on the cancel button.
+      await service.cancel(plan.id, false);
+      await service.cancel(plan.id, false);
+
+      await settleEmits();
+      expect(emitted.callCount).toBe(1);
+      expect(sentEmails).toHaveLength(1);
+      expect(mockAdapter.cancelSubscription.callCount).toBe(1);
+    });
+
+    it('should email the owner once when the cancellation is scheduled from the billing portal', async () => {
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].emailAddress).toBe('cancel@example.com');
+      expect(sentEmails[0].textMessage).toContain('until the end of the current billing period');
+    });
+
+    it('should email the owner once when the provider ends a subscription nobody cancelled', async () => {
+      // Stripe ending the subscription after its payment retries run out, or
+      // an operator deleting it from the Stripe dashboard.
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(subscriptionDeleted('evt_provider_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].textMessage).toContain('Calendars it covered no longer have access');
+    });
+
+    it('should email once for an in-app cancel, whatever the provider echoes afterwards', async () => {
+      const { account, plan, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.cancel(plan.id, false);
+      await service.processWebhookEvent(scheduledCancellation('evt_echo_updated'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_echo_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
+    });
+
+    it('should not email again when a provider cancellation is replayed', async () => {
+      const { account, providerConfig } = await seedCoveredAccount();
+      const sentEmails = captureDunningEmails(account);
+
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+      // The same delivery retried, then a later event that still carries the
+      // schedule (Stripe sends one on every subscription change).
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel'), providerConfig.id);
+      await service.processWebhookEvent(scheduledCancellation('evt_portal_cancel_later'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_portal_deleted'), providerConfig.id);
+      await service.processWebhookEvent(subscriptionDeleted('evt_portal_deleted'), providerConfig.id);
+
+      await settleEmits();
+      expect(sentEmails).toHaveLength(1);
     });
 
     it('should finalize the plan and close its allocations when the deletion event arrives', async () => {
@@ -384,6 +723,321 @@ describe('Funding Plan System Integration Tests', () => {
       expect(plan.status).toBe('cancelled');
       expect(allocation.end_time).not.toBeNull();
     });
+
+    /**
+     * Drive a period-end cancellation all the way to the provider's deletion
+     * event, leaving the plan finalized as 'cancelled'.
+     */
+    async function finalizeCancellation(providerConfigId: string) {
+      await service.processWebhookEvent({
+        eventId: 'evt_integration_finalize',
+        eventType: 'customer.subscription.deleted',
+        subscriptionId: 'sub_user_cancel',
+        status: 'cancelled',
+        cancelAt: null,
+        rawPayload: {},
+      }, providerConfigId);
+    }
+
+    describe('resuming before the boundary', () => {
+      it('should reverse the pending cancellation on the plan the account already holds', async () => {
+        const { account, plan, allocation, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+
+        await service.resume(plan.id);
+
+        await plan.reload();
+        await allocation.reload();
+        expect(resumeSubscription.calledOnce).toBe(true);
+        expect(resumeSubscription.firstCall.args[0]).toBe('sub_user_cancel');
+        // A fresh nonce per attempt, scoped to this operation and this plan, so
+        // a replay de-duplicates at the provider without colliding with a cancel.
+        expect(resumeSubscription.firstCall.args[1].idempotencyKey)
+          .toMatch(new RegExp(`^pavillion:plan-resume:${plan.id}:[0-9a-f-]{36}$`));
+        expect(plan.status).toBe('active');
+        expect(plan.cancel_at).toBeNull();
+        expect(allocation.end_time).toBeNull();
+        // One account, one plan: resuming is never a second subscription.
+        expect(await FundingPlanEntity.count({ where: { account_id: account.id } })).toBe(1);
+      });
+
+      it('should refuse to resume a plan that has already ended', async () => {
+        const { plan, providerConfig, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+        await finalizeCancellation(providerConfig.id);
+
+        // The provider has deleted the subscription; there is nothing left to
+        // un-cancel. A fresh checkout is the way back.
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should refuse to resume once the cancellation boundary has passed', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        plan.cancel_at = new Date('2026-01-10T00:00:00Z');
+        await plan.save();
+
+        // Still 'active' only because the deletion event has not arrived; the
+        // provider has already ended the subscription it would be asked to keep.
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should refuse to resume a plan whose last calendar has been removed', async () => {
+        // Removing the last calendar closes its allocation at the period end
+        // and cancels the plan at the same boundary. Resuming would have the
+        // provider renew a subscription that covers nothing.
+        const { plan, allocation, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+        await service.cancel(plan.id, false);
+        allocation.end_time = periodEnd;
+        await allocation.save();
+
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+
+        await plan.reload();
+        expect(resumeSubscription.called).toBe(false);
+        expect(plan.cancel_at).toEqual(periodEnd);
+      });
+
+      it('should refuse to resume a plan with no pending cancellation', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        const resumeSubscription = sandbox.stub().resolves();
+        Object.assign(mockAdapter, { resumeSubscription });
+
+        await expect(service.resume(plan.id)).rejects.toThrow(FundingPlanNotResumableError);
+        expect(resumeSubscription.called).toBe(false);
+      });
+
+      it('should leave the cancellation in place when the provider refuses to resume', async () => {
+        const { plan, mockAdapter } = await seedCoveredAccount();
+        Object.assign(mockAdapter, { resumeSubscription: sandbox.stub().rejects(new Error('stripe down')) });
+        await service.cancel(plan.id, false);
+
+        await expect(service.resume(plan.id)).rejects.toThrow('stripe down');
+
+        await plan.reload();
+        expect(plan.cancel_at).toEqual(periodEnd);
+      });
+    });
+
+    it('should let an account whose only plan has ended start a fresh checkout', async () => {
+      const settings = FundingSettingsEntity.build({
+        id: uuidv4(),
+        enabled: true,
+        monthly_price: 1000000,
+        yearly_price: 10000000,
+        currency: 'USD',
+        pay_what_you_can: false,
+        grace_period_days: 7,
+      });
+      await settings.save();
+
+      const { account, plan, providerConfig, mockAdapter } = await seedCoveredAccount();
+      await service.cancel(plan.id, false);
+      await finalizeCancellation(providerConfig.id);
+
+      // The checkout gate counts only an 'active' plan, so a finalized one is
+      // history rather than the account's one plan.
+      const session = await service.createCheckoutSession(account.id, 'monthly', 'https://pavillion.dev/return');
+
+      expect(session.sessionId).toBe('cs_test_abc123');
+      expect(mockAdapter.createCheckoutSession.calledOnce).toBe(true);
+    });
+  });
+
+  /**
+   * Which plan GET /v1/status reports when an account has held more than one.
+   * An account accumulates rows over time — a finalized plan stays behind as
+   * history when a fresh checkout creates the next — so newest-first alone
+   * would let a plan that has ended hide the one the account is paying for.
+   */
+  /**
+   * Disconnecting a provider removes its billing portal, which is the only way
+   * a suspended plan can be reactivated. Both disconnect paths therefore count
+   * every plan that has not ended, not just active and past_due ones.
+   */
+  describe('provider disconnect guards', () => {
+    async function seedProviderWithPlan(status: 'suspended' | 'cancelled') {
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'disconnect@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      const plan = FundingPlanEntity.build({
+        id: uuidv4(),
+        account_id: account.id,
+        provider_config_id: providerConfig.id,
+        provider_subscription_id: 'sub_disconnect',
+        provider_customer_id: 'cus_disconnect',
+        status,
+        billing_cycle: 'monthly',
+        amount: 1000000,
+        currency: 'USD',
+        current_period_start: new Date('2026-01-01T00:00:00Z'),
+        current_period_end: new Date('2026-02-01T00:00:00Z'),
+        cancelled_at: status === 'cancelled' ? new Date() : null,
+        cancel_at: null,
+        suspended_at: status === 'suspended' ? new Date() : null,
+      });
+      await plan.save();
+
+      return { providerConfig, plan };
+    }
+
+    it('should refuse to disconnect a provider whose only plan is suspended', async () => {
+      const { providerConfig } = await seedProviderWithPlan('suspended');
+
+      await expect(service.disconnectProvider('stripe')).rejects.toThrow('have not ended');
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).not.toBeNull();
+    });
+
+    it('should disconnect a provider whose plans have all been cancelled', async () => {
+      const { providerConfig } = await seedProviderWithPlan('cancelled');
+
+      expect(await service.disconnectProvider('stripe')).toBe(true);
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).toBeNull();
+    });
+
+    it('should ask for confirmation before the admin flow disconnects a provider with a suspended plan', async () => {
+      const { providerConfig } = await seedProviderWithPlan('suspended');
+      const connections = new ProviderConnectionService(eventBus);
+
+      const result = await connections.disconnectProvider('stripe', false);
+
+      expect(result.requiresConfirmation).toBe(true);
+      expect(result.activeFundingPlanCount).toBe(1);
+      expect(await connections.getActiveFundingPlanCount('stripe')).toBe(1);
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).not.toBeNull();
+    });
+
+    it('should let the admin flow disconnect a provider whose plans have all been cancelled without confirmation', async () => {
+      const { providerConfig } = await seedProviderWithPlan('cancelled');
+      const connections = new ProviderConnectionService(eventBus);
+
+      const result = await connections.disconnectProvider('stripe', false);
+
+      expect(result.requiresConfirmation).toBeUndefined();
+      expect(await ProviderConfigEntity.findByPk(providerConfig.id)).toBeNull();
+    });
+  });
+
+  describe('getStatus', () => {
+    async function seedAccountPlans(statuses: Array<'active' | 'past_due' | 'suspended' | 'cancelled'>) {
+      const providerConfig = await createProviderConfig('stripe');
+      const account = AccountEntity.build({
+        id: uuidv4(),
+        email: 'status@example.com',
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      });
+      await account.save();
+
+      // Oldest first; the fake clock is frozen, so step it to give each row a
+      // distinct createdAt.
+      const plans: FundingPlanEntity[] = [];
+      for (const status of statuses) {
+        _clock.tick(60 * 1000);
+        const plan = FundingPlanEntity.build({
+          id: uuidv4(),
+          account_id: account.id,
+          provider_config_id: providerConfig.id,
+          provider_subscription_id: `sub_${uuidv4()}`,
+          provider_customer_id: 'cus_status',
+          status,
+          billing_cycle: 'monthly',
+          amount: 1000000,
+          currency: 'USD',
+          current_period_start: new Date(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          cancelled_at: status === 'cancelled' ? new Date() : null,
+          cancel_at: null,
+          suspended_at: null,
+        });
+        await plan.save();
+        plans.push(plan);
+      }
+
+      return { account, plans };
+    }
+
+    it('should prefer an active plan over a newer cancelled one', async () => {
+      const { account, plans: [active] } = await seedAccountPlans(['active', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(active.id);
+      expect(status?.status).toBe('active');
+    });
+
+    it('should prefer a past_due plan over a newer cancelled one', async () => {
+      const { account, plans: [pastDue] } = await seedAccountPlans(['past_due', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(pastDue.id);
+    });
+
+    it('should report a plan that is winding down to its boundary over a newer cancelled one', async () => {
+      // A period-end cancellation stays 'active' until the boundary: it is
+      // still the plan the account is covered by, not one on its way out of
+      // the list.
+      const { account, plans: [cancelling] } = await seedAccountPlans(['active', 'cancelled']);
+      cancelling.cancel_at = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+      await cancelling.save();
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(cancelling.id);
+      expect(status?.cancelAt).toEqual(cancelling.cancel_at);
+    });
+
+    it('should report the most recent cancelled plan when nothing else is live', async () => {
+      const { account, plans: [, newest] } = await seedAccountPlans(['cancelled', 'cancelled']);
+
+      const status = await service.getStatus(account.id);
+
+      expect(status?.id).toBe(newest.id);
+      expect(status?.status).toBe('cancelled');
+    });
+
+    it('should report nothing for an account that has never held a plan', async () => {
+      expect(await service.getStatus(uuidv4())).toBeUndefined();
+    });
+
+    // The funding page's covered-calendars list resolves the same plan the
+    // status card shows, so a plan in dunning still lists what it covers.
+    it.each(['past_due', 'suspended'] as const)(
+      'should list the calendars a %s plan covers, past a newer cancelled plan',
+      async (status) => {
+        const { account, plans: [current] } = await seedAccountPlans([status, 'cancelled']);
+        const calendarId = uuidv4();
+        await CalendarFundingPlanEntity.build({
+          id: uuidv4(),
+          funding_plan_id: current.id,
+          calendar_id: calendarId,
+          amount: 1000000,
+          end_time: null,
+        }).save();
+
+        const covered = await service.getCalendarsInFundingPlan(account.id);
+
+        expect(covered.map((item) => item.calendarId)).toEqual([calendarId]);
+      },
+    );
   });
 
   /**
@@ -394,7 +1048,7 @@ describe('Funding Plan System Integration Tests', () => {
    * `where` clause or the unique index that actually hold the line.
    */
   describe('one plan per account, one plan per calendar', () => {
-    async function seedAccountWithPlan(status: 'active' | 'suspended') {
+    async function seedAccountWithPlan(status: 'active' | 'past_due' | 'suspended') {
       const providerConfig = await createProviderConfig('stripe');
 
       const settings = FundingSettingsEntity.build({
@@ -449,6 +1103,23 @@ describe('Funding Plan System Integration Tests', () => {
       ).rejects.toThrow(ActiveFundingPlanExistsError);
     });
 
+    it.each(['past_due', 'suspended'] as const)(
+      'should refuse a second checkout while the account\'s plan is %s',
+      async (status) => {
+        // The subscription still exists at the provider and its unpaid invoice
+        // can still collect. A second subscription bought meanwhile would
+        // charge the account twice; the way back is the billing portal.
+        const { account } = await seedAccountWithPlan(status);
+        const createCheckoutSession = sandbox.stub().resolves({ clientSecret: 's', sessionId: 'cs_test_x' });
+        sandbox.stub(ProviderFactory, 'getAdapter').returns({ createCheckoutSession } as any);
+
+        await expect(
+          service.createCheckoutSession(account.id, 'monthly', 'https://pavillion.dev/return'),
+        ).rejects.toThrow(ActiveFundingPlanExistsError);
+        expect(createCheckoutSession.called).toBe(false);
+      },
+    );
+
     it('should record a cancellation the new subscription already carries', async () => {
       // A checkout can complete against a subscription that is already
       // scheduled to cancel — created through the provider's own surfaces, or
@@ -489,8 +1160,9 @@ describe('Funding Plan System Integration Tests', () => {
 
     it('should move a calendar stranded on a suspended plan rather than failing the add', async () => {
       // The sequence the unique index would otherwise turn into a 500 with no
-      // way out: plan suspended (allocations stay open), user buys a new plan
-      // without that calendar, then adds it. A pre-check scoped to the active
+      // way out: plan suspended (allocations stay open), a new plan arrives
+      // past the checkout gate without that calendar (a session opened before
+      // the suspension, say), then the calendar is added. A pre-check scoped to the active
       // plan sees nothing, the insert hits the index, and the calendar becomes
       // uncoverable — removeCalendarFromFundingPlan only looks under the active
       // plan, so it would answer 404.
@@ -613,10 +1285,12 @@ describe('Funding Plan System Integration Tests', () => {
     });
 
     it('should close a suspended plan\'s allocation when the calendar is bought again', async () => {
-      // A suspended plan keeps its allocations open and does not block a fresh
-      // checkout, so this is the reachable sequence that would otherwise hand
-      // the unique index a second open row and leave the provider retrying the
-      // webhook forever.
+      // A suspended plan keeps its allocations open. The checkout gate refuses
+      // a new plan while it is suspended, but a checkout can still complete
+      // past it (a session opened before the suspension), and that sequence
+      // would otherwise hand the unique index a second open row and leave the
+      // provider retrying the webhook forever. Driven through the webhook, so
+      // the gate is not in the path.
       const { account, plan, providerConfig } = await seedAccountWithPlan('suspended');
       const calendarId = uuidv4();
 
@@ -905,14 +1579,8 @@ describe('Funding Plan System Integration Tests', () => {
     });
     await plan.save();
 
-    // Set updatedAt to 9 days ago (clearly past grace period)
-    const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
-    await db.query(
-      'UPDATE funding_plan SET updatedAt = ? WHERE id = ?',
-      {
-        replacements: [nineDaysAgo.toISOString(), plan.id],
-      },
-    );
+    // Past due since 9 days ago (clearly past grace period)
+    await backdatePastDue(plan.id, new Date('2026-01-06T12:00:00Z'));
 
     // Run grace period check
     await checkGracePeriodExpiry();
@@ -1043,6 +1711,34 @@ describe('Funding Plan System Integration Tests', () => {
       const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
 
       expect(access).toBe(false);
+    });
+
+    /** The one past_due plan the test seeded, read back by its status. */
+    async function pastDuePlan(): Promise<FundingPlanEntity> {
+      return (await FundingPlanEntity.findOne({ where: { status: 'past_due' } }))!;
+    }
+
+    it('should keep the gate open for a past_due plan inside its grace period', async () => {
+      await enableInstanceFunding();
+      // Written at the fake clock's now, so the 7-day grace has just begun.
+      const calendar = await createCoveredCalendar({ status: 'past_due' });
+
+      const access = await service.checkFundingAccess(calendar.id, 'widget_embedding');
+
+      expect(access).toBe(true);
+    });
+
+    it('should close the gate for a past_due plan once its grace period has expired', async () => {
+      await enableInstanceFunding();
+      const calendar = await createCoveredCalendar({ status: 'past_due' });
+      await backdatePastDue((await pastDuePlan()).id, new Date('2026-01-07T12:00:00Z'));
+
+      // Closed whether or not the suspension job has run yet ...
+      expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
+
+      // ... and still closed once it has.
+      await service.suspendExpiredFundingPlans();
+      expect(await service.checkFundingAccess(calendar.id, 'widget_embedding')).toBe(false);
     });
   });
 });

@@ -566,7 +566,7 @@
     },
     "disconnect_modal": {
       "title": "Disconnect {{provider}}?",
-      "message": "This provider has {{count}} active funding plan(s). Disconnecting will cancel all active funding plans and cannot be undone.",
+      "message": "This provider has {{count}} funding plan(s) that have not ended, including any that are past due or suspended. Disconnecting will cancel all of them and cannot be undone.",
       "consequence": "All supporters will lose access immediately and will be notified of the cancellation.",
       "checkbox_label": "I understand and want to proceed with disconnecting this provider",
       "cancel_button": "Cancel",

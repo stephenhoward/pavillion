@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { CoveredCalendarInfo } from '@/client/service/funding';
@@ -24,6 +24,7 @@ const errorMessage = ref('');
 const options = ref(null);
 const status = ref(null);
 const coveredCalendars = ref<CoveredCalendarInfo[]>([]);
+const planHeading = ref<HTMLElement | null>(null);
 
 // Computed properties
 const hasFundingPlan = computed(() => status.value !== null);
@@ -43,6 +44,16 @@ const isCancelled = computed(() => status.value?.status === 'cancelled');
  * through the boundary — so `isCancelled` says nothing about it.
  */
 const pendingCancellation = computed(() => Boolean(status.value?.cancelAt) && !isCancelled.value);
+
+/**
+ * A pending cancellation that can still be withdrawn. Once its boundary has
+ * passed the provider has ended (or is ending) the subscription, and the plan
+ * only reads 'active' until the deletion event lands; the way back from there
+ * is a fresh checkout, so "Keep My Plan" is not offered.
+ */
+const canResume = computed(() =>
+  pendingCancellation.value && new Date(status.value.cancelAt).getTime() > Date.now(),
+);
 
 /**
  * The date coverage runs to, once anything has ended it. Null while the plan
@@ -82,6 +93,41 @@ function getCalendarName(calendarId: string): string {
 function formatCalendarAmount(amount: number): string {
   if (!status.value) return '';
   return FundingService.formatCurrency(amount, status.value.currency);
+}
+
+/**
+ * Withdraw the pending cancellation, keeping the plan the account already
+ * holds. Changing one's mind before the boundary is never a second checkout.
+ */
+async function resumeFundingPlan() {
+  processing.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    const outcome = await fundingService.resume();
+
+    if (outcome === 'resumed') {
+      successMessage.value = t('resume_success');
+    }
+    else if (outcome === 'not_resumable') {
+      // Retrying cannot help, so say why and show the plan as it now stands.
+      errorMessage.value = t('resume_not_possible');
+    }
+    else {
+      errorMessage.value = t('resume_error');
+      return;
+    }
+
+    await loadData();
+    // The button that had focus is gone after the reload; give focus a stable
+    // place to land instead of dropping it to <body>.
+    await nextTick();
+    planHeading.value?.focus();
+  }
+  finally {
+    processing.value = false;
+  }
 }
 
 /**
@@ -188,15 +234,18 @@ onMounted(async () => {
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
     <div v-else class="funding-plan-content">
-      <!-- No funding plan - Direct user to calendar management -->
-      <div v-if="!hasFundingPlan && options?.enabled" class="no-funding-plan">
+      <!--
+        No funding plan, or only one that has ended - direct the user to
+        calendar management, where a fresh checkout starts the next plan
+      -->
+      <div v-if="(!hasFundingPlan || isCancelled) && options?.enabled" class="no-funding-plan">
         <h2>{{ t("no_funding_plan") }}</h2>
         <p>{{ t("no_plan_redirect") }}</p>
       </div>
 
       <!-- Active funding plan - Show status and management -->
       <div v-if="hasFundingPlan" class="funding-plan-status">
-        <h2>{{ t("current_funding_plan") }}</h2>
+        <h2 ref="planHeading" tabindex="-1">{{ t("current_funding_plan") }}</h2>
 
         <div class="status-card">
           <div class="status-row">
@@ -240,13 +289,28 @@ onMounted(async () => {
         </div>
 
         <div class="funding-plan-actions">
+          <!--
+            Suspended included: updating the payment details in the provider's
+            portal is how a suspended plan is reactivated, and the suspension
+            email sends the owner here to do it.
+          -->
           <button
-            v-if="isActive || isPastDue"
+            v-if="isActive || isPastDue || isSuspended"
             type="button"
             class="btn btn--secondary"
             @click="openBillingPortal"
           >
             {{ t("manage_payment_button") }}
+          </button>
+
+          <button
+            v-if="canResume"
+            type="button"
+            class="btn btn--primary"
+            :disabled="processing"
+            @click="resumeFundingPlan"
+          >
+            {{ t("resume_funding_plan_button") }}
           </button>
 
           <button
@@ -261,8 +325,8 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Covered calendars list -->
-      <div v-if="hasFundingPlan" class="covered-calendars">
+      <!-- Covered calendars list; an ended plan covers nothing -->
+      <div v-if="hasFundingPlan && !isCancelled" class="covered-calendars">
         <h2>{{ t("covered_calendars_title") }}</h2>
 
         <div v-if="coveredCalendars.length === 0" class="covered-calendars-empty">

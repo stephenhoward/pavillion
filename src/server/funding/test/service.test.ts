@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
 import db from '@/server/common/entity/db';
 import FundingService, { MIN_PWYC_AMOUNT, MAX_PWYC_AMOUNT } from '@/server/funding/service/funding';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -245,6 +246,43 @@ describe('FundingService', () => {
         expect(mockEntity.cancel_at).toBeNull();
         expect(mockEntity.save.called).toBe(true);
       });
+
+      it('should still end coverage now for a plan pending period-end cancellation', async () => {
+        const { mockEntity, mockAdapter } = stubCancellablePlan({ cancel_at: periodEnd });
+
+        await service.cancel(mockEntity.id, true);
+
+        expect(mockAdapter.cancelSubscription.calledWith(mockEntity.provider_subscription_id, true)).toBe(true);
+        expect(mockEntity.status).toBe('cancelled');
+        expect(mockEntity.save.called).toBe(true);
+      });
+    });
+
+    /*
+     * Every emitted cancellation emails the plan owner, so a cancel that would
+     * change nothing must not reach the provider, write, or emit.
+     */
+    describe('when the cancellation is already recorded', () => {
+      const cases: Array<[string, Record<string, unknown>, boolean]> = [
+        ['a period-end cancel of a plan with cancel_at set', { cancel_at: periodEnd }, false],
+        ['a period-end cancel of a cancelled plan', { status: 'cancelled', cancelled_at: new Date() }, false],
+        ['an immediate cancel of a cancelled plan', { status: 'cancelled', cancelled_at: new Date() }, true],
+      ];
+
+      for (const [label, overrides, immediate] of cases) {
+        it(`should do nothing for ${label}`, async () => {
+          const { mockEntity, mockAdapter } = stubCancellablePlan(overrides);
+          const emitted = sandbox.spy();
+          eventBus.on('funding:plan:cancelled', emitted);
+
+          await service.cancel(mockEntity.id, immediate);
+          await new Promise(resolve => setImmediate(resolve));
+
+          expect(mockAdapter.cancelSubscription.called).toBe(false);
+          expect(mockEntity.save.called).toBe(false);
+          expect(emitted.called).toBe(false);
+        });
+      }
     });
   });
 
@@ -503,6 +541,74 @@ describe('FundingService', () => {
       });
     });
 
+    /**
+     * Pavillion's suspension is a local overlay on a subscription the provider
+     * still calls past due and keeps retrying (DEC-022). Only a paid or ended
+     * report may lift it.
+     */
+    describe('suspension held against provider past_due reports', () => {
+      /** Every lifecycle event the plan emits, flushed past commit. */
+      function recordLifecycleEmits(): string[] {
+        const emitted: string[] = [];
+        for (const name of ['payment_failed', 'suspended', 'reactivated', 'cancelled']) {
+          eventBus.on(`funding:plan:${name}`, () => emitted.push(name));
+        }
+        return emitted;
+      }
+
+      const flushEmits = () => new Promise(resolve => setImmediate(resolve));
+
+      it('should leave a suspended plan suspended, and announce nothing, on a past_due report', async () => {
+        const plan = stubWebhookTarget({ status: 'suspended' });
+        const emitted = recordLifecycleEmits();
+
+        await service.processWebhookEvent({
+          eventId: 'evt_retry_failed',
+          eventType: 'invoice.payment_failed',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'past_due',
+          rawPayload: {},
+        }, plan.provider_config_id);
+        await flushEmits();
+
+        expect(plan.status).toBe('suspended');
+        expect(emitted).toEqual([]);
+      });
+
+      it('should reactivate a suspended plan the provider reports paid', async () => {
+        const plan = stubWebhookTarget({ status: 'suspended' });
+        const emitted = recordLifecycleEmits();
+
+        await service.processWebhookEvent({
+          eventId: 'evt_retry_paid',
+          eventType: 'invoice.payment_succeeded',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'active',
+          rawPayload: {},
+        }, plan.provider_config_id);
+        await flushEmits();
+
+        expect(plan.status).toBe('active');
+        expect(emitted).toEqual(['reactivated']);
+      });
+
+      it('should end a suspended plan the provider reports cancelled', async () => {
+        const plan = stubWebhookTarget({ status: 'suspended' });
+        sandbox.stub(CalendarFundingPlanEntity, 'update').resolves([0] as any);
+
+        await service.processWebhookEvent({
+          eventId: 'evt_retries_exhausted',
+          eventType: 'customer.subscription.deleted',
+          subscriptionId: plan.provider_subscription_id,
+          status: 'cancelled',
+          cancelAt: null,
+          rawPayload: {},
+        }, plan.provider_config_id);
+
+        expect(plan.status).toBe('cancelled');
+      });
+    });
+
     it('should propagate a checkout plan-creation failure so the provider retries', async () => {
       // The session-return path degrades this failure to a still-open status;
       // the webhook path must not, or the provider would never redeliver.
@@ -655,7 +761,7 @@ describe('FundingService', () => {
       const mockEntity = {
         id: fundingPlanId,
         status: 'past_due',
-        updated_at: pastDueDate,
+        past_due_since: pastDueDate,
         save: sandbox.stub().resolves(),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -665,6 +771,7 @@ describe('FundingService', () => {
       };
 
       sandbox.stub(FundingPlanEntity, 'findAll').resolves([mockEntity] as any);
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockEntity as any);
 
       const mockSettings = {
         toModel: () => {
@@ -1299,11 +1406,11 @@ describe('FundingService', () => {
      * Stub the calendar's funding-plan allocation. Pass null for no allocation,
      * or plan overrides to shape the funding plan the allocation belongs to.
      *
-     * The fake honours the include's `where: { status: 'active' }` exactly as
-     * the database would: a query written without the status join still sees
-     * the allocation row, whatever state its plan is in. That asymmetry is
-     * what lets the non-active-status tests below fail if the join filter is
-     * ever dropped from qualifyingFundingPlan.
+     * The fake honours the include's status filter — an exact status, or an
+     * `Op.in` list — exactly as the database would: a query written without
+     * the status join still sees the allocation row, whatever state its plan
+     * is in. That asymmetry is what lets the suspended and cancelled tests
+     * below fail if the join filter is ever dropped from qualifyingFundingPlan.
      *
      * Two query shapes read this table and both land here, because sinon can
      * only stub a method once:
@@ -1321,6 +1428,7 @@ describe('FundingService', () => {
         cancelled_at?: Date | null;
         cancel_at?: Date | null;
         current_period_end?: Date | null;
+        past_due_since?: Date | null;
       } | null,
     ): sinon.SinonStub {
       /** The allocation row as the query in `options` would see it, or null. */
@@ -1334,11 +1442,16 @@ describe('FundingService', () => {
           cancelled_at: null,
           cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
+          past_due_since: null,
           ...plan,
         };
 
         const joinedStatus = options?.include?.[0]?.where?.status;
-        if (joinedStatus !== undefined && fundingPlan.status !== joinedStatus) {
+        const admitted = joinedStatus === undefined
+          || (typeof joinedStatus === 'string'
+            ? fundingPlan.status === joinedStatus
+            : (joinedStatus[Op.in] as string[]).includes(fundingPlan.status));
+        if (!admitted) {
           return null;
         }
 
@@ -1457,10 +1570,10 @@ describe('FundingService', () => {
       });
 
       /**
-       * The three cases below give the plan dates that would grant access on
-       * their own (no cancellation, a period end weeks away), so only the
-       * `status: 'active'` join filter in qualifyingFundingPlan can produce
-       * the denial. Each fails if that filter is removed.
+       * The two cases below give the plan dates that would grant access on
+       * their own (no cancellation, a period end weeks away, written just
+       * now), so only the status join filter in qualifyingFundingPlan can
+       * produce the denial. Each fails if that filter is removed.
        */
       it('should close the gate when the allocation points at a cancelled plan', async () => {
         stubFundingEnabled(true);
@@ -1473,22 +1586,97 @@ describe('FundingService', () => {
         expect(allowed).toBe(false);
       });
 
-      it('should close the gate when the allocation points at a past_due plan', async () => {
+      it('should close the gate when the allocation points at a suspended plan', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
-        stubAllocation({ status: 'past_due' });
+        stubAllocation({ status: 'suspended' });
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 
         expect(allowed).toBe(false);
       });
 
-      it('should close the gate when the allocation points at a suspended plan', async () => {
+      /**
+       * A past-due plan keeps its calendars covered through the instance grace
+       * period (DEC-022). The grace is measured from past_due_since, the
+       * instant the plan became past due, as the suspension job measures it,
+       * so coverage ends at the instant the job becomes entitled to suspend —
+       * whether or not it has run yet.
+       */
+      it('should keep the gate open for a past_due plan inside its grace period', async () => {
         stubFundingEnabled(true);
         stubOwnerIsAdmin(false);
         stubGrant(false);
-        stubAllocation({ status: 'suspended' });
+        // Payment failed two days ago; the instance grace period is 7 days.
+        stubAllocation({ status: 'past_due', past_due_since: new Date(Date.now() - 2 * DAY) });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(true);
+      });
+
+      it('should close the gate for a past_due plan whose grace period has expired', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Eight days past due and the suspension job has not run yet: the
+        // period end weeks ahead must not stretch the dunning window.
+        stubAllocation({
+          status: 'past_due',
+          past_due_since: new Date(Date.now() - 8 * DAY),
+          current_period_end: new Date(Date.now() + 30 * DAY),
+        });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      // A missing or unparseable instant must not leave the period end weeks
+      // ahead as the only boundary standing.
+      it.each([
+        ['missing', null],
+        ['unreadable', new Date(Number.NaN)],
+      ])('should close the gate for a past_due plan whose past-due instant is %s', async (_label, pastDueSince) => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        stubAllocation({ status: 'past_due', past_due_since: pastDueSince });
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should ignore later writes to a past_due plan when measuring its grace', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Past due for eight days but written a minute ago — a resume, or a
+        // provider echo. The grace runs from the failure, not the last write.
+        stubAllocation({
+          status: 'past_due',
+          past_due_since: new Date(Date.now() - 8 * DAY),
+          updatedAt: new Date(Date.now() - 60 * 1000),
+        } as any);
+
+        const allowed = await service.checkFundingAccess(calendarId, feature);
+
+        expect(allowed).toBe(false);
+      });
+
+      it('should close the gate for a past_due plan whose scheduled cancellation has passed', async () => {
+        stubFundingEnabled(true);
+        stubOwnerIsAdmin(false);
+        stubGrant(false);
+        // Still inside the dunning grace, but the plan was set to end an hour
+        // ago. Earliest boundary wins: grace never outlasts a cancellation.
+        stubAllocation({
+          status: 'past_due',
+          past_due_since: new Date(Date.now() - DAY),
+          cancel_at: new Date(Date.now() - HOUR),
+        });
 
         const allowed = await service.checkFundingAccess(calendarId, feature);
 

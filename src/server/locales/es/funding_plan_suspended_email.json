@@ -1,0 +1,15 @@
+{
+  "subject": "Tu plan de financiación ha sido suspendido",
+  "title": "Plan de financiación suspendido",
+  "greeting": "Hola,",
+  "message": "Tu {{planName}} ha sido suspendido porque no se pudo cobrar un pago.",
+  "status_detail": "Los calendarios que cubre este plan ya no tienen acceso a las funciones extendidas hasta que el plan se reactive.",
+  "plan_name_monthly": "plan de financiación mensual que apoya a {{domain}}",
+  "plan_name_yearly": "plan de financiación anual que apoya a {{domain}}",
+  "action_message": "Actualiza tus datos de pago para reactivar tu plan.",
+  "action_button": "Revisar plan de financiación",
+  "copy_link_text": "O copia este enlace:",
+  "signature": "Gracias,",
+  "team_name": "El equipo de Pavillion",
+  "footer_text": "Este es un mensaje automático, por favor no respondas a este correo electrónico."
+}

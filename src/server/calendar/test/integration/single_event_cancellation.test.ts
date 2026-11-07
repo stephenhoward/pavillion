@@ -67,6 +67,15 @@ describe('Single-event cancellation (service integration, real DB)', () => {
   });
 
   /**
+   * A start `days` from now at a fixed 14:00 UTC, so every run sees the same
+   * shape: an upcoming occurrence that `buildEventInstances` treats as future.
+   * A hardcoded calendar date stops being upcoming once the clock reaches it.
+   */
+  function upcomingStart(days: number): DateTime {
+    return DateTime.utc().plus({ days }).set({ hour: 14, minute: 0, second: 0, millisecond: 0 });
+  }
+
+  /**
    * Create a single, non-recurring event whose lone schedule starts at `start`.
    * Returns the created event (with its schedule populated) so callers can read
    * the schedule id / startDate for subsequent cancel and re-key operations.
@@ -83,7 +92,7 @@ describe('Single-event cancellation (service integration, real DB)', () => {
   }
 
   it('cancels a non-recurring single occurrence in shown mode (hideFromPublic=false)', async () => {
-    const start = DateTime.fromISO('2026-08-15T10:00:00.000Z', { zone: 'utc' });
+    const start = upcomingStart(10);
     const event = await createSingleEvent(start, 'Shown Cancel Single');
     expect(event.schedules.length).toBe(1);
 
@@ -129,7 +138,7 @@ describe('Single-event cancellation (service integration, real DB)', () => {
   });
 
   it('restores a cancelled single occurrence (cancel -> restore round-trip)', async () => {
-    const start = DateTime.fromISO('2026-10-01T09:00:00.000Z', { zone: 'utc' });
+    const start = upcomingStart(20);
     const event = await createSingleEvent(start, 'Restore Single');
     await calendarInterface.buildEventInstances(event);
 
@@ -146,8 +155,12 @@ describe('Single-event cancellation (service integration, real DB)', () => {
   });
 
   it('cancellation follows the event when its date is edited (exclusion re-keyed)', async () => {
-    const oldStart = DateTime.fromISO('2026-11-05T14:00:00.000Z', { zone: 'utc' });
-    const newStart = DateTime.fromISO('2026-12-20T14:00:00.000Z', { zone: 'utc' });
+    // Both dates must be upcoming. buildEventInstances never deletes a row that
+    // starts before now: past rows are the event's history in listings. If
+    // oldStart has already passed, its row legitimately survives the move and
+    // this test would be asserting the history rule, not the re-key.
+    const oldStart = upcomingStart(7);
+    const newStart = upcomingStart(45);
 
     const event = await createSingleEvent(oldStart, 'Re-key Single');
     const scheduleId = event.schedules[0].id!;

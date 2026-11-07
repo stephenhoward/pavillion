@@ -302,10 +302,24 @@ async function startStripeCheckout() {
   }
   catch (error) {
     console.error('Failed to start Stripe checkout:', error);
-    errorMessage.value = t('plan_start_error');
+    errorMessage.value = isExistingPlanConflict(error)
+      ? t('plan_already_exists_error')
+      : t('plan_start_error');
     formState.value = 'configure';
     processing.value = false;
   }
+}
+
+/**
+ * Whether a checkout was refused because the account already holds a plan.
+ *
+ * One account, one plan: a plan that is still running — including one winding
+ * down to a scheduled cancellation — refuses a second checkout. Retrying cannot
+ * change that, so it gets its own message rather than "please try again".
+ */
+function isExistingPlanConflict(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { errorName?: string } } } | null)?.response;
+  return response?.status === 409 && response.data?.errorName === 'ActiveFundingPlanExistsError';
 }
 
 /**

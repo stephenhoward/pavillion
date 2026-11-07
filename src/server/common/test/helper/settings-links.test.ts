@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adminAccountsPath, adminModerationReportPath, calendarReportsPath } from '@/server/common/helper/settings-links';
+import { adminAccountsPath, adminModerationReportPath, calendarReportsPath, fundingPlanPath } from '@/server/common/helper/settings-links';
 
 /*
  * These paths are a contract with the client route table: each literal below
@@ -41,5 +41,15 @@ describe('adminAccountsPath', () => {
 
   it('carries no query string', () => {
     expect(adminAccountsPath()).not.toContain('?');
+  });
+});
+
+describe('fundingPlanPath', () => {
+  it('addresses the account funding plan settings leaf', () => {
+    expect(fundingPlanPath()).toBe('/settings/account/funding');
+  });
+
+  it('carries no query string', () => {
+    expect(fundingPlanPath()).not.toContain('?');
   });
 });

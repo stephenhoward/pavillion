@@ -566,7 +566,7 @@
     },
     "disconnect_modal": {
       "title": "¿Desconectar {{provider}}?",
-      "message": "Este proveedor tiene {{count}} plan(es) de financiación activo(s). Desconectarlo cancelará todos los planes de financiación activos y no se podrá deshacer.",
+      "message": "Este proveedor tiene {{count}} plan(es) de financiación que no han terminado, incluidos los vencidos o suspendidos. Desconectarlo los cancelará todos y no se podrá deshacer.",
       "consequence": "Todos los seguidores perderán el acceso de inmediato y serán notificados de la cancelación.",
       "checkbox_label": "Entiendo y deseo continuar con la desconexión de este proveedor",
       "cancel_button": "Cancelar",

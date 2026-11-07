@@ -302,8 +302,12 @@ export class ProviderConnectionService {
   /**
    * Disconnect a payment provider
    *
-   * Checks for active funding plans and requires confirmation before proceeding.
-   * If confirmed, cancels all active funding plans, deletes webhook, and removes credentials.
+   * Checks for funding plans that have not ended (any status but 'cancelled' —
+   * the same rule the checkout gate and getStatus use) and requires
+   * confirmation before proceeding. If confirmed, cancels all of them, deletes
+   * webhook, and removes credentials. A suspended plan counts: its only way
+   * back is this provider's billing portal, so disconnecting must end it
+   * deliberately rather than strand it.
    *
    * @param providerType - Type of provider to disconnect
    * @param confirmed - Whether admin has confirmed the disconnection
@@ -327,13 +331,11 @@ export class ProviderConnectionService {
       throw new Error('Provider not found');
     }
 
-    // Count active funding plans
+    // Count funding plans that have not ended
     const activeCount = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
-        status: {
-          [Op.in]: ['active', 'past_due'],
-        },
+        status: { [Op.ne]: 'cancelled' },
       },
     });
 
@@ -342,19 +344,17 @@ export class ProviderConnectionService {
       return {
         requiresConfirmation: true,
         activeFundingPlanCount: activeCount,
-        message: `This provider has ${activeCount} active funding plan(s). Disconnecting will cancel all active funding plans.`,
+        message: `This provider has ${activeCount} funding plan(s) that have not ended. Disconnecting will cancel all of them.`,
       };
     }
 
     // If confirmed, proceed with disconnection
     if (activeCount > 0 && confirmed) {
-      // Force-cancel all active funding plans
+      // Force-cancel every funding plan that has not ended
       const activeFundingPlans = await FundingPlanEntity.findAll({
         where: {
           provider_config_id: entity.id,
-          status: {
-            [Op.in]: ['active', 'past_due'],
-          },
+          status: { [Op.ne]: 'cancelled' },
         },
       });
 
@@ -376,10 +376,10 @@ export class ProviderConnectionService {
   }
 
   /**
-   * Get count of active funding plans for a provider
+   * Get count of funding plans on a provider that have not ended
    *
    * @param providerType - Type of provider
-   * @returns Count of active funding plans
+   * @returns Count of funding plans whose status is not 'cancelled'
    */
   async getActiveFundingPlanCount(providerType: ProviderType): Promise<number> {
     const entity = await ProviderConfigEntity.findOne({
@@ -393,9 +393,7 @@ export class ProviderConnectionService {
     return FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
-        status: {
-          [Op.in]: ['active', 'past_due'],
-        },
+        status: { [Op.ne]: 'cancelled' },
       },
     });
   }

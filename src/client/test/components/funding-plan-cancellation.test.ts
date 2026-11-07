@@ -25,6 +25,7 @@ const serviceMocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
   getCalendarsInFundingPlan: vi.fn(),
   cancel: vi.fn(),
+  resume: vi.fn(),
   getPortalUrl: vi.fn(),
 }));
 
@@ -34,6 +35,7 @@ vi.mock('@/client/service/funding', () => {
     getStatus = serviceMocks.getStatus;
     getCalendarsInFundingPlan = serviceMocks.getCalendarsInFundingPlan;
     cancel = serviceMocks.cancel;
+    resume = serviceMocks.resume;
     getPortalUrl = serviceMocks.getPortalUrl;
 
     static formatCurrency(amount: number, currency: string): string {
@@ -103,6 +105,14 @@ describe('funding-plan.vue cancellation states', () => {
             cancel_funding_plan_button: 'Cancel Plan',
             manage_payment_button: 'Manage Payment Method',
             cancellation_info: 'Your funding plan will remain active until {{date}}',
+            resume_funding_plan_button: 'Keep My Plan',
+            resume_success: 'Your funding plan will continue.',
+            resume_error: 'Failed to keep your funding plan.',
+            resume_not_possible: 'This cancellation can no longer be withdrawn.',
+            current_funding_plan: 'Current Funding Plan',
+            no_funding_plan: 'No Active Funding Plan',
+            no_plan_redirect: 'Open the General page of any calendar you own.',
+            covered_calendars_title: 'Calendars on This Plan',
           },
         },
       },
@@ -120,10 +130,11 @@ describe('funding-plan.vue cancellation states', () => {
    * @param status - Body GET /v1/status would return
    * @returns The mounted wrapper
    */
-  async function mountWithStatus(status: Record<string, unknown>) {
+  async function mountWithStatus(status: Record<string, unknown>, attachTo?: HTMLElement) {
     serviceMocks.getStatus.mockResolvedValue(status);
 
     const wrapper = mount(FundingPlanManagement, {
+      attachTo,
       global: { plugins: [router, [I18NextVue, { i18next }], createPinia()] },
     });
 
@@ -168,6 +179,108 @@ describe('funding-plan.vue cancellation states', () => {
     expect(wrapper.text()).toContain(cancelledOn);
     expect(wrapper.find('.status-message.info').text()).toContain(periodEnd);
     expect(wrapper.text()).not.toContain('Cancel Plan');
+  });
+
+  /** A boundary still ahead, so the cancellation can be withdrawn. */
+  const futureBoundary = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  /** Click "Keep My Plan" and let the resume and the reload settle. */
+  async function clickKeep(wrapper: Awaited<ReturnType<typeof mountWithStatus>>) {
+    await wrapper.findAll('button').find((b) => b.text() === 'Keep My Plan')!.trigger('click');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+  }
+
+  it('should offer to keep a plan whose cancellation is pending, and withdraw the cancellation on request', async () => {
+    serviceMocks.resume.mockResolvedValue('resumed');
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: futureBoundary });
+    serviceMocks.getStatus.mockResolvedValue(continuingPlan);
+
+    await clickKeep(wrapper);
+
+    expect(serviceMocks.resume).toHaveBeenCalledOnce();
+    expect(wrapper.find('.success-message').text()).toBe('Your funding plan will continue.');
+    // Back to a continuing plan: no boundary, cancel offered again.
+    expect(wrapper.find('.status-message.info').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Cancel Plan');
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should move focus to the plan heading once the button it was on is gone', async () => {
+    serviceMocks.resume.mockResolvedValue('resumed');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: futureBoundary }, host);
+    serviceMocks.getStatus.mockResolvedValue(continuingPlan);
+
+    const keep = wrapper.findAll('button').find((b) => b.text() === 'Keep My Plan')!;
+    (keep.element as HTMLElement).focus();
+    await clickKeep(wrapper);
+
+    const heading = wrapper.find('.funding-plan-status h2');
+    expect(heading.attributes('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(heading.element);
+
+    wrapper.unmount();
+    host.remove();
+  });
+
+  it('should explain, and show the plan as it now stands, when the cancellation can no longer be withdrawn', async () => {
+    // The server's 409: retrying cannot succeed, so "please try again" would
+    // send the user round the same loop.
+    serviceMocks.resume.mockResolvedValue('not_resumable');
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: futureBoundary });
+    serviceMocks.getStatus.mockResolvedValue({
+      ...continuingPlan,
+      status: 'cancelled',
+      cancelledAt: '2026-01-10T00:00:00.000Z',
+    });
+
+    await clickKeep(wrapper);
+
+    expect(wrapper.find('.error-message').text()).toBe('This cancellation can no longer be withdrawn.');
+    expect(serviceMocks.getStatus).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should report a failed resume and keep the cancellation on screen', async () => {
+    serviceMocks.resume.mockResolvedValue('failed');
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: futureBoundary });
+
+    await clickKeep(wrapper);
+
+    expect(wrapper.find('.error-message').text()).toBe('Failed to keep your funding plan.');
+    expect(wrapper.text()).toContain('Keep My Plan');
+  });
+
+  it('should not offer to keep a plan whose cancellation boundary has already passed', async () => {
+    // Still 'active' only until the deletion event lands; the provider has
+    // already ended the subscription, so a fresh checkout is the way back.
+    const wrapper = await mountWithStatus({ ...continuingPlan, cancelAt: '2020-01-01T00:00:00.000Z' });
+
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should not offer to keep a plan that is simply continuing', async () => {
+    const wrapper = await mountWithStatus(continuingPlan);
+
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+  });
+
+  it('should point an account whose plan has ended at starting a new one', async () => {
+    const wrapper = await mountWithStatus({
+      ...continuingPlan,
+      status: 'cancelled',
+      cancelledAt: '2026-01-10T00:00:00.000Z',
+    });
+
+    // The ended plan is history, not something to keep or resume: the way
+    // back is a fresh checkout from a calendar, which the checkout gate allows
+    // because it counts only a plan that is still active.
+    expect(wrapper.find('.no-funding-plan').text()).toContain('Open the General page of any calendar you own.');
+    expect(wrapper.text()).not.toContain('Keep My Plan');
+    // Nothing is covered by an ended plan, so there is no list to show.
+    expect(wrapper.find('.covered-calendars').exists()).toBe(false);
   });
 
   it('should render real dates and a resolved billing cycle from the camelCase payload', async () => {

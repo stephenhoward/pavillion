@@ -85,6 +85,16 @@ export class PayPalAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * PayPal cancels immediately (see cancelSubscription), so there is never a
+   * pending cancellation to withdraw.
+   *
+   * @param _subscriptionId - Provider's subscription ID
+   */
+  async resumeSubscription(_subscriptionId: string): Promise<void> {
+    throw new Error('PayPal subscriptions cannot be resumed once cancelled');
+  }
+
+  /**
    * PayPal does not support in-place subscription amount updates
    *
    * @returns False

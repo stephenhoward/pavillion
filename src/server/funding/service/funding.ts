@@ -44,6 +44,7 @@ import {
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
   ActiveFundingPlanExistsError,
+  FundingPlanNotResumableError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   WebhookSignatureError,
@@ -341,19 +342,20 @@ export default class FundingService {
       return false;
     }
 
-    // Check if any active funding plans use this provider
-    const activeFundingPlans = await FundingPlanEntity.count({
+    // Refuse while any plan on this provider has not ended — the same
+    // "unended" rule the checkout gate and getStatus use. A suspended plan
+    // counts: its only way back is updating payment details in this
+    // provider's billing portal, which disconnecting would remove.
+    const unendedFundingPlans = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
-        status: {
-          [Op.in]: ['active', 'past_due'],
-        },
+        status: { [Op.ne]: 'cancelled' },
       },
     });
 
-    if (activeFundingPlans > 0) {
+    if (unendedFundingPlans > 0) {
       throw new Error(
-        `Cannot disconnect provider with ${activeFundingPlans} active funding plan(s)`,
+        `Cannot disconnect provider with ${unendedFundingPlans} funding plan(s) that have not ended`,
       );
     }
 
@@ -695,11 +697,12 @@ export default class FundingService {
       // calendar already open under a *different* plan and hand the index an
       // insert it must reject.
       //
-      // That is a reachable purchase, not a corrupt-database hypothetical: a
-      // plan that goes `suspended` keeps its allocations open, and a suspended
-      // plan neither blocks a fresh checkout nor gets its calendars closed. So
-      // an account can hold a live plan while a stranded row from the suspended
-      // one still covers the calendar it is now trying to add.
+      // A plan that goes `suspended` keeps its allocations open and does not
+      // get its calendars closed. The checkout gate refuses a new plan while
+      // one is suspended, but a second plan can still arrive past it (a session
+      // opened before the suspension, or one of the races that gate's comment
+      // lists), so an account can hold a live plan while a stranded row from
+      // the suspended one still covers the calendar it is now trying to add.
       const openElsewhere = await CalendarFundingPlanEntity.findOne({
         where: {
           calendar_id: calendarId,
@@ -844,15 +847,15 @@ export default class FundingService {
   }
 
   /**
-   * Get all active calendar allocations for an account's funding plan
+   * Get the open calendar allocations of an account's funding plan
    *
-   * Resolves the active funding plan for the account, then queries
-   * CalendarFundingPlanEntity for active allocations (end_time IS NULL).
-   * Returns an empty array if the account has no active funding plan
-   * (does not throw an error).
+   * Resolves the plan through getStatus, as every other plan-level read does,
+   * so a past-due or suspended plan lists the calendars it still holds open
+   * allocations for. An ended plan covers nothing and returns an empty array,
+   * as does an account with no plan (neither throws).
    *
    * @param accountId - Account ID
-   * @returns Array of active calendar allocations with calendarId, amount, and createdAt
+   * @returns Array of open calendar allocations with calendarId, amount, and createdAt
    */
   async getCalendarsInFundingPlan(
     accountId: string,
@@ -861,22 +864,20 @@ export default class FundingService {
       throw new ValidationError('Invalid accountId: must be a valid UUID');
     }
 
-    const fundingPlanEntity = await FundingPlanEntity.findOne({
-      where: { account_id: accountId, status: 'active' },
-    });
+    const fundingPlan = await this.getStatus(accountId);
 
-    if (!fundingPlanEntity) {
+    if (!fundingPlan || fundingPlan.status === 'cancelled') {
       return [];
     }
 
-    const activeAllocations = await CalendarFundingPlanEntity.findAll({
+    const openAllocations = await CalendarFundingPlanEntity.findAll({
       where: {
-        funding_plan_id: fundingPlanEntity.id,
+        funding_plan_id: fundingPlan.id,
         end_time: { [Op.is]: null as any },
       },
     });
 
-    return activeAllocations.map((alloc) => ({
+    return openAllocations.map((alloc) => ({
       calendarId: alloc.calendar_id,
       amount: alloc.amount,
       createdAt: alloc.created_at,
@@ -1149,32 +1150,34 @@ export default class FundingService {
     // Validate return URL origin (defense in depth)
     this.validateReturnUrlOrigin(returnUrl);
 
-    // One account, one plan. A plan that is winding down towards its `cancel_at`
-    // boundary is still that one plan and still blocks a second: it is active,
-    // it is being honoured, and its calendars are covered by it.
+    // One account, one plan, and any plan that has not ended is that plan —
+    // the same rule getStatus reports by. That covers:
     //
-    // Which leaves the resubscribe-during-the-cancellation-window case, and the
-    // answer to that is NOT to relax this gate. A customer who changes their
-    // mind before the boundary should have the pending cancellation *reversed*
-    // on the plan they already hold — clear `cancel_at` and send
-    // `cancel_at_period_end: false` to the provider — so they resume rather than
-    // accumulate a second subscription. That path belongs to pv-jdot.3.3; this
-    // gate is what holds the invariant until it lands.
+    //  - an active plan, including one winding down towards its `cancel_at`
+    //    boundary: it is being honoured and its calendars are covered by it. A
+    //    customer who changes their mind before the boundary has the pending
+    //    cancellation *reversed* on that plan (`resume`), never a second one.
+    //  - a past_due or suspended plan: its subscription still exists at the
+    //    provider, and the unpaid invoice can still collect — on retry, or when
+    //    the customer updates their payment details in the billing portal. A
+    //    second subscription bought meanwhile would charge the account twice.
+    //    The way back is that portal, not a new checkout.
+    //
+    // Only once a plan has finalized to 'cancelled' does it stop counting, and
+    // a fresh checkout is then the way back.
     //
     // What this gate actually provides is the common case, and no more. It is
     // an unlocked read one or more HTTP round trips before the only site that
     // creates a plan (processCheckoutCompleted), and `funding_plan` carries no
     // unique constraint on account_id, provider_subscription_id or
-    // provider_event_id to catch what slips past. At least three routes reach
-    // two plans on one account anyway: concurrent creation for a single
-    // subscription, two checkout sessions paid in parallel, and a suspended
-    // plan revived through the billing portal after a second was bought — the
-    // terminal-status guard in processWebhookEvent does not cover that last one
-    // because it only pins 'cancelled'. Closing those needs a database-level
+    // provider_event_id to catch what slips past. Two plans on one account are
+    // still reachable through concurrent creation for a single subscription,
+    // two checkout sessions paid in parallel, or a session opened before the
+    // existing plan's state changed. Closing those needs a database-level
     // constraint and a decision about what to do with the loser; pv-ez63 owns
     // it.
     const existingPlan = await FundingPlanEntity.findOne({
-      where: { account_id: accountId, status: 'active' },
+      where: { account_id: accountId, status: { [Op.ne]: 'cancelled' } },
     });
 
     if (existingPlan) {
@@ -1379,6 +1382,15 @@ export default class FundingService {
    * cancel racing an allocation change queues behind it instead of cancelling
    * at the provider while the other transaction is still pushing a new total.
    * Same Postgres-only caveat as `resolveActiveFundingPlan`.
+   *
+   * A cancel that would change nothing is a no-op: no provider call, no write,
+   * no event. That covers any cancel of a plan already 'cancelled', and a
+   * period-end cancel of a plan whose `cancel_at` is already set. Each emitted
+   * cancellation sends the owner an email, so a repeated request (a double
+   * click, a scripted loop) must not emit again. The check runs after the
+   * locked read, so two concurrent requests serialize and the second sees the
+   * first's write. An immediate cancel of a plan pending period-end
+   * cancellation still proceeds: it ends coverage now, which is a real change.
    */
   async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
     const run = async (t: Transaction): Promise<void> => {
@@ -1388,6 +1400,11 @@ export default class FundingService {
       });
       if (!entity) {
         throw new Error('Funding plan not found');
+      }
+
+      if (entity.status === 'cancelled' || (!immediate && entity.cancel_at)) {
+        logger.info({ fundingPlanId: entity.id, immediate }, 'Funding plan cancellation already recorded; nothing to do');
+        return;
       }
 
       // Get provider configuration
@@ -1442,13 +1459,110 @@ export default class FundingService {
   }
 
   /**
-   * Get funding plan status for an account
+   * Withdraw a pending period-end cancellation, keeping the plan the account
+   * already holds
+   *
+   * This is how a customer changes their mind before the boundary. It never
+   * creates a second plan — the checkout gate still counts a winding-down plan
+   * as the account's one plan — it clears `cancel_at` on this one and tells the
+   * provider to renew. The provider's next `customer.subscription.updated`
+   * reports `cancel_at: null`, which processWebhookEvent applies as the same
+   * clear, so the two writes converge.
+   *
+   * Only a plan with a boundary still ahead of it and at least one calendar
+   * still on it can be resumed. One already 'cancelled' has had its
+   * subscription deleted at the provider, and one whose boundary has passed is
+   * waiting on that deletion; for both, a fresh checkout is the way back. One
+   * whose every allocation has been closed is cancelling because its last
+   * calendar was removed, and resuming it would renew a plan that covers
+   * nothing.
+   *
+   * Like `cancel`, the row is locked before the provider call so a concurrent
+   * cancel queues behind this one, and the provider call runs before the local
+   * write so a refusal leaves the cancellation in place. The adapter refuses
+   * too when the provider still reports a scheduled cancellation afterwards
+   * (one set for a specific date, say), so the local boundary is only cleared
+   * once the provider has actually dropped its own.
+   *
+   * The same asymmetry as `cancel` applies: if the provider call succeeds and
+   * the commit then fails, the provider will renew while the plan here still
+   * carries `cancel_at`. That fails safe — the customer is shown, and the
+   * access check enforces, an earlier end than the one they are paying past —
+   * and the provider's `customer.subscription.updated`, which reports
+   * `cancel_at: null`, clears the stale boundary through processWebhookEvent.
+   *
+   * @param fundingPlanId - Funding plan ID
+   * @throws FundingPlanNotFoundError when the plan does not exist
+   * @throws FundingPlanNotResumableError when there is no pending cancellation
+   *   that can still be withdrawn
+   */
+  async resume(fundingPlanId: string): Promise<void> {
+    await db.transaction(async (t: Transaction) => {
+      const entity = await FundingPlanEntity.findByPk(fundingPlanId, {
+        transaction: t,
+        lock: Transaction.LOCK.UPDATE,
+      });
+      if (!entity) {
+        throw new FundingPlanNotFoundError(fundingPlanId);
+      }
+
+      if (entity.status === 'cancelled' || !entity.cancel_at || entity.cancel_at.getTime() <= Date.now()) {
+        throw new FundingPlanNotResumableError(fundingPlanId);
+      }
+
+      // A plan with no calendar still on it is cancelling because its last
+      // calendar was removed. Withdrawing that cancellation would have the
+      // provider renew a subscription that covers nothing.
+      const openAllocation = await CalendarFundingPlanEntity.findOne({
+        where: {
+          funding_plan_id: entity.id,
+          end_time: { [Op.is]: null as any },
+        },
+        transaction: t,
+      });
+      if (!openAllocation) {
+        throw new FundingPlanNotResumableError(fundingPlanId);
+      }
+
+      const providerEntity = await ProviderConfigEntity.findByPk(entity.provider_config_id, {
+        transaction: t,
+      });
+      if (!providerEntity) {
+        throw new Error('Provider configuration not found');
+      }
+
+      const adapter = ProviderFactory.getAdapter(providerEntity);
+      await adapter.resumeSubscription(entity.provider_subscription_id, {
+        idempotencyKey: buildProviderIdempotencyKey('plan-resume', entity.id),
+      });
+
+      entity.cancel_at = null;
+      await entity.save({ transaction: t });
+    });
+  }
+
+  /**
+   * Get the funding plan an account is on
+   *
+   * An account accumulates plan rows: a plan that finalized to 'cancelled'
+   * stays behind as history when a fresh checkout creates the next one. Any
+   * plan that has not ended — active (including one winding down to its
+   * `cancel_at` boundary), past_due or suspended — is therefore preferred over
+   * a cancelled one, however much newer the cancelled row is. Only when every
+   * plan has ended is the most recent cancelled plan reported, so the account
+   * can see that its plan ended rather than that it never had one.
    *
    * @param accountId - Account ID
-   * @returns Funding plan or null if none exists
+   * @returns The account's current plan, its most recent ended plan when none
+   *   is current, or undefined if it has never held one
    */
   async getStatus(accountId: string): Promise<FundingPlan | undefined> {
-    const entity = await FundingPlanEntity.findOne({
+    const current = await FundingPlanEntity.findOne({
+      where: { account_id: accountId, status: { [Op.ne]: 'cancelled' } },
+      order: [['createdAt', 'DESC']],
+    });
+
+    const entity = current ?? await FundingPlanEntity.findOne({
       where: { account_id: accountId },
       order: [['createdAt', 'DESC']],
     });
@@ -1604,7 +1718,7 @@ export default class FundingService {
   /**
    * Process webhook event from payment provider
    *
-   * Two rules govern how a provider event may move a local plan:
+   * Three rules govern how a provider event may move a local plan:
    *
    *  - 'cancelled' is terminal here. A provider that reports any other status
    *    for a plan already cancelled locally is ignored, not applied. The
@@ -1614,6 +1728,13 @@ export default class FundingService {
    *    its `cancelled_at` as well. Resubscribing creates a new plan
    *    (processCheckoutCompleted); it never revives a cancelled one, so
    *    nothing legitimate needs this transition.
+   *  - Pavillion owns 'suspended' (DEC-022). The grace-period job suspends a
+   *    plan the provider still calls past_due and keeps retrying, so the
+   *    provider's next past_due report says nothing new and is not applied.
+   *    Applied, it would hand the plan back to the job's past_due scan with a
+   *    fresh `past_due_since` — a second grace period of coverage — to be
+   *    suspended and announced a second time when that ran out. A suspended plan leaves suspension only when the
+   *    provider reports it paid ('active') or ended ('cancelled').
    *  - A plan that is 'cancelled' once the event has been applied is finalized:
    *    the calendar allocations it was paying for get their `end_time` written,
    *    so the coverage record shows when it actually ended rather than staying
@@ -1699,10 +1820,9 @@ export default class FundingService {
       // any of the writes below can overwrite it. It is what the allocations
       // were covered through, so finalization has to date them from it.
       const scheduledCancelAt = fundingPlanRecord.cancel_at;
+      const previousStatus = fundingPlanRecord.status;
 
       if (event.status) {
-        const previousStatus = fundingPlanRecord.status;
-
         if (previousStatus === 'cancelled' && event.status !== 'cancelled') {
           logger.warn({
             eventId: event.eventId,
@@ -1710,6 +1830,18 @@ export default class FundingService {
             fundingPlanId: fundingPlanRecord.id,
             reportedStatus: event.status,
           }, 'Ignoring provider status for a funding plan that is already cancelled');
+        }
+        else if (previousStatus === 'suspended' && event.status === 'past_due') {
+          // Expected on every retry the provider makes after our grace period
+          // suspended the plan, so logged quietly. Nothing is emitted: the
+          // owner already has this episode's payment-failed and suspension
+          // emails, and the plan stays out of the suspension job's past_due
+          // scan, so no second suspension email follows either.
+          logger.info({
+            eventId: event.eventId,
+            eventType: event.eventType,
+            fundingPlanId: fundingPlanRecord.id,
+          }, 'Keeping a suspended funding plan suspended against a provider past_due report');
         }
         else {
           fundingPlanRecord.status = event.status;
@@ -1738,6 +1870,30 @@ export default class FundingService {
       // pending cancellation the customer reversed), a date schedules one.
       if (event.cancelAt !== undefined) {
         fundingPlanRecord.cancel_at = event.cancelAt;
+      }
+
+      // A cancellation that started at the provider (billing portal, Stripe
+      // dashboard, or Stripe ending the subscription after its retries) is
+      // announced here, so the owner hears about it as they would an in-app
+      // one. Only when no cancellation was recorded before this event: an
+      // in-app period-end cancel has already set cancel_at, and an in-app
+      // immediate cancel has already made the plan 'cancelled', so cancel()
+      // has announced those and their provider echoes stay quiet. A redelivery
+      // is stopped by the dedupe row, and a later distinct event finds the
+      // marker this one wrote.
+      if (!scheduledCancelAt) {
+        if (previousStatus !== 'cancelled' && fundingPlanRecord.status === 'cancelled') {
+          emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
+            fundingPlan: fundingPlanRecord.toModel(),
+            immediate: true,
+          }, t);
+        }
+        else if (fundingPlanRecord.status !== 'cancelled' && fundingPlanRecord.cancel_at) {
+          emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
+            fundingPlan: fundingPlanRecord.toModel(),
+            immediate: false,
+          }, t);
+        }
       }
 
       if (event.currentPeriodStart) {
@@ -1927,13 +2083,14 @@ export default class FundingService {
         // plan closes whatever allocation was still open for the same calendar
         // under an earlier one.
         //
-        // Not defensive tidying — without it this insert fails. A plan that
-        // went `suspended` keeps its allocations open (it may yet be revived)
-        // and does not block a fresh checkout, so buying a new plan for the
-        // same calendar is an ordinary, reachable sequence that would otherwise
-        // present the unique index on (calendar_id) WHERE end_time IS NULL with
-        // a second open row. The webhook would then fail, and the provider
-        // would retry it forever.
+        // Belt and braces, but load-bearing when it fires. A plan that went
+        // `suspended` keeps its allocations open (it may yet be revived). The
+        // checkout gate refuses a new plan while one is suspended, but a
+        // checkout can still complete past it — a session opened before the
+        // suspension, or one of the races the gate's comment lists — and
+        // without this close it would present the unique index on
+        // (calendar_id) WHERE end_time IS NULL with a second open row. The
+        // webhook would then fail, and the provider would retry it forever.
         //
         // addCalendarToFundingPlan carries the matching close for the same
         // reason. The two must stay symmetric: every path that opens an
@@ -1983,28 +2140,57 @@ export default class FundingService {
    * Suspend funding plans that have exceeded grace period
    *
    * Called by scheduled job to handle expired grace periods
+   *
+   * The scan is an unlocked snapshot, so each plan is re-read FOR UPDATE and
+   * suspended only if it still matches the scan: 'past_due', and past due
+   * since before the grace-period cutoff. Without that, a webhook landing
+   * between scan and write — Stripe's own `unpaid` → 'suspended', or a
+   * recovered payment → 'active' — would be overwritten from the stale
+   * snapshot, and a webhook suspension would be announced a second time (one
+   * more dunning email). `processWebhookEvent` takes the same row lock.
    */
   async suspendExpiredFundingPlans(): Promise<void> {
     const settings = await this.getSettings();
     const gracePeriodMs = settings.gracePeriodDays * 24 * 60 * 60 * 1000;
     const cutoffDate = new Date(Date.now() - gracePeriodMs);
 
-    const expiredFundingPlans = await FundingPlanEntity.findAll({
-      where: {
-        status: 'past_due',
-        updatedAt: {
-          [Op.lt]: cutoffDate,
-        },
-      },
-    });
+    // The scan's filter, reused under the lock below. Measured from
+    // past_due_since, which only the transition into past_due writes, so no
+    // later write to the row (a cancel, a resume, a provider echo) restarts
+    // the grace. A past-due row with no recorded instant counts as expired,
+    // as the access gate reads it (planAccessExpiry).
+    const expiredWhere = {
+      status: 'past_due',
+      [Op.or]: [
+        { past_due_since: { [Op.lt]: cutoffDate } },
+        { past_due_since: { [Op.is]: null as any } },
+      ],
+    };
 
-    for (const fundingPlanRecord of expiredFundingPlans) {
-      fundingPlanRecord.status = 'suspended';
-      fundingPlanRecord.suspended_at = new Date();
-      await fundingPlanRecord.save();
+    const expiredFundingPlans = await FundingPlanEntity.findAll({ where: expiredWhere });
 
-      this.eventBus.emit('funding:plan:suspended', {
-        fundingPlan: fundingPlanRecord.toModel(),
+    for (const candidate of expiredFundingPlans) {
+      await db.transaction(async (t: Transaction) => {
+        // The scan's conditions again, under the lock: still past due, and past
+        // due since before the cutoff — a plan that recovered and fell past due
+        // again after the scan has a fresh grace period. Evaluated by the
+        // database, so the comparison is the scan's own.
+        const fundingPlanRecord = await FundingPlanEntity.findOne({
+          where: { id: candidate.id, ...expiredWhere },
+          transaction: t,
+          lock: Transaction.LOCK.UPDATE,
+        });
+        if (!fundingPlanRecord) {
+          return;
+        }
+
+        fundingPlanRecord.status = 'suspended';
+        fundingPlanRecord.suspended_at = new Date();
+        await fundingPlanRecord.save({ transaction: t });
+
+        emitAfterTx(this.eventBus, 'funding:plan:suspended', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        }, t);
       });
     }
   }
@@ -2535,8 +2721,8 @@ export default class FundingService {
 
   /**
    * Check whether the calendar has a funding plan allocation that still grants
-   * access: an active allocation, on an active plan, inside the plan's access
-   * boundary.
+   * access: an active allocation, on an active or past-due plan, inside the
+   * plan's access boundary.
    *
    * Stricter than hasActiveFundingPlan, which trusts the plan's status alone
    * and therefore keeps granting access to a plan whose ending was never
@@ -2576,7 +2762,10 @@ export default class FundingService {
       },
       include: [{
         model: FundingPlanEntity,
-        where: { status: 'active' },
+        // Suspended and cancelled plans grant nothing. A past-due one keeps
+        // its calendars covered through the dunning grace (DEC-022), which
+        // planAccessExpiry bounds.
+        where: { status: { [Op.in]: ['active', 'past_due'] } },
         required: true,
       }],
     });
@@ -2594,13 +2783,13 @@ export default class FundingService {
    * The instant at which a funding plan stops granting access to its
    * calendars, or null if nothing on the plan sets an end.
    *
-   * These dates never widen access: the caller has already required
-   * status 'active', so a plan Stripe moved to past_due or suspended is
-   * denied by the join before any date is read. The boundaries only
-   * discriminate among plans that still claim to be active.
+   * These dates never widen access: the caller has already required status
+   * 'active' or 'past_due', so a suspended or cancelled plan is denied by the
+   * join before any date is read. The boundaries only discriminate among
+   * plans whose status still grants.
    *
-   * Two candidate boundaries are considered and the EARLIEST wins, because a
-   * gate helper must never round permissive:
+   * Up to three candidate boundaries are considered and the EARLIEST wins,
+   * because a gate helper must never round permissive:
    *
    *  - cancel_at, the instant a scheduled cancellation takes effect. A
    *    cancel-at-period-end leaves the plan 'active' — the customer is paid up
@@ -2613,15 +2802,25 @@ export default class FundingService {
    *    silent-renewal-failure and missed-deletion cases. The grace window
    *    exists for the plan that is still 'active' with a renewal webhook in
    *    flight or lost: it keeps a paying customer from being cut off the
-   *    instant their period rolls over. It is not the dunning window —
-   *    suspendExpiredFundingPlans measures its own grace from updatedAt on
-   *    past_due rows, and those rows never reach this helper.
+   *    instant their period rolls over. It is not the dunning window, which
+   *    is the next boundary.
+   *  - past_due_since plus the instance grace period, on a past_due plan
+   *    only. This is the dunning window (DEC-022): a plan whose payment failed
+   *    keeps its calendars covered until the grace period ends. It is measured
+   *    exactly as suspendExpiredFundingPlans measures it, from the instant the
+   *    plan became past due, so coverage ends when the job becomes entitled to
+   *    suspend the plan — whether or not the job has run yet. Never from
+   *    updatedAt: a cancel, a resume or any provider echo moves that, and a
+   *    holder who never pays could keep pushing the grace forward with them. The provider usually
+   *    advances current_period_end when it opens the unpaid invoice, so
+   *    without this boundary a past-due plan would ride the new period's end.
    *
    * ## Precedence among the end-of-entitlement markers
    *
    * Four stored values can end a calendar's coverage. They are not competing
    * answers to one question; each answers a different one, and only two are
-   * read here:
+   * read here (past_due_since, above, is the dunning clock rather than an
+   * end-of-entitlement marker):
    *
    *  1. CalendarFundingPlanEntity.end_time — when THIS CALENDAR's allocation
    *     ends, whatever the plan goes on to do. Applied by qualifyingFundingPlan's
@@ -2655,11 +2854,20 @@ export default class FundingService {
   private planAccessExpiry(plan: FundingPlanEntity, gracePeriodDays: number): Date | null {
     const graceMs = Math.max(gracePeriodDays, 0) * 24 * 60 * 60 * 1000;
 
+    // A missing or unreadable instant would make the dunning boundary absent
+    // or NaN, and either one lets the period end weeks ahead stand alone:
+    // permissive. Read it as the epoch instead — grace long over, access
+    // denied — which is also how the suspension job treats a NULL.
+    const pastDueSince = plan.status === 'past_due'
+      ? (Number.isFinite(plan.past_due_since?.getTime()) ? plan.past_due_since!.getTime() : 0)
+      : null;
+
     const boundaries = [
       plan.cancel_at,
       plan.current_period_end
         ? new Date(plan.current_period_end.getTime() + graceMs)
         : null,
+      pastDueSince !== null ? new Date(pastDueSince + graceMs) : null,
     ].filter((boundary): boundary is Date => boundary instanceof Date);
 
     if (boundaries.length === 0) {

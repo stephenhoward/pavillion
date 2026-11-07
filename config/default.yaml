@@ -195,6 +195,10 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 requests per account per 15 minutes
+  fundingPlanChange:
+    byAccount:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 10  # 10 cancel/resume requests per account per 15 minutes
   fundingWebhook:
     byIp:
       windowMs: 60000  # 1 minute in milliseconds

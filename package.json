@@ -2,7 +2,7 @@
   "name": "pavillion",
   "version": "0.0.0",
   "repository": "github:stephenhoward/pavillion",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "type": "module",
   "private": true,
   "engines": {
@@ -28,7 +28,8 @@
     "test:integration": "npx vitest run --config vitest.integration.config.ts --silent",
     "test:ratelimiting": "npx vitest run --config vitest.ratelimiting.config.ts --silent",
     "test:watch": "npx vitest --ui",
-    "test:e2e": "npx playwright test --quiet",
+    "test:e2e": "npx playwright test --project=chromium --quiet",
+    "test:e2e:webkit": "npx playwright test --project=webkit --quiet",
     "test:e2e:ui": "npx playwright test --ui",
     "test:e2e:debug": "npx playwright test --debug",
     "test:federation": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx playwright test --config=playwright.federation.config.ts --quiet",

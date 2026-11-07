@@ -205,6 +205,19 @@ export default class FundingInterface {
     return this.fundingService.cancel(fundingPlanId, immediate);
   }
 
+  /**
+   * Withdraw a pending period-end cancellation on a funding plan.
+   *
+   * Performs no ownership check of its own. The caller must have resolved
+   * `fundingPlanId` from the acting account (as POST /resume does through
+   * `getStatus(account.id)`), never taken it from request input.
+   *
+   * @param fundingPlanId - ID of the acting account's own plan
+   */
+  async resume(fundingPlanId: string): Promise<void> {
+    return this.fundingService.resume(fundingPlanId);
+  }
+
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
     return this.fundingService.getBillingPortalUrl(accountId, returnUrl);
   }
@@ -251,7 +264,7 @@ export default class FundingInterface {
   // Calendar funding plan operations
 
   /**
-   * Get all calendars in the account's active funding plan
+   * Get the calendars the account's funding plan holds open allocations for
    *
    * @param accountId - Account ID to look up
    * @returns Array of covered calendar allocations (calendarId, amount, createdAt)

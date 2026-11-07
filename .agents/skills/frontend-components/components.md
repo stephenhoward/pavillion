@@ -98,6 +98,24 @@ const emit = defineEmits<{
 
 Non-form components may use custom events when v-model doesn't fit semantically.
 
+## Flow State
+
+A flow with more than two steps or outcomes holds its position in one typed union, not in several booleans:
+
+```typescript
+// ✓ Preferred
+type FormState = 'configure' | 'checkout' | 'result';
+const formState = ref<FormState>('configure');
+
+// ✗ Avoid: can represent states the flow never reaches
+const showCheckout = ref(false);
+const isComplete = ref(false);
+```
+
+`FundingForm.vue` and `VerifyOwnershipWizard.vue` are the models.
+
+A single request's `loading` or `saving` flag doesn't need a union. Convert an existing component only when it is changing for another reason and its state is part of that change.
+
 ## Accessibility Requirements
 
 Cross-app shared components in `common/components/` must meet WCAG AA:
