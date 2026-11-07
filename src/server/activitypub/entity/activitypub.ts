@@ -13,6 +13,7 @@ import DeleteActivity from '@/server/activitypub/model/action/delete';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
+import RejectActivity from '@/server/activitypub/model/action/reject';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
 class ActivityPubMessageEntity extends Model {
@@ -64,6 +65,9 @@ class ActivityPubMessageEntity extends Model {
         break;
       case 'Accept':
         builder = (object: any) => AcceptActivity.fromObject(object);
+        break;
+      case 'Reject':
+        builder = (object: any) => RejectActivity.fromObject(object);
         break;
       case 'Announce':
         builder = (object: any) => AnnounceActivity.fromObject(object);

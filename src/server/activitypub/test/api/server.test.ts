@@ -177,6 +177,30 @@ describe('addToInbox', () => {
     expect(vi.mocked(logInboxActivityAccepted)).toHaveBeenCalledWith('calendar', 'testuser', req.body);
   });
 
+  it('should accept a Reject activity into the inbox', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Reject',
+        id: 'https://example.com/activities/rj1',
+        actor: 'https://example.com/actor',
+        object: 'https://local.example/calendars/testuser/follows/1',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('testId', 'testuser'));
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+    res.status.returns(res);
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(inboxMock.calledOnce).toBe(true);
+    expect((inboxMock.firstCall.args[1] as any).type).toBe('Reject');
+  });
+
   it('should not record acceptance when the inbox write fails', async () => {
     // Ordering is the point: the acceptance record must sit downstream of the
     // write, so a write that throws leaves no acceptance behind.

@@ -7,6 +7,7 @@ import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
+import RejectActivity from '@/server/activitypub/model/action/reject';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import JoinActivity from '@/server/activitypub/model/action/join';
@@ -37,6 +38,7 @@ import {
   deleteActivitySchema,
   followActivitySchema,
   acceptActivitySchema,
+  rejectActivitySchema,
   announceActivitySchema,
   undoActivitySchema,
   joinActivitySchema,
@@ -418,6 +420,9 @@ export default class ActivityPubServerRoutes {
       case 'Accept':
         activityValidation = acceptActivitySchema.safeParse(req.body);
         break;
+      case 'Reject':
+        activityValidation = rejectActivitySchema.safeParse(req.body);
+        break;
       case 'Announce':
         activityValidation = announceActivitySchema.safeParse(req.body);
         break;
@@ -521,6 +526,9 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Accept':
         message = AcceptActivity.fromObject(req.body);
+        break;
+      case 'Reject':
+        message = RejectActivity.fromObject(req.body);
         break;
       case 'Announce':
         message = AnnounceActivity.fromObject(req.body);
