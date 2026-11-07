@@ -107,6 +107,17 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
     }
     calendarId = calResponse.body.id;
 
+    // Created here, before any event exists: handleEventCreated's findOrCreate
+    // opens a transaction after the POST responds, and a calendar create racing
+    // it on SQLite's single connection fails with a 500.
+    const otherCal = await request(env.app)
+      .post('/api/v1/calendars')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ urlName: 'otherinstancecal', languages: 'en' });
+    if (otherCal.status !== 201 && otherCal.status !== 200) {
+      throw new Error(`Failed to create second calendar: ${otherCal.status} ${JSON.stringify(otherCal.body)}`);
+    }
+
     // Create a Place (Location) for space-scoped event tests.
     const locResponse = await request(env.app)
       .post(`/api/v1/calendars/${calendarId}/locations`)
@@ -687,16 +698,6 @@ describe('GET /api/public/v1/events/:eventId/instances/:startTime', () => {
    * visible on that calendar (owned or reposted), or the response is 404.
    */
   describe('?calendar= binds the response to the named calendar', () => {
-    beforeAll(async () => {
-      const otherCal = await request(env.app)
-        .post('/api/v1/calendars')
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ urlName: 'otherinstancecal', languages: 'en' });
-      if (otherCal.status !== 201 && otherCal.status !== 200) {
-        throw new Error(`Failed to create second calendar: ${otherCal.status} ${JSON.stringify(otherCal.body)}`);
-      }
-    });
-
     it('returns the instance when ?calendar= names the owning calendar', async () => {
       const eventId = await createOneShotEvent(
         '2034-02-10T18:00:00Z',
