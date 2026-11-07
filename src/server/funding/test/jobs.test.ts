@@ -8,13 +8,13 @@ import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings'
 import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import FundingService from '@/server/funding/service/funding';
-import { checkGracePeriodExpiry } from '@/server/funding/service/jobs';
+import { checkGracePeriodExpiry, startScheduledJobs } from '@/server/funding/service/jobs';
 import { backdatePastDue } from '@/server/funding/test/fixtures/past-due';
 
 describe('Funding Plan Scheduled Jobs', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
-  let _service: FundingService;
+  let service: FundingService;
   let _clock: sinon.SinonFakeTimers;
 
   beforeAll(async () => {
@@ -25,7 +25,7 @@ describe('Funding Plan Scheduled Jobs', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
-    _service = new FundingService(eventBus);
+    service = new FundingService(eventBus);
 
     // Use fake timers to control date/time
     _clock = sandbox.useFakeTimers({
@@ -36,6 +36,30 @@ describe('Funding Plan Scheduled Jobs', () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  describe('startScheduledJobs', () => {
+    it('emits job events on the event bus it is given', async () => {
+      // The grace job's suspension is what emails the plan owner, and the
+      // email handler listens on the domain's bus. A job running on any
+      // other bus suspends the plan and drops the event.
+      sandbox.stub(FundingService.prototype, 'suspendExpiredFundingPlans').callsFake(async function (this: any) {
+        this.eventBus.emit('funding:plan:suspended', { fundingPlan: { id: 'plan-1' } });
+      });
+      sandbox.stub(FundingService.prototype, 'revokeExpiredGrants').resolves();
+      const suspended = sandbox.spy();
+      eventBus.on('funding:plan:suspended', suspended);
+
+      const stopJobs = startScheduledJobs(eventBus);
+      try {
+        await _clock.tickAsync(10_000); // the initial run after startup
+      }
+      finally {
+        stopJobs();
+      }
+
+      expect(suspended.calledOnceWith({ fundingPlan: { id: 'plan-1' } })).toBe(true);
+    });
   });
 
   describe('checkGracePeriodExpiry', () => {
@@ -96,7 +120,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       await backdatePastDue(expiredPlan.id, eightDaysAgo);
 
       // Run the job
-      await checkGracePeriodExpiry();
+      await checkGracePeriodExpiry(service);
 
       // Reload funding plan to check status
       await expiredPlan.reload();
@@ -165,7 +189,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       expect(plan.status).toBe('past_due');
 
       // Run the job
-      await checkGracePeriodExpiry();
+      await checkGracePeriodExpiry(service);
 
       // Reload and verify transition
       await plan.reload();
@@ -232,7 +256,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       expect(plan.suspended_at).toBeNull();
 
       // Run the job
-      await checkGracePeriodExpiry();
+      await checkGracePeriodExpiry(service);
 
       // Reload and verify suspended_at is set
       await plan.reload();
@@ -323,7 +347,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       await backdatePastDue(veryRecentPlan.id, oneDayAgo);
 
       // Run the job
-      await checkGracePeriodExpiry();
+      await checkGracePeriodExpiry(service);
 
       // Reload both funding plans
       await recentPlan.reload();
@@ -414,7 +438,7 @@ describe('Funding Plan Scheduled Jobs', () => {
     it('should not suspend, or announce, a plan a webhook already suspended', async () => {
       const { plan, emitted } = await seedStaleCandidate('suspended', new Date('2026-01-05T12:00:00Z'));
 
-      await _service.suspendExpiredFundingPlans();
+      await service.suspendExpiredFundingPlans();
       await _clock.runAllAsync();
 
       await plan.reload();
@@ -427,7 +451,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       // recovered and failed once more between scan and lock.
       const { plan, emitted } = await seedStaleCandidate('past_due', new Date('2026-01-14T12:00:00Z'));
 
-      await _service.suspendExpiredFundingPlans();
+      await service.suspendExpiredFundingPlans();
       await _clock.runAllAsync();
 
       await plan.reload();
@@ -438,7 +462,7 @@ describe('Funding Plan Scheduled Jobs', () => {
     it('should suspend, and announce once, a plan the scan read correctly', async () => {
       const { plan, emitted } = await seedStaleCandidate('past_due', new Date('2026-01-05T12:00:00Z'));
 
-      await _service.suspendExpiredFundingPlans();
+      await service.suspendExpiredFundingPlans();
       await _clock.runAllAsync();
 
       await plan.reload();
@@ -504,7 +528,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       const emitted = sandbox.spy();
       eventBus.on('funding:plan:suspended', emitted);
 
-      await _service.processWebhookEvent({
+      await service.processWebhookEvent({
         eventId: `evt_${uuidv4()}`,
         eventType: 'invoice.payment_failed',
         subscriptionId,
@@ -514,7 +538,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       // A grace period on, the job runs again.
       _clock.tick(8 * 24 * 60 * 60 * 1000);
 
-      await _service.suspendExpiredFundingPlans();
+      await service.suspendExpiredFundingPlans();
       await _clock.runAllAsync();
 
       await plan.reload();
@@ -577,7 +601,7 @@ describe('Funding Plan Scheduled Jobs', () => {
       // Bulk update, so the status hook that owns the column does not run.
       await FundingPlanEntity.update({ past_due_since: null }, { where: { id: plan.id } });
 
-      await _service.suspendExpiredFundingPlans();
+      await service.suspendExpiredFundingPlans();
 
       await plan.reload();
       expect(plan.status).toBe('suspended');

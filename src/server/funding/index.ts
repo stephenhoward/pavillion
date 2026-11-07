@@ -71,7 +71,7 @@ export default class FundingDomain {
     this.installAPI(app);
 
     // Start scheduled jobs (grace period check)
-    this.stopJobs = startScheduledJobs();
+    this.stopJobs = startScheduledJobs(this.eventBus);
   }
 
   public installAPI(app: Application): void {
