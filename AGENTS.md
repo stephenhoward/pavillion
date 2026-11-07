@@ -127,7 +127,10 @@ When the `budget-watch` mod is loaded (`.agents/mods/budget-watch`; inert otherw
 
 Recurring agent time-wasters, verified against session history — read before shelling out:
 
-- The Bash tool runs zsh. Quote glob arguments (`--include='*.ts'`, `ls 'vitest*.ts'`) — an unquoted glob that matches nothing aborts the **entire** command with "no matches found", including parts that would have worked. Bare `===` echo separators trigger zsh equals-expansion (`=== not found`); quote them (`echo '==='`).
+- The Bash tool runs zsh: an unquoted glob that matches nothing aborts the **entire** command with "no matches found", including parts that would have worked. Two cases, two fixes:
+  - A glob meant as a *pattern* for the tool to interpret — quote it: `--include='*.ts'`, `find src -name '*.vue'`.
+  - A glob over *paths* that may not exist (`ls src/foo/seed*`, `grep x .github/workflows/*publish*`, `cat dir/*.ts`) — quoting does not help, it hands the tool a literal `*`. Don't probe with a shell glob: use the Glob tool, or `find <dir> -name '<pattern>'`, which prints nothing instead of aborting.
+- Bare `===` echo separators trigger zsh equals-expansion (`=== not found`); quote them (`echo '==='`).
 - `grep` in the Bash tool is a ugrep shim, not `/usr/bin/grep`. `\+` in patterns fails with "invalid syntax" — match a literal leading `+` (e.g. git-diff added lines) with `'^[+]'`. Prefer the Grep tool for searches.
 - A no-match `grep` exits 1, which marks the whole Bash call as an error and skips any later `&&` steps. Append `|| true` when zero matches is an acceptable outcome, or end compound commands with something that always succeeds.
 - `npm run test:e2e` (154 tests) exceeds the default 2-minute Bash timeout; pass a 10-minute timeout when running it.
