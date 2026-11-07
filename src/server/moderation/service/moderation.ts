@@ -1126,8 +1126,19 @@ class ModerationService {
    * @throws InvalidVerificationTokenError if token is invalid, expired, or already used
    */
   async verifyReport(token: string): Promise<Report> {
-    // Atomic update: only succeeds if the token exists, the report is still
-    // pending verification, and the token has not expired
+    // Locate the report by token first so the row we act on and emit for is
+    // the one that was verified, not whichever report was updated last.
+    const candidate = await ReportEntity.findOne({
+      where: { verification_token: token },
+    });
+
+    if (!candidate) {
+      throw new InvalidVerificationTokenError();
+    }
+
+    // Atomic update: only succeeds if the row still carries the token, the
+    // report is still pending verification, and the token has not expired.
+    // Scoped to the id so only one concurrent request can win.
     const [affectedCount] = await ReportEntity.update(
       {
         status: ReportStatus.SUBMITTED,
@@ -1136,6 +1147,7 @@ class ModerationService {
       },
       {
         where: {
+          id: candidate.id,
           verification_token: token,
           status: ReportStatus.PENDING_VERIFICATION,
           verification_expiration: {
@@ -1149,18 +1161,7 @@ class ModerationService {
       throw new InvalidVerificationTokenError();
     }
 
-    // Retrieve the updated report for event emission.
-    // The token was cleared by the atomic update, so we find the report
-    // by querying for the most recently updated submitted report with a
-    // null verification token. This is safe because the atomic update
-    // guarantees only one request succeeds.
-    const entity = await ReportEntity.findOne({
-      where: {
-        status: ReportStatus.SUBMITTED,
-        verification_token: null,
-      },
-      order: [['updated_at', 'DESC']],
-    });
+    const entity = await ReportEntity.findByPk(candidate.id);
 
     if (!entity) {
       throw new InvalidVerificationTokenError();
