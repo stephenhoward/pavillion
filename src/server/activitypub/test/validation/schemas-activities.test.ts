@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   followActivitySchema,
   acceptActivitySchema,
+  rejectActivitySchema,
   createActivitySchema,
   updateActivitySchema,
   deleteActivitySchema,
@@ -165,6 +166,36 @@ describe('ActivityPub Validation Schemas - Activities', () => {
 
       const result = followActivitySchema.safeParse(invalidFollow);
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('rejectActivitySchema', () => {
+    const base = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: 'https://remote.example/activities/789',
+      type: 'Reject',
+      actor: 'https://remote.example/calendars/events',
+    };
+
+    it('accepts a URI object', () => {
+      const result = rejectActivitySchema.safeParse({ ...base, object: 'https://example.com/activities/123' });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts an embedded Follow object', () => {
+      const result = rejectActivitySchema.safeParse({
+        ...base,
+        object: {
+          type: 'Follow',
+          actor: 'https://example.com/calendars/mine',
+          object: 'https://remote.example/calendars/events',
+        },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a missing object', () => {
+      expect(rejectActivitySchema.safeParse(base).success).toBe(false);
     });
   });
 

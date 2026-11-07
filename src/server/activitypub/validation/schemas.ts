@@ -341,6 +341,17 @@ export const acceptActivitySchema = activityBaseSchema.extend({
 });
 
 /**
+ * Schema for a Reject activity: a peer refusing (or revoking) a Follow.
+ * The object is the rejected activity, inline or by URI.
+ *
+ * @see https://www.w3.org/TR/activitypub/#reject-activity-inbox
+ */
+export const rejectActivitySchema = activityBaseSchema.extend({
+  type: z.literal('Reject'),
+  object: objectReferenceSchema,
+});
+
+/**
  * Type for a validated Follow activity.
  */
 export type FollowActivity = z.infer<typeof followActivitySchema>;
@@ -349,6 +360,7 @@ export type FollowActivity = z.infer<typeof followActivitySchema>;
  * Type for a validated Accept activity.
  */
 export type AcceptActivity = z.infer<typeof acceptActivitySchema>;
+export type RejectActivity = z.infer<typeof rejectActivitySchema>;
 
 /**
  * Schema for ActivityPub Announce activity.

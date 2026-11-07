@@ -15,6 +15,7 @@ import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
+import RejectActivity from "@/server/activitypub/model/action/reject";
 import IgnoreActivity from "@/server/activitypub/model/action/ignore";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import UndoActivity from "@/server/activitypub/model/action/undo";
@@ -498,6 +499,26 @@ class ProcessInboxService {
             throw new Error('Failed to parse Accept activity');
           }
           await this.processAcceptActivity(calendar, activity);
+        }
+        break;
+      case 'Reject':
+        {
+          const activity = RejectActivity.fromObject(message.message);
+          if (!activity) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'parse_failure',
+              activity_type: 'Reject',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Failed to parse Reject activity',
+              message_id: message.id,
+            });
+            throw new Error('Failed to parse Reject activity');
+          }
+          await this.processRejectActivity(calendar, activity);
         }
         break;
       case 'Announce':
@@ -2199,6 +2220,74 @@ class ProcessInboxService {
    * @param {AcceptActivity} message - The Accept activity message
    * @returns {Promise<void>}
    */
+  async processRejectActivity(calendar: Calendar, message: RejectActivity) {
+    const rejectedObject = message.object;
+
+    if (!rejectedObject) {
+      logger.warn('Reject activity missing object');
+      return;
+    }
+
+    // Only the followed actor may refuse a Follow of it, so unlike the Accept
+    // path this matches the sender exactly rather than by host.
+    let followedActorUri: string | null = null;
+    let followId: string | null = null;
+
+    if (typeof rejectedObject === 'string') {
+      followId = rejectedObject;
+    }
+    else if (rejectedObject.type === 'Follow' && typeof rejectedObject.object === 'string') {
+      followedActorUri = rejectedObject.object;
+      if (followedActorUri !== message.actor) {
+        logger.warn(`Reject from ${message.actor} names a different followed actor: ${followedActorUri}`);
+        return;
+      }
+    }
+
+    if (!followedActorUri && !followId) {
+      this.logRejectNoOp(calendar, message);
+      return;
+    }
+
+    const remoteCalendar = await this.remoteCalendarService.getByActorUri(message.actor);
+    let followingRecord: FollowingCalendarEntity | null = null;
+
+    if (remoteCalendar) {
+      followingRecord = followId
+        ? await FollowingCalendarEntity.findOne({ where: { id: followId, calendar_id: calendar.id } })
+        : await FollowingCalendarEntity.findOne({
+          where: { calendar_actor_id: remoteCalendar.id, calendar_id: calendar.id },
+        });
+      if (followingRecord && followingRecord.calendar_actor_id !== remoteCalendar.id) {
+        logger.warn(`Reject from ${message.actor} does not match the actor of the referenced Follow`);
+        return;
+      }
+    }
+
+    if (!followingRecord) {
+      this.logRejectNoOp(calendar, message);
+      return;
+    }
+
+    await followingRecord.destroy();
+    logger.info(`Follow of ${message.actor} removed for calendar ${calendar.urlName} after Reject`);
+    this.eventBus.emit('activitypub:calendar:unfollowed', {
+      calendarId: calendar.id,
+      sourceActorUri: message.actor,
+    });
+  }
+
+  private logRejectNoOp(calendar: Calendar, message: RejectActivity) {
+    logger.info(
+      {
+        activityId: message.id,
+        actor_domain: this.extractDomain(message.actor || 'unknown'),
+        calendarUrlName: calendar.urlName,
+      },
+      '[INBOX] Recorded inbound Reject; no action taken',
+    );
+  }
+
   async processAcceptActivity(calendar: Calendar, message: AcceptActivity) {
     logger.info(`Processing Accept activity from ${message.actor} for calendar ${calendar.urlName}`);
 

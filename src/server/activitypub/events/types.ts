@@ -110,7 +110,9 @@ export interface ActivityPubEventRepostedPayload {
 
 /**
  * Emitted by `ActivityPubService.unfollowCalendar` after the local follow
- * row(s) are destroyed and the Undo(Follow) is queued. The calendar domain
+ * row(s) are destroyed and the Undo(Follow) is queued, and by
+ * `ProcessInboxService.processRejectActivity` after a peer's Reject(Follow)
+ * removes the follow row. The calendar domain
  * consumes it to clear the `origin_uri` dedup stamps on Places/Spaces the
  * follower mirrored from the unfollowed source.
  *
