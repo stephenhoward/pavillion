@@ -840,13 +840,22 @@ describe('Funding Plan System Integration Tests', () => {
       });
       await settings.save();
 
-      const { account, plan, providerConfig, mockAdapter } = await seedCoveredAccount();
+      const { account, plan, allocation, providerConfig, mockAdapter } = await seedCoveredAccount();
       await service.cancel(plan.id, false);
       await finalizeCancellation(providerConfig.id);
+      service.setCalendarInterface({
+        isCalendarOwnerById: sandbox.stub().resolves(true),
+      } as any);
 
       // The checkout gate counts only an 'active' plan, so a finalized one is
       // history rather than the account's one plan.
-      const session = await service.createCheckoutSession(account.id, 'monthly', 'https://pavillion.dev/return');
+      const session = await service.createCheckoutSession(
+        account.id,
+        'monthly',
+        'https://pavillion.dev/return',
+        undefined,
+        [allocation.calendar_id],
+      );
 
       expect(session.sessionId).toBe('cs_test_abc123');
       expect(mockAdapter.createCheckoutSession.calledOnce).toBe(true);

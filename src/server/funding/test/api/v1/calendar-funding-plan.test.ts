@@ -12,6 +12,7 @@ import {
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
   FundingAccessIndeterminateError,
+  InvalidAmountError,
 } from '@/common/exceptions/funding';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
@@ -144,7 +145,23 @@ describe('CalendarFundingPlanRoutes API', () => {
       expect(response.body.error).toContain('Invalid calendarId');
     });
 
-    it('should return 400 when amount is missing', async () => {
+    it('should leave a missing amount for the service to rule on', async () => {
+      // Only the service knows the instance's pricing mode: fixed-price
+      // instances need no amount, and pay-what-you-can ones refuse without one.
+      const calendarId = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
+      mockInterface.addCalendarToFundingPlan.resolves();
+      bindAddCalendar();
+
+      await request(testApp(router))
+        .post('/handler')
+        .send({ calendarId })
+        .expect(200);
+
+      expect(mockInterface.addCalendarToFundingPlan.firstCall.args).toEqual(['test-account-id', calendarId, undefined]);
+    });
+
+    it('should answer 400 when the service refuses a missing amount', async () => {
+      mockInterface.addCalendarToFundingPlan.rejects(new InvalidAmountError('Amount must be a positive integer in millicents'));
       bindAddCalendar();
 
       const response = await request(testApp(router))
@@ -152,7 +169,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .send({ calendarId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d' })
         .expect(400);
 
-      expect(response.body.error).toContain('amount is required');
+      expect(response.body.errorName).toBe('InvalidAmountError');
     });
 
     it.each([

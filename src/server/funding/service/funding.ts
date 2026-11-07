@@ -660,6 +660,38 @@ export default class FundingService {
   }
 
   /**
+   * The configured price of covering one calendar for a billing cycle
+   *
+   * @param settings - Instance funding settings
+   * @param billingCycle - Billing cycle to price
+   * @returns Price per calendar in millicents
+   */
+  private calendarPrice(settings: FundingSettings, billingCycle: BillingCycle): number {
+    return billingCycle === 'monthly' ? settings.monthlyPrice : settings.yearlyPrice;
+  }
+
+  /**
+   * Validate the amount a pay-what-you-can owner offers for adding a calendar
+   *
+   * Same floor as the checkout path, so an allocation can never cover a
+   * calendar for less than checkout would have charged.
+   *
+   * @param amount - Offered amount in millicents
+   * @returns The validated amount
+   * @throws InvalidAmountError if the amount is missing, fractional or below the floor
+   */
+  private validatedAddAmount(amount: number | undefined): number {
+    if (amount === undefined || !Number.isInteger(amount)) {
+      throw new InvalidAmountError('Amount must be a positive integer in millicents');
+    }
+    if (amount < MIN_PWYC_AMOUNT) {
+      throw new InvalidAmountError(`Amount must be at least ${MIN_PWYC_AMOUNT} millicents ($1.00)`);
+    }
+
+    return amount;
+  }
+
+  /**
    * Add a calendar to an existing funding plan
    *
    * Resolves the active funding plan for the account internally.
@@ -679,14 +711,18 @@ export default class FundingService {
    * and less harmful of the two failure orderings, and it fails toward
    * over-charging rather than toward unbilled entitlement.
    *
+   * On a fixed-price instance the allocation is the configured price for the
+   * plan's billing cycle, and any amount the caller sends is ignored. On a
+   * pay-what-you-can instance the caller's amount is required.
+   *
    * @param accountId - Account ID (used to resolve funding plan and verify ownership)
    * @param calendarId - Calendar ID to add
-   * @param amount - Amount to allocate in millicents
+   * @param amount - Amount to allocate in millicents (pay-what-you-can only)
    */
   async addCalendarToFundingPlan(
     accountId: string,
     calendarId: string,
-    amount: number,
+    amount?: number,
   ): Promise<void> {
     // Validate UUIDs
     if (!isValidUUID(accountId)) {
@@ -696,14 +732,8 @@ export default class FundingService {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Validate amount: same floor as the checkout path, so an allocation can
-    // never cover a calendar for less than checkout would have charged
-    if (!Number.isInteger(amount)) {
-      throw new InvalidAmountError('Amount must be a positive integer in millicents');
-    }
-    if (amount < MIN_PWYC_AMOUNT) {
-      throw new InvalidAmountError(`Amount must be at least ${MIN_PWYC_AMOUNT} millicents ($1.00)`);
-    }
+    const settings = await this.getSettings();
+    const offeredAmount = settings.payWhatYouCan ? this.validatedAddAmount(amount) : null;
 
     await db.transaction(async (tx: Transaction) => {
       // Lock the plan row first: every read below derives the provider total
@@ -769,7 +799,7 @@ export default class FundingService {
         id: uuidv4(),
         funding_plan_id: fundingPlanEntity.id,
         calendar_id: calendarId,
-        amount,
+        amount: offeredAmount ?? this.calendarPrice(settings, fundingPlanEntity.billing_cycle),
         end_time: null,
       }, { transaction: tx });
 
@@ -1146,14 +1176,18 @@ export default class FundingService {
    * - Rejects if user already has an active funding plan
    * - Rejects if no Stripe provider is configured/enabled
    * - Validates calendarId ownership via calendar interface
-   * - Enforces PWYC amount bounds when amount is provided
+   * - On a fixed-price instance, charges the configured price per covered
+   *   calendar, requires at least one calendar, and ignores any amount sent
+   * - On a pay-what-you-can instance, enforces the amount bounds when an amount
+   *   is provided
    * - accountId comes from the authenticated account, never from request body
    *
    * @param accountId - Authenticated account ID
    * @param billingCycle - 'monthly' or 'yearly'
    * @param returnUrl - URL to return to after checkout
-   * @param amount - Optional amount in millicents (for PWYC pricing)
-   * @param calendarIds - Optional array of calendar IDs the plan should cover
+   * @param amount - Optional amount in millicents (pay-what-you-can only)
+   * @param calendarIds - Calendar IDs the plan should cover; required, with at
+   *   least one entry, on a fixed-price instance
    * @returns Client secret and session ID for the embedded checkout
    */
   async createCheckoutSession(
@@ -1230,10 +1264,21 @@ export default class FundingService {
       }
     }
 
+    // A repeated id is one calendar: charging per entry would bill for it twice,
+    // and the second entry would break the open-allocation index at completion.
+    const coveredCalendarIds = calendarIds && [...new Set(calendarIds)];
+
     // Determine pricing: either use fixed price from settings or PWYC amount
     let checkoutAmount: number | undefined;
 
-    if (amount !== undefined) {
+    if (!settings.payWhatYouCan) {
+      // The price is per calendar, so a plan covering none has no price
+      if (!coveredCalendarIds?.length) {
+        throw new ValidationError('At least one calendar is required to start a funding plan');
+      }
+      checkoutAmount = this.calendarPrice(settings, billingCycle) * coveredCalendarIds.length;
+    }
+    else if (amount !== undefined) {
       // PWYC: validate amount bounds
       if (!Number.isInteger(amount)) {
         throw new InvalidAmountError('Amount must be a positive integer in millicents');
@@ -1247,8 +1292,8 @@ export default class FundingService {
       checkoutAmount = amount;
     }
     else {
-      // Fixed pricing: use the settings price for the selected billing cycle
-      checkoutAmount = billingCycle === 'monthly' ? settings.monthlyPrice : settings.yearlyPrice;
+      // PWYC with no amount chosen: one configured price for the whole plan
+      checkoutAmount = this.calendarPrice(settings, billingCycle);
     }
 
     // Map billing cycle to Stripe interval
@@ -1261,7 +1306,7 @@ export default class FundingService {
       currency: settings.currency,
       interval,
       accountId,
-      calendarIds,
+      calendarIds: coveredCalendarIds,
       returnUrl,
       colorMode,
       productName: await this.productName(),
@@ -1971,6 +2016,43 @@ export default class FundingService {
   }
 
   /**
+   * Decide what each calendar of a newly completed plan is allocated
+   *
+   * A pay-what-you-can plan divides what the owner chose to pay. A fixed-price
+   * plan allocates the configured price, unless that no longer adds up to what
+   * was charged: the price may have changed after the session opened, or a
+   * calendar may have left the account. The charge has already happened and the
+   * provider would retry a failed webhook to no end, so the plan is still built
+   * from what was actually charged, and the mismatch is logged.
+   *
+   * @param plan - The plan being created, with its charged amount and cycle
+   * @param calendarCount - Number of calendars the plan covers (at least one)
+   * @param settings - Instance funding settings
+   * @returns Amount to allocate to each calendar, in millicents
+   * @private
+   */
+  private perCalendarAllocation(plan: FundingPlan, calendarCount: number, settings: FundingSettings): number {
+    const evenSplit = Math.floor(plan.amount / calendarCount);
+
+    if (settings.payWhatYouCan) {
+      return evenSplit;
+    }
+
+    const price = this.calendarPrice(settings, plan.billingCycle);
+    if (price * calendarCount === plan.amount) {
+      return price;
+    }
+
+    logger.warn({
+      fundingPlanId: plan.id,
+      billingCycle: plan.billingCycle,
+      calendarCount,
+    }, 'Checkout charge does not match the configured price for its calendars; splitting what was charged');
+
+    return evenSplit;
+  }
+
+  /**
    * Process a checkout.session.completed webhook event
    *
    * Creates a local FundingPlan record from the completed checkout session,
@@ -2048,6 +2130,9 @@ export default class FundingService {
       }
     }
 
+    // Read outside the transaction, like the provider and ownership reads above
+    const settings = ownedCalendarIds.length > 0 ? await this.getSettings() : null;
+
     // Wrap all mutations in a transaction to prevent orphaned records
     const fundingPlan = await db.transaction(async (t: Transaction): Promise<FundingPlan | null> => {
       // Re-run the idempotency check under the plan row lock: the webhook and
@@ -2101,7 +2186,7 @@ export default class FundingService {
       await eventEntity.save({ transaction: t });
 
       // Allocate funding to validated calendars
-      if (ownedCalendarIds.length > 0) {
+      if (settings) {
         // A calendar belongs to one plan at a time, so coverage moving to this
         // plan closes whatever allocation was still open for the same calendar
         // under an earlier one.
@@ -2134,7 +2219,7 @@ export default class FundingService {
           },
         );
 
-        const perCalendarAmount = Math.floor(plan.amount / ownedCalendarIds.length);
+        const perCalendarAmount = this.perCalendarAllocation(plan, ownedCalendarIds.length, settings);
 
         for (const calendarId of ownedCalendarIds) {
           await CalendarFundingPlanEntity.create({
