@@ -548,7 +548,7 @@ export default class FundingService {
   }
 
   /**
-   * Update the funding plan amount at the payment provider
+   * Update the funding plan amount at the payment provider and on the plan row
    *
    * Skips the provider call if the adapter does not support in-place amount updates
    * (e.g. PayPal funding plans have fixed amounts set at creation time).
@@ -602,6 +602,12 @@ export default class FundingService {
       await this.productName(),
       { idempotencyKey: buildProviderIdempotencyKey('plan-amount', fundingPlanEntity.id) },
     );
+
+    // Written only once the provider has accepted the total, in the same
+    // transaction, so a refusal leaves the row as it was. Nothing else keeps
+    // this column in step: no webhook carries the amount back.
+    fundingPlanEntity.amount = newAmount;
+    await fundingPlanEntity.save({ transaction: tx });
   }
 
   /**

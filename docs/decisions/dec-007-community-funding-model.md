@@ -9,6 +9,10 @@
 
 Pavillion supports voluntary funding plans: calendar owners contribute a recurring amount to the instance that hosts them, helping the operator keep the service online — the NPR/Wikipedia model applied instance-inward. In return, supporters unlock funding-gated extended features ([DEC-011](dec-011-federated-value-boundary.md)). The feature uses Stripe Embedded Checkout for payment processing, with instance administrators entering Stripe API keys directly rather than using Stripe Connect OAuth. A funding plan is paid as a recurring subscription, but the product vocabulary is "funding plan" and "support" — "subscription" describes the payment mechanics, not the relationship (see Terminology).
 
+**A fixed price is per covered calendar.** In fixed-price mode the configured price is what covering one calendar costs for a billing cycle, so a plan's total is the sum of its covered calendars. An owner covers another calendar by adding it to the existing plan, never by a second checkout, which [DEC-022](dec-022-funding-plan-lifecycle.md) refuses. Pay what you can stays a mode the operator may enable: the owner names the amount, a checkout's amount is split across the calendars it covers, and an added calendar carries the amount offered for it.
+
+A change to a plan's calendars changes what the provider bills from the next renewal, with no proration, so a calendar added mid-period is covered at no charge until then.
+
 **Stripe is the only payment provider in v1.** PayPal is descoped: the scaffolding stays in the tree, inert. There is no reachable PayPal payment path — checkout resolves an enabled Stripe provider only. PayPal completion is deferred, not cancelled.
 
 ### Where "Stripe only" is enforced

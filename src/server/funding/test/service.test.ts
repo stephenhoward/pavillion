@@ -2809,6 +2809,50 @@ describe('FundingService', () => {
         expect(adapter.updateSubscriptionAmount.calledOnce).toBe(true);
         expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(PRICE);
       });
+
+      it('should keep the plan amount at the provider total as calendars come and go', async () => {
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+
+        await service.addCalendarToFundingPlan(accountId, uuidv4());
+        await plan.reload();
+        expect(plan.amount).toBe(2 * PRICE);
+
+        await service.removeCalendarFromFundingPlan(accountId, existing.calendar_id);
+        await plan.reload();
+        expect(plan.amount).toBe(PRICE);
+      });
+
+      it('should leave the plan amount alone when the provider refuses an add', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.updateSubscriptionAmount.rejects(new Error('provider refused'));
+
+        await expect(service.addCalendarToFundingPlan(accountId, uuidv4())).rejects.toThrow('provider refused');
+
+        await plan.reload();
+        expect(plan.amount).toBe(PRICE);
+      });
+
+      it('should leave the plan amount alone when the provider refuses a removal', async () => {
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+        await service.addCalendarToFundingPlan(accountId, uuidv4());
+        adapter.updateSubscriptionAmount.rejects(new Error('provider refused'));
+
+        await expect(service.removeCalendarFromFundingPlan(accountId, existing.calendar_id))
+          .rejects.toThrow('provider refused');
+
+        await plan.reload();
+        expect(plan.amount).toBe(2 * PRICE);
+      });
+
+      it('should keep a fixed amount on a provider that cannot change one', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.supportsAmountUpdates.returns(false);
+
+        await service.addCalendarToFundingPlan(accountId, uuidv4());
+
+        await plan.reload();
+        expect(plan.amount).toBe(PRICE);
+      });
     });
   });
 
