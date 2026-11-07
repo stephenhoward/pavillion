@@ -97,7 +97,7 @@ describe('resetPassword', async () => {
     expect( await service.resetPassword('1234', 'password') ).toBe(undefined);
   });
 
-  it('should return empty string if the code is expired', async () => {
+  it('should clear the code to null if the code is expired', async () => {
     let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
     let saveStub = sandbox.stub(AccountSecretsEntity.prototype, 'save');
     let secrets = AccountSecretsEntity.build({
@@ -109,7 +109,7 @@ describe('resetPassword', async () => {
 
     expect( await service.resetPassword('1234', 'password') ).toBe(undefined);
     expect(saveStub.called).toBe(true);
-    expect(secrets.password_reset_code).toBe('');
+    expect(secrets.password_reset_code).toBe(null);
     expect(secrets.password_reset_expiration).toBe(null);
   });
 
@@ -134,8 +134,34 @@ describe('resetPassword', async () => {
     if ( acct ) {
       expect( acct.id ).toBe(account.id);
     }
-    expect(secrets.password_reset_code).toBe('');
+    expect(secrets.password_reset_code).toBe(null);
     expect(secrets.password_reset_expiration).toBe(null);
+  });
+
+  it('should not query for an empty code', async () => {
+    let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
+
+    expect( await service.resetPassword('', 'password') ).toBe(undefined);
+    expect(findSecretStub.called).toBe(false);
+  });
+});
+
+describe('validatePasswordResetCode', async () => {
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  afterEach( () => {
+    sandbox.restore();
+  });
+
+  it('should not query for an empty code', async () => {
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountDomain = new AccountsDomain(eventBus, configurationDomain.interface, new SetupDomain().interface);
+    const service = new AuthenticationService(eventBus, accountDomain.interface);
+    let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
+
+    expect( await service.validatePasswordResetCode('') ).toBe(undefined);
+    expect(findSecretStub.called).toBe(false);
   });
 });
 
