@@ -973,18 +973,19 @@ describe('FundingService.configureStripe', () => {
     vi.clearAllMocks();
   });
 
-  it('should return success and connectionVerified when API returns both', async () => {
+  it('should return success, connectionVerified and the webhook check the API returns', async () => {
     // Arrange
     const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
+    const webhookCheck = { status: 'missing_events', missingEvents: ['invoice.payment_failed'] };
     const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ status: 200, data: { success: true, connectionVerified: true } });
+    axiosPost.mockResolvedValue({ status: 200, data: { success: true, connectionVerified: true, webhookCheck } });
 
     // Act
     const result = await service.configureStripe(credentials);
 
     // Assert
     expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/admin/providers/stripe/configure', credentials);
-    expect(result).toEqual({ success: true, connectionVerified: true });
+    expect(result).toEqual({ success: true, connectionVerified: true, webhookCheck });
   });
 
   it('should return connectionVerified false when API reports unverified connection', async () => {
@@ -997,10 +998,11 @@ describe('FundingService.configureStripe', () => {
     const result = await service.configureStripe(credentials);
 
     // Assert
-    expect(result).toEqual({ success: true, connectionVerified: false });
+    expect(result.success).toBe(true);
+    expect(result.connectionVerified).toBe(false);
   });
 
-  it('should default connectionVerified to false when field is missing from response', async () => {
+  it('should default connectionVerified to false and the webhook check to unchecked when missing from response', async () => {
     // Arrange
     const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
     const axiosPost = vi.mocked(axios.post);
@@ -1010,7 +1012,11 @@ describe('FundingService.configureStripe', () => {
     const result = await service.configureStripe(credentials);
 
     // Assert
-    expect(result).toEqual({ success: true, connectionVerified: false });
+    expect(result).toEqual({
+      success: true,
+      connectionVerified: false,
+      webhookCheck: { status: 'unchecked', missingEvents: [] },
+    });
   });
 
   it('should return success false for non-200 status', async () => {
@@ -1035,5 +1041,23 @@ describe('FundingService.configureStripe', () => {
 
     // Act & Assert
     await expect(service.configureStripe(credentials)).rejects.toThrow('Network error');
+  });
+});
+
+describe('FundingService.checkStripeWebhook', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should return the webhook check from the admin endpoint', async () => {
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ status: 200, data: { status: 'no_destination', missingEvents: [] } });
+
+    const result = await service.checkStripeWebhook();
+
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/admin/providers/stripe/webhook-check');
+    expect(result).toEqual({ status: 'no_destination', missingEvents: [] });
   });
 });

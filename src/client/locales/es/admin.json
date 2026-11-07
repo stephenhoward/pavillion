@@ -497,6 +497,7 @@
         "stripe_webhook_secret_required": "El secreto de firma del webhook es obligatorio",
         "stripe_webhook_secret_format": "El secreto de firma del webhook debe empezar por whsec_",
         "stripe_webhook_url_copy": "Copiar la URL del webhook",
+        "stripe_webhook_events_label": "Envíale estos eventos. Sin ellos, los planes pueden empezar, pero Pavillion nunca sabrá que uno se renovó, tuvo un pago fallido o terminó:",
         "paypal_client_id_required": "El ID de cliente es obligatorio",
         "paypal_client_secret_required": "El secreto de cliente es obligatorio",
         "paypal_environment_required": "El entorno es obligatorio",
@@ -630,7 +631,15 @@
       "never_expires": "Nunca"
     },
     "currency_required": "Selecciona una moneda",
-    "price_required": "Al menos un precio debe ser mayor que $0"
+    "price_required": "Al menos un precio debe ser mayor que $0",
+    "webhook_check": {
+      "title": "Los webhooks de Stripe necesitan atención",
+      "missing_events": "El destino de webhook de Stripe para {{url}} no envía los eventos siguientes, así que Pavillion no puede registrar renovaciones, pagos fallidos ni cancelaciones de los planes afectados. Añádelos al destino en Stripe:",
+      "no_destination": "Stripe no tiene ningún destino de webhook para {{url}}. Los planes pueden empezar, pero Pavillion nunca sabrá que uno se renovó, tuvo un pago fallido o terminó. Crea un destino para esa URL que envíe:",
+      "disabled": "El destino de webhook de Stripe para {{url}} está desactivado, así que Pavillion no recibe nada de Stripe. Los planes pueden empezar, pero ninguno se renovará, caducará ni terminará aquí hasta que lo actives en Stripe.",
+      "unchecked": "Pavillion no pudo leer los destinos de webhook de esta cuenta de Stripe. Comprueba en Stripe que el destino para {{url}} envía:",
+      "this_instance_url": "esta instancia"
+    }
   },
   "blocked_instances": {
     "subtitle": "Gestiona las instancias de ActivityPub bloqueadas para el control de la federación",

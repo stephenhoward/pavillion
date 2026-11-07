@@ -8,6 +8,7 @@ import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { ProviderType } from '@/common/model/funding-plan';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
+import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 import { EventEmitter } from 'events';
 
 describe('ProviderConnectionService', () => {
@@ -83,7 +84,7 @@ describe('ProviderConnectionService', () => {
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toEqual({ connectionVerified: true });
+      expect(result.connectionVerified).toBe(true);
       expect(buildStub.calledOnce).toBe(true);
       // Saved once with credentials, once more to enable after verification
       expect(mockEntity.save.calledTwice).toBe(true);
@@ -127,7 +128,7 @@ describe('ProviderConnectionService', () => {
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toEqual({ connectionVerified: true });
+      expect(result.connectionVerified).toBe(true);
       // A verified configure enables a provider that was pre-created disabled
       expect(mockEntity.save.calledTwice).toBe(true);
       expect(mockEntity.enabled).toBe(true);
@@ -157,7 +158,11 @@ describe('ProviderConnectionService', () => {
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toEqual({ connectionVerified: false });
+      expect(result).toEqual({
+        connectionVerified: false,
+        // Credentials that did not verify cannot read the account's webhooks
+        webhookCheck: { status: 'unchecked', missingEvents: [] },
+      });
       // An unverified key must not become the checkout provider
       expect(mockEntity.enabled).toBe(false);
       expect(mockEntity.save.calledOnce).toBe(true);
@@ -181,10 +186,66 @@ describe('ProviderConnectionService', () => {
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toEqual({ connectionVerified: false });
+      expect(result).toEqual({
+        connectionVerified: false,
+        // Credentials that did not verify cannot read the account's webhooks
+        webhookCheck: { status: 'unchecked', missingEvents: [] },
+      });
       // An unverified key must not become the checkout provider
       expect(mockEntity.enabled).toBe(false);
       expect(mockEntity.save.calledOnce).toBe(true);
+    });
+
+    it('should not read webhook destinations with credentials that did not verify', async () => {
+      const mockEntity = {
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: false,
+        save: sandbox.stub().resolves(),
+      };
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+      sandbox.stub(ProviderConfigEntity, 'build').returns(mockEntity as any);
+      sandbox.stub(ProviderFactory, 'clearCache');
+
+      const stripeAdapter = new StripeAdapter({ apiKey: 'sk_test_abc123def456' }, 'whsec_abc123def456');
+      sandbox.stub(stripeAdapter, 'validateCredentials').resolves(false);
+      const checkStub = sandbox.stub(stripeAdapter, 'checkWebhookDestination');
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(stripeAdapter);
+
+      const result = await service.configureStripe(validCredentials, adminUser);
+
+      expect(result.webhookCheck).toEqual({ status: 'unchecked', missingEvents: [] });
+      expect(checkStub.called).toBe(false);
+    });
+
+    it('should report the webhook destination check for a verified connection', async () => {
+      const mockEntity = {
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: false,
+        save: sandbox.stub().resolves(),
+      };
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+      sandbox.stub(ProviderConfigEntity, 'build').returns(mockEntity as any);
+      sandbox.stub(ProviderFactory, 'clearCache');
+
+      const stripeAdapter = new StripeAdapter({ apiKey: 'sk_test_abc123def456' }, 'whsec_abc123def456');
+      sandbox.stub(stripeAdapter, 'validateCredentials').resolves(true);
+      const checkStub = sandbox.stub(stripeAdapter, 'checkWebhookDestination').resolves({
+        status: 'missing_events',
+        missingEvents: ['customer.subscription.deleted'],
+      });
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(stripeAdapter);
+
+      const result = await service.configureStripe(validCredentials, adminUser);
+
+      expect(result).toEqual({
+        connectionVerified: true,
+        webhookCheck: { status: 'missing_events', missingEvents: ['customer.subscription.deleted'] },
+      });
+      expect(checkStub.calledOnceWith(webhookManager.generateWebhookUrl('stripe'))).toBe(true);
+      // A webhook gap informs the admin; it never holds back enabling the provider
+      expect(mockEntity.enabled).toBe(true);
     });
 
     it('should throw error for missing publishable_key', async () => {
@@ -263,7 +324,50 @@ describe('ProviderConnectionService', () => {
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
 
       const result = await service.configureStripe(liveCreds, adminUser);
-      expect(result).toEqual({ connectionVerified: true });
+      expect(result.connectionVerified).toBe(true);
+    });
+  });
+
+  describe('checkStripeWebhook', () => {
+    const stripeEntity = { id: 'stripe-config', provider_type: 'stripe' };
+
+    it('checks the instance webhook URL against the configured Stripe account', async () => {
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(stripeEntity as any);
+      const stripeAdapter = new StripeAdapter({ apiKey: 'sk_test_abc123def456' }, 'whsec_abc123def456');
+      const checkStub = sandbox.stub(stripeAdapter, 'checkWebhookDestination').resolves({ status: 'ok', missingEvents: [] });
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(stripeAdapter);
+
+      const check = await service.checkStripeWebhook();
+
+      expect(check).toEqual({ status: 'ok', missingEvents: [] });
+      expect(checkStub.calledOnceWith(webhookManager.generateWebhookUrl('stripe'))).toBe(true);
+    });
+
+    it('reports unchecked when no Stripe provider is configured', async () => {
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+
+      const check = await service.checkStripeWebhook();
+
+      expect(check).toEqual({ status: 'unchecked', missingEvents: [] });
+    });
+
+    it('reports unchecked for an adapter that cannot read webhook destinations', async () => {
+      // Development without Stripe keys hands back the mock adapter
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(stripeEntity as any);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
+
+      const check = await service.checkStripeWebhook();
+
+      expect(check).toEqual({ status: 'unchecked', missingEvents: [] });
+    });
+
+    it('reports unchecked rather than throwing when the stored credentials are unreadable', async () => {
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(stripeEntity as any);
+      sandbox.stub(ProviderFactory, 'getAdapter').throws(new Error('Invalid credentials format'));
+
+      const check = await service.checkStripeWebhook();
+
+      expect(check).toEqual({ status: 'unchecked', missingEvents: [] });
     });
   });
 

@@ -7,9 +7,11 @@ import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
+import StripeWebhookCheck from './stripe-webhook-check.vue';
 import GrantForm from './grant-form.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
+import type { StripeWebhookCheck as StripeWebhookCheckResult } from '@/common/model/funding-plan';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding',
@@ -45,6 +47,9 @@ const fieldErrors = reactive<Record<string, string>>({});
 // Provider management state
 const providers = ref([]);
 const providersLoading = ref(false);
+// What the Stripe account's webhook destination for this instance delivers;
+// null until checked, and never checked without a configured Stripe provider
+const stripeWebhookCheck = ref<StripeWebhookCheckResult | null>(null);
 const connectingProvider = ref(null); // Track which provider is currently connecting
 const showDisconnectModal = ref(false); // Control disconnect confirmation modal visibility
 const disconnectModalData = ref({
@@ -139,12 +144,35 @@ async function loadProviders() {
     providers.value = allProviders.filter(
       provider => SUPPORTED_PROVIDER_TYPES.some(type => type === provider.provider_type),
     );
+    void loadStripeWebhookCheck();
   }
   catch (error) {
     console.error('Failed to load providers:', error);
   }
   finally {
     providersLoading.value = false;
+  }
+}
+
+/**
+ * Check the configured Stripe provider's webhook destination. A destination
+ * missing the plan-lifecycle events still answers 200 and checkout still
+ * works, so this page is where an admin learns plans will never end.
+ */
+async function loadStripeWebhookCheck() {
+  const stripeConfigured = providers.value.some(
+    provider => provider.provider_type === 'stripe' && provider.configured,
+  );
+  if (!stripeConfigured) {
+    stripeWebhookCheck.value = null;
+    return;
+  }
+  try {
+    stripeWebhookCheck.value = await fundingService.checkStripeWebhook();
+  }
+  catch (error) {
+    console.error('Failed to check the Stripe webhook destination:', error);
+    stripeWebhookCheck.value = null;
   }
 }
 
@@ -832,33 +860,41 @@ onMounted(async () => {
 
               <!-- Provider items -->
               <div v-else class="providers-list">
-                <div v-for="provider in configuredProviders" :key="provider.provider_type" class="provider-item">
-                  <div class="provider-info">
-                    <div class="provider-name-row">
-                      <h3 class="provider-name">{{ provider.display_name }}</h3>
-                      <span v-if="provider.enabled" class="connected-badge">{{ t("connected_badge") }}</span>
-                      <span v-else class="connected-badge connected-badge--disabled">{{ t("connected_disabled_badge") }}</span>
+                <template v-for="provider in configuredProviders" :key="provider.provider_type">
+                  <div class="provider-item">
+                    <div class="provider-info">
+                      <div class="provider-name-row">
+                        <h3 class="provider-name">{{ provider.display_name }}</h3>
+                        <span v-if="provider.enabled" class="connected-badge">{{ t("connected_badge") }}</span>
+                        <span v-else class="connected-badge connected-badge--disabled">{{ t("connected_disabled_badge") }}</span>
+                      </div>
+                      <span class="provider-type">{{ provider.provider_type }}</span>
                     </div>
-                    <span class="provider-type">{{ provider.provider_type }}</span>
+                    <div class="provider-actions">
+                      <label class="toggle-inline">
+                        <input
+                          type="checkbox"
+                          :checked="provider.enabled"
+                          @change="toggleProvider(provider)"
+                        />
+                        <span class="toggle-inline-label">{{ t("provider_enabled_label") }}</span>
+                      </label>
+                      <button
+                        type="button"
+                        class="action-link action-link--danger"
+                        @click="disconnectProvider(provider.provider_type)"
+                      >
+                        {{ t("disconnect_button") }}
+                      </button>
+                    </div>
                   </div>
-                  <div class="provider-actions">
-                    <label class="toggle-inline">
-                      <input
-                        type="checkbox"
-                        :checked="provider.enabled"
-                        @change="toggleProvider(provider)"
-                      />
-                      <span class="toggle-inline-label">{{ t("provider_enabled_label") }}</span>
-                    </label>
-                    <button
-                      type="button"
-                      class="action-link action-link--danger"
-                      @click="disconnectProvider(provider.provider_type)"
-                    >
-                      {{ t("disconnect_button") }}
-                    </button>
-                  </div>
-                </div>
+                  <StripeWebhookCheck
+                    v-if="provider.provider_type === 'stripe' && stripeWebhookCheck"
+                    class="provider-webhook-check"
+                    :check="stripeWebhookCheck"
+                    :webhook-url="provider.webhook_url"
+                  />
+                </template>
               </div>
             </template>
           </section>
@@ -1663,6 +1699,10 @@ onMounted(async () => {
   }
 
   .providers-list {
+    .provider-webhook-check {
+      margin: var(--pav-space-4) var(--pav-space-6);
+    }
+
     .provider-item {
       display: flex;
       flex-direction: column;

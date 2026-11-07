@@ -3,8 +3,11 @@ import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import CopyButton from '@/client/components/common/CopyButton.vue';
+import { STRIPE_WEBHOOK_EVENTS } from '@/common/model/funding-plan';
+import type { StripeWebhookCheck as StripeWebhookCheckResult } from '@/common/model/funding-plan';
 import FundingService from '@/client/service/funding';
 import type { ProviderConfig, PayPalCredentials, StripeCredentials } from '@/client/service/funding';
+import StripeWebhookCheck from '@/client/components/admin/stripe-webhook-check.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.wizard',
@@ -31,6 +34,7 @@ const selectedProvider = ref<string | null>(null);
 const error = ref<string | null>(null);
 const connecting = ref(false);
 const connectionVerified = ref(false);
+const webhookCheck = ref<StripeWebhookCheckResult | null>(null);
 
 // PayPal form state
 const paypalClientId = ref('');
@@ -132,6 +136,7 @@ function resetWizard() {
   error.value = null;
   connecting.value = false;
   connectionVerified.value = false;
+  webhookCheck.value = null;
   resetPayPalForm();
   resetStripeForm();
 }
@@ -293,6 +298,7 @@ async function configureStripe() {
 
     if (result.success) {
       connectionVerified.value = result.connectionVerified;
+      webhookCheck.value = result.webhookCheck;
       currentStep.value = 3;
       connecting.value = false;
     }
@@ -448,6 +454,12 @@ function handleSuccess() {
                     :aria-label="t('step2.stripe_webhook_url_copy')"
                   />
                 </div>
+                <div class="webhook-events-hint">
+                  <p id="stripe-webhook-events-label" class="webhook-events-label">{{ t('step2.stripe_webhook_events_label') }}</p>
+                  <ul class="webhook-events" aria-labelledby="stripe-webhook-events-label">
+                    <li v-for="eventType in STRIPE_WEBHOOK_EVENTS" :key="eventType"><code>{{ eventType }}</code></li>
+                  </ul>
+                </div>
               </div>
             </div>
 
@@ -571,6 +583,12 @@ function handleSuccess() {
             {{ t('step3.connection_warning_message', { provider: selectedProviderName }) }}
           </p>
         </div>
+
+        <StripeWebhookCheck
+          v-if="webhookCheck"
+          :check="webhookCheck"
+          :webhook-url="selectedProviderConfig?.webhook_url"
+        />
       </div>
     </div>
 
@@ -832,6 +850,22 @@ function handleSuccess() {
           font-size: 0.75rem;
           user-select: all;
           word-break: break-all;
+        }
+      }
+
+      .webhook-events-hint {
+        margin-block-start: var(--pav-space-2);
+
+        .webhook-events-label {
+          margin: 0;
+          font-size: inherit;
+          line-height: inherit;
+          font-weight: var(--pav-font-weight-medium);
+        }
+
+        .webhook-events {
+          margin: var(--pav-space-1) 0 0;
+          padding-inline-start: var(--pav-space-5);
         }
       }
     }

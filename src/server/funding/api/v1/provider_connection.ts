@@ -34,6 +34,13 @@ export default class ProviderConnectionRoutes {
       this.configureStripe.bind(this),
     );
 
+    // Stripe webhook destination check
+    router.get(
+      '/admin/providers/stripe/webhook-check',
+      ...ExpressHelper.adminOnly,
+      this.checkStripeWebhook.bind(this),
+    );
+
     // PayPal configuration route
     router.post(
       '/admin/providers/paypal/configure',
@@ -56,7 +63,8 @@ export default class ProviderConnectionRoutes {
    * Configure Stripe credentials via direct API key entry
    *
    * Accepts publishable_key, secret_key, and webhook_secret.
-   * Returns { success: true, connectionVerified: boolean } on success.
+   * Returns { success: true, connectionVerified: boolean, webhookCheck } on
+   * success, webhookCheck being the StripeWebhookCheck for this instance.
    * Error responses never include submitted key values or connectionVerified.
    */
   async configureStripe(req: Request, res: Response): Promise<void> {
@@ -81,7 +89,11 @@ export default class ProviderConnectionRoutes {
         email: adminUser.email,
       });
 
-      res.json({ success: true, connectionVerified: result.connectionVerified });
+      res.json({
+        success: true,
+        connectionVerified: result.connectionVerified,
+        webhookCheck: result.webhookCheck,
+      });
     }
     catch (error) {
       // Log only key prefix, never full value
@@ -93,6 +105,22 @@ export default class ProviderConnectionRoutes {
       else {
         res.status(500).json({ error: 'Internal server error' });
       }
+    }
+  }
+
+  /**
+   * GET /admin/providers/stripe/webhook-check
+   * Report whether the Stripe account's webhook destination for this instance
+   * sends every required event. Always 200 with a StripeWebhookCheck; a check
+   * that could not run is `unchecked`, not an error.
+   */
+  async checkStripeWebhook(_req: Request, res: Response): Promise<void> {
+    try {
+      res.json(await this.service.checkStripeWebhook());
+    }
+    catch (error) {
+      logError(error, 'Error checking Stripe webhook destination');
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 

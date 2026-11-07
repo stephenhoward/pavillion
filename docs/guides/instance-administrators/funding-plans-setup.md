@@ -13,7 +13,7 @@ Pavillion supports voluntary funding plans — recurring contributions from the 
 - Creating a Stripe account for your instance — you, the admin, are the merchant of record. This is not Stripe Connect; calendar owners don't onboard into Stripe individually
 - The keys you need: publishable key, secret key, webhook signing secret. Where each goes in config, how to rotate them ([secret rotation](./secret-rotation))
 - CSP changes for the Stripe embedded checkout iframe — what loads from where, what to allow
-- Webhook configuration on the Stripe side — the endpoint, the events to listen for, how to verify Pavillion is receiving them
+- Webhook configuration on the Stripe side — the endpoint, the events to listen for, how to verify Pavillion is receiving them. The destination must send `checkout.session.completed`, `invoice.paid`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.updated` and `customer.subscription.deleted`; Stripe's preset event groups do not cover them all. Without them checkout still works, but plans never renew, lapse or end — the admin funding page warns when they are missing
 - Testing the funding flow before announcing it: Stripe's test mode, the test card numbers, what a successful contribution looks like in the database and in Stripe
 - The vocabulary, explained once so you can explain it later: a funding plan supports the instance — the money never goes to a calendar, and calendars are "covered by" a plan, not funded by anyone. "Subscription" is the word for the payment mechanics (renewal, billing, cancellation), which is also what Stripe's dashboard calls it
 - The "what about VAT, taxes, 1099s, donations vs. revenue" question — out of scope for this guide, but pointers to where to start

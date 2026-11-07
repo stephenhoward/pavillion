@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -8,6 +8,7 @@ import CopyButton from '@/client/components/common/CopyButton.vue';
 import FundingService from '@/client/service/funding';
 import type { ProviderConfig } from '@/client/service/funding';
 import enAdmin from '@/client/locales/en/admin.json';
+import { STRIPE_WEBHOOK_EVENTS } from '@/common/model/funding-plan';
 
 describe('AddProviderWizard', () => {
   const mockUnconfiguredProviders: ProviderConfig[] = [
@@ -385,7 +386,7 @@ describe('AddProviderWizard', () => {
 
     it('should call configureStripe on form submission with valid credentials', async () => {
       const mockConfigureStripe = vi.spyOn(FundingService.prototype, 'configureStripe')
-        .mockResolvedValue({ success: true, connectionVerified: true });
+        .mockResolvedValue({ success: true, connectionVerified: true, webhookCheck: { status: 'ok', missingEvents: [] } });
 
       const wrapper = mountWithI18n({
         props: {
@@ -420,7 +421,7 @@ describe('AddProviderWizard', () => {
 
     it('should navigate to success step after successful verified configuration', async () => {
       vi.spyOn(FundingService.prototype, 'configureStripe')
-        .mockResolvedValue({ success: true, connectionVerified: true });
+        .mockResolvedValue({ success: true, connectionVerified: true, webhookCheck: { status: 'ok', missingEvents: [] } });
 
       const wrapper = mountWithI18n({
         props: {
@@ -447,6 +448,77 @@ describe('AddProviderWizard', () => {
       expect(wrapper.text()).toContain('Provider Connected');
       expect(wrapper.find('.success-content').exists()).toBe(true);
       expect(wrapper.find('.done-button').exists()).toBe(true);
+    });
+
+    it('should list the webhook events Stripe must send beside the webhook URL', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: [{
+            ...mockUnconfiguredProviders[0],
+            webhook_url: 'https://events.example.org/api/funding/webhooks/stripe',
+          }],
+        },
+      });
+
+      await navigateToStripeStep(wrapper);
+
+      expect(wrapper.find('.webhook-url').text()).toBe('https://events.example.org/api/funding/webhooks/stripe');
+      const listed = wrapper.findAll('.webhook-events code').map(code => code.text());
+      expect(listed).toEqual([...STRIPE_WEBHOOK_EVENTS]);
+    });
+
+    it('should warn on the success step when the webhook destination omits events', async () => {
+      vi.spyOn(FundingService.prototype, 'configureStripe').mockResolvedValue({
+        success: true,
+        connectionVerified: true,
+        webhookCheck: { status: 'missing_events', missingEvents: ['customer.subscription.deleted'] },
+      });
+
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      await navigateToStripeStep(wrapper);
+      await wrapper.find('#stripe-publishable-key').setValue('pk_test_abc123');
+      await wrapper.find('#stripe-secret-key').setValue('sk_test_abc123');
+      await wrapper.find('#stripe-webhook-secret').setValue('whsec_abc123');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      // Still connected — the gap is reported, not treated as a failed save
+      expect(wrapper.find('.success-content').exists()).toBe(true);
+      const check = wrapper.find('.webhook-check');
+      expect(check.exists()).toBe(true);
+      expect(check.findAll('code').map(code => code.text())).toEqual(['customer.subscription.deleted']);
+    });
+
+    it('should not warn on the success step when the webhook destination sends every event', async () => {
+      vi.spyOn(FundingService.prototype, 'configureStripe').mockResolvedValue({
+        success: true,
+        connectionVerified: true,
+        webhookCheck: { status: 'ok', missingEvents: [] },
+      });
+
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      await navigateToStripeStep(wrapper);
+      await wrapper.find('#stripe-publishable-key').setValue('pk_test_abc123');
+      await wrapper.find('#stripe-secret-key').setValue('sk_test_abc123');
+      await wrapper.find('#stripe-webhook-secret').setValue('whsec_abc123');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(wrapper.find('.success-content').exists()).toBe(true);
+      expect(wrapper.find('.webhook-check').exists()).toBe(false);
     });
 
     it('should show error message when configuration fails', async () => {
@@ -478,8 +550,9 @@ describe('AddProviderWizard', () => {
     });
 
     it('should disable form inputs during submission', async () => {
-      let resolvePromise: (value: { success: boolean; connectionVerified: boolean }) => void;
-      const configurePromise = new Promise<{ success: boolean; connectionVerified: boolean }>(resolve => {
+      type ConfigureResult = Awaited<ReturnType<FundingService['configureStripe']>>;
+      let resolvePromise: (value: ConfigureResult) => void;
+      const configurePromise = new Promise<ConfigureResult>(resolve => {
         resolvePromise = resolve;
       });
       vi.spyOn(FundingService.prototype, 'configureStripe').mockReturnValue(configurePromise);
@@ -510,7 +583,7 @@ describe('AddProviderWizard', () => {
       expect(wrapper.find('#stripe-webhook-secret').attributes('disabled')).toBeDefined();
 
       // Resolve the promise to clean up
-      resolvePromise!({ success: true, connectionVerified: true });
+      resolvePromise!({ success: true, connectionVerified: true, webhookCheck: { status: 'ok', missingEvents: [] } });
       await nextTick();
     });
 
@@ -678,7 +751,7 @@ describe('AddProviderWizard', () => {
 
     it('should navigate to warning step when configureStripe returns unverified', async () => {
       vi.spyOn(FundingService.prototype, 'configureStripe')
-        .mockResolvedValue({ success: true, connectionVerified: false });
+        .mockResolvedValue({ success: true, connectionVerified: false, webhookCheck: { status: 'unchecked', missingEvents: [] } });
 
       const wrapper = mountWithI18n({
         props: {

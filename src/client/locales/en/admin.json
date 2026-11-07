@@ -497,6 +497,7 @@
         "stripe_webhook_secret_required": "Webhook Signing Secret is required",
         "stripe_webhook_secret_format": "Webhook Signing Secret must start with whsec_",
         "stripe_webhook_url_copy": "Copy webhook URL",
+        "stripe_webhook_events_label": "Send these events to it. Without them, plans can start but Pavillion never learns that one renewed, missed a payment or ended:",
         "paypal_client_id_required": "Client ID is required",
         "paypal_client_secret_required": "Client Secret is required",
         "paypal_environment_required": "Environment is required",
@@ -630,7 +631,15 @@
       "never_expires": "Never"
     },
     "currency_required": "Please select a currency",
-    "price_required": "At least one price must be greater than $0"
+    "price_required": "At least one price must be greater than $0",
+    "webhook_check": {
+      "title": "Stripe webhooks need attention",
+      "missing_events": "The Stripe webhook destination for {{url}} does not send the events below, so Pavillion cannot record renewals, failed payments or cancellations for the plans they affect. Add them to the destination in Stripe:",
+      "no_destination": "Stripe has no webhook destination for {{url}}. Plans can start, but Pavillion never learns that one renewed, missed a payment or ended. Create a destination for that URL that sends:",
+      "disabled": "The Stripe webhook destination for {{url}} is disabled, so Pavillion hears nothing from Stripe. Plans can start, but none will renew, lapse or end here until you enable it in Stripe.",
+      "unchecked": "Pavillion could not read this Stripe account's webhook destinations. Check in Stripe that the destination for {{url}} sends:",
+      "this_instance_url": "this instance"
+    }
   },
   "blocked_instances": {
     "subtitle": "Manage blocked ActivityPub instances for federation control",

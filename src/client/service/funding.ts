@@ -2,7 +2,7 @@ import axios from 'axios';
 import i18next from 'i18next';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { FUNDING_GATED_FEATURES } from '@/common/model/funding-plan';
-import type { CalendarFundingSummary, FundingGatedFeature } from '@/common/model/funding-plan';
+import type { CalendarFundingSummary, FundingGatedFeature, StripeWebhookCheck } from '@/common/model/funding-plan';
 import { useFundingStore } from '@/client/stores/fundingStore';
 
 /**
@@ -375,14 +375,20 @@ export default class FundingService {
    * Configure Stripe credentials manually (admin only)
    *
    * @param {StripeCredentials} credentials - Stripe credentials
-   * @returns {Promise<{ success: boolean; connectionVerified: boolean }>} Configuration result with connection verification status
+   * @returns Configuration result: whether the connection verified, and what
+   *   the account's webhook destination for this instance delivers
    */
-  async configureStripe(credentials: StripeCredentials): Promise<{ success: boolean; connectionVerified: boolean }> {
+  async configureStripe(credentials: StripeCredentials): Promise<{
+    success: boolean;
+    connectionVerified: boolean;
+    webhookCheck: StripeWebhookCheck;
+  }> {
     try {
       const response = await axios.post('/api/funding/v1/admin/providers/stripe/configure', credentials);
       return {
         success: response.status === 200,
         connectionVerified: response.data?.connectionVerified === true,
+        webhookCheck: response.data?.webhookCheck ?? { status: 'unchecked', missingEvents: [] },
       };
     }
     catch (error) {
@@ -390,6 +396,17 @@ export default class FundingService {
       throw error;
     }
   }
+
+  /**
+   * Check the Stripe webhook destination for this instance (admin only)
+   *
+   * @returns What the Stripe account's destination for this instance delivers
+   */
+  async checkStripeWebhook(): Promise<StripeWebhookCheck> {
+    const response = await axios.get('/api/funding/v1/admin/providers/stripe/webhook-check');
+    return response.data;
+  }
+
   /**
    * Update provider configuration (admin only)
    *
