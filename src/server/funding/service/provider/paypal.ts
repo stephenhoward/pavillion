@@ -118,6 +118,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
     _providerSubscriptionId: string,
     _newAmount: number,
     _currency: string,
+    _productName: string,
   ): Promise<void> {
     throw new Error('updateSubscriptionAmount is not implemented for PayPal');
   }
@@ -275,7 +276,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @param interval - Billing interval
    * @throws Error always, as PayPal uses billing plans instead
    */
-  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year'): Promise<string> {
+  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year', _productName: string): Promise<string> {
     throw new Error('createPrice is not implemented for PayPal');
   }
 

@@ -6,6 +6,7 @@ import FundingApiV1 from '@/server/funding/api/v1';
 import { startScheduledJobs } from '@/server/funding/service/jobs';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
 import type EmailInterface from '@/server/email/interface';
 
 /**
@@ -38,6 +39,16 @@ export default class FundingDomain {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.interface.setCalendarInterface(calendarInterface);
+  }
+
+  /**
+   * Injects ConfigurationInterface into the funding service so the provider
+   * product name can follow the instance title.
+   *
+   * @param configurationInterface - The ConfigurationInterface from the configuration domain
+   */
+  setConfigurationInterface(configurationInterface: ConfigurationInterface): void {
+    this.interface.setConfigurationInterface(configurationInterface);
   }
 
   /**
