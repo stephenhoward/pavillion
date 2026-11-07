@@ -69,6 +69,14 @@
     "widget_embedding_message": "Embedding this calendar in another website is an extended feature, available to supporters of {{instanceName}}."
   },
 
+  "add_to_plan": {
+    "message_monthly": "Your funding plan can cover this calendar too, for {{price}} more each month.",
+    "message_yearly": "Your funding plan can cover this calendar too, for {{price}} more each year.",
+    "action": "Add this calendar to your plan",
+    "adding": "Adding...",
+    "error": "We couldn't add this calendar to your plan. Please try again."
+  },
+
   "redirect_message": "Redirecting to payment provider...",
   "processing_message": "Processing your payment...",
   "covered_calendars_title": "Calendars on This Plan",

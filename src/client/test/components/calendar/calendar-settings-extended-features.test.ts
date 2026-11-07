@@ -14,6 +14,9 @@ vi.mock('axios');
 const CALENDAR_ID = 'calendar-123';
 const FUNDING_URL = `/api/funding/v1/calendars/${CALENDAR_ID}/funding`;
 const SITE_CONFIG_URL = '/api/config/v1/site';
+const PLAN_STATUS_URL = '/api/funding/v1/status';
+const OPTIONS_URL = '/api/funding/v1/options';
+const ADD_CALENDAR_URL = '/api/funding/v1/calendars';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
@@ -37,14 +40,33 @@ function summaryResponse(widgetEmbedding: boolean, status: string) {
 }
 
 /**
- * Route the requests this screen issues. Anything else is a failure — in
- * particular the funding *options* endpoint, which this screen no longer has
- * any reason to read.
+ * Route the requests this screen issues. Anything else is a failure.
+ *
+ * The account has no funding plan unless `plan` says otherwise, because that is
+ * what the upsell card checks before it offers a checkout.
  */
-function mockRequests(funding: unknown) {
+function mockRequests(funding: unknown, plan: Record<string, unknown> | null = null) {
   vi.mocked(axios.get).mockImplementation((url: string) => {
     if (url === FUNDING_URL) {
       return funding instanceof Error ? Promise.reject(funding) : Promise.resolve(funding);
+    }
+    if (url === PLAN_STATUS_URL) {
+      return plan
+        ? Promise.resolve({ data: plan })
+        : Promise.reject({ response: { status: 404 } });
+    }
+    if (url === OPTIONS_URL) {
+      return Promise.resolve({
+        data: {
+          enabled: true,
+          providers: [],
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: false,
+          payWhatYouCanYearlyDiscount: 0,
+        },
+      });
     }
     if (url === SITE_CONFIG_URL) {
       return Promise.resolve({ data: { siteTitle: 'Example Instance' } });
@@ -136,6 +158,168 @@ describe('CalendarSettings — extended features section', () => {
       expect(wrapper.find('.funding-upsell').exists()).toBe(true);
       expect(wrapper.find('.setting-badge--enabled').exists()).toBe(false);
       expect(wrapper.find('.setting-disable-btn').exists()).toBe(false);
+    });
+  });
+
+  describe('when the account already holds an active plan', () => {
+    const ACTIVE_PLAN = { id: 'plan-1', status: 'active', billingCycle: 'monthly', amount: 1000000, currency: 'USD' };
+
+    it('offers to add this calendar at the configured price instead of a checkout', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
+
+      ({ wrapper } = await mountSettings(pinia));
+
+      const affordance = wrapper.find('.funding-add-to-plan');
+      expect(affordance.exists()).toBe(true);
+      expect(affordance.text()).toContain('$10.00');
+      expect(wrapper.text()).not.toContain('Contribute to enable');
+
+      const button = affordance.find('button');
+      expect(button.text()).toBe('Add this calendar to your plan');
+
+      await button.trigger('click');
+      await flushPromises();
+
+      expect(axios.post).toHaveBeenCalledWith(ADD_CALENDAR_URL, { calendarId: CALENDAR_ID, amount: undefined });
+    });
+
+    it('prices a yearly plan at the yearly price', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'), { ...ACTIVE_PLAN, billingCycle: 'yearly' });
+
+      ({ wrapper } = await mountSettings(pinia));
+
+      expect(wrapper.find('.funding-add-to-plan').text()).toContain('$100.00');
+    });
+
+    it('shows the covered badge and reports success without a reload once added', async () => {
+      let added = false;
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      const routeRequest = vi.mocked(axios.get).getMockImplementation()!;
+      vi.mocked(axios.get).mockImplementation((url: string) => (
+        url === FUNDING_URL && added
+          ? Promise.resolve(summaryResponse(true, 'covered'))
+          : routeRequest(url)
+      ));
+      vi.mocked(axios.post).mockImplementation(async () => {
+        added = true;
+        return { data: { success: true } };
+      });
+
+      ({ wrapper } = await mountSettings(pinia));
+      await wrapper.find('.funding-add-to-plan button').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.setting-badge--enabled').exists()).toBe(true);
+      expect(wrapper.find('.funding-add-to-plan').exists()).toBe(false);
+      expect(wrapper.find('.alert--success').text()).toBe('Extended features enabled for this calendar.');
+    });
+
+    it('moves focus to the section heading once the button has gone', async () => {
+      let added = false;
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      const routeRequest = vi.mocked(axios.get).getMockImplementation()!;
+      vi.mocked(axios.get).mockImplementation((url: string) => (
+        url === FUNDING_URL && added
+          ? Promise.resolve(summaryResponse(true, 'covered'))
+          : routeRequest(url)
+      ));
+      vi.mocked(axios.post).mockImplementation(async () => {
+        added = true;
+        return { data: { success: true } };
+      });
+
+      ({ wrapper } = await mountSettings(pinia));
+      const heading = wrapper.findAll('h2').find(h => h.text() === 'Extended Features')!;
+      const focus = vi.spyOn(heading.element as HTMLElement, 'focus');
+
+      await wrapper.find('.funding-add-to-plan button').trigger('click');
+      await flushPromises();
+
+      expect(focus).toHaveBeenCalled();
+    });
+
+    it('sends the named price as the amount on a pay-what-you-can instance', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      const routeRequest = vi.mocked(axios.get).getMockImplementation()!;
+      vi.mocked(axios.get).mockImplementation(async (url: string) => {
+        const response = await routeRequest(url);
+        return url === OPTIONS_URL
+          ? { data: { ...response.data, payWhatYouCan: true } }
+          : response;
+      });
+      vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
+
+      ({ wrapper } = await mountSettings(pinia));
+      await wrapper.find('.funding-add-to-plan button').trigger('click');
+      await flushPromises();
+
+      expect(axios.post).toHaveBeenCalledWith(ADD_CALENDAR_URL, { calendarId: CALENDAR_ID, amount: 1000000 });
+    });
+
+    it('keeps the offer and says what happened when the add is refused', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      vi.mocked(axios.post).mockRejectedValue(new Error('provider refused'));
+
+      ({ wrapper } = await mountSettings(pinia));
+      await wrapper.find('.funding-add-to-plan button').trigger('click');
+      await flushPromises();
+
+      const affordance = wrapper.find('.funding-add-to-plan');
+      expect(affordance.find('[role="status"]').text()).toContain('couldn\'t add this calendar');
+      expect(affordance.find('button').attributes('aria-disabled')).toBeUndefined();
+    });
+
+    it('sends one request however often the button is activated, and keeps it focusable', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'), ACTIVE_PLAN);
+      vi.mocked(axios.post).mockReturnValue(new Promise(() => {}));
+
+      ({ wrapper } = await mountSettings(pinia));
+      const button = wrapper.find('.funding-add-to-plan button');
+
+      await button.trigger('click');
+      await button.trigger('click');
+      await flushPromises();
+
+      expect(axios.post).toHaveBeenCalledTimes(1);
+      expect(button.attributes('aria-disabled')).toBe('true');
+      // A disabled button would drop keyboard focus to <body>.
+      expect(button.attributes('disabled')).toBeUndefined();
+    });
+
+    it.each([
+      ['past due', { ...ACTIVE_PLAN, status: 'past_due' }],
+      ['suspended', { ...ACTIVE_PLAN, status: 'suspended' }],
+      ['winding down', { ...ACTIVE_PLAN, cancelAt: '2027-01-01T00:00:00Z' }],
+    ])('does not offer to add to a plan that is %s', async (_label, plan) => {
+      mockRequests(summaryResponse(false, 'not_covered'), plan);
+
+      ({ wrapper } = await mountSettings(pinia));
+
+      expect(wrapper.find('.funding-add-to-plan').exists()).toBe(false);
+      expect(wrapper.text()).toContain('Contribute to enable');
+    });
+
+    it('offers nothing new for a calendar already covered whose gate has closed', async () => {
+      mockRequests(summaryResponse(false, 'covered'), ACTIVE_PLAN);
+
+      ({ wrapper } = await mountSettings(pinia));
+
+      expect(wrapper.find('.funding-add-to-plan').exists()).toBe(false);
+      expect(axios.get).not.toHaveBeenCalledWith(PLAN_STATUS_URL);
+    });
+
+    it('falls back to the checkout offer when the plan cannot be read', async () => {
+      mockRequests(summaryResponse(false, 'not_covered'));
+      const routeRequest = vi.mocked(axios.get).getMockImplementation()!;
+      vi.mocked(axios.get).mockImplementation((url: string) => (
+        url === PLAN_STATUS_URL ? Promise.reject(new Error('status read failed')) : routeRequest(url)
+      ));
+
+      ({ wrapper } = await mountSettings(pinia));
+
+      expect(wrapper.find('.funding-add-to-plan').exists()).toBe(false);
+      expect(wrapper.text()).toContain('Contribute to enable');
     });
   });
 

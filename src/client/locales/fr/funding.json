@@ -69,6 +69,14 @@
     "widget_embedding_message": "L'intégration de ce calendrier dans un autre site web est une fonctionnalité étendue, réservée à celles et ceux qui contribuent à {{instanceName}}."
   },
 
+  "add_to_plan": {
+    "message_monthly": "Votre plan de financement peut aussi couvrir ce calendrier, pour {{price}} de plus par mois.",
+    "message_yearly": "Votre plan de financement peut aussi couvrir ce calendrier, pour {{price}} de plus par an.",
+    "action": "Ajouter ce calendrier à votre plan",
+    "adding": "Ajout...",
+    "error": "Nous n'avons pas pu ajouter ce calendrier à votre plan. Veuillez réessayer."
+  },
+
   "redirect_message": "Redirection vers le fournisseur de paiement...",
   "processing_message": "Traitement de votre paiement...",
   "covered_calendars_title": "Calendriers sur ce plan",

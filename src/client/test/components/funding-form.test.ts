@@ -10,11 +10,15 @@ const {
   mockGetOptions,
   mockCreateCheckoutSession,
   mockGetCheckoutSessionStatus,
+  mockGetAddToPlanOffer,
+  mockAddCalendarToFundingPlan,
   mockLoadStripe,
 } = vi.hoisted(() => ({
   mockGetOptions: vi.fn(),
   mockCreateCheckoutSession: vi.fn(),
   mockGetCheckoutSessionStatus: vi.fn(),
+  mockGetAddToPlanOffer: vi.fn(),
+  mockAddCalendarToFundingPlan: vi.fn(),
   mockLoadStripe: vi.fn(),
 }));
 
@@ -24,6 +28,8 @@ vi.mock('@/client/service/funding', () => {
       getOptions: mockGetOptions,
       createCheckoutSession: mockCreateCheckoutSession,
       getCheckoutSessionStatus: mockGetCheckoutSessionStatus,
+      getAddToPlanOffer: mockGetAddToPlanOffer,
+      addCalendarToFundingPlan: mockAddCalendarToFundingPlan,
     };
   });
   MockClass.formatCurrency = (millicents: number, currency: string) => {
@@ -654,6 +660,7 @@ describe('FundingForm', () => {
       mockCreateCheckoutSession.mockRejectedValue({
         response: { status: 409, data: { errorName: 'ActiveFundingPlanExistsError' } },
       });
+      mockGetAddToPlanOffer.mockResolvedValue(null);
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
@@ -665,6 +672,45 @@ describe('FundingForm', () => {
       expect(error.text()).toContain('already has a funding plan');
       expect(error.text()).not.toContain('Please try again');
       expect(mockLoadStripe).not.toHaveBeenCalled();
+      expect(wrapper.find('.funding-add-to-plan').exists()).toBe(false);
+    });
+
+    describe('when a refused checkout finds a plan that can take the calendar', () => {
+      const OFFER = { billingCycle: 'monthly', price: 1000000, currency: 'USD', payWhatYouCan: false };
+
+      const refuseCheckout = async () => {
+        mockGetOptions.mockResolvedValue(makeStripeOptions());
+        mockCreateCheckoutSession.mockRejectedValue({
+          response: { status: 409, data: { errorName: 'ActiveFundingPlanExistsError' } },
+        });
+        mockGetAddToPlanOffer.mockResolvedValue(OFFER);
+
+        const wrapper = await mountFundingForm({ calendarId: 'cal-1' });
+        currentWrapper = wrapper;
+
+        await wrapper.find('button.btn--primary').trigger('click');
+        await flushPromises();
+        return wrapper;
+      };
+
+      it('replaces the form with the add offer and keeps the refusal message', async () => {
+        const wrapper = await refuseCheckout();
+
+        expect(wrapper.find('.error-message').text()).toContain('already has a funding plan');
+        expect(wrapper.find('.funding-add-to-plan').text()).toContain('$10.00');
+        expect(wrapper.find('input[type="radio"]').exists()).toBe(false);
+      });
+
+      it('adds the calendar and reports it the way a started plan is reported', async () => {
+        mockAddCalendarToFundingPlan.mockResolvedValue(undefined);
+        const wrapper = await refuseCheckout();
+
+        await wrapper.find('.funding-add-to-plan button').trigger('click');
+        await flushPromises();
+
+        expect(mockAddCalendarToFundingPlan).toHaveBeenCalledWith('cal-1', undefined);
+        expect(wrapper.emitted('plan-started')).toHaveLength(1);
+      });
     });
 
     it('keeps the retry message for a failure that retrying can fix', async () => {

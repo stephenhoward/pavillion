@@ -69,6 +69,14 @@
     "widget_embedding_message": "La incrustación de este calendario en otro sitio web es una función extendida, disponible para quienes colaboran con {{instanceName}}."
   },
 
+  "add_to_plan": {
+    "message_monthly": "Tu plan de financiación también puede cubrir este calendario, por {{price}} más al mes.",
+    "message_yearly": "Tu plan de financiación también puede cubrir este calendario, por {{price}} más al año.",
+    "action": "Añadir este calendario a tu plan",
+    "adding": "Añadiendo...",
+    "error": "No pudimos añadir este calendario a tu plan. Inténtalo de nuevo."
+  },
+
   "redirect_message": "Redirigiendo al proveedor de pagos...",
   "processing_message": "Procesando tu pago...",
   "covered_calendars_title": "Calendarios en Este Plan",

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Config from '@/client/service/config';
+import FundingService from '@/client/service/funding';
+import type { AddToPlanOffer } from '@/client/service/funding';
+import FundingAddToPlan from '@/client/components/account/FundingAddToPlan.vue';
 import FundingSheet from '@/client/components/logged_in/calendar-management/funding-sheet.vue';
 import { useFundingAccess } from '@/client/composables/useFundingAccess';
 import type { FundingGatedFeature } from '@/common/model/funding-plan';
@@ -34,6 +37,11 @@ import type { FundingGatedFeature } from '@/common/model/funding-plan';
  * A `feature` key that is not in the registry lands in the same place: nothing
  * is cached under it, so the state is `unknown` and the card stays silent
  * rather than guessing.
+ *
+ * What it offers depends on the account. An account whose plan can take this
+ * calendar is offered that, because a checkout would be refused (DEC-022); any
+ * other account is offered the checkout. A failed plan read falls back to the
+ * checkout, whose refusal offers the same add.
  */
 const props = defineProps<{
   /** The calendar whose funding gate is being read. */
@@ -44,8 +52,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   /**
-   * A funding plan was started from this card, and the calendar's access has
-   * already been re-read. Consumers use it to report success and, where one
+   * A funding plan was started or extended from this card, and the calendar's
+   * access has already been re-read. Consumers use it to report success and, where one
    * of their own actions was what the gate refused, to retry that action.
    */
   'plan-started': [];
@@ -53,12 +61,51 @@ const emit = defineEmits<{
 
 const { t } = useTranslation('funding', { keyPrefix: 'upsell' });
 
-const { isDenied, ensureLoaded, refresh } = useFundingAccess(props.calendarId);
+const { status, isDenied, ensureLoaded, refresh } = useFundingAccess(props.calendarId);
+
+const fundingService = new FundingService();
 
 const instanceName = ref('');
 const showFundingSheet = ref(false);
+const addOffer = ref<AddToPlanOffer | null>(null);
+const offerChecked = ref(false);
 
-const showUpsell = computed(() => isDenied(props.feature));
+const denied = computed(() => isDenied(props.feature));
+
+// Neither shows until the offer has been read, so an owner with a plan never
+// sees the checkout pitch flash up first.
+const showAddToPlan = computed(() => denied.value && addOffer.value !== null);
+const showUpsell = computed(() => denied.value && offerChecked.value && addOffer.value === null);
+
+/**
+ * Read whether this calendar can join the account's plan.
+ *
+ * Only for a `not_covered` calendar: one the status calls covered but the gate
+ * refuses is already on a plan, and adding it again would be a conflict.
+ */
+async function checkAddOffer() {
+  offerChecked.value = false;
+  addOffer.value = null;
+
+  if (status.value === 'not_covered') {
+    try {
+      addOffer.value = await fundingService.getAddToPlanOffer();
+    }
+    catch {
+      // Already logged by the service. The checkout still answers correctly.
+    }
+  }
+
+  offerChecked.value = true;
+}
+
+// A watcher rather than onMounted: the gate can close after mount, when a
+// consumer records a refusal or a covered calendar is taken off its plan.
+watch(denied, (isNowDenied) => {
+  if (isNowDenied) {
+    checkAddOffer();
+  }
+}, { immediate: true });
 
 /**
  * The feature-specific pitch, one key per registry entry.
@@ -93,7 +140,7 @@ onMounted(async () => {
 });
 
 /**
- * Fold a completed checkout back into the shared cache before telling the
+ * Fold a completed checkout or add back into the shared cache before telling the
  * consumer. Refreshing first means the gate answer the consumer reads in its
  * own handler is the post-payment one, and this card has already hidden itself
  * by the time anything else runs.
@@ -106,7 +153,14 @@ async function onPlanStarted() {
 </script>
 
 <template>
-  <div v-if="showUpsell" class="alert alert--info funding-upsell" role="status">
+  <FundingAddToPlan
+    v-if="showAddToPlan && addOffer"
+    :calendarId="props.calendarId"
+    :offer="addOffer"
+    @added="onPlanStarted"
+  />
+
+  <div v-else-if="showUpsell" class="alert alert--info funding-upsell" role="status">
     <p class="funding-upsell__message">{{ message }}</p>
     <!--
       A closed gate is the weaker claim "nothing we can see grants this": the
