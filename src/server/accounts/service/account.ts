@@ -1144,6 +1144,9 @@ export default class AccountService {
    * @throws {Error} If the code is invalid or expired
    */
   async validatePasswordResetCode(code: string): Promise<Account> {
+    if (!code) {
+      throw new Error('Invalid password reset code');
+    }
     const secret = await AccountSecretsEntity.findOne({ where: { password_reset_code: code } });
 
     if (!secret) {
