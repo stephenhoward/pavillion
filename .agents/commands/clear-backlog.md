@@ -309,6 +309,34 @@ Contract:
   scope, or re-tiers the bead) and carries the rationale into the `[Tier B]`
   PR. It does not edit, soften, or summarize the advisor's rationale.
 
+## Run-level stop rule (all modes)
+
+Per-worker budgets do not bound the run, so the orchestrator bounds it. This
+rule binds the orchestrator, not the implementers, and adds to the `[budget]`
+signals in `AGENTS.md` ("Budget Signals") without replacing them: it acts on
+their readings and never contradicts their bands.
+
+Once roughly three quarters of the budget is used (the 75% context reading
+for the orchestrator, or the session-window readings as `AGENTS.md` defines
+them):
+
+1. **Start no new items.** Dispatch nothing further, including items already
+   surveyed and tiered. Undispatched items are not failures.
+2. **Finish in-flight work.** Let dispatched implementers return and record
+   their results as usual.
+3. **Run the gate on anything pushed** (the existing build/lint gate for
+   each PR opened this run) before reporting.
+4. **End with a handoff block** in the final report listing, forward-only:
+   - **Not started**: each item surveyed but not dispatched, with its tier.
+   - **CI pending**: each PR whose checks had not finished, with its number.
+   - **Unknown state**: anything whose outcome could not be confirmed (an
+     implementer that did not report, a push with no PR, a bead whose status
+     is unclear), with what to check first.
+
+   In `--scheduled` mode the block is appended to the per-run report file
+   alongside the Phase 5 tally and suggested-next lines. The next run reads
+   it during Phase 0b and Phase 1 instead of rediscovering state.
+
 ## Scheduled mode (`--scheduled`)
 
 Unattended weekly run. Everything above applies, plus:
