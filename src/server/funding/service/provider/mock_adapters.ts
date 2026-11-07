@@ -83,6 +83,15 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Withdraw a scheduled cancellation (mock)
+   *
+   * @param _subscriptionId - Provider's subscription ID
+   */
+  async resumeSubscription(_subscriptionId: string): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * Mock Stripe supports amount updates
    *
    * @returns True
@@ -260,6 +269,15 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    */
   async cancelSubscription(_subscriptionId: string, _immediate: boolean): Promise<void> {
     // Mock cancellation - no actual API call
+    return Promise.resolve();
+  }
+
+  /**
+   * Withdraw a scheduled cancellation (mock)
+   *
+   * @param _subscriptionId - Provider's subscription ID
+   */
+  async resumeSubscription(_subscriptionId: string): Promise<void> {
     return Promise.resolve();
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
 import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService, { MIN_PWYC_AMOUNT } from '@/server/funding/service/funding';
@@ -10,7 +11,7 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
-import { ProviderConfig, FundingPlan, FundingSettings } from '@/common/model/funding-plan';
+import { ProviderConfig, FundingPlan, FundingSettings, type FundingPlanStatus } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   InvalidAmountError,
@@ -523,8 +524,8 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
      * The allocation row itself always exists here (end_time null) — that is
      * the point. What varies is the plan it belongs to, and whether the query
      * asking for it joins that plan at all. The fake honours the include's
-     * `where: { status: 'active' }` exactly as the database would, so a query
-     * written without the join still sees the row. That asymmetry is what the
+     * status filter — an exact status, or an `Op.in` list — exactly as the
+     * database would, so a query written without the join still sees the row. That asymmetry is what the
      * boundary tests below are measuring: a predicate that reads the
      * allocation alone reports covered here, and one that goes through the
      * plan does not.
@@ -539,6 +540,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         cancelled_at?: Date | null;
         cancel_at?: Date | null;
         current_period_end?: Date | null;
+        past_due_since?: Date | null;
       } | null,
     ): void {
       /** The allocation row as the query in `options` would see it, or null. */
@@ -552,11 +554,16 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
           cancelled_at: null,
           cancel_at: null,
           current_period_end: new Date(Date.now() + 30 * DAY),
+          past_due_since: null,
           ...plan,
         };
 
         const joinedStatus = options?.include?.[0]?.where?.status;
-        if (joinedStatus !== undefined && fundingPlan.status !== joinedStatus) {
+        const admitted = joinedStatus === undefined
+          || (typeof joinedStatus === 'string'
+            ? fundingPlan.status === joinedStatus
+            : (joinedStatus[Op.in] as string[]).includes(fundingPlan.status));
+        if (!admitted) {
           return null;
         }
 
@@ -648,6 +655,39 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
 
         const status = await service.getFundingStatusForCalendar(accountId, calendarId);
         expect(status).toBe('covered');
+      });
+
+      it('should still return covered for a past_due plan inside its grace period', async () => {
+        const calendarId = uuidv4();
+        const accountId = uuidv4();
+
+        await onlyThePlanDecides(accountId, calendarId);
+        stubAllocation(calendarId, { status: 'past_due', past_due_since: new Date(Date.now() - 2 * DAY) });
+
+        const status = await service.getFundingStatusForCalendar(accountId, calendarId);
+        expect(status).toBe('covered');
+      });
+
+      it('should return not_covered for a past_due plan whose grace period has expired', async () => {
+        const calendarId = uuidv4();
+        const accountId = uuidv4();
+
+        await onlyThePlanDecides(accountId, calendarId);
+        stubAllocation(calendarId, { status: 'past_due', past_due_since: new Date(Date.now() - 8 * DAY) });
+
+        const status = await service.getFundingStatusForCalendar(accountId, calendarId);
+        expect(status).toBe('not_covered');
+      });
+
+      it('should return not_covered when the funding plan behind the allocation is suspended', async () => {
+        const calendarId = uuidv4();
+        const accountId = uuidv4();
+
+        await onlyThePlanDecides(accountId, calendarId);
+        stubAllocation(calendarId, { status: 'suspended' });
+
+        const status = await service.getFundingStatusForCalendar(accountId, calendarId);
+        expect(status).toBe('not_covered');
       });
     });
 
@@ -1047,36 +1087,87 @@ describe('FundingService - getCalendarsInFundingPlan', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: FundingService;
+  let accountId: string;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new FundingService(eventBus);
+    accountId = uuidv4();
   });
 
   afterEach(() => {
     sandbox.restore();
   });
 
-  it('should return empty array when account has no active funding plan', async () => {
-    const accountId = uuidv4();
-    sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+  /**
+   * Give the account one plan in the given status, honouring the status
+   * filter of whatever read asks for it the way the database would: an exact
+   * status, or an `Op.ne` exclusion (getStatus's unended-first read).
+   *
+   * @param status - The plan's status, or null for an account with no plan
+   * @returns The plan row, or null
+   */
+  function stubAccountPlan(status: FundingPlanStatus | null): FundingPlanEntity | null {
+    const plan = status === null ? null : FundingPlanEntity.build({
+      id: uuidv4(),
+      account_id: accountId,
+      provider_config_id: uuidv4(),
+      provider_subscription_id: 'sub_covered',
+      provider_customer_id: 'cus_covered',
+      status,
+      billing_cycle: 'monthly',
+      amount: 800000,
+      currency: 'USD',
+      current_period_start: new Date('2026-01-01T00:00:00Z'),
+      current_period_end: new Date('2026-02-01T00:00:00Z'),
+      cancelled_at: null,
+      cancel_at: null,
+      suspended_at: null,
+    });
+
+    sandbox.stub(FundingPlanEntity, 'findOne').callsFake((async (options: any) => {
+      const wanted = options?.where?.status;
+      const matches = wanted === undefined
+        || (typeof wanted === 'string' ? plan?.status === wanted : plan?.status !== wanted[Op.ne]);
+      return matches ? plan : null;
+    }) as any);
+
+    return plan;
+  }
+
+  /** Two open allocations, as the `end_time IS NULL` query returns them. */
+  function openAllocations(fundingPlanId: string) {
+    return [
+      {
+        funding_plan_id: fundingPlanId,
+        calendar_id: 'calendar-one',
+        amount: 500000,
+        end_time: null,
+        created_at: new Date('2026-01-15'),
+      },
+      {
+        funding_plan_id: fundingPlanId,
+        calendar_id: 'calendar-two',
+        amount: 300000,
+        end_time: null,
+        created_at: new Date('2026-02-20'),
+      },
+    ] as any;
+  }
+
+  it('should return empty array when account has no funding plan', async () => {
+    stubAccountPlan(null);
+    const allocationRead = sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
 
     const result = await service.getCalendarsInFundingPlan(accountId);
 
     expect(result).toEqual([]);
+    expect(allocationRead.called).toBe(false);
   });
 
-  it('should return empty array when plan exists but has no active calendar allocations', async () => {
-    const accountId = uuidv4();
-    const fundingPlanId = uuidv4();
-
-    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-      id: fundingPlanId,
-      account_id: accountId,
-      status: 'active',
-    } as any);
-
+  it('should return empty array when plan exists but has no open calendar allocations', async () => {
+    stubAccountPlan('active');
     sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
 
     const result = await service.getCalendarsInFundingPlan(accountId);
@@ -1084,80 +1175,51 @@ describe('FundingService - getCalendarsInFundingPlan', () => {
     expect(result).toEqual([]);
   });
 
-  it('should return active allocations with calendarId, amount, and createdAt', async () => {
-    const accountId = uuidv4();
-    const fundingPlanId = uuidv4();
-    const calendarId1 = uuidv4();
-    const calendarId2 = uuidv4();
-    const createdAt1 = new Date('2026-01-15');
-    const createdAt2 = new Date('2026-02-20');
-
-    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-      id: fundingPlanId,
-      account_id: accountId,
-      status: 'active',
-    } as any);
-
-    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
-      {
-        funding_plan_id: fundingPlanId,
-        calendar_id: calendarId1,
-        amount: 500000,
-        end_time: null,
-        created_at: createdAt1,
-      },
-      {
-        funding_plan_id: fundingPlanId,
-        calendar_id: calendarId2,
-        amount: 300000,
-        end_time: null,
-        created_at: createdAt2,
-      },
-    ] as any);
+  it('should return open allocations with calendarId, amount, and createdAt', async () => {
+    const plan = stubAccountPlan('active')!;
+    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves(openAllocations(plan.id));
 
     const result = await service.getCalendarsInFundingPlan(accountId);
 
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({
-      calendarId: calendarId1,
-      amount: 500000,
-      createdAt: createdAt1,
-    });
-    expect(result[1]).toEqual({
-      calendarId: calendarId2,
-      amount: 300000,
-      createdAt: createdAt2,
-    });
+    expect(result).toEqual([
+      { calendarId: 'calendar-one', amount: 500000, createdAt: new Date('2026-01-15') },
+      { calendarId: 'calendar-two', amount: 300000, createdAt: new Date('2026-02-20') },
+    ]);
   });
 
-  it('should only return active allocations (end_time IS NULL), not ended ones', async () => {
-    const accountId = uuidv4();
-    const fundingPlanId = uuidv4();
-    const activeCalendarId = uuidv4();
-    const activeCreatedAt = new Date('2026-01-15');
+  it('should read only the plan\'s open allocations (end_time IS NULL)', async () => {
+    const plan = stubAccountPlan('active')!;
+    const allocationRead = sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
 
-    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
-      id: fundingPlanId,
-      account_id: accountId,
-      status: 'active',
-    } as any);
+    await service.getCalendarsInFundingPlan(accountId);
 
-    // findAll is called with end_time: { [Op.is]: null }, so the stub
-    // should only return active allocations (the service filters via the query)
-    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
-      {
-        funding_plan_id: fundingPlanId,
-        calendar_id: activeCalendarId,
-        amount: 500000,
-        end_time: null,
-        created_at: activeCreatedAt,
-      },
-    ] as any);
+    const where = allocationRead.firstCall.args[0]!.where as any;
+    expect(where.funding_plan_id).toBe(plan.id);
+    expect(where.end_time).toEqual({ [Op.is]: null });
+  });
+
+  // A past-due or suspended plan still holds its allocations open, and the
+  // funding page must show what it covers rather than "no calendars yet".
+  it.each(['past_due', 'suspended'] as const)(
+    'should list the calendars a %s plan covers',
+    async (status) => {
+      const plan = stubAccountPlan(status)!;
+      sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves(openAllocations(plan.id));
+
+      const result = await service.getCalendarsInFundingPlan(accountId);
+
+      expect(result.map((item) => item.calendarId)).toEqual(['calendar-one', 'calendar-two']);
+    },
+  );
+
+  it('should list nothing for an account whose only plan has ended', async () => {
+    stubAccountPlan('cancelled');
+    const allocationRead = sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
 
     const result = await service.getCalendarsInFundingPlan(accountId);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].calendarId).toBe(activeCalendarId);
+    expect(result).toEqual([]);
+    expect(allocationRead.called).toBe(false);
   });
 
   it('should throw ValidationError for invalid UUID', async () => {

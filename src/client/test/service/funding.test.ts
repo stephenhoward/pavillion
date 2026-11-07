@@ -413,6 +413,37 @@ describe('FundingService.getStatus', () => {
   });
 });
 
+describe('FundingService.resume', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should POST to /api/funding/v1/resume and report the plan resumed', async () => {
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 200, data: { success: true } });
+
+    expect(await service.resume()).toBe('resumed');
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/resume');
+  });
+
+  it('should report a cancellation that can no longer be withdrawn distinctly', async () => {
+    vi.mocked(axios.post).mockRejectedValue({
+      response: { status: 409, data: { errorName: 'FundingPlanNotResumableError' } },
+    });
+
+    expect(await service.resume()).toBe('not_resumable');
+  });
+
+  it('should report any other error as a failure rather than throwing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(axios.post).mockRejectedValue({ response: { status: 500, data: {} } });
+
+    expect(await service.resume()).toBe('failed');
+  });
+});
+
 describe('FundingService.loadFundingSummary', () => {
   const service = new FundingService();
 

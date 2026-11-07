@@ -88,6 +88,15 @@ export type FundingPlanStatus = {
 };
 
 /**
+ * How a request to keep a cancelling plan ended.
+ *
+ * `not_resumable` is the server's 409: the cancellation can no longer be
+ * withdrawn (the plan has ended or its boundary has passed), so retrying
+ * cannot help. Every other failure is `failed`, which retrying might.
+ */
+export type ResumeOutcome = 'resumed' | 'not_resumable' | 'failed';
+
+/**
  * Provider info returned from the options API
  */
 export type FundingProvider = {
@@ -723,6 +732,26 @@ export default class FundingService {
     catch (error) {
       console.error('Failed to cancel funding plan:', error);
       return false;
+    }
+  }
+
+  /**
+   * Withdraw a pending period-end cancellation, keeping the current plan
+   *
+   * @returns {Promise<ResumeOutcome>} Whether the plan will continue, cannot
+   *   be resumed any more, or the request failed
+   */
+  async resume(): Promise<ResumeOutcome> {
+    try {
+      const response = await axios.post('/api/funding/v1/resume');
+      return response.status === 200 ? 'resumed' : 'failed';
+    }
+    catch (error: any) {
+      if (error?.response?.status === 409 && error.response.data?.errorName === 'FundingPlanNotResumableError') {
+        return 'not_resumable';
+      }
+      console.error('Failed to resume funding plan:', error);
+      return 'failed';
     }
   }
 

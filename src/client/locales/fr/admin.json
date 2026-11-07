@@ -566,7 +566,7 @@
     },
     "disconnect_modal": {
       "title": "Déconnecter {{provider}} ?",
-      "message": "Ce prestataire a {{count}} plan(s) de financement actif(s). La déconnexion annulera tous les plans de financement actifs et ne pourra pas être annulée.",
+      "message": "Ce prestataire a {{count}} plan(s) de financement qui n'ont pas pris fin, y compris ceux en retard de paiement ou suspendus. La déconnexion les annulera tous et ne pourra pas être annulée.",
       "consequence": "Tous les soutiens perdront immédiatement leur accès et seront informés de l’annulation.",
       "checkbox_label": "Je comprends et souhaite poursuivre la déconnexion de ce prestataire",
       "cancel_button": "Annuler",

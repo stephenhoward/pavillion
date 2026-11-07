@@ -24,6 +24,7 @@
 
   "plan_started_success": "Gracias por apoyar esta instancia. Tu plan de financiación está activo.",
   "plan_start_error": "No se pudo iniciar tu plan de financiación. Por favor intenta de nuevo.",
+  "plan_already_exists_error": "Tu cuenta ya tiene un plan de financiación. Adminístralo desde la configuración de Plan de financiación de tu cuenta, donde puedes actualizar tus datos de pago o conservar un plan que cancelaste.",
 
   "checkout_done_button": "Listo",
   "checkout_try_again_button": "Intentar de Nuevo",
@@ -42,13 +43,17 @@
 
   "cancellation_info": "Tu plan de financiación seguirá activo hasta el {{date}}",
   "past_due_warning": "Tu pago no se completó. Actualiza tu método de pago para seguir apoyando esta instancia.",
-  "suspended_message": "Tu plan de financiación está suspendido porque el pago siguió fallando. Por favor contacta con soporte.",
+  "suspended_message": "Tu plan de financiación está suspendido porque el pago siguió fallando. Actualiza tus datos de pago para reactivarlo.",
 
   "manage_payment_button": "Gestionar Método de Pago",
   "cancel_funding_plan_button": "Cancelar Plan",
   "cancel_confirm": "¿Cancelar tu plan de financiación? Tu suscripción termina al cierre del período de facturación actual, y conservarás las funciones extendidas hasta entonces. Tus calendarios siguen en línea de todas formas.",
   "cancel_success": "Plan de financiación cancelado. Conservarás las funciones extendidas hasta el final de tu período de facturación.",
   "cancel_error": "No se pudo cancelar el plan de financiación. Por favor intenta de nuevo.",
+  "resume_funding_plan_button": "Conservar mi plan",
+  "resume_success": "Tu plan de financiación continuará y se renovará como de costumbre al final del período de facturación actual.",
+  "resume_error": "No se pudo conservar tu plan de financiación. Por favor intenta de nuevo.",
+  "resume_not_possible": "Esta cancelación ya no se puede retirar: el plan ha terminado o ya no le quedan calendarios. Para volver a apoyar esta instancia, inicia un nuevo plan desde la página General de cualquier calendario de tu propiedad.",
 
   "portal_error": "No se pudo acceder al portal de facturación. Por favor intenta de nuevo.",
 

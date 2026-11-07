@@ -152,6 +152,15 @@ export interface PaymentProviderAdapter {
   cancelSubscription(subscriptionId: string, immediate: boolean, options?: ProviderRequestOptions): Promise<void>;
 
   /**
+   * Withdraw a scheduled period-end cancellation, so the subscription renews
+   * as if it had never been cancelled
+   *
+   * @param subscriptionId - Provider's subscription ID
+   * @param options - Per-request options (idempotency key)
+   */
+  resumeSubscription(subscriptionId: string, options?: ProviderRequestOptions): Promise<void>;
+
+  /**
    * Whether the provider supports in-place subscription amount updates
    *
    * Stripe supports updating amounts on existing subscriptions.
