@@ -58,6 +58,7 @@ import { createLogger } from '@/server/common/helper/logger';
 import { isValidUuidV4 as isValidUUID } from '@/server/common/helper/uuid';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
 
 const logger = createLogger('funding');
 
@@ -88,6 +89,7 @@ export default class FundingService {
   private eventBus: EventEmitter;
   private calendarInterface?: CalendarInterface;
   private accountsInterface?: AccountsInterface;
+  private configurationInterface?: ConfigurationInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
@@ -101,6 +103,25 @@ export default class FundingService {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.calendarInterface = calendarInterface;
+  }
+
+  /**
+   * Injects ConfigurationInterface so the provider-facing product name can
+   * follow the instance title.
+   *
+   * @param configurationInterface - The ConfigurationInterface from the configuration domain
+   */
+  setConfigurationInterface(configurationInterface: ConfigurationInterface): void {
+    this.configurationInterface = configurationInterface;
+  }
+
+  /**
+   * Name shown to the payer on checkout, receipts and the customer portal:
+   * the instance title, or the configured domain when no title is set.
+   */
+  private async productName(): Promise<string> {
+    const settings = await this.configurationInterface?.getAllSettings();
+    return settings?.siteTitle || config.get<string>('domain');
   }
 
   /**
@@ -578,6 +599,7 @@ export default class FundingService {
       fundingPlanEntity.provider_subscription_id,
       newAmount,
       fundingPlanEntity.currency,
+      await this.productName(),
       { idempotencyKey: buildProviderIdempotencyKey('plan-amount', fundingPlanEntity.id) },
     );
   }
@@ -1242,6 +1264,7 @@ export default class FundingService {
       calendarIds,
       returnUrl,
       colorMode,
+      productName: await this.productName(),
     };
 
     return adapter.createCheckoutSession(params, {

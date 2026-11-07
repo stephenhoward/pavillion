@@ -15,6 +15,7 @@ import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
 
 /**
  * Funding domain interface for cross-domain communication
@@ -40,6 +41,16 @@ export default class FundingInterface {
    */
   setCalendarInterface(calendarInterface: CalendarInterface): void {
     this.fundingService.setCalendarInterface(calendarInterface);
+  }
+
+  /**
+   * Injects ConfigurationInterface into the funding service so the provider
+   * product name can follow the instance title.
+   *
+   * @param configurationInterface - The ConfigurationInterface from the configuration domain
+   */
+  setConfigurationInterface(configurationInterface: ConfigurationInterface): void {
+    this.fundingService.setConfigurationInterface(configurationInterface);
   }
 
   /**

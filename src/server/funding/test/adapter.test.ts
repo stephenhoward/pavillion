@@ -219,7 +219,7 @@ describe('Payment Provider Adapters', () => {
         id: 'sub_mock123',
       });
 
-      await stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD');
+      await stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD', 'Test Instance');
 
       // Verify subscription was retrieved to get the current item
       expect(mockStripe.subscriptions.retrieve.calledOnce).toBe(true);
@@ -231,6 +231,7 @@ describe('Payment Provider Adapters', () => {
       expect(priceArgs.unit_amount).toBe(2000); // 2000000 millicents -> 2000 cents
       expect(priceArgs.currency).toBe('usd');
       expect(priceArgs.recurring.interval).toBe('month');
+      expect(priceArgs.product_data.name).toBe('Test Instance');
 
       // Verify subscription was updated with no proration
       expect(mockStripe.subscriptions.update.calledOnce).toBe(true);
@@ -251,7 +252,7 @@ describe('Payment Provider Adapters', () => {
       });
 
       await expect(
-        stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD'),
+        stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD', 'Test Instance'),
       ).rejects.toThrow('Subscription has no items to update');
     });
 
@@ -1236,7 +1237,7 @@ describe('Payment Provider Adapters', () => {
           id: 'price_new_monthly',
         });
 
-        const priceId = await stripeAdapter.createPrice(1000000, 'USD', 'month');
+        const priceId = await stripeAdapter.createPrice(1000000, 'USD', 'month', 'Test Instance');
 
         expect(priceId).toBe('price_new_monthly');
         expect(mockStripe.prices.create.calledOnce).toBe(true);
@@ -1245,7 +1246,7 @@ describe('Payment Provider Adapters', () => {
         expect(args.unit_amount).toBe(1000); // 1000000 millicents -> 1000 cents
         expect(args.currency).toBe('usd');
         expect(args.recurring.interval).toBe('month');
-        expect(args.product_data.name).toBe('Pavillion Subscription');
+        expect(args.product_data.name).toBe('Test Instance');
       });
 
       it('should create a yearly recurring price', async () => {
@@ -1253,7 +1254,7 @@ describe('Payment Provider Adapters', () => {
           id: 'price_new_yearly',
         });
 
-        const priceId = await stripeAdapter.createPrice(12000000, 'EUR', 'year');
+        const priceId = await stripeAdapter.createPrice(12000000, 'EUR', 'year', 'Test Instance');
 
         expect(priceId).toBe('price_new_yearly');
 
@@ -1267,11 +1268,11 @@ describe('Payment Provider Adapters', () => {
         mockStripe.prices.create.resolves({ id: 'price_conv' });
 
         // $1.00 = 100000 millicents = 100 cents
-        await stripeAdapter.createPrice(100000, 'USD', 'month');
+        await stripeAdapter.createPrice(100000, 'USD', 'month', 'Test Instance');
         expect(mockStripe.prices.create.firstCall.args[0].unit_amount).toBe(100);
 
         // $100,000 = 10000000000 millicents = 10000000 cents
-        await stripeAdapter.createPrice(10000000000, 'USD', 'month');
+        await stripeAdapter.createPrice(10000000000, 'USD', 'month', 'Test Instance');
         expect(mockStripe.prices.create.secondCall.args[0].unit_amount).toBe(10000000);
       });
     });
@@ -1342,7 +1343,7 @@ describe('Payment Provider Adapters', () => {
       });
 
       it('should send distinct keys for each mutating call in an amount update', async () => {
-        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', 'Test Instance', options);
 
         const priceKey = mockStripe.prices.create.firstCall.args[1].idempotencyKey;
         const updateKey = mockStripe.subscriptions.update.firstCall.args[2].idempotencyKey;
@@ -1367,7 +1368,7 @@ describe('Payment Provider Adapters', () => {
       });
 
       it('should send an idempotency key on price creation and portal session creation', async () => {
-        await stripeAdapter.createPrice(1000000, 'USD', 'month', options);
+        await stripeAdapter.createPrice(1000000, 'USD', 'month', 'Test Instance', options);
         await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com', options);
 
         expect(mockStripe.prices.create.firstCall.args[1].idempotencyKey)
@@ -1377,8 +1378,8 @@ describe('Payment Provider Adapters', () => {
       });
 
       it('should derive the same keys when the same operation is replayed', async () => {
-        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
-        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', options);
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', 'Test Instance', options);
+        await stripeAdapter.updateSubscriptionAmount('sub_1', 2000000, 'USD', 'Test Instance', options);
 
         expect(mockStripe.prices.create.firstCall.args[1].idempotencyKey)
           .toBe(mockStripe.prices.create.secondCall.args[1].idempotencyKey);
@@ -1550,7 +1551,7 @@ describe('Payment Provider Adapters', () => {
 
     it('should throw when updateSubscriptionAmount is called', async () => {
       await expect(
-        paypalAdapter.updateSubscriptionAmount('I-MOCK123', 2000000, 'USD'),
+        paypalAdapter.updateSubscriptionAmount('I-MOCK123', 2000000, 'USD', 'Test Instance'),
       ).rejects.toThrow('updateSubscriptionAmount is not implemented for PayPal');
     });
 
@@ -1593,7 +1594,7 @@ describe('Payment Provider Adapters', () => {
 
     it('should throw when createPrice is called', async () => {
       await expect(
-        paypalAdapter.createPrice(1000000, 'USD', 'month'),
+        paypalAdapter.createPrice(1000000, 'USD', 'month', 'Test Instance'),
       ).rejects.toThrow('createPrice is not implemented for PayPal');
     });
   });
@@ -1607,19 +1608,21 @@ describe('Payment Provider Adapters', () => {
     it('should record updateSubscriptionAmount calls', async () => {
       const mockAdapter = new MockStripeAdapter();
 
-      await mockAdapter.updateSubscriptionAmount('sub_123', 5000000, 'USD');
-      await mockAdapter.updateSubscriptionAmount('sub_456', 3000000, 'EUR');
+      await mockAdapter.updateSubscriptionAmount('sub_123', 5000000, 'USD', 'Test Instance');
+      await mockAdapter.updateSubscriptionAmount('sub_456', 3000000, 'EUR', 'Test Instance');
 
       expect(mockAdapter.updateSubscriptionAmountCalls).toHaveLength(2);
       expect(mockAdapter.updateSubscriptionAmountCalls[0]).toEqual({
         providerSubscriptionId: 'sub_123',
         newAmount: 5000000,
         currency: 'USD',
+        productName: 'Test Instance',
       });
       expect(mockAdapter.updateSubscriptionAmountCalls[1]).toEqual({
         providerSubscriptionId: 'sub_456',
         newAmount: 3000000,
         currency: 'EUR',
+        productName: 'Test Instance',
       });
     });
 
@@ -1655,7 +1658,7 @@ describe('Payment Provider Adapters', () => {
     it('should return mock price ID for createPrice', async () => {
       const mockAdapter = new MockStripeAdapter();
 
-      const priceId = await mockAdapter.createPrice(1000000, 'USD', 'month');
+      const priceId = await mockAdapter.createPrice(1000000, 'USD', 'month', 'Test Instance');
 
       expect(priceId).toBeTruthy();
       expect(priceId).toContain('price_mock_');
@@ -1664,6 +1667,7 @@ describe('Payment Provider Adapters', () => {
         amount: 1000000,
         currency: 'USD',
         interval: 'month',
+        productName: 'Test Instance',
       });
     });
   });
@@ -1677,13 +1681,14 @@ describe('Payment Provider Adapters', () => {
     it('should record updateSubscriptionAmount calls', async () => {
       const mockAdapter = new MockPayPalAdapter();
 
-      await mockAdapter.updateSubscriptionAmount('I-123', 5000000, 'USD');
+      await mockAdapter.updateSubscriptionAmount('I-123', 5000000, 'USD', 'Test Instance');
 
       expect(mockAdapter.updateSubscriptionAmountCalls).toHaveLength(1);
       expect(mockAdapter.updateSubscriptionAmountCalls[0]).toEqual({
         providerSubscriptionId: 'I-123',
         newAmount: 5000000,
         currency: 'USD',
+        productName: 'Test Instance',
       });
     });
 
@@ -1712,7 +1717,7 @@ describe('Payment Provider Adapters', () => {
       const mockAdapter = new MockPayPalAdapter();
 
       await expect(
-        mockAdapter.createPrice(1000000, 'USD', 'month'),
+        mockAdapter.createPrice(1000000, 'USD', 'month', 'Test Instance'),
       ).rejects.toThrow('createPrice is not implemented for PayPal');
     });
   });

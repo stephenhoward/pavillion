@@ -16,6 +16,7 @@ export interface UpdateSubscriptionAmountCall {
   providerSubscriptionId: string;
   newAmount: number;
   currency: string;
+  productName: string;
 }
 
 /**
@@ -32,6 +33,7 @@ export interface CreatePriceCall {
   amount: number;
   currency: string;
   interval: 'month' | 'year';
+  productName: string;
 }
 
 /**
@@ -108,16 +110,19 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param productName - Product name shown to the payer
    */
   async updateSubscriptionAmount(
     providerSubscriptionId: string,
     newAmount: number,
     currency: string,
+    productName: string,
   ): Promise<void> {
     this.updateSubscriptionAmountCalls.push({
       providerSubscriptionId,
       newAmount,
       currency,
+      productName,
     });
   }
 
@@ -229,10 +234,11 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval
+   * @param productName - Product name shown to the payer
    * @returns Mock price ID
    */
-  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
-    this.createPriceCalls.push({ amount, currency, interval });
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year', productName: string): Promise<string> {
+    this.createPriceCalls.push({ amount, currency, interval, productName });
     this.idCounter++;
 
     return `price_mock_${this.idCounter}`;
@@ -298,16 +304,19 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param providerSubscriptionId - Provider's subscription ID
    * @param newAmount - New subscription amount in millicents
    * @param currency - ISO 4217 currency code
+   * @param productName - Product name shown to the payer
    */
   async updateSubscriptionAmount(
     providerSubscriptionId: string,
     newAmount: number,
     currency: string,
+    productName: string,
   ): Promise<void> {
     this.updateSubscriptionAmountCalls.push({
       providerSubscriptionId,
       newAmount,
       currency,
+      productName,
     });
   }
 
@@ -407,9 +416,10 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    * @param amount - Amount in millicents
    * @param currency - ISO 4217 currency code
    * @param interval - Billing interval
+   * @param productName - Product name shown to the payer
    * @throws Error always
    */
-  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year'): Promise<string> {
+  async createPrice(_amount: number, _currency: string, _interval: 'month' | 'year', _productName: string): Promise<string> {
     throw new Error('createPrice is not implemented for PayPal');
   }
 }
