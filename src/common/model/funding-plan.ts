@@ -44,6 +44,44 @@ export const SUPPORTED_PROVIDER_TYPES: readonly ProviderType[] = ['stripe'];
 export const CHECKOUT_SESSION_ID_PATTERN = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
 
 /**
+ * The Stripe event types the instance's webhook destination must deliver.
+ *
+ * Exactly the types StripeAdapter.parseWebhookEvent acts on (a test holds the
+ * two together). A destination missing any of them still answers 200 to
+ * everything it does send and checkout still works — activation does not
+ * wait for a webhook — but the instance can then never end a plan, record a
+ * renewal, or move a failed payment to past due. The admin wizard lists these
+ * beside the webhook URL, and checkStripeWebhookDestination reports when the
+ * configured destination does not send them.
+ */
+export const STRIPE_WEBHOOK_EVENTS = [
+  'checkout.session.completed',
+  'invoice.paid',
+  'invoice.payment_succeeded',
+  'invoice.payment_failed',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+] as const;
+
+/**
+ * What a look at the Stripe account found for the instance's webhook URL.
+ *
+ * - `ok`: an enabled destination for the URL sends every required event.
+ * - `missing_events`: enabled destinations exist but omit `missingEvents`.
+ * - `disabled`: destinations exist for the URL but none is enabled.
+ * - `no_destination`: no destination points at the URL.
+ * - `unchecked`: the destinations could not be read (no provider, a
+ *   restricted key without webhook read access, or a Stripe error), so
+ *   nothing is known either way.
+ */
+export type StripeWebhookCheckStatus = 'ok' | 'missing_events' | 'disabled' | 'no_destination' | 'unchecked';
+
+export type StripeWebhookCheck = {
+  status: StripeWebhookCheckStatus;
+  missingEvents: string[];
+};
+
+/**
  * How a single calendar is currently covered.
  *
  * This is the one vocabulary for a single calendar's coverage, shared verbatim

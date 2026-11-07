@@ -35,6 +35,7 @@ import { buildProviderIdempotencyKey } from '../service/provider/idempotency';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
 import { ProviderFactory } from '../service/provider/factory';
+import { STRIPE_WEBHOOK_EVENTS } from '@/common/model/funding-plan';
 
 describe('Payment Provider Adapters', () => {
   const sandbox = sinon.createSandbox();
@@ -128,6 +129,9 @@ describe('Payment Provider Adapters', () => {
         },
         balance: {
           retrieve: sandbox.stub(),
+        },
+        webhookEndpoints: {
+          list: sandbox.stub(),
         },
       };
 
@@ -278,6 +282,147 @@ describe('Payment Provider Adapters', () => {
       // Test invalid signature
       const invalidResult = stripeAdapter.verifyWebhookSignature(payload, invalidSignature);
       expect(invalidResult).toBe(false);
+    });
+
+    describe('checkWebhookDestination', () => {
+      const WEBHOOK_URL = 'https://events.example.org/api/funding/webhooks/stripe';
+
+      function endpoint(overrides: Partial<Stripe.WebhookEndpoint> = {}): Stripe.WebhookEndpoint {
+        return {
+          id: 'we_test',
+          object: 'webhook_endpoint',
+          url: WEBHOOK_URL,
+          status: 'enabled',
+          enabled_events: [...STRIPE_WEBHOOK_EVENTS],
+          ...overrides,
+        } as Stripe.WebhookEndpoint;
+      }
+
+      function givenEndpoints(endpoints: Stripe.WebhookEndpoint[]) {
+        mockStripe.webhookEndpoints.list.returns({
+          autoPagingToArray: sandbox.stub().resolves(endpoints),
+        });
+      }
+
+      it('reports ok when an enabled destination for the URL sends every required event', async () => {
+        givenEndpoints([endpoint()]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({ status: 'ok', missingEvents: [] });
+      });
+
+      it('reports ok for a destination subscribed to all events', async () => {
+        givenEndpoints([endpoint({ enabled_events: ['*'] })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({ status: 'ok', missingEvents: [] });
+      });
+
+      it('names the events a preset-group destination omits', async () => {
+        // The staging destination: invoice.*, payment_intent.*, subscription_schedule.*
+        givenEndpoints([endpoint({
+          enabled_events: [
+            'invoice.paid',
+            'invoice.payment_succeeded',
+            'invoice.payment_failed',
+            'payment_intent.succeeded',
+            'subscription_schedule.updated',
+          ],
+        })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({
+          status: 'missing_events',
+          missingEvents: [
+            'checkout.session.completed',
+            'customer.subscription.updated',
+            'customer.subscription.deleted',
+          ],
+        });
+      });
+
+      it('counts events from every enabled destination for the URL together', async () => {
+        givenEndpoints([
+          endpoint({ id: 'we_a', enabled_events: ['checkout.session.completed', 'invoice.paid', 'invoice.payment_succeeded'] }),
+          endpoint({ id: 'we_b', enabled_events: ['invoice.payment_failed', 'customer.subscription.updated', 'customer.subscription.deleted'] }),
+        ]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check.status).toBe('ok');
+      });
+
+      it('ignores a disabled destination when an enabled one omits events', async () => {
+        givenEndpoints([
+          endpoint({ id: 'we_off', status: 'disabled' }),
+          endpoint({ id: 'we_on', enabled_events: ['checkout.session.completed'] }),
+        ]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check.status).toBe('missing_events');
+        expect(check.missingEvents).toContain('customer.subscription.deleted');
+      });
+
+      it('reports disabled when every destination for the URL is disabled', async () => {
+        givenEndpoints([endpoint({ status: 'disabled' })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({ status: 'disabled', missingEvents: [] });
+      });
+
+      it('reports no_destination when only other URLs have destinations', async () => {
+        givenEndpoints([endpoint({ url: 'https://other.example.org/api/funding/webhooks/stripe' })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({ status: 'no_destination', missingEvents: [] });
+      });
+
+      it('matches a destination URL that differs only in host case or a trailing slash', async () => {
+        givenEndpoints([endpoint({ url: 'https://Events.Example.org/api/funding/webhooks/stripe/' })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check.status).toBe('ok');
+      });
+
+      it('reports unchecked rather than throwing when the destinations cannot be read', async () => {
+        // A restricted key without webhook read access fails here
+        mockStripe.webhookEndpoints.list.returns({
+          autoPagingToArray: sandbox.stub().rejects(new Error('permission denied')),
+        });
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check).toEqual({ status: 'unchecked', missingEvents: [] });
+        expect(warnStub).toHaveBeenCalled();
+      });
+    });
+
+    describe('STRIPE_WEBHOOK_EVENTS', () => {
+      // The list the admin is told to subscribe must be exactly what the
+      // parser acts on: one event too few and a destination passes the check
+      // while plans silently stop ending; one too many and admins are sent
+      // after events nothing reads.
+      it.each([...STRIPE_WEBHOOK_EVENTS])('names %s, which parseWebhookEvent acts on', (type) => {
+        const event = stripeAdapter.parseWebhookEvent(JSON.stringify(capturedStripeEvent(type)));
+
+        expect(event.eventType).toBe(type);
+        expect(event.status).toBeDefined();
+      });
+
+      it('leaves out event types parseWebhookEvent does not act on', () => {
+        const unlisted = { ...capturedStripeEvent('invoice.paid'), type: 'invoice.created' };
+
+        const event = stripeAdapter.parseWebhookEvent(JSON.stringify(unlisted));
+
+        expect(event.status).toBeUndefined();
+      });
     });
 
     describe('parseWebhookEvent', () => {

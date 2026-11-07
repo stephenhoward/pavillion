@@ -9,10 +9,25 @@ import {
   ProviderRequestOptions,
   WebhookEvent,
 } from './adapter';
-import { ProviderType } from '@/common/model/funding-plan';
+import { ProviderType, STRIPE_WEBHOOK_EVENTS, StripeWebhookCheck } from '@/common/model/funding-plan';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('funding');
+
+/**
+ * Reduce a webhook URL to the parts that decide where Stripe delivers:
+ * scheme, host (case-folded by URL) and port, plus the path without a
+ * trailing slash. An unparseable URL compares as itself.
+ */
+function normalizeWebhookUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  }
+  catch {
+    return url;
+  }
+}
 
 /**
  * Stripe rejects Idempotency-Key headers longer than this.
@@ -36,7 +51,9 @@ interface BillingPeriod {
  *
  * Webhook registration is managed manually by the instance administrator
  * via the Stripe dashboard. The admin enters the webhook signing secret
- * (whsec_) directly through the credential configuration form.
+ * (whsec_) directly through the credential configuration form. The adapter
+ * never creates or edits that destination; checkWebhookDestination only reads
+ * it, to tell the admin when it omits events in STRIPE_WEBHOOK_EVENTS.
  */
 export class StripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -113,6 +130,56 @@ export class StripeAdapter implements PaymentProviderAdapter {
     catch {
       return false;
     }
+  }
+
+  /**
+   * Report whether the Stripe account's webhook destinations for `webhookUrl`
+   * send every event in STRIPE_WEBHOOK_EVENTS.
+   *
+   * Read-only: the operator owns the destination. A destination created from
+   * one of Stripe's preset event groups answers 200 to everything it sends
+   * while omitting the events that end plans, so the gap is invisible from
+   * the instance side — this is the only place it can be seen. Events from
+   * every enabled destination for the URL count together. A read failure
+   * (typically a restricted key without webhook read access) is `unchecked`,
+   * never an error: the check informs the admin and must not block a save.
+   *
+   * @param webhookUrl - The instance's Stripe webhook URL
+   * @returns What the account's destinations for that URL deliver
+   */
+  async checkWebhookDestination(webhookUrl: string): Promise<StripeWebhookCheck> {
+    let endpoints: Stripe.WebhookEndpoint[];
+    try {
+      endpoints = await this.stripe.webhookEndpoints.list({ limit: 100 }).autoPagingToArray({ limit: 1000 });
+    }
+    catch (err) {
+      logger.warn({
+        providerType: this.providerType,
+        errorType: err instanceof Error ? err.constructor.name : 'unknown',
+      }, 'Could not list Stripe webhook destinations to check their events');
+      return { status: 'unchecked', missingEvents: [] };
+    }
+
+    const target = normalizeWebhookUrl(webhookUrl);
+    const matching = endpoints.filter(endpoint => normalizeWebhookUrl(endpoint.url) === target);
+    if (matching.length === 0) {
+      return { status: 'no_destination', missingEvents: [] };
+    }
+
+    const enabled = matching.filter(endpoint => endpoint.status === 'enabled');
+    if (enabled.length === 0) {
+      return { status: 'disabled', missingEvents: [] };
+    }
+
+    const delivered = new Set(enabled.flatMap(endpoint => endpoint.enabled_events));
+    if (delivered.has('*')) {
+      return { status: 'ok', missingEvents: [] };
+    }
+
+    const missingEvents = STRIPE_WEBHOOK_EVENTS.filter(type => !delivered.has(type));
+    return missingEvents.length === 0
+      ? { status: 'ok', missingEvents: [] }
+      : { status: 'missing_events', missingEvents };
   }
 
   /**

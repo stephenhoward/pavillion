@@ -1,12 +1,13 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { Op } from 'sequelize';
-import { ProviderType } from '@/common/model/funding-plan';
+import { ProviderType, StripeWebhookCheck } from '@/common/model/funding-plan';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { PaymentProviderAdapter, ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { StripeAdapter } from '@/server/funding/service/provider/stripe';
+import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import FundingService from '@/server/funding/service/funding';
 import {
   InvalidProviderTypeError,
@@ -17,6 +18,8 @@ import {
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('funding');
+
+const unchecked = (): StripeWebhookCheck => ({ status: 'unchecked', missingEvents: [] });
 
 /**
  * User object for admin operations
@@ -40,6 +43,7 @@ export interface StripeCredentialInputs {
  */
 export interface StripeConfigureResult {
   connectionVerified: boolean;
+  webhookCheck: StripeWebhookCheck;
 }
 
 /**
@@ -87,7 +91,11 @@ export class ProviderConnectionService {
    *
    * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
    * @param adminUser - Admin user performing the configuration
-   * @returns Object with connectionVerified indicating if Stripe API call succeeded
+   * A verified configure also checks the account's webhook destination for
+   * this instance (see checkStripeWebhook); an unverified one cannot, and
+   * reports it `unchecked`.
+   *
+   * @returns connectionVerified (the Stripe API call succeeded) and webhookCheck
    */
   async configureStripe(credentials: StripeCredentialInputs, _adminUser: AdminUser): Promise<StripeConfigureResult> {
     // Validate required fields
@@ -174,7 +182,47 @@ export class ProviderConnectionService {
       await entity.save();
     }
 
-    return { connectionVerified };
+    const webhookCheck = connectionVerified
+      ? await this.checkWebhookFor(entity)
+      : unchecked();
+
+    return { connectionVerified, webhookCheck };
+  }
+
+  /**
+   * Check that the configured Stripe account has a webhook destination for
+   * this instance that sends every event in STRIPE_WEBHOOK_EVENTS.
+   *
+   * Read-only and never throws: with no Stripe provider, or when the account
+   * cannot be read, the result is `unchecked`.
+   *
+   * @returns What the Stripe account's destinations for this instance deliver
+   */
+  async checkStripeWebhook(): Promise<StripeWebhookCheck> {
+    const entity = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe' },
+    });
+    if (!entity) {
+      return unchecked();
+    }
+    return this.checkWebhookFor(entity);
+  }
+
+  private async checkWebhookFor(entity: ProviderConfigEntity): Promise<StripeWebhookCheck> {
+    try {
+      const adapter = ProviderFactory.getAdapter(entity);
+      if (!(adapter instanceof StripeAdapter)) {
+        return unchecked();
+      }
+      const webhookUrl = new WebhookManager().generateWebhookUrl('stripe');
+      return await adapter.checkWebhookDestination(webhookUrl);
+    }
+    catch (err) {
+      logger.warn({
+        errorType: err instanceof Error ? err.constructor.name : 'unknown',
+      }, 'Stripe webhook destination check failed');
+      return unchecked();
+    }
   }
 
   /**

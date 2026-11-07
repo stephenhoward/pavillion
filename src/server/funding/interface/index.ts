@@ -8,7 +8,7 @@ import {
   type ProviderStatus,
   type DisconnectionResult,
 } from '@/server/funding/service/provider_connection';
-import { FundingPlan, FundingSettings, ProviderConfig, CalendarFundingSummary, BillingCycle, ProviderType, FundingGatedFeature } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, CalendarFundingSummary, BillingCycle, ProviderType, FundingGatedFeature, StripeWebhookCheck } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import type { ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -166,6 +166,15 @@ export default class FundingInterface {
    */
   async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<StripeConfigureResult> {
     return this.providerConnectionService.configureStripe(credentials, adminUser);
+  }
+
+  /**
+   * Check the Stripe account's webhook destination for this instance
+   *
+   * @returns Whether a destination for the instance URL sends every required event
+   */
+  async checkStripeWebhook(): Promise<StripeWebhookCheck> {
+    return this.providerConnectionService.checkStripeWebhook();
   }
 
   /**

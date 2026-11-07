@@ -78,6 +78,7 @@ describe('Funding Provider UI Components', () => {
       }),
       updateProvider: vi.fn().mockResolvedValue(true),
       disconnectProvider: vi.fn().mockResolvedValue({ success: true }),
+      checkStripeWebhook: vi.fn().mockResolvedValue({ status: 'ok', missingEvents: [] }),
     };
 
     // Mock the funding service prototype methods
@@ -86,6 +87,7 @@ describe('Funding Provider UI Components', () => {
     vi.spyOn(FundingService.prototype, 'listFundingPlans').mockImplementation(mockService.listFundingPlans);
     vi.spyOn(FundingService.prototype, 'updateProvider').mockImplementation(mockService.updateProvider);
     vi.spyOn(FundingService.prototype, 'disconnectProvider').mockImplementation(mockService.disconnectProvider);
+    vi.spyOn(FundingService.prototype, 'checkStripeWebhook').mockImplementation(mockService.checkStripeWebhook);
 
     // Mock static methods
     vi.spyOn(FundingService, 'millicentsToDisplay').mockImplementation((millicents: number) => millicents / 100000);
@@ -192,6 +194,58 @@ describe('Funding Provider UI Components', () => {
     expect(stripeItem.find('.connected-badge').exists()).toBe(true);
     expect(stripeItem.find('.connected-badge').text()).toBe('Connected');
     expect(stripeItem.findAll('button').some(b => b.text().includes('Disconnect'))).toBe(true);
+  });
+
+  describe('Stripe webhook destination check', () => {
+    const configuredStripe = {
+      id: 'provider-1',
+      provider_type: 'stripe',
+      enabled: true,
+      display_name: 'Stripe',
+      configured: true,
+      webhook_url: 'https://events.example.org/api/funding/webhooks/stripe',
+    };
+
+    it('warns beside a connected Stripe provider whose destination omits events', async () => {
+      // A connected, enabled provider with a destination that cannot end plans —
+      // the state that otherwise looks healthy on this page
+      mockService.getProviders.mockResolvedValue([configuredStripe]);
+      mockService.checkStripeWebhook.mockResolvedValue({
+        status: 'missing_events',
+        missingEvents: ['customer.subscription.updated', 'customer.subscription.deleted'],
+      });
+
+      wrapper = mountFunding();
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const check = wrapper.find('.provider-webhook-check');
+      expect(check.exists()).toBe(true);
+      expect(check.text()).toContain('events.example.org');
+      expect(check.findAll('code').map(code => code.text())).toEqual([
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+      ]);
+    });
+
+    it('shows no warning when the destination sends every event', async () => {
+      mockService.getProviders.mockResolvedValue([configuredStripe]);
+
+      wrapper = mountFunding();
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockService.checkStripeWebhook).toHaveBeenCalled();
+      expect(wrapper.find('.webhook-check').exists()).toBe(false);
+    });
+
+    it('does not check webhooks before Stripe is configured', async () => {
+      wrapper = mountFunding();
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockService.checkStripeWebhook).not.toHaveBeenCalled();
+    });
   });
 
   /**

@@ -37,7 +37,10 @@ describe('Provider Connection API Routes', () => {
 
   describe('POST /admin/providers/stripe/configure', () => {
     it('should configure Stripe credentials successfully with connectionVerified true', async () => {
-      sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: true });
+      sandbox.stub(service, 'configureStripe').resolves({
+        connectionVerified: true,
+        webhookCheck: { status: 'missing_events', missingEvents: ['customer.subscription.deleted'] },
+      });
 
       router.use(addRequestUser);
       router.post('/stripe/configure', routes.configureStripe.bind(routes));
@@ -51,11 +54,18 @@ describe('Provider Connection API Routes', () => {
         })
         .expect(200);
 
-      expect(response.body).toEqual({ success: true, connectionVerified: true });
+      expect(response.body).toEqual({
+        success: true,
+        connectionVerified: true,
+        webhookCheck: { status: 'missing_events', missingEvents: ['customer.subscription.deleted'] },
+      });
     });
 
     it('should return connectionVerified false when service returns unverified', async () => {
-      sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: false });
+      sandbox.stub(service, 'configureStripe').resolves({
+        connectionVerified: false,
+        webhookCheck: { status: 'unchecked', missingEvents: [] },
+      });
 
       router.use(addRequestUser);
       router.post('/stripe/configure', routes.configureStripe.bind(routes));
@@ -69,11 +79,18 @@ describe('Provider Connection API Routes', () => {
         })
         .expect(200);
 
-      expect(response.body).toEqual({ success: true, connectionVerified: false });
+      expect(response.body).toEqual({
+        success: true,
+        connectionVerified: false,
+        webhookCheck: { status: 'unchecked', missingEvents: [] },
+      });
     });
 
     it('should pass correct credentials to service', async () => {
-      const configureStub = sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: true });
+      const configureStub = sandbox.stub(service, 'configureStripe').resolves({
+        connectionVerified: true,
+        webhookCheck: { status: 'ok', missingEvents: [] },
+      });
 
       router.use(addRequestUser);
       router.post('/stripe/configure', routes.configureStripe.bind(routes));
@@ -190,6 +207,33 @@ describe('Provider Connection API Routes', () => {
 
       expect(response.body.error).toBe('Internal server error');
       expect(response.body).not.toHaveProperty('connectionVerified');
+    });
+  });
+
+  describe('GET /admin/providers/stripe/webhook-check', () => {
+    it('should return the webhook destination check', async () => {
+      sandbox.stub(service, 'checkStripeWebhook').resolves({
+        status: 'no_destination',
+        missingEvents: [],
+      });
+      router.get('/stripe/webhook-check', routes.checkStripeWebhook.bind(routes));
+
+      const response = await request(testApp(router))
+        .get('/stripe/webhook-check')
+        .expect(200);
+
+      expect(response.body).toEqual({ status: 'no_destination', missingEvents: [] });
+    });
+
+    it('should return 500 when the check itself fails unexpectedly', async () => {
+      sandbox.stub(service, 'checkStripeWebhook').rejects(new Error('database unavailable'));
+      router.get('/stripe/webhook-check', routes.checkStripeWebhook.bind(routes));
+
+      const response = await request(testApp(router))
+        .get('/stripe/webhook-check')
+        .expect(500);
+
+      expect(response.body).toEqual({ error: 'Internal server error' });
     });
   });
 
