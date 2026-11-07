@@ -1379,6 +1379,15 @@ export default class FundingService {
    * cancel racing an allocation change queues behind it instead of cancelling
    * at the provider while the other transaction is still pushing a new total.
    * Same Postgres-only caveat as `resolveActiveFundingPlan`.
+   *
+   * A cancel that would change nothing is a no-op: no provider call, no write,
+   * no event. That covers any cancel of a plan already 'cancelled', and a
+   * period-end cancel of a plan whose `cancel_at` is already set. Each emitted
+   * cancellation sends the owner an email, so a repeated request (a double
+   * click, a scripted loop) must not emit again. The check runs after the
+   * locked read, so two concurrent requests serialize and the second sees the
+   * first's write. An immediate cancel of a plan pending period-end
+   * cancellation still proceeds: it ends coverage now, which is a real change.
    */
   async cancel(fundingPlanId: string, immediate: boolean = false, tx?: Transaction): Promise<void> {
     const run = async (t: Transaction): Promise<void> => {
@@ -1388,6 +1397,11 @@ export default class FundingService {
       });
       if (!entity) {
         throw new Error('Funding plan not found');
+      }
+
+      if (entity.status === 'cancelled' || (!immediate && entity.cancel_at)) {
+        logger.info({ fundingPlanId: entity.id, immediate }, 'Funding plan cancellation already recorded; nothing to do');
+        return;
       }
 
       // Get provider configuration
@@ -1699,10 +1713,9 @@ export default class FundingService {
       // any of the writes below can overwrite it. It is what the allocations
       // were covered through, so finalization has to date them from it.
       const scheduledCancelAt = fundingPlanRecord.cancel_at;
+      const previousStatus = fundingPlanRecord.status;
 
       if (event.status) {
-        const previousStatus = fundingPlanRecord.status;
-
         if (previousStatus === 'cancelled' && event.status !== 'cancelled') {
           logger.warn({
             eventId: event.eventId,
@@ -1738,6 +1751,30 @@ export default class FundingService {
       // pending cancellation the customer reversed), a date schedules one.
       if (event.cancelAt !== undefined) {
         fundingPlanRecord.cancel_at = event.cancelAt;
+      }
+
+      // A cancellation that started at the provider (billing portal, Stripe
+      // dashboard, or Stripe ending the subscription after its retries) is
+      // announced here, so the owner hears about it as they would an in-app
+      // one. Only when no cancellation was recorded before this event: an
+      // in-app period-end cancel has already set cancel_at, and an in-app
+      // immediate cancel has already made the plan 'cancelled', so cancel()
+      // has announced those and their provider echoes stay quiet. A redelivery
+      // is stopped by the dedupe row, and a later distinct event finds the
+      // marker this one wrote.
+      if (!scheduledCancelAt) {
+        if (previousStatus !== 'cancelled' && fundingPlanRecord.status === 'cancelled') {
+          emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
+            fundingPlan: fundingPlanRecord.toModel(),
+            immediate: true,
+          }, t);
+        }
+        else if (fundingPlanRecord.status !== 'cancelled' && fundingPlanRecord.cancel_at) {
+          emitAfterTx(this.eventBus, 'funding:plan:cancelled', {
+            fundingPlan: fundingPlanRecord.toModel(),
+            immediate: false,
+          }, t);
+        }
       }
 
       if (event.currentPeriodStart) {
@@ -1983,28 +2020,52 @@ export default class FundingService {
    * Suspend funding plans that have exceeded grace period
    *
    * Called by scheduled job to handle expired grace periods
+   *
+   * The scan is an unlocked snapshot, so each plan is re-read FOR UPDATE and
+   * suspended only if it still matches the scan: 'past_due', last updated
+   * before the grace-period cutoff. Without that, a webhook landing
+   * between scan and write — Stripe's own `unpaid` → 'suspended', or a
+   * recovered payment → 'active' — would be overwritten from the stale
+   * snapshot, and a webhook suspension would be announced a second time (one
+   * more dunning email). `processWebhookEvent` takes the same row lock.
    */
   async suspendExpiredFundingPlans(): Promise<void> {
     const settings = await this.getSettings();
     const gracePeriodMs = settings.gracePeriodDays * 24 * 60 * 60 * 1000;
     const cutoffDate = new Date(Date.now() - gracePeriodMs);
 
-    const expiredFundingPlans = await FundingPlanEntity.findAll({
-      where: {
-        status: 'past_due',
-        updatedAt: {
-          [Op.lt]: cutoffDate,
-        },
+    // The scan's filter, reused under the lock below.
+    const expiredWhere = {
+      status: 'past_due',
+      updatedAt: {
+        [Op.lt]: cutoffDate,
       },
-    });
+    };
 
-    for (const fundingPlanRecord of expiredFundingPlans) {
-      fundingPlanRecord.status = 'suspended';
-      fundingPlanRecord.suspended_at = new Date();
-      await fundingPlanRecord.save();
+    const expiredFundingPlans = await FundingPlanEntity.findAll({ where: expiredWhere });
 
-      this.eventBus.emit('funding:plan:suspended', {
-        fundingPlan: fundingPlanRecord.toModel(),
+    for (const candidate of expiredFundingPlans) {
+      await db.transaction(async (t: Transaction) => {
+        // The scan's conditions again, under the lock: still past due, and past
+        // due since before the cutoff — a plan that recovered and fell past due
+        // again after the scan has a fresh grace period. Evaluated by the
+        // database, so the comparison is the scan's own.
+        const fundingPlanRecord = await FundingPlanEntity.findOne({
+          where: { id: candidate.id, ...expiredWhere },
+          transaction: t,
+          lock: Transaction.LOCK.UPDATE,
+        });
+        if (!fundingPlanRecord) {
+          return;
+        }
+
+        fundingPlanRecord.status = 'suspended';
+        fundingPlanRecord.suspended_at = new Date();
+        await fundingPlanRecord.save({ transaction: t });
+
+        emitAfterTx(this.eventBus, 'funding:plan:suspended', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        }, t);
       });
     }
   }

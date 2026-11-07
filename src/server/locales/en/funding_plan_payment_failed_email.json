@@ -1,0 +1,15 @@
+{
+  "subject": "A payment for your funding plan didn't go through",
+  "title": "Payment Not Received",
+  "greeting": "Hello,",
+  "message": "We couldn't collect the latest payment for your {{planName}}.",
+  "status_detail": "Your plan is now past due. The calendars it covers keep extended features for a short grace period, after which the plan will be suspended if the payment is still outstanding.",
+  "plan_name_monthly": "monthly funding plan supporting {{domain}}",
+  "plan_name_yearly": "yearly funding plan supporting {{domain}}",
+  "action_message": "Please check your payment details to keep your plan active.",
+  "action_button": "Review Funding Plan",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

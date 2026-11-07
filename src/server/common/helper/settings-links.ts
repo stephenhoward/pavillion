@@ -43,3 +43,14 @@ export function adminModerationReportPath(reportId: string): string {
 export function adminAccountsPath(): string {
   return '/settings/admin/accounts';
 }
+
+/**
+ * Path to the signed-in account's Funding Plan settings page, the client
+ * route `funding_plan`. Path only: callers add the origin with `publicUrl`.
+ * Pinned by the same two tests as `calendarReportsPath`.
+ *
+ * @returns `/settings/account/funding`
+ */
+export function fundingPlanPath(): string {
+  return '/settings/account/funding';
+}

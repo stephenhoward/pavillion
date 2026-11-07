@@ -245,6 +245,43 @@ describe('FundingService', () => {
         expect(mockEntity.cancel_at).toBeNull();
         expect(mockEntity.save.called).toBe(true);
       });
+
+      it('should still end coverage now for a plan pending period-end cancellation', async () => {
+        const { mockEntity, mockAdapter } = stubCancellablePlan({ cancel_at: periodEnd });
+
+        await service.cancel(mockEntity.id, true);
+
+        expect(mockAdapter.cancelSubscription.calledWith(mockEntity.provider_subscription_id, true)).toBe(true);
+        expect(mockEntity.status).toBe('cancelled');
+        expect(mockEntity.save.called).toBe(true);
+      });
+    });
+
+    /*
+     * Every emitted cancellation emails the plan owner, so a cancel that would
+     * change nothing must not reach the provider, write, or emit.
+     */
+    describe('when the cancellation is already recorded', () => {
+      const cases: Array<[string, Record<string, unknown>, boolean]> = [
+        ['a period-end cancel of a plan with cancel_at set', { cancel_at: periodEnd }, false],
+        ['a period-end cancel of a cancelled plan', { status: 'cancelled', cancelled_at: new Date() }, false],
+        ['an immediate cancel of a cancelled plan', { status: 'cancelled', cancelled_at: new Date() }, true],
+      ];
+
+      for (const [label, overrides, immediate] of cases) {
+        it(`should do nothing for ${label}`, async () => {
+          const { mockEntity, mockAdapter } = stubCancellablePlan(overrides);
+          const emitted = sandbox.spy();
+          eventBus.on('funding:plan:cancelled', emitted);
+
+          await service.cancel(mockEntity.id, immediate);
+          await new Promise(resolve => setImmediate(resolve));
+
+          expect(mockAdapter.cancelSubscription.called).toBe(false);
+          expect(mockEntity.save.called).toBe(false);
+          expect(emitted.called).toBe(false);
+        });
+      }
     });
   });
 
@@ -655,7 +692,7 @@ describe('FundingService', () => {
       const mockEntity = {
         id: fundingPlanId,
         status: 'past_due',
-        updated_at: pastDueDate,
+        updatedAt: pastDueDate,
         save: sandbox.stub().resolves(),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -665,6 +702,7 @@ describe('FundingService', () => {
       };
 
       sandbox.stub(FundingPlanEntity, 'findAll').resolves([mockEntity] as any);
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockEntity as any);
 
       const mockSettings = {
         toModel: () => {

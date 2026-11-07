@@ -1,0 +1,17 @@
+{
+  "subject": "Your funding plan has been cancelled",
+  "title": "Funding Plan Cancelled",
+  "greeting": "Hello,",
+  "message": "Your {{planName}} has been cancelled. Thank you for supporting this instance.",
+  "status_immediate": "Calendars it covered no longer have access to extended features.",
+  "status_period_end": "Calendars it covers keep extended features until the end of the current billing period, and the plan will not renew after that.",
+  "plan_name_monthly": "monthly funding plan supporting {{domain}}",
+  "plan_name_yearly": "yearly funding plan supporting {{domain}}",
+  "action_message": "You can start a new funding plan at any time.",
+  "action_message_period_end": "Changed your mind? You can keep your plan from your funding plan settings until it ends.",
+  "action_button": "View Funding Plan",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

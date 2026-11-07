@@ -6,6 +6,7 @@ import FundingApiV1 from '@/server/funding/api/v1';
 import { startScheduledJobs } from '@/server/funding/service/jobs';
 import type CalendarInterface from '@/server/calendar/interface';
 import type AccountsInterface from '@/server/accounts/interface';
+import type EmailInterface from '@/server/email/interface';
 
 /**
  * Funding Domain entry point.
@@ -17,10 +18,15 @@ export default class FundingDomain {
   private readonly eventHandlers: FundingEventHandlers;
   private stopJobs?: () => void;
 
-  constructor(eventBus: EventEmitter) {
+  /**
+   * @param eventBus - The shared domain event bus
+   * @param emailInterface - Sends the plan owner's dunning emails; optional so
+   *   test harnesses that need no email can construct the domain without it
+   */
+  constructor(eventBus: EventEmitter, emailInterface?: EmailInterface) {
     this.eventBus = eventBus;
     this.interface = new FundingInterface(eventBus);
-    this.eventHandlers = new FundingEventHandlers();
+    this.eventHandlers = new FundingEventHandlers(emailInterface);
   }
 
   /**
@@ -36,12 +42,14 @@ export default class FundingDomain {
 
   /**
    * Injects AccountsInterface into the funding service for cross-domain
-   * account role checks (admin exemption from funding gates).
+   * account role checks (admin exemption from funding gates), and into the
+   * event handlers to resolve a plan owner's address for dunning emails.
    *
    * @param accountsInterface - The AccountsInterface instance from the accounts domain
    */
   setAccountsInterface(accountsInterface: AccountsInterface): void {
     this.interface.setAccountsInterface(accountsInterface);
+    this.eventHandlers.setAccountsInterface(accountsInterface);
   }
 
   public initialize(app: Application): void {

@@ -1,0 +1,17 @@
+{
+  "subject": "Votre plan de financement a été annulé",
+  "title": "Plan de financement annulé",
+  "greeting": "Bonjour,",
+  "message": "Votre {{planName}} a été annulé. Merci d'avoir soutenu cette instance.",
+  "status_immediate": "Les calendriers qu'il couvrait n'ont plus accès aux fonctionnalités étendues.",
+  "status_period_end": "Les calendriers qu'il couvre conservent les fonctionnalités étendues jusqu'à la fin de la période de facturation en cours, et le plan ne sera pas renouvelé ensuite.",
+  "plan_name_monthly": "plan de financement mensuel qui soutient {{domain}}",
+  "plan_name_yearly": "plan de financement annuel qui soutient {{domain}}",
+  "action_message": "Vous pouvez démarrer un nouveau plan de financement à tout moment.",
+  "action_message_period_end": "Vous avez changé d'avis ? Vous pouvez conserver votre plan depuis les paramètres de votre plan de financement jusqu'à sa fin.",
+  "action_button": "Voir le plan de financement",
+  "copy_link_text": "Ou copiez ce lien :",
+  "signature": "Merci,",
+  "team_name": "L'équipe Pavillion",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}
