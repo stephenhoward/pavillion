@@ -5,6 +5,7 @@ import {
   AccountAlreadyExistsError,
   AccountApplicationAlreadyExistsError,
   AccountApplicationsClosedError,
+  AccountApplicationNotConfirmedError,
 } from '@/server/accounts/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
@@ -164,6 +165,10 @@ export default class AccountApplicationRouteHandlers {
       }
     }
     catch (error) {
+      if (error instanceof AccountApplicationNotConfirmedError) {
+        res.status(409).json({ error: 'application_not_confirmed', errorName: 'AccountApplicationNotConfirmedError' });
+        return;
+      }
       // Don't expose internal error details - use generic translation key
       logError(error, 'Error processing application');
       res.status(400).json({ error: 'application_processing_error', errorName: 'ApplicationProcessingError' });

@@ -247,6 +247,8 @@ describe('Email normalization (integration, real SQLite DB)', () => {
       const application = await AccountApplicationEntity.findOne({ where: { email: 'applicant@x.com' } });
       expect(application).toBeDefined();
 
+      await accountService.confirmAccountApplication(application!.confirmation_token!);
+
       const account = await accountService.acceptAccountApplication(application!.id);
       expect(account.email).toBe('applicant@x.com');
 

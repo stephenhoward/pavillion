@@ -11,7 +11,7 @@ import EmailInterface from "@/server/email/interface";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
 import db from '@/server/common/entity/db';
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
-import { noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
+import { noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountApplicationNotConfirmedError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
@@ -33,6 +33,9 @@ import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('accounts');
+
+/** Application statuses an admin can act on; unconfirmed applicants are excluded. */
+const ACTIONABLE_APPLICATION_STATUSES = ['pending', 'rejected'];
 
 type AccountInfo = {
   account: Account,
@@ -705,6 +708,7 @@ export default class AccountService {
     * @param id - The ID of the application to approve
     * @returns {Promise<Account>} A promise that resolves to the newly created account
     * @throws {noAccountApplicationExistsError} if no application exists with the given ID
+    * @throws {AccountApplicationNotConfirmedError} if the applicant has not confirmed their email
     */
   async acceptAccountApplication(id: string): Promise<Account> {
 
@@ -712,6 +716,11 @@ export default class AccountService {
 
     if (! application ) {
       throw new noAccountApplicationExistsError();
+    }
+
+    // An unconfirmed applicant has not proven they own the email address.
+    if (!ACTIONABLE_APPLICATION_STATUSES.includes(application.status)) {
+      throw new AccountApplicationNotConfirmedError();
     }
 
     let accountInfo: AccountInfo;
@@ -768,6 +777,11 @@ export default class AccountService {
 
     if (!application) {
       throw new noAccountApplicationExistsError();
+    }
+
+    // Already rejected: nothing to change and nothing to re-send.
+    if (application.status === 'rejected') {
+      return;
     }
 
     // Update application status instead of destroying it
@@ -881,7 +895,6 @@ export default class AccountService {
 
     const whereClause: any = {};
     const ALLOWED_STATUSES = ['pending_confirmation', 'pending', 'rejected'];
-    const ACTIONABLE_STATUSES = ['pending', 'rejected'];
 
     if (status && ALLOWED_STATUSES.includes(status)) {
       whereClause.status = status;
@@ -889,7 +902,7 @@ export default class AccountService {
     else {
       // Default (and fallback for unknown values): exclude pending_confirmation
       // so admins see only the actionable queue.
-      whereClause.status = { [Op.in]: ACTIONABLE_STATUSES };
+      whereClause.status = { [Op.in]: ACTIONABLE_APPLICATION_STATUSES };
     }
 
     const { count, rows: entities } = await AccountApplicationEntity.findAndCountAll({

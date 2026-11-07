@@ -9,7 +9,7 @@ import AccountInvitationEntity from '@/server/accounts/entity/account_invitation
 import EmailInterface from '@/server/email/interface';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountApplicationNotConfirmedError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import EventEmitter from 'events';
@@ -1083,6 +1083,44 @@ describe('acceptAccountApplication', () => {
     expect(destroyStub.called).toBe(true);
     expect(account).toBeTruthy();
   });
+
+  it('approves a rejected application', async () => {
+    let findApplicationStub = acceptSandbox.stub(AccountApplicationEntity, 'findByPk');
+    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
+    acceptSandbox.stub(emailInterface, 'sendEmail');
+
+    const application = AccountApplicationEntity.build({ email: 'test@example.com', status: 'rejected' });
+    const destroyStub = acceptSandbox.stub(application, 'destroy').resolves();
+
+    findApplicationStub.resolves(application);
+    setupAccountStub.resolves({ account: new Account('id', 'testme', 'test@example.com'), password_code: 'test_code' });
+
+    const account = await accountService.acceptAccountApplication('test_id');
+
+    expect(account).toBeTruthy();
+    expect(destroyStub.called).toBe(true);
+  });
+
+  it('refuses an application still pending confirmation', async () => {
+    let findApplicationStub = acceptSandbox.stub(AccountApplicationEntity, 'findByPk');
+    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
+    let sendEmailStub = acceptSandbox.stub(emailInterface, 'sendEmail');
+
+    const application = AccountApplicationEntity.build({ email: 'test@example.com', status: 'pending_confirmation' });
+    const destroyStub = acceptSandbox.stub(application, 'destroy').resolves();
+    const saveStub = acceptSandbox.stub(application, 'save').resolves();
+
+    findApplicationStub.resolves(application);
+
+    await expect(accountService.acceptAccountApplication('test_id')).rejects
+      .toThrow(AccountApplicationNotConfirmedError);
+
+    expect(setupAccountStub.called).toBe(false);
+    expect(sendEmailStub.called).toBe(false);
+    expect(destroyStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+    expect(application.status).toBe('pending_confirmation');
+  });
 });
 
 describe('rejectAccountApplication', () => {
@@ -1147,6 +1185,46 @@ describe('rejectAccountApplication', () => {
     expect(sendEmailStub.called).toBe(false);
     expect(saveStub.called).toBe(true);
     expect(application.status).toBe('rejected');
+  });
+
+  it('rejecting a pending_confirmation application still rejects and emails once', async () => {
+    let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
+    let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
+
+    const application = AccountApplicationEntity.build({
+      email: 'test@example.com',
+      status: 'pending_confirmation',
+    });
+    const saveStub = rejectSandbox.stub(application, 'save').resolves();
+
+    findApplicationStub.resolves(application);
+
+    await accountService.rejectAccountApplication('test_id', false);
+
+    expect(sendEmailStub.calledOnce).toBe(true);
+    expect(saveStub.calledOnce).toBe(true);
+    expect(application.status).toBe('rejected');
+  });
+
+  it('rejecting an already-rejected application is a no-op', async () => {
+    let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
+    let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
+
+    const application = AccountApplicationEntity.build({
+      email: 'test@example.com',
+      status: 'rejected',
+    });
+    const originalTimestamp = new Date('2026-01-01T00:00:00Z');
+    application.status_timestamp = originalTimestamp;
+    const saveStub = rejectSandbox.stub(application, 'save').resolves();
+
+    findApplicationStub.resolves(application);
+
+    await accountService.rejectAccountApplication('test_id', false);
+
+    expect(sendEmailStub.called).toBe(false);
+    expect(saveStub.called).toBe(false);
+    expect(application.status_timestamp).toBe(originalTimestamp);
   });
 });
 
