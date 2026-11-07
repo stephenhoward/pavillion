@@ -4,7 +4,8 @@ import i18next from 'i18next';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
-import type { FundingOptions, FundingProvider } from '@/client/service/funding';
+import type { AddToPlanOffer, FundingOptions, FundingProvider } from '@/client/service/funding';
+import FundingAddToPlan from '@/client/components/account/FundingAddToPlan.vue';
 import { SUPPORTED_PROVIDER_TYPES } from '@/common/model/funding-plan';
 import { loadStripe } from '@/client/service/stripe-loader';
 import type { StripeEmbeddedCheckout } from '@stripe/stripe-js';
@@ -35,6 +36,7 @@ const errorMessage = ref('');
 const options = ref<FundingOptions | null>(null);
 const formState = ref<FormState>('configure');
 const resultStatus = ref<'success' | 'error'>('success');
+const addOffer = ref<AddToPlanOffer | null>(null);
 
 const selectedProvider = ref('');
 const selectedCycle = ref<'monthly' | 'yearly'>('monthly');
@@ -302,9 +304,13 @@ async function startStripeCheckout() {
   }
   catch (error) {
     console.error('Failed to start Stripe checkout:', error);
-    errorMessage.value = isExistingPlanConflict(error)
-      ? t('plan_already_exists_error')
-      : t('plan_start_error');
+    if (isExistingPlanConflict(error)) {
+      errorMessage.value = t('plan_already_exists_error');
+      addOffer.value = await readAddOffer();
+    }
+    else {
+      errorMessage.value = t('plan_start_error');
+    }
     formState.value = 'configure';
     processing.value = false;
   }
@@ -320,6 +326,23 @@ async function startStripeCheckout() {
 function isExistingPlanConflict(error: unknown): boolean {
   const response = (error as { response?: { status?: number; data?: { errorName?: string } } } | null)?.response;
   return response?.status === 409 && response.data?.errorName === 'ActiveFundingPlanExistsError';
+}
+
+/**
+ * What this calendar would cost to add to the plan a checkout was refused for.
+ * Null leaves the refusal's message to point the owner at their funding page.
+ */
+async function readAddOffer(): Promise<AddToPlanOffer | null> {
+  if (!props.calendarId) {
+    return null;
+  }
+
+  try {
+    return await fundingService.getAddToPlanOffer();
+  }
+  catch {
+    return null;
+  }
 }
 
 /**
@@ -385,8 +408,16 @@ onBeforeUnmount(() => {
 
     <!-- Configure state: select billing cycle, amount, provider -->
     <template v-if="!loading && formState === 'configure' && options">
+      <!-- A checkout was refused for a plan that can take this calendar instead -->
+      <FundingAddToPlan
+        v-if="addOffer && calendarId"
+        :calendarId="calendarId"
+        :offer="addOffer"
+        @added="acknowledgeResult"
+      />
+
       <!-- Nothing to offer: no supported provider is enabled on this instance -->
-      <div v-if="!hasProviders" class="no-providers-message" role="status">
+      <div v-else-if="!hasProviders" class="no-providers-message" role="status">
         {{ t("no_providers_available") }}
       </div>
 

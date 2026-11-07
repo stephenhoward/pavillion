@@ -24,7 +24,7 @@
       v-if="props.isOwner"
       :calendarId="props.calendarId"
       :feature="WIDGET_FEATURE"
-      @plan-started="retryRefusedDomain"
+      @plan-started="onPlanStarted"
     />
     <p
       v-else-if="state.ownerMustEnable"
@@ -53,6 +53,7 @@
         <p class="help-text">{{ t('add_domain_help') }}</p>
         <input
           id="newDomain"
+          ref="domainInput"
           v-model="state.newDomain"
           type="text"
           class="form-input"
@@ -74,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue';
+import { nextTick, reactive, ref, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -108,6 +109,8 @@ const { t } = useTranslation('calendars', {
 // reading of the gate, and every decision about what to show for it, belongs
 // to FundingUpsellCard.
 const { recordAccessDenial } = useFundingAccess(props.calendarId);
+
+const domainInput = ref<HTMLInputElement | null>(null);
 
 // Component state
 const state = reactive<{
@@ -243,6 +246,16 @@ const retryRefusedDomain = async () => {
     return;
   }
   await addDomain();
+};
+
+/**
+ * Retry the refused domain and move focus off the upsell card, which has gone,
+ * to the field the owner came here to use.
+ */
+const onPlanStarted = async () => {
+  await retryRefusedDomain();
+  await nextTick();
+  domainInput.value?.focus();
 };
 
 /**

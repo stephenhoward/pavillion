@@ -143,6 +143,16 @@ describe('WidgetDomains', () => {
       expect(wrapper.vm.state.success).toBe('add_success');
     });
 
+    it('moves focus to the domain field once the upsell card has gone', async () => {
+      wrapper = await createWrapper();
+      const focus = vi.spyOn(wrapper.find('#newDomain').element as HTMLElement, 'focus');
+
+      wrapper.findComponent(FundingUpsellCard).vm.$emit('plan-started');
+      await flushPromises();
+
+      expect(focus).toHaveBeenCalled();
+    });
+
     it('does not re-issue anything on plan-started when no domain was refused', async () => {
       wrapper = await createWrapper();
 

@@ -228,6 +228,21 @@ describe('FundingService.addCalendarToFundingPlan', () => {
     });
   });
 
+  it('should leave the amount for the server to set when none is given', async () => {
+    // Arrange
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 200 });
+
+    // Act
+    await service.addCalendarToFundingPlan('cal123');
+
+    // Assert
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/calendars', {
+      calendarId: 'cal123',
+      amount: undefined,
+    });
+  });
+
   it('should return void on success', async () => {
     // Arrange
     const axiosPost = vi.mocked(axios.post);
@@ -247,6 +262,54 @@ describe('FundingService.addCalendarToFundingPlan', () => {
 
     // Act & Assert
     await expect(service.addCalendarToFundingPlan('cal123', 500)).rejects.toThrow('Failed');
+  });
+});
+
+describe('FundingService.getAddToPlanOffer', () => {
+  const service = new FundingService();
+  const options = {
+    enabled: true,
+    providers: [],
+    monthlyPrice: 1000000,
+    yearlyPrice: 10000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+    payWhatYouCanYearlyDiscount: 0,
+  };
+
+  const mockPlan = (plan: Record<string, unknown> | null) => {
+    vi.mocked(axios.get).mockImplementation(async (url: string) => {
+      if (url === '/api/funding/v1/options') return { data: options };
+      if (plan) return { data: plan };
+      throw { response: { status: 404 } };
+    });
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('prices an active plan at the configured price for its billing cycle', async () => {
+    mockPlan({ status: 'active', billingCycle: 'yearly', cancelAt: null });
+
+    await expect(service.getAddToPlanOffer()).resolves.toEqual({
+      billingCycle: 'yearly',
+      price: 10000000,
+      currency: 'USD',
+      payWhatYouCan: false,
+    });
+  });
+
+  it.each([
+    ['holds no plan', null],
+    ['holds a past-due plan', { status: 'past_due', billingCycle: 'monthly' }],
+    ['holds a suspended plan', { status: 'suspended', billingCycle: 'monthly' }],
+    ['holds a cancelled plan', { status: 'cancelled', billingCycle: 'monthly' }],
+    ['holds a plan winding down', { status: 'active', billingCycle: 'monthly', cancelAt: '2027-01-01T00:00:00Z' }],
+  ])('offers nothing to an account that %s', async (_label, plan) => {
+    mockPlan(plan);
+
+    await expect(service.getAddToPlanOffer()).resolves.toBeNull();
   });
 });
 

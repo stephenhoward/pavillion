@@ -119,6 +119,17 @@ export type FundingOptions = {
 };
 
 /**
+ * What adding a calendar to the account's existing funding plan would cost
+ */
+export type AddToPlanOffer = {
+  billingCycle: 'monthly' | 'yearly';
+  /** Per-calendar price for the plan's billing cycle, in millicents. */
+  price: number;
+  currency: string;
+  payWhatYouCan: boolean;
+};
+
+/**
  * Account search result
  */
 export type AccountSearchResult = {
@@ -581,10 +592,11 @@ export default class FundingService {
    * Add a calendar to the user's funding plan
    *
    * @param {string} calendarId - The calendar ID to add
-   * @param {number} amount - The funding amount for this calendar
+   * @param {number} amount - Amount in millicents; required on a pay-what-you-can
+   *   instance, ignored on a fixed-price one
    * @returns {Promise<void>}
    */
-  async addCalendarToFundingPlan(calendarId: string, amount: number): Promise<void> {
+  async addCalendarToFundingPlan(calendarId: string, amount?: number): Promise<void> {
     try {
       await axios.post('/api/funding/v1/calendars', {
         calendarId,
@@ -717,6 +729,32 @@ export default class FundingService {
       console.error('Failed to get funding plan status:', error);
       throw error;
     }
+  }
+
+  /**
+   * Read what a calendar would cost to add to the account's funding plan
+   *
+   * Only an active plan takes a new calendar (DEC-022). A plan winding down to a
+   * scheduled cancellation is excluded too: the server would accept the add, but
+   * "more each month" would misdescribe a plan that is ending, and the owner's
+   * way back is Keep My Plan on the account funding page.
+   *
+   * @returns {Promise<AddToPlanOffer | null>} The offer, or null if the account
+   *   holds no plan that can take a calendar
+   */
+  async getAddToPlanOffer(): Promise<AddToPlanOffer | null> {
+    const plan = await this.getStatus();
+    if (plan?.status !== 'active' || plan.cancelAt) {
+      return null;
+    }
+
+    const options = await this.getOptions();
+    return {
+      billingCycle: plan.billingCycle,
+      price: plan.billingCycle === 'monthly' ? options.monthlyPrice : options.yearlyPrice,
+      currency: options.currency,
+      payWhatYouCan: options.payWhatYouCan,
+    };
   }
 
   /**

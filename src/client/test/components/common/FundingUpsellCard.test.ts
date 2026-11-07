@@ -13,6 +13,7 @@ vi.mock('axios');
 const CALENDAR_ID = 'cal-uuid-1';
 const FUNDING_URL = `/api/funding/v1/calendars/${CALENDAR_ID}/funding`;
 const SITE_CONFIG_URL = '/api/config/v1/site';
+const PLAN_STATUS_URL = '/api/funding/v1/status';
 
 const routes: RouteRecordRaw[] = [
   { path: '/', component: {}, name: 'home' },
@@ -33,13 +34,16 @@ function summaryResponse(widgetEmbedding: boolean, status = 'not_covered') {
 }
 
 /**
- * Route the two GETs the card issues on mount. Anything else is a failure —
- * the card is not supposed to reach for the funding options endpoint.
+ * Route the GETs the card issues on mount. The account holds no plan, so the
+ * options endpoint is never reached. Anything else is a failure.
  */
 function mockRequests(funding: unknown) {
   vi.mocked(axios.get).mockImplementation((url: string) => {
     if (url === FUNDING_URL) {
       return funding instanceof Error ? Promise.reject(funding) : Promise.resolve(funding);
+    }
+    if (url === PLAN_STATUS_URL) {
+      return Promise.reject({ response: { status: 404 } });
     }
     if (url === SITE_CONFIG_URL) {
       return Promise.resolve({ data: { siteTitle: 'Example Instance' } });

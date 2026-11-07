@@ -1,13 +1,15 @@
 <template>
   <div class="settings-tab">
-    <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error">
-      {{ state.error }}
-    </div>
+    <div role="status" aria-live="polite">
+      <!-- Error Display -->
+      <div v-if="state.error" class="alert alert--error">
+        {{ state.error }}
+      </div>
 
-    <!-- Success Display -->
-    <div v-if="state.success" class="alert alert--success">
-      {{ state.success }}
+      <!-- Success Display -->
+      <div v-if="state.success" class="alert alert--success">
+        {{ state.success }}
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -178,7 +180,9 @@
           and the third renders nothing.
         -->
         <div v-if="extendedFeaturesAccess !== 'unknown'" class="setting-card">
-          <h2 class="setting-label">{{ t('extended_features_label') }}</h2>
+          <h2 ref="extendedFeaturesHeading" class="setting-label" tabindex="-1">
+            {{ t('extended_features_label') }}
+          </h2>
 
           <!--
             No standing "these features need funding" line under the heading.
@@ -232,12 +236,16 @@
             </template>
           </div>
 
-          <!-- Denied. The card re-checks the gate before it shows anything. -->
+          <!--
+            Denied. The card re-checks the gate before it shows anything, so it
+            stays mounted rather than sitting in a v-else: it reports
+            `plan-started` after the refresh that opens the gate, and an
+            unmounted component's emit is dropped.
+          -->
           <FundingUpsellCard
-            v-else
             :calendarId="props.calendarId"
             :feature="EXTENDED_FEATURE"
-            @plan-started="onPlanStarted"
+            @plan-started="onUpsellPlanStarted"
           />
         </div>
       </div>
@@ -254,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, nextTick, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import iso6391 from 'iso-639-1-dir';
@@ -306,6 +314,7 @@ const {
 // Local calendar clone for translatable content editing
 const localCalendar = ref<Calendar | null>(null);
 const contentLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
+const extendedFeaturesHeading = ref<HTMLElement | null>(null);
 
 // Component state
 const state = reactive<{
@@ -699,6 +708,16 @@ const disableExtendedFeatures = async () => {
 const onPlanStarted = () => {
   state.success = t('extended_features_enabled_success');
   clearMessages();
+};
+
+/**
+ * The same report for a plan the owner acted on here. The upsell card that held
+ * focus has gone, so focus moves to the section heading rather than to <body>.
+ */
+const onUpsellPlanStarted = async () => {
+  onPlanStarted();
+  await nextTick();
+  extendedFeaturesHeading.value?.focus();
 };
 
 // This leaf is the Stripe return URL. A redirect-based payment method lands
