@@ -2,6 +2,7 @@ import express, { Request, Response, Application } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import AccountsInterface from '@/server/accounts/interface';
 import { Account } from '@/common/model/account';
+import { AccountApplicationNotConfirmedError } from '@/server/accounts/exceptions';
 import { logError } from '@/server/common/helper/error-logger';
 
 export default class AdminAccountRouteHandlers {
@@ -93,6 +94,10 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
+      if (error instanceof AccountApplicationNotConfirmedError) {
+        res.status(409).json({ error: 'application_not_confirmed', errorName: 'AccountApplicationNotConfirmedError' });
+        return;
+      }
       logError(error, 'Error approving application');
       res.status(500).json({ error: 'Failed to approve application' });
     }

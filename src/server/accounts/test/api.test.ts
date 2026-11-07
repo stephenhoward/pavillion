@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import AccountRouteHandlers from '../api/v1/accounts';
 import AccountInvitationRouteHandlers from '../api/v1/invitations';
 import AccountApplicationRouteHandlers from '../api/v1/applications';
+import AdminAccountRouteHandlers from '../api/v1/admin';
 import AccountsInterface from '../interface';
 import { Account } from '../../../common/model/account';
 import { testApp, countRoutes } from '../../common/test/lib/express';
@@ -20,6 +21,7 @@ import {
   AccountRegistrationClosedError,
   AccountApplicationAlreadyExistsError,
   AccountApplicationsClosedError,
+  AccountApplicationNotConfirmedError,
 } from '../exceptions';
 import { ValidationError } from '../../../common/exceptions/base';
 
@@ -951,6 +953,35 @@ describe('Applications API', () => {
     expect(response.status).toBe(200);
     expect(stub.called).toBe(false);
     expect(stub2.called).toBe(true);
+  });
+
+  it('process application: unconfirmed application returns 409 with errorName', async () => {
+    sandbox.stub(accountsInterface,'acceptAccountApplication').rejects(new AccountApplicationNotConfirmedError());
+    router.post('/handler', applicationHandlers.processApplication.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({accepted: true});
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      error: 'application_not_confirmed',
+      errorName: 'AccountApplicationNotConfirmedError',
+    });
+  });
+
+  it('admin approve: unconfirmed application returns 409 with errorName', async () => {
+    sandbox.stub(accountsInterface,'acceptAccountApplication').rejects(new AccountApplicationNotConfirmedError());
+    const adminHandlers = new AdminAccountRouteHandlers(accountsInterface);
+    router.post('/handler/:id', adminHandlers.approveApplication.bind(adminHandlers));
+
+    const response = await request(testApp(router)).post('/handler/app-id');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      error: 'application_not_confirmed',
+      errorName: 'AccountApplicationNotConfirmedError',
+    });
   });
 
   it('process application: should fail', async () => {

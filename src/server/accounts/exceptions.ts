@@ -40,6 +40,12 @@ class AccountApplicationsClosedError extends Error {
   }
 }
 
+class AccountApplicationNotConfirmedError extends Error {
+  constructor() {
+    super('Account Application has not been confirmed');
+  }
+}
+
 class AccountRegistrationClosedError extends Error {
   constructor() {
     super('Account Registration is closed');
@@ -60,6 +66,7 @@ export {
   noAccountInviteExistsError,
   noAccountApplicationExistsError,
   AccountApplicationsClosedError,
+  AccountApplicationNotConfirmedError,
   AccountRegistrationClosedError,
   AccountInvitationPermissionError,
 };
