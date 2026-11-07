@@ -59,7 +59,8 @@ npm start                # Production server
 npm test                 # All unit and integration tests
 npm run test:unit        # Unit tests only
 npm run test:integration # Integration tests only
-npm run test:e2e         # Single-instance e2e (fast, no Docker)
+npm run test:e2e         # Single-instance e2e, Chromium only (fast, no Docker)
+npm run test:e2e:webkit  # Widget and public-calendar specs in WebKit (needs: npx playwright install webkit)
 npm run test:federation  # Federation e2e (requires Docker)
 npm run test:coverage    # Coverage report
 npm run test:watch       # Tests in watch mode with UI

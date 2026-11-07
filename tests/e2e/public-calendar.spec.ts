@@ -46,11 +46,8 @@ test.describe('Public Calendar', () => {
     // Navigate to the public calendar for test_calendar
     await page.goto(env.baseURL + '/test_calendar');
 
-    // Conditional skip if public site isn't rendering
-    const appContent = await page.locator('#app').textContent({ timeout: 10000 }).catch(() => '');
-    if (!appContent || appContent.trim() === '') {
-      test.skip();
-    }
+    // The HTML shell serves #app empty, so wait for the site to mount into it.
+    await expect(page.locator('#app')).not.toBeEmpty({ timeout: 10000 });
   });
 
   test('should render the public calendar page', async ({ page }) => {

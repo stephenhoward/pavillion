@@ -30,3 +30,8 @@ jobs:
           chmod +x docker/federation/ssl/generate-certs.sh
           docker/federation/ssl/generate-certs.sh
       - run: npm run test:e2e
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      # The list reporter prints a line per test, so a skip shows in the log.
+      - name: Run WebKit e2e
+        run: npm run test:e2e:webkit -- --reporter=list
