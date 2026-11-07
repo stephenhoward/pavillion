@@ -46,8 +46,9 @@ export const CHECKOUT_SESSION_ID_PATTERN = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$
 /**
  * The Stripe event types the instance's webhook destination must deliver.
  *
- * Exactly the types StripeAdapter.parseWebhookEvent acts on (a test holds the
- * two together). A destination missing any of them still answers 200 to
+ * The types StripeAdapter.parseWebhookEvent acts on. A test fails if this
+ * names a type the parser ignores; the other direction is a rule, not a
+ * test: a new case in the parser's switch must be added here too. A destination missing any of them still answers 200 to
  * everything it does send and checkout still works — activation does not
  * wait for a webhook — but the instance can then never end a plan, record a
  * renewal, or move a failed payment to past due. The admin wizard lists these

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -487,7 +487,7 @@ describe('AddProviderWizard', () => {
       await wrapper.find('#stripe-secret-key').setValue('sk_test_abc123');
       await wrapper.find('#stripe-webhook-secret').setValue('whsec_abc123');
       await wrapper.find('form').trigger('submit');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Still connected — the gap is reported, not treated as a failed save
       expect(wrapper.find('.success-content').exists()).toBe(true);
@@ -515,7 +515,7 @@ describe('AddProviderWizard', () => {
       await wrapper.find('#stripe-secret-key').setValue('sk_test_abc123');
       await wrapper.find('#stripe-webhook-secret').setValue('whsec_abc123');
       await wrapper.find('form').trigger('submit');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await flushPromises();
 
       expect(wrapper.find('.success-content').exists()).toBe(true);
       expect(wrapper.find('.webhook-check').exists()).toBe(false);

@@ -6,6 +6,12 @@ import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import FundingInterface from '@/server/funding/interface';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
 import { InvalidCredentialsError, MissingRequiredFieldError } from '@/common/exceptions/funding';
+import ExpressHelper from '@/server/common/helper/express';
+import { Account } from '@/common/model/account';
+
+// Snapshot at module load: other suites stub ExpressHelper.adminOnly onto
+// their own middleware, and these tests must compare against the real chain.
+const ADMIN_ONLY_CHAIN = [...ExpressHelper.adminOnly];
 
 /**
  * Tests for Provider Connection API routes
@@ -223,6 +229,41 @@ describe('Provider Connection API Routes', () => {
         .expect(200);
 
       expect(response.body).toEqual({ status: 'no_destination', missingEvents: [] });
+    });
+
+    it('should register the route behind the full adminOnly chain', () => {
+      // The handler has no user check of its own; the registration is the gate
+      const app = express();
+      routes.installHandlers(app, '/api/funding/v1');
+
+      const layers = (app as any)._router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === '/admin/providers/stripe/webhook-check');
+
+      expect(layers).toHaveLength(1);
+      const handlers = layers[0].route.stack.map((l: any) => l.handle);
+      for (const guard of ADMIN_ONLY_CHAIN) {
+        expect(handlers).toContain(guard);
+      }
+    });
+
+    it('should reject a non-admin before the check runs', async () => {
+      const checkStub = sandbox.stub(service, 'checkStripeWebhook').resolves({ status: 'ok', missingEvents: [] });
+      const nonAdmin = new Account('user-uuid', 'user', 'user@example.com');
+      nonAdmin.roles = [];
+      router.use((req, _res, next) => {
+        req.user = nonAdmin;
+        next();
+      });
+      // Reuse the production role-check arm; only the passport arm is skipped
+      router.get('/stripe/webhook-check', ADMIN_ONLY_CHAIN[1], routes.checkStripeWebhook.bind(routes));
+
+      await request(testApp(router))
+        .get('/stripe/webhook-check')
+        .expect(403);
+
+      expect(checkStub.called).toBe(false);
     });
 
     it('should return 500 when the check itself fails unexpectedly', async () => {

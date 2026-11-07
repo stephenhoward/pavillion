@@ -391,6 +391,21 @@ describe('Payment Provider Adapters', () => {
         expect(check.status).toBe('ok');
       });
 
+      it.each([
+        ['http scheme', 'http://events.example.org/api/funding/webhooks/stripe'],
+        ['another port', 'https://events.example.org:8443/api/funding/webhooks/stripe'],
+        ['another path', 'https://events.example.org/api/funding/webhooks/paypal'],
+        ['a subdomain', 'https://www.events.example.org/api/funding/webhooks/stripe'],
+      ])('does not count a destination on %s as this instance\'s', async (_label, url) => {
+        // Over-matching is the dangerous direction: it would report ok for a
+        // destination Stripe never delivers this instance's events to
+        givenEndpoints([endpoint({ url })]);
+
+        const check = await stripeAdapter.checkWebhookDestination(WEBHOOK_URL);
+
+        expect(check.status).toBe('no_destination');
+      });
+
       it('reports unchecked rather than throwing when the destinations cannot be read', async () => {
         // A restricted key without webhook read access fails here
         mockStripe.webhookEndpoints.list.returns({

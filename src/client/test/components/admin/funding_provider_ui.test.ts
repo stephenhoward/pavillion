@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount, VueWrapper, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
@@ -216,8 +216,7 @@ describe('Funding Provider UI Components', () => {
       });
 
       wrapper = mountFunding();
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       const check = wrapper.find('.provider-webhook-check');
       expect(check.exists()).toBe(true);
@@ -232,17 +231,27 @@ describe('Funding Provider UI Components', () => {
       mockService.getProviders.mockResolvedValue([configuredStripe]);
 
       wrapper = mountFunding();
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       expect(mockService.checkStripeWebhook).toHaveBeenCalled();
       expect(wrapper.find('.webhook-check').exists()).toBe(false);
     });
 
+    it('shows no warning and keeps the provider listed when the check request fails', async () => {
+      mockService.getProviders.mockResolvedValue([configuredStripe]);
+      mockService.checkStripeWebhook.mockRejectedValue(new Error('Network error'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      wrapper = mountFunding();
+      await flushPromises();
+
+      expect(wrapper.findAll('.provider-item')).toHaveLength(1);
+      expect(wrapper.find('.webhook-check').exists()).toBe(false);
+    });
+
     it('does not check webhooks before Stripe is configured', async () => {
       wrapper = mountFunding();
-      await nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       expect(mockService.checkStripeWebhook).not.toHaveBeenCalled();
     });

@@ -88,13 +88,12 @@ export class ProviderConnectionService {
    * the Stripe API. Verification failure never aborts the save.
    * A verified configure also enables the provider so it can take
    * payments; an unverified save leaves the enabled flag untouched.
-   *
-   * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
-   * @param adminUser - Admin user performing the configuration
    * A verified configure also checks the account's webhook destination for
    * this instance (see checkStripeWebhook); an unverified one cannot, and
    * reports it `unchecked`.
    *
+   * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
+   * @param adminUser - Admin user performing the configuration
    * @returns connectionVerified (the Stripe API call succeeded) and webhookCheck
    */
   async configureStripe(credentials: StripeCredentialInputs, _adminUser: AdminUser): Promise<StripeConfigureResult> {

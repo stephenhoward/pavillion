@@ -33,43 +33,32 @@ const eventsToList = computed<readonly string[]>(() => {
 });
 
 const url = computed(() => props.webhookUrl ?? t('this_instance_url'));
+
+// The status picks the message key, so an unknown value from a newer server
+// reads as "could not check" rather than a raw key
+const KNOWN_STATUSES = ['missing_events', 'disabled', 'no_destination', 'unchecked'];
+const messageKey = computed(() => (KNOWN_STATUSES.includes(props.check.status) ? props.check.status : 'unchecked'));
 </script>
 
 <template>
-  <div v-if="check.status !== 'ok'" class="webhook-check">
-    <p class="webhook-check__title">{{ t('title') }}</p>
-    <p class="webhook-check__message">{{ t(check.status, { url }) }}</p>
-    <ul v-if="eventsToList.length > 0" class="webhook-check__events">
-      <li v-for="eventType in eventsToList" :key="eventType"><code>{{ eventType }}</code></li>
-    </ul>
+  <div v-if="check.status !== 'ok'" class="alert alert--warning webhook-check" role="alert">
+    <div class="alert__content">
+      <p class="alert__title">{{ t('title') }}</p>
+      <p class="alert__message">{{ t(messageKey, { url }) }}</p>
+      <ul v-if="eventsToList.length > 0" class="webhook-check__events">
+        <li v-for="eventType in eventsToList" :key="eventType"><code>{{ eventType }}</code></li>
+      </ul>
+    </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-.webhook-check {
-  margin-block-start: var(--pav-space-3);
-  padding: var(--pav-space-3) var(--pav-space-4);
-  border-inline-start: 3px solid var(--pav-color-warning);
-  border-radius: var(--pav-border-radius-sm);
-  background: var(--pav-color-surface-secondary);
-  text-align: start;
+.webhook-check__events {
+  margin: var(--pav-space-2) 0 0;
+  padding-inline-start: var(--pav-space-5);
 
-  &__title {
-    margin: 0 0 var(--pav-space-1);
-    font-weight: var(--pav-font-weight-semibold);
-  }
-
-  &__message {
-    margin: 0;
-  }
-
-  &__events {
-    margin: var(--pav-space-2) 0 0;
-    padding-inline-start: var(--pav-space-5);
-
-    code {
-      font-size: var(--pav-font-size-sm);
-    }
+  code {
+    font-size: var(--pav-font-size-sm);
   }
 }
 </style>

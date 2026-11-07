@@ -150,7 +150,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
   async checkWebhookDestination(webhookUrl: string): Promise<StripeWebhookCheck> {
     let endpoints: Stripe.WebhookEndpoint[];
     try {
-      endpoints = await this.stripe.webhookEndpoints.list({ limit: 100 }).autoPagingToArray({ limit: 1000 });
+      endpoints = await this.stripe.webhookEndpoints.list({ limit: 100 }).autoPagingToArray({ limit: 100 });
     }
     catch (err) {
       logger.warn({
@@ -450,7 +450,8 @@ export class StripeAdapter implements PaymentProviderAdapter {
       rawPayload: event,
     };
 
-    // Parse event-specific data
+    // Parse event-specific data. A type handled here must also be listed in
+    // STRIPE_WEBHOOK_EVENTS, or admins are never told to subscribe to it.
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;

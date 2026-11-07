@@ -68,6 +68,19 @@ describe('StripeWebhookCheck', () => {
     expect(wrapper.find('.webhook-check__events').exists()).toBe(false);
   });
 
+  it('treats a status this client does not know as a check that could not run', () => {
+    const wrapper = mountCheck({ status: 'rate_limited' as StripeWebhookCheckResult['status'], missingEvents: [] });
+
+    expect(wrapper.text()).toContain('could not read');
+    expect(wrapper.text()).not.toContain('rate_limited');
+  });
+
+  it('announces the warning to assistive technology', () => {
+    const wrapper = mountCheck({ status: 'disabled', missingEvents: [] });
+
+    expect(wrapper.find('.webhook-check').attributes('role')).toBe('alert');
+  });
+
   it('falls back to a generic phrase when no webhook URL is known', () => {
     const wrapper = mountCheck({ status: 'no_destination', missingEvents: [] }, {});
 

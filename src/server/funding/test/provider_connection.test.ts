@@ -196,6 +196,28 @@ describe('ProviderConnectionService', () => {
       expect(mockEntity.save.calledOnce).toBe(true);
     });
 
+    it('should not read webhook destinations with credentials that did not verify', async () => {
+      const mockEntity = {
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: false,
+        save: sandbox.stub().resolves(),
+      };
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+      sandbox.stub(ProviderConfigEntity, 'build').returns(mockEntity as any);
+      sandbox.stub(ProviderFactory, 'clearCache');
+
+      const stripeAdapter = new StripeAdapter({ apiKey: 'sk_test_abc123def456' }, 'whsec_abc123def456');
+      sandbox.stub(stripeAdapter, 'validateCredentials').resolves(false);
+      const checkStub = sandbox.stub(stripeAdapter, 'checkWebhookDestination');
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(stripeAdapter);
+
+      const result = await service.configureStripe(validCredentials, adminUser);
+
+      expect(result.webhookCheck).toEqual({ status: 'unchecked', missingEvents: [] });
+      expect(checkStub.called).toBe(false);
+    });
+
     it('should report the webhook destination check for a verified connection', async () => {
       const mockEntity = {
         id: uuidv4(),

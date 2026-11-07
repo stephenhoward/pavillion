@@ -3,11 +3,11 @@ import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import CopyButton from '@/client/components/common/CopyButton.vue';
-import StripeWebhookCheck from '@/client/components/admin/stripe-webhook-check.vue';
 import { STRIPE_WEBHOOK_EVENTS } from '@/common/model/funding-plan';
 import type { StripeWebhookCheck as StripeWebhookCheckResult } from '@/common/model/funding-plan';
 import FundingService from '@/client/service/funding';
 import type { ProviderConfig, PayPalCredentials, StripeCredentials } from '@/client/service/funding';
+import StripeWebhookCheck from '@/client/components/admin/stripe-webhook-check.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.wizard',
@@ -455,8 +455,8 @@ function handleSuccess() {
                   />
                 </div>
                 <div class="webhook-events-hint">
-                  <span class="webhook-url-label">{{ t('step2.stripe_webhook_events_label') }}</span>
-                  <ul class="webhook-events">
+                  <p id="stripe-webhook-events-label" class="webhook-events-label">{{ t('step2.stripe_webhook_events_label') }}</p>
+                  <ul class="webhook-events" aria-labelledby="stripe-webhook-events-label">
                     <li v-for="eventType in STRIPE_WEBHOOK_EVENTS" :key="eventType"><code>{{ eventType }}</code></li>
                   </ul>
                 </div>
@@ -854,15 +854,18 @@ function handleSuccess() {
       }
 
       .webhook-events-hint {
-        margin-top: 0.375rem;
+        margin-block-start: var(--pav-space-2);
 
-        .webhook-url-label {
+        .webhook-events-label {
+          margin: 0;
+          font-size: inherit;
+          line-height: inherit;
           font-weight: var(--pav-font-weight-medium);
         }
 
         .webhook-events {
-          margin: 0.25rem 0 0;
-          padding-inline-start: 1.25rem;
+          margin: var(--pav-space-1) 0 0;
+          padding-inline-start: var(--pav-space-5);
         }
       }
     }
