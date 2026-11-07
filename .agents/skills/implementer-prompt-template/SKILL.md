@@ -71,7 +71,9 @@ costs a failed call plus a forced re-read.
 
 **Before closing:**
 
-1. Kill any stale vitest processes: `pkill -f "vitest" 2>/dev/null || true`
+1. Do NOT `pkill` vitest — it kills every other agent's test run on the
+   machine. `vitest run` exits on its own; stop only a background run you
+   started, by its task ID.
 2. Run lint: `npm run lint`
 3. If the bead notes list specific test files under "Relevant Tests", run those
    targeted tests only (not the full suite):
@@ -174,10 +176,14 @@ fine; files being **edited** must go through Read first.
 Before the implementer calls `bd close`, it must run these four steps in
 order:
 
-1. **Kill stale vitest processes.** `pkill -f "vitest" 2>/dev/null || true`.
-   A previous run in the same shell session can leave watcher processes
-   holding ports or consuming resources; killing them up front prevents
-   mysterious hangs on the targeted run.
+1. **Leave other test processes alone.** Never `pkill -f "vitest"`: the
+   pattern matches every vitest process on the machine, so it kills the
+   runs of parallel implementers and of the build-guardian, which then
+   fail mid-run and get mis-diagnosed. There is nothing of
+   the implementer's own to clean up — `vitest run` exits when it
+   finishes, and only watch mode (never used here) leaves a process
+   behind. If the implementer started a run in the background, it stops
+   that run by its task ID.
 2. **Lint.** `npm run lint`. This is cheap and catches style / type
    regressions before the build-guardian runs the full suite later. Must
    pass.

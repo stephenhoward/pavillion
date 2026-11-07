@@ -185,10 +185,6 @@ This command has no automated tests. To verify behavioral equivalence with the p
 
 ## Integration with Build Guardian (summary)
 
-Test execution is centralized at the wave level to prevent concurrent vitest instances. Implementers run `npm run lint` + targeted tests (bead-listed files only) pre-close; the full suite runs exactly once per wave via the single `build-guardian` invocation at the end of the wave-end chain. Any agent that runs tests must first kill stale vitest processes:
-
-```bash
-pkill -f "vitest" 2>/dev/null || true
-```
+Test execution is centralized at the wave level to prevent concurrent vitest instances. Implementers run `npm run lint` + targeted tests (bead-listed files only) pre-close; the full suite runs exactly once per wave via the single `build-guardian` invocation at the end of the wave-end chain. No agent kills vitest processes machine-wide (`pkill -f "vitest"` would kill other agents' runs); `vitest run` exits on its own.
 
 All `*-auditor` agents are purely read-only — they run in parallel with each other and with in-flight implementers without contending for test resources. Full rationale and sequencing lives in [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md).
