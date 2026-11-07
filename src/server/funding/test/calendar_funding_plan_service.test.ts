@@ -84,6 +84,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         provider_config_id: providerConfigId,
         provider_subscription_id: 'sub_123',
         status: 'active',
+        save: sandbox.stub().resolves(),
         current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         toModel: function() {
           const sub = new FundingPlan(this.id);
@@ -233,6 +234,7 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
         account_id: accountId,
         provider_config_id: providerConfigId,
         status: 'active',
+        save: sandbox.stub().resolves(),
       };
       const mockCalendarFundingPlan = {
         id: uuidv4(),
