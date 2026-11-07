@@ -292,7 +292,7 @@ chmod 600 secrets/*.txt
 | `SMTP_USER` | No | - | SMTP authentication username |
 | `SMTP_PASSWORD` | No | - | SMTP authentication password |
 
-Run the containers in UTC and do not set `TZ`: recurring events are expanded in each schedule's own IANA zone, and a process zone other than UTC risks shifting occurrence times (see [DEC-023](decisions/dec-023-recurrence-time-zone-conventions.md)).
+Run the containers in UTC and do not set `TZ`: recurring events are expanded in each schedule's own IANA zone, and a process zone other than UTC risks shifting occurrence times.
 
 ## Port Reference
 
