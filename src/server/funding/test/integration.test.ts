@@ -397,7 +397,7 @@ describe('Funding Plan System Integration Tests', () => {
     await backdatePastDue(plan.id, new Date('2026-01-07T12:00:00Z'));
 
     // Step 3: Run grace period check job
-    await checkGracePeriodExpiry();
+    await checkGracePeriodExpiry(service);
 
     // Verify: Status changed to suspended
     await plan.reload();
@@ -1592,7 +1592,7 @@ describe('Funding Plan System Integration Tests', () => {
     await backdatePastDue(plan.id, new Date('2026-01-06T12:00:00Z'));
 
     // Run grace period check
-    await checkGracePeriodExpiry();
+    await checkGracePeriodExpiry(service);
 
     // Verify: Should be suspended (past grace period)
     await plan.reload();
