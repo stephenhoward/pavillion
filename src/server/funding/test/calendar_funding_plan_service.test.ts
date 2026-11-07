@@ -63,6 +63,14 @@ describe('FundingService - Calendar Funding Plan Methods', () => {
   });
 
   describe('addCalendarToFundingPlan', () => {
+    // The caller's amount only counts on a pay-what-you-can instance. Fixed-price
+    // allocation is covered in service.test.ts under 'per-calendar pricing'.
+    beforeEach(() => {
+      const settings = new FundingSettings();
+      settings.payWhatYouCan = true;
+      sandbox.stub(FundingSettingsEntity, 'findOne').resolves({ toModel: () => settings } as any);
+    });
+
     it('should create a CalendarFundingPlan row and update provider total', async () => {
       const fundingPlanId = uuidv4();
       const calendarId = uuidv4();

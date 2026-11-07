@@ -56,6 +56,9 @@ export default class CheckoutSessionRoutes {
    * Create a Stripe checkout session for embedded checkout
    *
    * Body: { billingCycle: string, returnUrl: string, amount?: number, calendarIds?: string[] }
+   *
+   * A fixed-price instance ignores `amount`, charges its configured price per
+   * calendar and refuses a session with no `calendarIds`.
    */
   async createSession(req: Request, res: Response): Promise<void> {
     try {

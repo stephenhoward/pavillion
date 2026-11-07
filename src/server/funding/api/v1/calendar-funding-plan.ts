@@ -71,7 +71,12 @@ export default class CalendarFundingPlanRoutes {
    * POST /calendars
    * Add a calendar to the user's funding plan
    *
-   * Body: { calendarId: string, amount: number }
+   * Body: { calendarId: string, amount?: number }
+   *
+   * `amount` is optional here because only the service knows the instance's
+   * pricing mode. A fixed-price instance ignores it and allocates the configured
+   * price for the plan's billing cycle; a pay-what-you-can instance requires it
+   * and refuses the request without one.
    */
   async addCalendar(req: Request, res: Response): Promise<void> {
     try {
@@ -94,8 +99,8 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      if (typeof amount !== 'number' || !Number.isFinite(amount)) {
-        res.status(400).json({ error: 'amount is required and must be a finite number', errorName: 'ValidationError' });
+      if (amount !== undefined && (typeof amount !== 'number' || !Number.isFinite(amount))) {
+        res.status(400).json({ error: 'amount must be a finite number', errorName: 'ValidationError' });
         return;
       }
 

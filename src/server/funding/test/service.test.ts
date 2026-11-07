@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { Op } from 'sequelize';
@@ -10,6 +10,7 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
+import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -18,6 +19,7 @@ import {
   DuplicateGrantError,
   GrantNotFoundError,
   ActiveFundingPlanExistsError,
+  InvalidAmountError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   WebhookSignatureError,
@@ -28,6 +30,16 @@ import { ValidationError } from '@/common/exceptions/base';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 import logger from '@/server/common/helper/logger';
+
+// The funding service's domain logger is created at import, so the warning it
+// raises can only be observed by replacing createLogger. The default export
+// stays real: logError writes through it, and tests below stub it directly.
+const { fundingLogWarn } = vi.hoisted(() => ({ fundingLogWarn: vi.fn() }));
+
+vi.mock('@/server/common/helper/logger', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/common/helper/logger')>()),
+  createLogger: () => ({ info: vi.fn(), warn: fundingLogWarn, error: vi.fn(), debug: vi.fn() }),
+}));
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -2174,13 +2186,19 @@ describe('FundingService', () => {
       return mockEntity;
     }
 
-    function stubSettings(overrides?: Partial<{ monthlyPrice: number; yearlyPrice: number; currency: string }>) {
+    function stubSettings(overrides?: Partial<{
+      monthlyPrice: number;
+      yearlyPrice: number;
+      currency: string;
+      payWhatYouCan: boolean;
+    }>) {
       const mockSettings = {
         toModel: () => {
           const settings = new FundingSettings();
           settings.monthlyPrice = overrides?.monthlyPrice ?? 1000000;
           settings.yearlyPrice = overrides?.yearlyPrice ?? 10000000;
           settings.currency = overrides?.currency ?? 'USD';
+          settings.payWhatYouCan = overrides?.payWhatYouCan ?? false;
           return settings;
         },
       };
@@ -2203,8 +2221,9 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
-      const result = await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+      const result = await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId]);
 
       expect(result.clientSecret).toBe('cs_secret_abc');
       expect(result.sessionId).toBe('cs_test_abc123');
@@ -2222,11 +2241,12 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
       service.setConfigurationInterface({
         getAllSettings: sandbox.stub().resolves({ siteTitle: 'Pavillion Staging' }),
       } as any);
 
-      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId]);
 
       expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('Pavillion Staging');
     });
@@ -2236,11 +2256,12 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
       service.setConfigurationInterface({
         getAllSettings: sandbox.stub().resolves({ siteTitle: '' }),
       } as any);
 
-      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId]);
 
       expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('pavillion.dev');
     });
@@ -2250,8 +2271,9 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
-      await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId]);
 
       expect(mockAdapter.createCheckoutSession.firstCall.args[0].productName).toBe('pavillion.dev');
     });
@@ -2261,8 +2283,9 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings({ yearlyPrice: 10000000 });
       const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
-      await service.createCheckoutSession(accountId, 'yearly', returnUrl);
+      await service.createCheckoutSession(accountId, 'yearly', returnUrl, undefined, [calendarId]);
 
       const params = mockAdapter.createCheckoutSession.firstCall.args[0];
       expect(params.interval).toBe('year');
@@ -2272,7 +2295,7 @@ describe('FundingService', () => {
     it('should create checkout session with PWYC amount', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
       const mockAdapter = stubMockAdapter();
 
       const pwycAmount = 500000; // $5.00
@@ -2334,7 +2357,7 @@ describe('FundingService', () => {
     it('should reject PWYC amount below minimum', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
 
       await expect(
         service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT - 1),
@@ -2344,7 +2367,7 @@ describe('FundingService', () => {
     it('should reject PWYC amount above maximum', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
 
       await expect(
         service.createCheckoutSession(accountId, 'monthly', returnUrl, MAX_PWYC_AMOUNT + 1),
@@ -2354,7 +2377,7 @@ describe('FundingService', () => {
     it('should reject non-integer PWYC amount', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
 
       await expect(
         service.createCheckoutSession(accountId, 'monthly', returnUrl, 150000.5),
@@ -2398,7 +2421,7 @@ describe('FundingService', () => {
     it('should accept PWYC amount at exact minimum boundary', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
       const mockAdapter = stubMockAdapter();
 
       await service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT);
@@ -2410,7 +2433,7 @@ describe('FundingService', () => {
     it('should accept PWYC amount at exact maximum boundary', async () => {
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
       stubEnabledStripeProvider();
-      stubSettings();
+      stubSettings({ payWhatYouCan: true });
       const mockAdapter = stubMockAdapter();
 
       await service.createCheckoutSession(accountId, 'monthly', returnUrl, MAX_PWYC_AMOUNT);
@@ -2450,10 +2473,11 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
       // Should not throw - pavillion.dev is the test config domain
       await expect(
-        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/return'),
+        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/return', undefined, [calendarId]),
       ).resolves.toBeDefined();
     });
 
@@ -2462,10 +2486,329 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       stubSettings();
       stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
       await expect(
-        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/funding/complete?session_id={CHECKOUT_SESSION_ID}&plan=monthly'),
+        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/funding/complete?session_id={CHECKOUT_SESSION_ID}&plan=monthly', undefined, [calendarId]),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe('per-calendar pricing', () => {
+    const PRICE = 1000000; // $10.00 a month in millicents
+    const YEARLY_PRICE = 10000000;
+    const returnUrl = 'https://pavillion.dev/return';
+    const subscriptionPeriod = {
+      currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+      currentPeriodEnd: new Date('2026-02-01T00:00:00Z'),
+    };
+
+    let accountId: string;
+    let providerConfigId: string;
+    let adapter: {
+      createCheckoutSession: sinon.SinonStub;
+      getSubscription: sinon.SinonStub;
+      supportsAmountUpdates: sinon.SinonStub;
+      updateSubscriptionAmount: sinon.SinonStub;
+    };
+
+    function stubPricing(payWhatYouCan: boolean) {
+      sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
+        toModel: () => {
+          const settings = new FundingSettings();
+          settings.monthlyPrice = PRICE;
+          settings.yearlyPrice = YEARLY_PRICE;
+          settings.currency = 'USD';
+          settings.payWhatYouCan = payWhatYouCan;
+          return settings;
+        },
+      } as any);
+    }
+
+    /**
+     * Complete the checkout the adapter was last asked to create, reporting
+     * back what the provider actually charged and carrying the session's
+     * calendar metadata through as the provider would.
+     */
+    async function completeCheckout(chargedAmount: number, period = subscriptionPeriod) {
+      const params = adapter.createCheckoutSession.lastCall.args[0];
+      const subscriptionId = `sub_${uuidv4()}`;
+      adapter.getSubscription.resolves({
+        ...period,
+        status: 'active',
+        amount: chargedAmount,
+        currency: 'USD',
+      });
+
+      await service.processWebhookEvent({
+        eventId: `evt_${uuidv4()}`,
+        eventType: 'checkout.session.completed',
+        subscriptionId,
+        customerId: 'cus_pricing',
+        accountId,
+        calendarIds: JSON.stringify(params.calendarIds),
+        rawPayload: {},
+      }, providerConfigId);
+
+      const plan = await FundingPlanEntity.findOne({ where: { provider_subscription_id: subscriptionId } });
+      const allocations = await CalendarFundingPlanEntity.findAll({ where: { funding_plan_id: plan!.id } });
+      return { plan: plan!, allocations };
+    }
+
+    async function seedActivePlan(billingCycle: 'monthly' | 'yearly', existingAmount: number) {
+      const plan = await FundingPlanEntity.create({
+        id: uuidv4(),
+        account_id: accountId,
+        provider_config_id: providerConfigId,
+        provider_subscription_id: `sub_${uuidv4()}`,
+        provider_customer_id: 'cus_pricing',
+        status: 'active',
+        billing_cycle: billingCycle,
+        amount: existingAmount,
+        currency: 'USD',
+        current_period_start: subscriptionPeriod.currentPeriodStart,
+        current_period_end: subscriptionPeriod.currentPeriodEnd,
+      });
+      const existing = await CalendarFundingPlanEntity.create({
+        id: uuidv4(),
+        funding_plan_id: plan.id,
+        calendar_id: uuidv4(),
+        amount: existingAmount,
+        end_time: null,
+      });
+      return { plan, existing };
+    }
+
+    const openAllocation = (calendarId: string) => CalendarFundingPlanEntity.findOne({
+      where: { calendar_id: calendarId, end_time: { [Op.is]: null as any } },
+    });
+
+    beforeEach(async () => {
+      fundingLogWarn.mockClear();
+      accountId = uuidv4();
+      await AccountEntity.create({
+        id: accountId,
+        email: `${accountId}@pavillion.dev`,
+        password_hash: 'hash',
+        status: 'active',
+        languages: 'en',
+      } as any);
+
+      const providerModel = new ProviderConfig(uuidv4(), 'stripe');
+      providerModel.enabled = true;
+      providerModel.displayName = 'Credit Card';
+      const providerEntity = ProviderConfigEntity.fromModel(providerModel);
+      await providerEntity.save();
+      providerConfigId = providerEntity.id;
+
+      adapter = {
+        createCheckoutSession: sandbox.stub().resolves({ clientSecret: 'cs_secret', sessionId: 'cs_test_pricing' }),
+        getSubscription: sandbox.stub(),
+        supportsAmountUpdates: sandbox.stub().returns(true),
+        updateSubscriptionAmount: sandbox.stub().resolves(),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(adapter as any);
+      sandbox.stub(config, 'get').withArgs('domain').returns('pavillion.dev');
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
+    });
+
+    describe('at checkout, on a fixed-price instance', () => {
+      beforeEach(() => stubPricing(false));
+
+      it('should charge the price per calendar and allocate that price to each', async () => {
+        const calendarIds = [uuidv4(), uuidv4()];
+
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, calendarIds);
+
+        expect(adapter.createCheckoutSession.firstCall.args[0].amount).toBe(2 * PRICE);
+
+        const { plan, allocations } = await completeCheckout(2 * PRICE);
+
+        expect(plan.amount).toBe(2 * PRICE);
+        expect(allocations.map((a) => a.calendar_id).sort()).toEqual([...calendarIds].sort());
+        expect(allocations.map((a) => a.amount)).toEqual([PRICE, PRICE]);
+        expect(fundingLogWarn).not.toHaveBeenCalled();
+      });
+
+      it('should price a yearly plan from the yearly price', async () => {
+        await service.createCheckoutSession(accountId, 'yearly', returnUrl, undefined, [uuidv4(), uuidv4()]);
+
+        expect(adapter.createCheckoutSession.firstCall.args[0].amount).toBe(2 * YEARLY_PRICE);
+
+        const { allocations } = await completeCheckout(2 * YEARLY_PRICE, {
+          currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+          currentPeriodEnd: new Date('2027-01-01T00:00:00Z'),
+        });
+
+        expect(allocations.map((a) => a.amount)).toEqual([YEARLY_PRICE, YEARLY_PRICE]);
+      });
+
+      it('should ignore an amount the caller sends', async () => {
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT, [uuidv4()]);
+
+        expect(adapter.createCheckoutSession.firstCall.args[0].amount).toBe(PRICE);
+      });
+
+      it('should charge for a repeated calendar id once', async () => {
+        // Charging per entry would bill twice for one calendar, and the second
+        // entry would then break the open-allocation index when the plan is built.
+        const calendarId = uuidv4();
+
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId, calendarId]);
+
+        const params = adapter.createCheckoutSession.firstCall.args[0];
+        expect(params.amount).toBe(PRICE);
+        expect(params.calendarIds).toEqual([calendarId]);
+      });
+
+      it.each([
+        ['omitted', undefined],
+        ['empty', []],
+      ])('should refuse a session whose calendar ids are %s', async (_label, calendarIds) => {
+        await expect(
+          service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, calendarIds),
+        ).rejects.toThrow(ValidationError);
+
+        expect(adapter.createCheckoutSession.called).toBe(false);
+      });
+    });
+
+    describe('when the charge no longer matches the configured price', () => {
+      beforeEach(() => stubPricing(false));
+
+      it('should split what was charged when the price changed after checkout', async () => {
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [uuidv4(), uuidv4()]);
+
+        // The session was opened at an older price: the customer paid 1.5P
+        const charged = 3 * PRICE / 2;
+        const { plan, allocations } = await completeCheckout(charged);
+
+        expect(plan.amount).toBe(charged);
+        expect(allocations.map((a) => a.amount)).toEqual([charged / 2, charged / 2]);
+        expect(fundingLogWarn).toHaveBeenCalledOnce();
+      });
+
+      it('should keep amounts out of the warning', async () => {
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [uuidv4(), uuidv4()]);
+
+        const { plan } = await completeCheckout(3 * PRICE / 2);
+
+        expect(fundingLogWarn.mock.calls[0][0]).toEqual({
+          fundingPlanId: plan.id,
+          billingCycle: 'monthly',
+          calendarCount: 2,
+        });
+      });
+
+      it('should split the charge across the calendars still owned at completion', async () => {
+        const [kept, lost] = [uuidv4(), uuidv4()];
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [kept, lost]);
+        mockCalendarInterface.isCalendarOwnerById.withArgs(accountId, lost).resolves(false);
+
+        const { allocations } = await completeCheckout(2 * PRICE);
+
+        expect(allocations.map((a) => [a.calendar_id, a.amount])).toEqual([[kept, 2 * PRICE]]);
+        expect(fundingLogWarn).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe('on a pay-what-you-can instance', () => {
+      beforeEach(() => stubPricing(true));
+
+      it('should charge the chosen amount once, however many calendars it covers', async () => {
+        const amount = 3 * MIN_PWYC_AMOUNT;
+
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, amount, [uuidv4(), uuidv4()]);
+
+        expect(adapter.createCheckoutSession.firstCall.args[0].amount).toBe(amount);
+      });
+
+      it('should divide the plan amount across its calendars', async () => {
+        const amount = 3 * MIN_PWYC_AMOUNT;
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, amount, [uuidv4(), uuidv4()]);
+
+        const { allocations } = await completeCheckout(amount);
+
+        expect(allocations.map((a) => a.amount)).toEqual([amount / 2, amount / 2]);
+        expect(fundingLogWarn).not.toHaveBeenCalled();
+      });
+
+      it('should still start a session that names no calendar', async () => {
+        await service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT);
+
+        expect(adapter.createCheckoutSession.calledOnce).toBe(true);
+      });
+
+      it('should allocate the caller\'s amount when adding a calendar', async () => {
+        await seedActivePlan('monthly', PRICE);
+        const calendarId = uuidv4();
+
+        await service.addCalendarToFundingPlan(accountId, calendarId, 2 * MIN_PWYC_AMOUNT);
+
+        expect((await openAllocation(calendarId))!.amount).toBe(2 * MIN_PWYC_AMOUNT);
+        expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(PRICE + 2 * MIN_PWYC_AMOUNT);
+      });
+
+      it.each([
+        ['omitted', undefined],
+        ['below the minimum', MIN_PWYC_AMOUNT - 1],
+      ])('should refuse to add a calendar when the amount is %s', async (_label, amount) => {
+        await seedActivePlan('monthly', PRICE);
+        const calendarId = uuidv4();
+
+        await expect(
+          service.addCalendarToFundingPlan(accountId, calendarId, amount),
+        ).rejects.toThrow(InvalidAmountError);
+
+        expect(await openAllocation(calendarId)).toBeNull();
+        expect(adapter.updateSubscriptionAmount.called).toBe(false);
+      });
+    });
+
+    describe('adding and removing calendars on a fixed-price instance', () => {
+      beforeEach(() => stubPricing(false));
+
+      it('should allocate the configured price whatever amount the caller sends', async () => {
+        await seedActivePlan('monthly', PRICE);
+        const calendarId = uuidv4();
+
+        await service.addCalendarToFundingPlan(accountId, calendarId, 1000);
+
+        expect((await openAllocation(calendarId))!.amount).toBe(PRICE);
+        expect(adapter.updateSubscriptionAmount.calledOnce).toBe(true);
+        expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(2 * PRICE);
+      });
+
+      it('should accept an add that sends no amount', async () => {
+        await seedActivePlan('monthly', PRICE);
+        const calendarId = uuidv4();
+
+        await service.addCalendarToFundingPlan(accountId, calendarId);
+
+        expect((await openAllocation(calendarId))!.amount).toBe(PRICE);
+      });
+
+      it('should price an added calendar from the plan\'s own billing cycle', async () => {
+        await seedActivePlan('yearly', YEARLY_PRICE);
+        const calendarId = uuidv4();
+
+        await service.addCalendarToFundingPlan(accountId, calendarId);
+
+        expect((await openAllocation(calendarId))!.amount).toBe(YEARLY_PRICE);
+        expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(2 * YEARLY_PRICE);
+      });
+
+      it('should bill the remaining calendars after one is removed', async () => {
+        const { existing } = await seedActivePlan('monthly', PRICE);
+        const calendarId = uuidv4();
+        await service.addCalendarToFundingPlan(accountId, calendarId);
+        adapter.updateSubscriptionAmount.resetHistory();
+
+        await service.removeCalendarFromFundingPlan(accountId, existing.calendar_id);
+
+        expect(adapter.updateSubscriptionAmount.calledOnce).toBe(true);
+        expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(PRICE);
+      });
     });
   });
 

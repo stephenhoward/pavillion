@@ -291,9 +291,9 @@ export default class FundingInterface {
    *
    * @param accountId - Account ID (funding plan resolved internally)
    * @param calendarId - Calendar ID to add
-   * @param amount - Amount to allocate in millicents
+   * @param amount - Amount to allocate in millicents (pay-what-you-can only; ignored on a fixed-price instance)
    */
-  async addCalendarToFundingPlan(accountId: string, calendarId: string, amount: number): Promise<void> {
+  async addCalendarToFundingPlan(accountId: string, calendarId: string, amount?: number): Promise<void> {
     return this.fundingService.addCalendarToFundingPlan(accountId, calendarId, amount);
   }
 
