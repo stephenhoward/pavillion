@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, errors, type Page } from '@playwright/test';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
@@ -25,11 +25,27 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 let env: TestEnvironment;
 
-function embeddingUrl(): string {
-  return `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
+function embeddingUrl(origin = 'http://localhost:8080'): string {
+  return `${origin}/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
 }
 
 const WIDGET_FRAME = 'iframe[src*="/widget/"]';
+
+/**
+ * The browser's own Back or Forward. Playwright waits on a main-frame
+ * navigation, which a traversal inside the iframe never is, so the wait is
+ * bounded; the command itself is sent at once.
+ */
+async function traverseHistory(page: Page, direction: 'goBack' | 'goForward'): Promise<void> {
+  try {
+    await page[direction]({ timeout: 1000 });
+  }
+  catch (error) {
+    if (!(error instanceof errors.TimeoutError)) {
+      throw error;
+    }
+  }
+}
 
 /** The embedded widget iframe's height on the host page, as the SDK last set it. */
 function frameHeight(page: Page): Promise<number> {
@@ -289,6 +305,99 @@ test.describe('Widget Embedding', () => {
     expectRange(await afterHistoryBack);
     await expect(page).toHaveURL(hasListQuery);
     await expect(cards).toHaveCount(listCount, { timeout: 10000 });
+  });
+
+  test("Back from an event's detail returns to the list", async ({ page }) => {
+    // Playwright traverses through its browser protocol, not a Back button, so
+    // a pass in the webkit project says nothing about Back in Safari itself.
+    //
+    // localhost:8080 is same-site with the test server, because ports do not
+    // count. 127.0.0.1 makes the host cross-site, as a real embed is.
+    const hostOrigin = 'http://127.0.0.1:8080';
+    const anchorUrl = `${hostOrigin}/`;
+    const hostUrl = embeddingUrl(hostOrigin);
+
+    const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+    const startDate = isoDate(new Date());
+    // A short range keeps the frame short. The popover's close waits on two
+    // animation frames, and in Linux WebKit a frame of a 9000px iframe takes
+    // seconds, long enough to outlast the assertion after Escape.
+    const endDate = isoDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
+    // A known page behind the host, so the last Back has somewhere to land
+    // other than about:blank.
+    await page.goto(anchorUrl);
+    await page.goto(hostUrl);
+    // Lost if the host document is replaced, even by a same-URL reload.
+    await page.evaluate(() => {
+      (window as any).__hostMarker = 1;
+    });
+
+    const iframe = page.frameLocator(WIDGET_FRAME);
+    const cards = iframe.locator('article.event-card');
+    const searchInput = iframe.locator('#public-event-search');
+    const detailHeading = iframe.locator('.event-detail-overlay h1');
+    await expect(cards.first()).toBeVisible({ timeout: 15000 });
+
+    await iframe.locator('.date-filter-button').click();
+    await iframe.locator('.date-pill.calendar-pill').click();
+    const dateInputs = iframe.locator('.date-input');
+    await dateInputs.first().fill(startDate);
+    await dateInputs.last().fill(endDate);
+    await dateInputs.last().press('Escape');
+    await expect(iframe.locator('.date-dropdown')).toHaveCount(0);
+
+    // Taken from a title so the filtered list keeps at least that event.
+    const title = await cards.first().locator('.event-title-link').innerText();
+    const word = title.split(/\s+/).find((candidate) => /^[a-z0-9]{3,}$/i.test(candidate));
+    expect(word, `no searchable word in "${title}"`).toBeTruthy();
+    await searchInput.fill(word!);
+
+    const listQuery = { search: word, startDate, endDate };
+    const widgetQuery = async () => {
+      const search = await iframe.locator('html').evaluate(() => window.location.search);
+      const params = new URLSearchParams(search);
+      return {
+        search: params.get('search'),
+        startDate: params.get('startDate'),
+        endDate: params.get('endDate'),
+      };
+    };
+    // Search is debounced, and a late router.replace would land after leaving
+    // the list.
+    await expect.poll(widgetQuery, { timeout: 10000 }).toEqual(listQuery);
+
+    const expectHostStayed = async () => {
+      await expect(page).toHaveURL(hostUrl);
+      expect(await page.evaluate(() => (window as any).__hostMarker)).toBe(1);
+    };
+    const expectFilteredList = async () => {
+      await expect(cards.first()).toBeVisible({ timeout: 10000 });
+      await expect(iframe.locator('.event-detail-overlay')).toHaveCount(0);
+      await expect(searchInput).toHaveValue(word!);
+      expect(await widgetQuery()).toEqual(listQuery);
+    };
+
+    await iframe.locator('article.event-card .event-title-link', { hasText: word }).first().click();
+    await expect(detailHeading).toBeVisible({ timeout: 10000 });
+
+    // Host first, so a Back that leaves the page fails on that, not on the
+    // widget it took with it.
+    await traverseHistory(page, 'goBack');
+    await expectHostStayed();
+    await expectFilteredList();
+
+    await traverseHistory(page, 'goForward');
+    await expect(detailHeading).toBeVisible({ timeout: 10000 });
+    await expectHostStayed();
+
+    await traverseHistory(page, 'goBack');
+    await expectHostStayed();
+    await expectFilteredList();
+
+    // Nothing left in the widget, so this Back is the host page's own.
+    await traverseHistory(page, 'goBack');
+    await expect(page).toHaveURL(anchorUrl);
   });
 
   test('modifier-click on an event title opens the detail in a new tab', async ({ page, browserName }) => {
