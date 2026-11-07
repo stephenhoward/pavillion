@@ -1480,7 +1480,8 @@ describe('ModerationService', () => {
       const updateStub = sandbox.stub(ReportEntity, 'update').resolves([1]);
 
       // Stub ReportEntity.findOne to return the updated entity
-      sandbox.stub(ReportEntity, 'findOne').resolves({
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: report.id } as any);
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
         toModel: () => report,
       } as any);
 
@@ -1507,6 +1508,7 @@ describe('ModerationService', () => {
 
     it('should throw InvalidVerificationTokenError when no rows are affected (invalid token)', async () => {
       // Atomic update returns 0 affected rows - token not found or already used
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: 'report-id-1' } as any);
       sandbox.stub(ReportEntity, 'update').resolves([0]);
 
       await expect(service.verifyReport('invalid-token'))
@@ -1516,6 +1518,7 @@ describe('ModerationService', () => {
     it('should throw InvalidVerificationTokenError when token is expired (0 rows affected)', async () => {
       // An expired token will not match the WHERE clause (verification_expiration > NOW()),
       // so the atomic update returns 0 affected rows
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: 'report-id-1' } as any);
       sandbox.stub(ReportEntity, 'update').resolves([0]);
 
       await expect(service.verifyReport('expired-token'))
@@ -1525,10 +1528,66 @@ describe('ModerationService', () => {
     it('should throw InvalidVerificationTokenError when token was already consumed by another request', async () => {
       // Race condition scenario: another request already consumed the token,
       // so the atomic update returns 0 affected rows
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: 'report-id-1' } as any);
       sandbox.stub(ReportEntity, 'update').resolves([0]);
 
       await expect(service.verifyReport('already-consumed-token'))
         .rejects.toThrow(InvalidVerificationTokenError);
+    });
+
+    it('should throw InvalidVerificationTokenError when no report carries the token', async () => {
+      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+      const updateStub = sandbox.stub(ReportEntity, 'update').resolves([1]);
+
+      await expect(service.verifyReport('unknown-token'))
+        .rejects.toThrow(InvalidVerificationTokenError);
+      expect(updateStub.called).toBe(false);
+    });
+
+    it('should scope the update to the located report and emit that report, not another submitted one', async () => {
+      const verified = new Report('report-verified');
+      verified.eventId = 'event-verified';
+      verified.calendarId = 'calendar-verified';
+      verified.status = ReportStatus.SUBMITTED;
+      const other = new Report('report-other');
+      other.calendarId = 'calendar-other';
+      other.status = ReportStatus.SUBMITTED;
+
+      // A different SUBMITTED report, updated more recently, is what a
+      // "latest submitted with null token" query would have returned.
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: 'report-verified' } as any);
+      sandbox.stub(ReportEntity, 'findByPk').callsFake((async (id: string) => ({
+        toModel: () => (id === 'report-verified' ? verified : other),
+      })) as any);
+      const updateStub = sandbox.stub(ReportEntity, 'update').resolves([1]);
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.verifyReport('valid-token');
+
+      expect(result.id).toBe('report-verified');
+      expect(updateStub.firstCall.args[1].where.id).toBe('report-verified');
+      expect(emitSpy.calledWith('reportVerified', sinon.match({ report: verified }))).toBe(true);
+      expect(emitSpy.calledWith(
+        'moderation:report:flagged',
+        sinon.match({ reportId: 'report-verified', calendarId: 'calendar-verified' }),
+      )).toBe(true);
+    });
+
+    it('should let only one of two concurrent verifications of the same token succeed', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.SUBMITTED;
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: 'report-id-1' } as any);
+      sandbox.stub(ReportEntity, 'findByPk').resolves({ toModel: () => report } as any);
+      sandbox.stub(ReportEntity, 'update').onFirstCall().resolves([1]).onSecondCall().resolves([0]);
+
+      const results = await Promise.allSettled([
+        service.verifyReport('valid-token'),
+        service.verifyReport('valid-token'),
+      ]);
+
+      expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+      expect(rejected.reason).toBeInstanceOf(InvalidVerificationTokenError);
     });
 
     it('should include expiration check in the atomic update WHERE clause', async () => {
@@ -1536,7 +1595,8 @@ describe('ModerationService', () => {
 
       const report = new Report('report-id-1');
       report.status = ReportStatus.SUBMITTED;
-      sandbox.stub(ReportEntity, 'findOne').resolves({
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: report.id } as any);
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
         toModel: () => report,
       } as any);
 
@@ -1936,7 +1996,8 @@ describe('ModerationService', () => {
       sandbox.stub(ReportEntity, 'update').resolves([1]);
 
       // Stub findOne to return the updated entity
-      sandbox.stub(ReportEntity, 'findOne').resolves({
+      sandbox.stub(ReportEntity, 'findOne').resolves({ id: report.id } as any);
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
         toModel: () => report,
       } as any);
 
@@ -2054,7 +2115,8 @@ describe('ModerationService', () => {
         report.status = ReportStatus.SUBMITTED;
 
         sandbox.stub(ReportEntity, 'update').resolves([1]);
-        sandbox.stub(ReportEntity, 'findOne').resolves({
+        sandbox.stub(ReportEntity, 'findOne').resolves({ id: report.id } as any);
+        sandbox.stub(ReportEntity, 'findByPk').resolves({
           toModel: () => report,
         } as any);
 
