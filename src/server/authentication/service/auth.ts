@@ -176,6 +176,9 @@ export default class AuthenticationService {
    * @returns {Promise<Account|undefined>} The account if password was reset successfully, undefined otherwise
    */
   async resetPassword(code: string, password: string): Promise<Account| undefined> {
+    if ( ! code ) {
+      return undefined;
+    }
     const secret = await AccountSecretsEntity.findOne({ where: {password_reset_code: code}, include: AccountEntity});
 
     if ( secret ) {
@@ -184,14 +187,14 @@ export default class AuthenticationService {
         const account = secret.account.toModel();
 
         if ( await this.accountService.setPassword(account, password) == true ) {
-          secret.password_reset_code = '';
+          secret.password_reset_code = null;
           secret.password_reset_expiration = null;
           await secret.save();
           return account;
         }
       }
       else {
-        secret.password_reset_code = '';
+        secret.password_reset_code = null;
         secret.password_reset_expiration = null;
         await secret.save();
       }
@@ -231,6 +234,9 @@ export default class AuthenticationService {
    * @returns {Promise<Account|undefined>} The account if the code is valid and not expired, undefined otherwise
    */
   async validatePasswordResetCode(code: string): Promise<Account|undefined> {
+    if ( ! code ) {
+      return undefined;
+    }
     const secret = await AccountSecretsEntity.findOne({
       where: {password_reset_code: code},
       include: AccountEntity,
