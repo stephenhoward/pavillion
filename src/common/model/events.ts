@@ -228,7 +228,15 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Schedules load in no fixed order, so the choice must not depend on it.
    */
   baseSchedule(): CalendarEventSchedule | null {
-    const candidates = (this.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
+    return CalendarEvent.baseScheduleOf(this.schedules ?? []);
+  }
+
+  /**
+   * The base schedule of a bare list of schedules, by the same rule as
+   * {@link baseSchedule}, for code that holds schedules without an event.
+   */
+  static baseScheduleOf(schedules: CalendarEventSchedule[]): CalendarEventSchedule | null {
+    const candidates = schedules.filter(s => !s.isExclusion && s.startDate);
     candidates.sort(compareSchedulesByStart);
     return candidates[0] ?? null;
   }

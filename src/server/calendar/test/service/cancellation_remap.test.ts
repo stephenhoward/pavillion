@@ -7,7 +7,7 @@ vi.mock('@/server/common/helper/logger', () => ({
   createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: warnMock, debug: vi.fn() }),
 }));
 
-import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { remapCancellations, REMAP_MAX_ROWS, type CancellationRemap } from '@/server/calendar/service/cancellation_remap';
 import { expandScheduleOccurrences } from '@/server/calendar/service/event_instance';
 
@@ -222,6 +222,28 @@ describe('remapCancellations', () => {
       );
       expect(plain(result)).toEqual({
         move: [{ id: 'thursday-row', start: '2026-01-16T03:00:00.000Z', hidden: true }],
+        remove: [],
+      });
+    });
+
+    it('expands each side in the frame CalendarEvent.baseSchedule() picks, ties broken by id', () => {
+      // Both start at 18:00Z on 23 Feb; 'aaa' wins the tie, so the series
+      // expands in UTC and stays at 18:00Z across the DST change. Framed in
+      // the series' own Los Angeles zone (first loaded), 16 March would be
+      // 17:00Z and the row would match nothing.
+      const series = (time: string) => recurring('series', `2026-02-23T${time}`, LA);
+      const anchor = () => oneOff('aaa', '2026-02-23T18:00:00Z', 'UTC');
+      const oldPositives = [series('10:00:00'), anchor()];
+      const newPositives = [series('11:00:00'), anchor()];
+      const event = new CalendarEvent('event-1', null);
+      event.schedules = newPositives;
+      expect(event.baseSchedule()?.id).toBe('aaa');
+
+      const result = remapCancellations(oldPositives, newPositives, [cancellation('row-a', '2026-03-16T18:00:00Z')], 'event-1');
+      const expected = expandScheduleOccurrences(newPositives[0], event.baseSchedule(), new Date('2026-03-31T00:00:00Z'), 10)[3];
+      expect(expected.toISOString()).toBe('2026-03-16T19:00:00.000Z');
+      expect(plain(result)).toEqual({
+        move: [{ id: 'row-a', start: expected.toISOString(), hidden: true }],
         remove: [],
       });
     });

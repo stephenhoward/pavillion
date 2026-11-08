@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { CalendarEventSchedule, compareSchedulesByStart } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { expandScheduleOccurrences } from '@/server/calendar/service/event_instance';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -56,9 +56,7 @@ type Classification =
   | { kind: 'shift'; successor: CalendarEventSchedule; position: number };
 
 function sideOf(schedules: CalendarEventSchedule[]): Side {
-  const candidates = schedules.filter(s => !s.isExclusion && s.startDate);
-  candidates.sort(compareSchedulesByStart);
-  return { schedules, base: candidates[0] ?? null };
+  return { schedules, base: CalendarEvent.baseScheduleOf(schedules) };
 }
 
 function walk(side: Side, schedule: CalendarEventSchedule, until: Date): Walk {
