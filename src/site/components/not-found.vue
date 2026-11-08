@@ -1,5 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
+
+defineProps<{
+  /** Destination of the link; defaults to the site root. */
+  homeHref?: string;
+  /** Label of the link; defaults to the "Go to Homepage" string. */
+  homeLabel?: string;
+}>();
+
 const { t } = useTranslation('system');
 </script>
 
@@ -7,8 +15,8 @@ const { t } = useTranslation('system');
   <main class="not-found">
     <h1>{{ t('not_found_error_message') }}</h1>
     <p>{{ t('not_found_suggestion') }}</p>
-    <a href="/" class="not-found-home-link">
-      {{ t('not_found_go_home') }}
+    <a :href="homeHref ?? '/'" class="not-found-home-link">
+      {{ homeLabel ?? t('not_found_go_home') }}
     </a>
   </main>
 </template>

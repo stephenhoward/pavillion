@@ -83,6 +83,17 @@ const goBack = () => {
 };
 
 /**
+ * Href of this calendar's list inside the frame, carrying the recorded list
+ * query or at least the sticky display keys. The not-found state links here
+ * rather than to the site root, which would load the client shell in the frame.
+ */
+const calendarListHref = computed(() => router.resolve({
+  name: 'widget-calendar',
+  params: { urlName: calendarId as string },
+  query: widgetStore.lastListQuery ?? stickyQuery(route.query),
+}).href);
+
+/**
  * Builds a widget-scoped category filter href that returns to the widget
  * calendar list pre-filtered by the chosen category, keeping the sticky
  * display keys. Uses the resolved router URL so the iframe-aware base path is
@@ -169,7 +180,7 @@ onBeforeMount(async () => {
 
     <!-- Not Found State -->
     <div v-if="!state.isLoading && state.notFound">
-      <NotFound />
+      <NotFound :home-href="calendarListHref" :home-label="backLabel" />
     </div>
 
     <!-- Error State -->

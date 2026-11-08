@@ -122,6 +122,18 @@ describe('NotFound', () => {
     expect(link.text()).toBe('Go to Homepage');
   });
 
+  it('links to a supplied destination with a supplied label, in the same frame', () => {
+    const custom = mount(NotFound, {
+      props: { homeHref: '/widget/cal?lang=es', homeLabel: 'Back to Cal' },
+      global: { plugins: [[I18NextVue, { i18next }]] },
+    });
+    const link = custom.find('a.not-found-home-link');
+    expect(link.attributes('href')).toBe('/widget/cal?lang=es');
+    expect(link.text()).toBe('Back to Cal');
+    expect(link.attributes('target')).toBeUndefined();
+    custom.unmount();
+  });
+
   it('renders its heading and suggestion under the scope id its styles target', () => {
     expect(scopeId).toMatch(/^data-v-/);
     expect(wrapper.find('p').attributes()).toHaveProperty(scopeId);

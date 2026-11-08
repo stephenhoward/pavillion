@@ -102,7 +102,10 @@ vi.mock('@/site/service/calendar', () => {
 });
 
 vi.mock('@/site/components/not-found.vue', () => ({
-  default: { template: '<div class="not-found-stub"></div>' },
+  default: {
+    props: ['homeHref', 'homeLabel'],
+    template: '<a class="not-found-stub" :href="homeHref">{{ homeLabel }}</a>',
+  },
 }));
 
 vi.mock('@/site/components/EventDetailBody.vue', () => ({
@@ -491,6 +494,17 @@ describe('widget event-detail-overlay slug routing', () => {
     // slug itself is unparseable — the overlay short-circuits.
     expect(loadEventInstanceMock).not.toHaveBeenCalled();
     expect(loadCalendarEventsMock).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('not-found links back to the embedded calendar list with the sticky display keys', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1/20261301-2500?colorMode=dark&lang=es&utm_source=x');
+
+    const link = wrapper.get('.not-found-stub');
+    const url = new URL(link.attributes('href')!, 'http://localhost');
+    expect(url.pathname).toBe('/widget/test_calendar');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ colorMode: 'dark', lang: 'es' });
+    expect(link.text()).toBe('Back to test_calendar');
     wrapper.unmount();
   });
 
