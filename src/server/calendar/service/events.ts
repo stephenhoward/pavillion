@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
+import type { DateTime } from 'luxon';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
@@ -27,6 +28,7 @@ import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFo
 import { ValidationError } from '@/common/exceptions/base';
 import { sanitizeImageAlt, validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 import { validateMediaTransform } from '@/server/calendar/service/media_transform';
+import { remapCancellations } from '@/server/calendar/service/cancellation_remap';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
@@ -1292,9 +1294,16 @@ class EventService {
    *     cancel-instance flow. These are NOT part of the generic edit surface;
    *     editing unrelated event fields must never delete them.
    *
+   * Once the positives are written, single-date cancellations follow the
+   * edit (DEC-023 rule 7, {@link remapCancellations}): a row still on an
+   * occurrence is kept, one whose occurrence moved is moved with it, and one
+   * that no longer lines up with any occurrence is removed. The moves and
+   * removals are written in the same transaction, and the returned model
+   * carries the cancellations as they stand afterwards.
+   *
    * The caller must reject payloads containing is_exclusion=true entries
-   * before invoking this method. Scoping of every query/destroy is strictly
-   * by event_id to prevent cross-event leakage.
+   * before invoking this method. Scoping of every query, update and destroy
+   * is strictly by event_id to prevent cross-event leakage.
    *
    * @param eventId - the id of the event whose schedules are being reconciled
    * @param incomingPositiveSchedules - the array of positive-schedule
@@ -1332,6 +1341,9 @@ class EventService {
     const existingExclusions = existingSchedules.filter(s => s.is_exclusion === true);
     const existingPositives = existingSchedules.filter(s => s.is_exclusion !== true);
     let unseenPositiveIds = existingPositives.map(s => s.id);
+    // Snapshot before the loop: updating a row mutates its entity.
+    const oldPositives = existingPositives.map(s => s.toModel());
+    const newPositives: CalendarEventSchedule[] = [];
 
     for (const schedule of incomingPositiveSchedules) {
       if (schedule.id) {
@@ -1366,19 +1378,6 @@ class EventService {
         // helper is positive-only, and payload rejection above guarantees
         // we never see isException=true here.
         const toStorage = EventScheduleEntity.toStorageDate;
-        // Capture the pre-edit occurrence instant and frequency so a single
-        // (non-recurring) event's exclusion row can follow a date edit below.
-        // The instant is taken from the entity's model projection (not the raw
-        // start_date column) because positive schedules and exclusion rows do
-        // NOT share a storage convention: positive rows store wall-clock digits
-        // reinterpreted in their `timezone` column (keepLocalTime), while the
-        // cancel path writes exclusion rows as true UTC instants with
-        // timezone='UTC'. Comparing raw `start_date` columns therefore only
-        // matched on a UTC server; comparing the resolved UTC instant matches
-        // on any server.
-        const oldStartInstantMs = scheduleEntity.toModel().startDate?.toUTC().toMillis() ?? null;
-        const oldStartDate = scheduleEntity.start_date;
-        const oldFrequency = scheduleEntity.frequency;
         const newStartDate = toStorage(parsed.startDate) ?? scheduleEntity.start_date;
         const newFrequency = 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency;
         await scheduleEntity.update({
@@ -1391,42 +1390,14 @@ class EventService {
           count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
           by_day: byDayValue,
         }, { transaction: tx });
-        event.addSchedule(scheduleEntity.toModel());
-
-        // Cancellation-follows-event (single events): when an owner edits the
-        // date/time of a single, non-recurring event that carries a
-        // cancellation, the exclusion row — keyed by start_date — must move
-        // with the event so it stays cancelled. Re-key any matching exclusion
-        // from the old start_date to the new one. Multi-schedule and recurring
-        // events are deliberately excluded: their exclusions are keyed to
-        // individual occurrence dates, not the lone schedule's start_date.
-        const isSingleNonRecurringEdit =
-          existingPositives.length === 1 &&
-          incomingPositiveSchedules.length === 1 &&
-          !oldFrequency && !newFrequency;
-        if (
-          isSingleNonRecurringEdit &&
-          oldStartInstantMs !== null &&
-          parsed.startDate &&
-          oldStartDate && newStartDate &&
-          newStartDate.getTime() !== oldStartDate.getTime()
-        ) {
-          for (const exclusion of existingExclusions) {
-            // Match and re-key by resolved UTC instant (via the model
-            // projection) so the comparison is independent of each row's
-            // storage convention. The new value is written back in the
-            // exclusion's OWN timezone convention via toStorageDate so it
-            // round-trips through toModel() to the new occurrence instant.
-            const exclusionInstantMs = exclusion.toModel().startDate?.toUTC().toMillis() ?? null;
-            if (exclusionInstantMs !== null && exclusionInstantMs === oldStartInstantMs) {
-              const rekeyedStart = toStorage(parsed.startDate.setZone(exclusion.timezone || 'UTC'));
-              await exclusion.update({ start_date: rekeyedStart }, { transaction: tx });
-            }
-          }
-        }
+        const updated = scheduleEntity.toModel();
+        newPositives.push(updated);
+        event.addSchedule(updated);
       }
       else {
-        event.addSchedule(await this.createEventSchedule(eventId, schedule, tx));
+        const created = await this.createEventSchedule(eventId, schedule, tx);
+        newPositives.push(created);
+        event.addSchedule(created);
       }
     }
 
@@ -1445,11 +1416,50 @@ class EventService {
       });
     }
 
-    // Re-attach the preserved exclusion rows to the returned model so
-    // downstream consumers (and the emitted eventUpdated payload) see the
-    // full, accurate schedule list.
+    // Cancellations follow the edit (DEC-023 rule 7). Every id the remap
+    // returns is one of the event_id-scoped rows loaded above, and each write
+    // is scoped by id, event_id and is_exclusion=true besides.
+    const { move, remove } = remapCancellations(
+      oldPositives, newPositives, existingExclusions.map(e => e.toModel()), eventId,
+    );
+    const moved = new Map<string, { start: DateTime; hidden: boolean }>();
+    for (const { id, start, hidden } of move) {
+      const exclusion = existingExclusions.find(e => e.id === id)!;
+      // Written in the row's own storage convention (a UTC instant), so it
+      // reads back as exactly the occurrence's instant and later cancel or
+      // restore lookups by start_date still find it.
+      const rowStart = start.setZone(exclusion.timezone || 'UTC');
+      const values: Record<string, unknown> = { start_date: EventScheduleEntity.toStorageDate(rowStart) };
+      if (hidden !== exclusion.hide_from_public) {
+        values.hide_from_public = hidden;
+      }
+      await EventScheduleEntity.update(values, {
+        where: { id, event_id: eventId, is_exclusion: true },
+        transaction: tx,
+      });
+      moved.set(id, { start: rowStart, hidden });
+    }
+    if (remove.length > 0) {
+      await EventScheduleEntity.destroy({
+        where: { id: remove, event_id: eventId, is_exclusion: true },
+        transaction: tx,
+      });
+    }
+
+    // Re-attach the exclusion rows as they now stand, so downstream consumers
+    // (and the emitted eventUpdated payload) see the full, accurate schedule
+    // list: moved rows at their new start, removed rows absent.
     for (const exclusion of existingExclusions) {
-      event.addSchedule(exclusion.toModel());
+      if (remove.includes(exclusion.id)) {
+        continue;
+      }
+      const model = exclusion.toModel();
+      const moveTo = moved.get(exclusion.id);
+      if (moveTo) {
+        model.startDate = moveTo.start;
+        model.hideFromPublic = moveTo.hidden;
+      }
+      event.addSchedule(model);
     }
   }
 

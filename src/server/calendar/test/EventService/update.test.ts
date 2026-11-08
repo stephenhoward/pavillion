@@ -987,6 +987,8 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       }
       return this;
     });
+    // The exclusion moves through a scoped static update.
+    const exclusionUpdateStub = sandbox.stub(EventScheduleEntity, 'update').resolves([1]);
 
     await service.updateEvent(acct, eventId, {
       schedules: [
@@ -1007,9 +1009,14 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     // So the re-key is asserted by the resolved occurrence INSTANT via
     // toModel(), not by raw start_date column equality (which would only hold
     // on a UTC server).
-    const exclusionUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === exclusionEntity);
-    expect(exclusionUpdate).toBeDefined();
-    const reKeyedInstantMs = exclusionEntity.toModel().startDate?.toUTC().toMillis();
+    expect(exclusionUpdateStub.calledOnce).toBe(true);
+    const [values, options] = exclusionUpdateStub.firstCall.args as [Record<string, unknown>, Record<string, any>];
+    expect(options.where).toEqual({ id: 'exclusionScheduleId', event_id: eventId, is_exclusion: true });
+    const reKeyedInstantMs = EventScheduleEntity.build({
+      start_date: values.start_date as Date,
+      timezone: exclusionEntity.timezone,
+      is_exclusion: true,
+    }).toModel().startDate?.toUTC().toMillis();
     expect(reKeyedInstantMs).toBe(positiveEntity.toModel().startDate?.toUTC().toMillis());
     // And it is genuinely the NEW occurrence, not the old one (15:00Z).
     expect(reKeyedInstantMs).not.toBe(oldOccurrenceInstantMs);
@@ -1058,6 +1065,110 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     // The exclusion row's update must not have been invoked.
     const exclusionUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === exclusionEntity);
     expect(exclusionUpdate).toBeUndefined();
+  });
+
+  /**
+   * A weekly Monday 10:00 Los Angeles series from 2026-01-05 (raw wall-clock
+   * digits, as positive rows store them) with two cancellations stored as UTC
+   * instants: the 2nd Monday (shown) and the 4th (hidden).
+   */
+  function weeklySeriesWithCancellations() {
+    const positiveEntity = EventScheduleEntity.build({
+      id: 'positiveScheduleId',
+      event_id: eventId,
+      start_date: new Date('2026-01-05T10:00:00Z'),
+      timezone: 'America/Los_Angeles',
+      frequency: EventFrequency.WEEKLY as string,
+      interval: 1,
+      count: 0,
+      by_day: '',
+      is_exclusion: false,
+    });
+    const secondMonday = EventScheduleEntity.build({
+      id: 'secondMondayId',
+      event_id: eventId,
+      start_date: new Date('2026-01-12T18:00:00Z'),
+      timezone: 'UTC',
+      is_exclusion: true,
+      hide_from_public: false,
+    });
+    const fourthMonday = EventScheduleEntity.build({
+      id: 'fourthMondayId',
+      event_id: eventId,
+      start_date: new Date('2026-01-26T18:00:00Z'),
+      timezone: 'UTC',
+      is_exclusion: true,
+      hide_from_public: true,
+    });
+    sandbox.stub(EventEntity, 'findByPk').resolves(
+      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
+    );
+    sandbox.stub(EventEntity.prototype, 'save');
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, secondMonday, fourthMonday]);
+    sandbox.stub(EventScheduleEntity.prototype, 'update').callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
+      for (const key in params) {
+        this.set(key, params[key]);
+      }
+      return this;
+    });
+    return {
+      staticUpdate: sandbox.stub(EventScheduleEntity, 'update').resolves([1]),
+      destroy: sandbox.stub(EventScheduleEntity, 'destroy').resolves(1),
+    };
+  }
+
+  it('should move and remove cancellations in the transaction when a schedule edit shifts them', async () => {
+    const { staticUpdate, destroy } = weeklySeriesWithCancellations();
+    let commit: () => void = () => {};
+    const fakeTx = { afterCommit: (cb: () => void) => { commit = cb; } } as any;
+    const emit = sandbox.spy(service['eventBus'], 'emit');
+
+    // An hour later, and three occurrences: the 2nd Monday moves to 11:00 on
+    // its own date, the 4th falls past the new end.
+    const updated = await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', count: 3 },
+      ],
+    }, undefined, fakeTx);
+
+    expect(staticUpdate.calledOnce).toBe(true);
+    const [values, updateOptions] = staticUpdate.firstCall.args as [Record<string, unknown>, Record<string, any>];
+    expect((values.start_date as Date).toISOString()).toBe('2026-01-12T19:00:00.000Z');
+    expect(values).not.toHaveProperty('hide_from_public');
+    expect(updateOptions.where).toEqual({ id: 'secondMondayId', event_id: eventId, is_exclusion: true });
+    expect(updateOptions.transaction).toBe(fakeTx);
+
+    expect(destroy.calledOnce).toBe(true);
+    const destroyOptions = destroy.firstCall.args[0] as Record<string, any>;
+    expect(destroyOptions.where).toEqual({ id: ['fourthMondayId'], event_id: eventId, is_exclusion: true });
+    expect(destroyOptions.transaction).toBe(fakeTx);
+
+    commit();
+    await new Promise(resolve => setImmediate(resolve));
+    const payload = emit.getCalls().find(c => c.args[0] === 'eventUpdated')?.args[1] as { event: { schedules: CalendarEventSchedule[] } };
+    for (const schedules of [updated.schedules, payload.event.schedules]) {
+      const exclusions = schedules.filter(s => s.isExclusion);
+      expect(exclusions.map(s => s.id)).toEqual(['secondMondayId']);
+      expect(exclusions[0].startDate?.toUTC().toISO()).toBe('2026-01-12T19:00:00.000Z');
+      expect(exclusions[0].hideFromPublic).toBe(false);
+    }
+  });
+
+  it('should not update or destroy any cancellation on a description-only edit', async () => {
+    const { staticUpdate, destroy } = weeklySeriesWithCancellations();
+    sandbox.stub(EventContentEntity, 'findOne').resolves(EventContentEntity.build({ event_id: eventId, language: 'en' }));
+    sandbox.stub(EventContentEntity.prototype, 'save');
+
+    // The editor sends the unchanged schedule back with every save.
+    await service.updateEvent(acct, eventId, {
+      content: { en: { name: 'Standup', description: 'New description' } },
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
+      ],
+    });
+
+    expect(staticUpdate.called).toBe(false);
+    expect(destroy.called).toBe(false);
   });
 
   it('should leave exclusions deleted after a restore (edit unrelated field post-restore)', async () => {
