@@ -274,7 +274,10 @@
       "file_no_events": "Ese archivo de calendario no contiene eventos para importar.",
       "file_too_many_events": "Ese archivo tiene más eventos de los que se pueden importar a la vez. Divídelo en archivos más pequeños e importa cada uno.",
       "no_edit_permission": "No tienes permiso para importar eventos en este calendario.",
-      "unknown_file_upload": "El servidor no pudo terminar de importar este archivo. Inténtalo de nuevo en un momento; si sigue ocurriendo, contacta con la administración de tu instancia."
+      "unknown_file_upload": "El servidor no pudo terminar de importar este archivo. Inténtalo de nuevo en un momento; si sigue ocurriendo, contacta con la administración de tu instancia.",
+      "source_cap_exceeded_url": "Este calendario ha alcanzado el número máximo de fuentes de importación. Elimina un feed antes de añadir otro.",
+      "invalid_url": "Esa no parece una URL de calendario válida. Revisa la dirección e inténtalo de nuevo.",
+      "unknown_create_url": "El servidor no pudo añadir este feed. Inténtalo de nuevo en un momento; si el problema continúa, contacta con la administración de tu instancia."
     },
     "verify_wizard": {
       "title": "Verificar propiedad",

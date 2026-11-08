@@ -9,8 +9,8 @@ import ImportSourceList from '@/client/components/logged_in/calendar-management/
 import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
 import AddImportSourceForm from '@/client/components/logged_in/calendar-management/import-sources/AddImportSourceForm.vue';
 import ImportSourceService from '@/client/service/import_source';
-import { ImportSourceCapExceededError, ImportSourceFileBadFormatError } from '@/common/exceptions/import';
-import { UnknownError } from '@/common/exceptions/base';
+import { ImportSourceCapExceededError, ImportSourceFileBadFormatError, ImportSourceFetchError } from '@/common/exceptions/import';
+import { UnknownError, ValidationError } from '@/common/exceptions/base';
 import { useToast, resetToastState, type Toast } from '@/client/composables/useToast';
 
 const routes: RouteRecordRaw[] = [
@@ -185,6 +185,31 @@ describe('ImportSourcesSection', () => {
 
       expect(createSourceMock).toHaveBeenCalled();
       expect(form.find('.alert--error').exists()).toBe(true);
+    });
+    it.each([
+      ['the source cap', new ImportSourceCapExceededError(), 'IMPORT_SOURCE_CAP_EXCEEDED', /maximum number of import sources/],
+      ['a fetch failure', new ImportSourceFetchError(), 'IMPORT_FETCH_ERROR', /fetch|reach|retriev/i],
+      ['an invalid URL', new ValidationError('bad url'), 'bad url', /valid calendar URL/],
+      ['a server error', new UnknownError(), 'Unknown error occurred', /server couldn't add this feed/],
+    ])('shows a translated message, not the raw code, when adding a URL fails with %s', async (_label, error, rawMessage, expected) => {
+      listSourcesMock.mockResolvedValue([]);
+      createSourceMock.mockRejectedValue(error);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.find('form.add-import-source-form');
+      await form.find('input[type="url"]').setValue('https://fail.example.com/x.ics');
+      await form.trigger('submit.prevent');
+      await flushPromises();
+
+      const alert = wrapper.find('.add-import-source-form [role="alert"]');
+      expect(alert.exists()).toBe(true);
+      expect(alert.text()).not.toContain(rawMessage);
+      expect(alert.text()).toMatch(expected);
     });
   });
 

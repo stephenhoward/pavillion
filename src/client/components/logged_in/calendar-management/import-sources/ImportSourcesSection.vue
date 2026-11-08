@@ -233,7 +233,8 @@ const createUrlSource = async (url: string) => {
   }
   catch (err) {
     console.error('Failed to create import source', err);
-    state.addError = (err as Error)?.message || t('error_creating');
+    // Exception messages are bare codes or generic text; show a translated sentence.
+    state.addError = t(importSourceErrorKey(err, 'create-url'));
   }
   finally {
     state.isAdding = false;

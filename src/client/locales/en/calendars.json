@@ -274,7 +274,10 @@
       "file_no_events": "That calendar file contains no events to import.",
       "file_too_many_events": "That file has more events than can be imported at once. Split it into smaller files and import each one.",
       "no_edit_permission": "You don't have permission to import events into this calendar.",
-      "unknown_file_upload": "The server couldn't finish importing this file. Try again in a moment; if it keeps happening, contact your instance administrator."
+      "unknown_file_upload": "The server couldn't finish importing this file. Try again in a moment; if it keeps happening, contact your instance administrator.",
+      "source_cap_exceeded_url": "This calendar has reached the maximum number of import sources. Remove a feed before adding another.",
+      "invalid_url": "That doesn't look like a valid calendar URL. Check the address and try again.",
+      "unknown_create_url": "The server couldn't add this feed. Try again in a moment; if it keeps happening, contact your instance administrator."
     },
     "verify_wizard": {
       "title": "Verify ownership",
