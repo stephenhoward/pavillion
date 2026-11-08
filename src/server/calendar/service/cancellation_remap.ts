@@ -73,6 +73,22 @@ function walk(side: Side, schedule: CalendarEventSchedule, until: Date): Walk {
   return { schedule, indexByMillis, reach };
 }
 
+/**
+ * The new schedule an old one became: the one with its id, or, when each
+ * side has a single schedule of the same kind (one-off or recurring), that
+ * schedule whatever its id. An import replaces its schedule on every run, so
+ * the lone pairing is what keeps a feed's time change from deleting the
+ * owner's cancellations.
+ */
+function successorOf(oldSchedule: CalendarEventSchedule, oldSide: Side, newSide: Side): CalendarEventSchedule | undefined {
+  const byId = newSide.schedules.find(s => s.id === oldSchedule.id);
+  if (byId) return byId;
+  if (oldSide.schedules.length !== 1 || newSide.schedules.length !== 1) return undefined;
+  const lone = newSide.schedules[0];
+  const isOneOff = (s: CalendarEventSchedule) => s.frequency === null || s.frequency === undefined;
+  return isOneOff(lone) === isOneOff(oldSchedule) ? lone : undefined;
+}
+
 function frameZone(side: Side) {
   return side.base?.startDate?.zone ?? 'UTC';
 }
@@ -107,12 +123,15 @@ function passesShiftGate(oldSchedule: CalendarEventSchedule, newSchedule: Calend
  * Each row is classified on its own:
  *   1. its instant is an occurrence of the new schedules → kept;
  *   2. no old schedule has it as an occurrence → untouched (already orphaned);
- *   3. its old schedule is a one-off still present by id → moved to that
- *      schedule's new start;
- *   4. its old schedule is recurring, still present by id, and passes the
- *      shift gate → moved to the new schedule's occurrence at the same
+ *   3. its old schedule is a one-off with a successor → moved to the
+ *      successor's start;
+ *   4. its old schedule is recurring, has a successor, and passes the
+ *      shift gate → moved to the successor's occurrence at the same
  *      position in the raw expansion, or removed past the new series' end;
  *   5. otherwise → removed.
+ *
+ * A schedule's successor is the new schedule with its id, or the lone new
+ * schedule when each side has exactly one of the same kind.
  *
  * Then collisions resolve, independent of row order: kept and untouched
  * rows claim their instants first, a mover onto a claimed instant is
@@ -163,7 +182,7 @@ export function remapCancellations(
     if (!owner) {
       return { kind: 'untouched' };
     }
-    const successor = newSide.schedules.find(s => s.id === owner.schedule.id);
+    const successor = successorOf(owner.schedule, oldSide, newSide);
     if (!successor?.startDate) {
       return { kind: 'remove' };
     }

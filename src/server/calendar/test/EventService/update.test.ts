@@ -1070,9 +1070,10 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
   /**
    * A weekly Monday 10:00 Los Angeles series from 2026-01-05 (raw wall-clock
    * digits, as positive rows store them) with two cancellations stored as UTC
-   * instants: the 2nd Monday (shown) and the 4th (hidden).
+   * instants: the 2nd Monday (shown) and the 4th (hidden), plus any extra
+   * cancellation rows given.
    */
-  function weeklySeriesWithCancellations() {
+  function weeklySeriesWithCancellations(extraExclusions: Array<{ id: string; start: string; hidden: boolean }> = []) {
     const positiveEntity = EventScheduleEntity.build({
       id: 'positiveScheduleId',
       event_id: eventId,
@@ -1104,7 +1105,15 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
     );
     sandbox.stub(EventEntity.prototype, 'save');
-    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, secondMonday, fourthMonday]);
+    const extras = extraExclusions.map(({ id, start, hidden }) => EventScheduleEntity.build({
+      id,
+      event_id: eventId,
+      start_date: new Date(start),
+      timezone: 'UTC',
+      is_exclusion: true,
+      hide_from_public: hidden,
+    }));
+    sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, secondMonday, fourthMonday, ...extras]);
     sandbox.stub(EventScheduleEntity.prototype, 'update').callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
       for (const key in params) {
         this.set(key, params[key]);
@@ -1152,6 +1161,46 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       expect(exclusions[0].startDate?.toUTC().toISO()).toBe('2026-01-12T19:00:00.000Z');
       expect(exclusions[0].hideFromPublic).toBe(false);
     }
+  });
+
+  it('should keep a moved hidden cancellation hidden in the emitted eventUpdated payload', async () => {
+    weeklySeriesWithCancellations();
+    const emit = sandbox.spy(service['eventBus'], 'emit');
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+      ],
+    });
+
+    const payload = emit.getCalls().find(c => c.args[0] === 'eventUpdated')?.args[1] as { event: { schedules: CalendarEventSchedule[] } };
+    const fourth = payload.event.schedules.find(s => s.id === 'fourthMondayId');
+    expect(fourth?.startDate?.toUTC().toISO()).toBe('2026-01-26T19:00:00.000Z');
+    expect(fourth?.hideFromPublic).toBe(true);
+  });
+
+  it('should write hide_from_public on the survivor, scoped to its row, when a hidden mover collides with it', async () => {
+    // A shown row already at 11:00 on the 4th Monday; the hidden 10:00 row
+    // that day shifts onto it.
+    const { staticUpdate, destroy } = weeklySeriesWithCancellations([
+      { id: 'shownAtElevenId', start: '2026-01-26T19:00:00Z', hidden: false },
+    ]);
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+      ],
+    });
+
+    const survivorWrite = staticUpdate.getCalls().find(c => (c.args[1] as Record<string, any>).where.id === 'shownAtElevenId');
+    expect(survivorWrite).toBeDefined();
+    const [values, options] = survivorWrite!.args as [Record<string, unknown>, Record<string, any>];
+    expect(values.hide_from_public).toBe(true);
+    expect((values.start_date as Date).toISOString()).toBe('2026-01-26T19:00:00.000Z');
+    expect(options.where).toEqual({ id: 'shownAtElevenId', event_id: eventId, is_exclusion: true });
+
+    expect(destroy.calledOnce).toBe(true);
+    expect((destroy.firstCall.args[0] as Record<string, any>).where).toEqual({ id: ['fourthMondayId'], event_id: eventId, is_exclusion: true });
   });
 
   it('should not update or destroy any cancellation on a description-only edit', async () => {

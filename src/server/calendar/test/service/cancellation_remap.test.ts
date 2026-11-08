@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DateTime } from 'luxon';
+
+const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
+vi.mock('@/server/common/helper/logger', () => ({
+  default: { info: vi.fn(), error: vi.fn(), warn: warnMock, debug: vi.fn() },
+  createLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: warnMock, debug: vi.fn() }),
+}));
 
 import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { remapCancellations, REMAP_MAX_ROWS, type CancellationRemap } from '@/server/calendar/service/cancellation_remap';
@@ -57,6 +63,9 @@ function plain(result: CancellationRemap) {
 /** Weekly Mondays at 10:00 Los Angeles from 2026-01-05 (18:00Z in winter). */
 const mondays = () => recurring('series', '2026-01-05T10:00:00', LA);
 
+/** Weekly Thursdays at the given Los Angeles time from 2026-01-08. */
+const thursdays = (time: string = '18:00:00') => recurring('thursdays', `2026-01-08T${time}`, LA);
+
 /** Cancellations on the 2nd and 4th Mondays (positions 1 and 3). */
 const mondayRows = () => [
   cancellation('row-a', '2026-01-12T18:00:00Z'),
@@ -64,6 +73,10 @@ const mondayRows = () => [
 ];
 
 describe('remapCancellations', () => {
+  beforeEach(() => {
+    warnMock.mockClear();
+  });
+
   describe('keeps rows still on an occurrence (rule 1)', () => {
     it.each([
       ['an unrelated edit', () => [mondays()]],
@@ -86,9 +99,14 @@ describe('remapCancellations', () => {
       ['an interval change', [mondays()], () => [recurring('series', '2026-01-05T10:00:00', LA, { interval: 2 })], mondayRows],
       ['a frequency change', [mondays()], () => [recurring('series', '2026-01-05T10:00:00', LA, { frequency: EventFrequency.MONTHLY })], mondayRows],
       ['the schedule removed', [mondays()], () => [], mondayRows],
-      ['a recurring schedule whose id changed', [mondays()], () => [recurring('replacement', '2026-01-05T11:00:00', LA)], mondayRows],
-      ['a one-off whose id is absent', [oneOff('once', '2026-03-02T10:00:00', LA)], () => [oneOff('elsewhere', '2026-03-09T10:00:00', LA)],
-        () => [cancellation('row-a', '2026-03-02T18:00:00Z')]],
+      ['a recurring schedule whose id changed beside another schedule', [mondays(), thursdays()],
+        () => [recurring('replacement', '2026-01-05T11:00:00', LA), thursdays()], mondayRows],
+      ['a one-off whose id is absent beside another schedule', [oneOff('once', '2026-03-03T10:00:00', LA), mondays()],
+        () => [oneOff('elsewhere', '2026-03-10T10:00:00', LA), mondays()],
+        () => [cancellation('row-a', '2026-03-03T18:00:00Z')]],
+      ['a lone recurring schedule replaced by a lone one-off', [mondays()], () => [oneOff('replacement', '2026-01-12T11:00:00', LA)], mondayRows],
+      ['a lone schedule whose id and pattern both changed', [mondays()],
+        () => [recurring('replacement', '2026-01-05T10:00:00', LA, { byDay: ['TU'] })], mondayRows],
       ['a shift that fails the gate (Mon 10:00 → Tue 09:00)', [mondays()], () => [recurring('series', '2026-01-06T09:00:00', LA)], mondayRows],
     ])('on %s', (_label, oldPositives, newPositives, rows) => {
       const exclusions = rows();
@@ -192,7 +210,6 @@ describe('remapCancellations', () => {
     });
 
     it('moves only the changed schedule\'s rows in a two-schedule event', () => {
-      const thursdays = (time: string) => recurring('thursdays', `2026-01-08T${time}`, LA);
       const rows = [
         cancellation('monday-row', '2026-01-12T18:00:00Z'),
         cancellation('thursday-row', '2026-01-16T02:00:00Z'), // Thu 15th 18:00 PST
@@ -205,6 +222,32 @@ describe('remapCancellations', () => {
       );
       expect(plain(result)).toEqual({
         move: [{ id: 'thursday-row', start: '2026-01-16T03:00:00.000Z', hidden: true }],
+        remove: [],
+      });
+    });
+  });
+
+  describe('pairs a lone schedule across an id change', () => {
+    it('moves a lone recurring schedule\'s rows on a time change', () => {
+      const result = remapCancellations([mondays()], [recurring('replacement', '2026-01-05T11:00:00', LA)], mondayRows(), 'event-1');
+      expect(plain(result)).toEqual({
+        move: [
+          { id: 'row-a', start: '2026-01-12T19:00:00.000Z', hidden: true },
+          { id: 'row-b', start: '2026-01-26T19:00:00.000Z', hidden: true },
+        ],
+        remove: [],
+      });
+    });
+
+    it('moves a lone one-off\'s row on a date change', () => {
+      const result = remapCancellations(
+        [oneOff('once', '2026-03-02T10:00:00', LA)],
+        [oneOff('replacement', '2026-03-09T10:00:00', LA)],
+        [cancellation('row-a', '2026-03-02T18:00:00Z')],
+        'event-1',
+      );
+      expect(plain(result)).toEqual({
+        move: [{ id: 'row-a', start: '2026-03-09T17:00:00.000Z', hidden: true }], // 10:00 PDT
         remove: [],
       });
     });
@@ -295,11 +338,28 @@ describe('remapCancellations', () => {
       });
     });
 
-    it('leaves every row when there are more than REMAP_MAX_ROWS', () => {
+    it('leaves a row only the old side\'s capped walk would reach, while removing one it can', () => {
+      // The old daily series is capped in 2013; the new weekly one reaches 2020.
+      const rows = [
+        cancellation('reachable', '2000-01-10T10:00:00Z'),
+        cancellation('beyond-cap', '2020-01-06T10:00:00Z'),
+      ];
+      const result = remapCancellations(
+        [recurring('daily', '2000-01-03T10:00:00', 'UTC', { frequency: EventFrequency.DAILY })],
+        [recurring('daily', '2000-01-04T11:00:00', 'UTC')],
+        rows,
+        'event-1',
+      );
+      expect(plain(result)).toEqual({ move: [], remove: ['reachable'] });
+    });
+
+    it('leaves every row, and logs the event id only, when there are more than REMAP_MAX_ROWS', () => {
       const rows = Array.from({ length: REMAP_MAX_ROWS + 1 }, (_, i) =>
         cancellation(`row-${i}`, DateTime.fromISO('2026-01-05T18:00:00Z', { zone: 'utc' }).plus({ weeks: i }).toISO()!));
       const result = remapCancellations([mondays()], [recurring('series', '2026-01-06T09:00:00', LA)], rows, 'event-1');
       expect(plain(result)).toEqual({ move: [], remove: [] });
+      expect(warnMock).toHaveBeenCalledTimes(1);
+      expect(warnMock.mock.calls[0][0]).toStrictEqual({ eventId: 'event-1' });
     });
   });
 });
@@ -326,5 +386,19 @@ describe('expandScheduleOccurrences', () => {
     const schedule = recurring('series', '2026-03-02T10:00:00', LA);
     const starts = expandScheduleOccurrences(schedule, schedule, null, 2).map(d => d.toISOString());
     expect(starts).toEqual(['2026-03-02T18:00:00.000Z', '2026-03-09T17:00:00.000Z']);
+  });
+
+  it('stops at until, inclusive, across a DST change', () => {
+    const schedule = recurring('series', '2026-03-02T10:00:00', LA);
+    const until = new Date('2026-03-16T17:00:00.000Z');
+    const starts = expandScheduleOccurrences(schedule, schedule, until, 10).map(d => d.toISOString());
+    expect(starts).toEqual(['2026-03-02T18:00:00.000Z', '2026-03-09T17:00:00.000Z', '2026-03-16T17:00:00.000Z']);
+  });
+
+  it('returns a one-off\'s start only when it is not after until', () => {
+    const schedule = oneOff('once', '2026-03-02T10:00:00', LA);
+    expect(expandScheduleOccurrences(schedule, schedule, new Date('2026-03-02T18:00:00.000Z'), 10)
+      .map(d => d.toISOString())).toEqual(['2026-03-02T18:00:00.000Z']);
+    expect(expandScheduleOccurrences(schedule, schedule, new Date('2026-03-02T17:59:59.000Z'), 10)).toEqual([]);
   });
 });

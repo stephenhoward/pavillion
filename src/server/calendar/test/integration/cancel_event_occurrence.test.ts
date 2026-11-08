@@ -676,128 +676,109 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
   });
 
   describe('PUT /events/:eventId with cancelled occurrences', () => {
-    /**
-     * Wait for the instance rebuild the PUT's eventUpdated listener starts.
-     * Its upsert stamps every row's updatedAt, so a row updated since the PUT
-     * means the rebuild has written; at most its trailing destroy remains,
-     * which drains ahead of the next query on the FIFO connection.
+    /*
+     * Literal dates in autumn 2040, across the US daylight-saving change of
+     * 2040-11-04, so every instant is exact and nothing depends on the day the
+     * suite runs. The series lie past the instance-generation horizon, so the
+     * listener chains the POST and PUT start write no instance rows and there
+     * is nothing to settle; occurrences are read with an explicit `after`.
      */
-    async function settleRebuild(eventId: string, since: Date): Promise<void> {
-      await waitFor(
-        () => EventInstanceEntity.findOne({
-          where: { event_id: eventId, updatedAt: { [Op.gte]: since } },
-        }),
-        { timeoutMs: 8000 },
-      );
-    }
+    const AFTER = '2040-09-30T00:00:00Z';
+    const LA = 'America/Los_Angeles';
 
-    async function upcoming(eventId: string, limit: number): Promise<Array<{ start: string; state: string }>> {
+    async function createWeekly(start: DateTime): Promise<string> {
       const response = await request(env.app)
-        .get(`/api/v1/events/${eventId}/upcoming-occurrences?limit=${limit}`)
-        .set('Authorization', `Bearer ${ownerToken}`);
-      expect(response.status).toBe(200);
-      return response.body.occurrences;
-    }
-
-    async function positiveSchedule(eventId: string): Promise<Record<string, any>> {
-      const response = await request(env.app)
-        .get(`/api/v1/events/${eventId}`)
-        .set('Authorization', `Bearer ${ownerToken}`);
-      expect(response.status).toBe(200);
-      return response.body.schedules.find((s: any) => s.isException !== true);
-    }
-
-    async function putSchedule(eventId: string, schedule: Record<string, unknown>): Promise<void> {
-      const since = new Date();
-      const response = await request(env.app)
-        .put(`/api/v1/events/${eventId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ schedules: [schedule] });
-      expect(response.status).toBe(200);
-      await settleRebuild(eventId, since);
-    }
-
-    const millis = (iso: string) => DateTime.fromISO(iso).toMillis();
-
-    it('moves a hidden cancellation to the new time when the start time moves an hour later', async () => {
-      const target = (await upcoming(recurringEventId, 2))[1];
-      const cancel = await request(env.app)
-        .post(`/api/v1/events/${recurringEventId}/occurrences/cancel`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ start: target.start, hideFromPublic: true });
-      expect(cancel.status).toBe(204);
-
-      const positive = await positiveSchedule(recurringEventId);
-      const later = (iso: string) => DateTime.fromISO(iso, { setZone: true }).plus({ hours: 1 }).toISO();
-      await putSchedule(recurringEventId, {
-        id: positive.id,
-        start: later(positive.start),
-        end: later(positive.end),
-        eventEndTime: later(positive.eventEndTime),
-        timezone: positive.timezone,
-        frequency: positive.frequency,
-        interval: positive.interval,
-      });
-
-      const after = await upcoming(recurringEventId, 5);
-      const movedStart = DateTime.fromISO(target.start).plus({ hours: 1 }).toMillis();
-      expect(after.find(o => millis(o.start) === movedStart)?.state).toBe('hidden');
-      expect(after.filter(o => o.state !== 'active').map(o => millis(o.start))).toEqual([movedStart]);
-      expect(after.some(o => millis(o.start) === millis(target.start))).toBe(false);
-    });
-
-    it('keeps a cancellation on its occurrence when a stored-UTC series is re-saved in a zone at the same instant', async () => {
-      // 02:00Z is the previous evening in Los Angeles, so the wall date
-      // changes and the cancellation follows by position under the
-      // unchanged-instant gate. Across a DST change the occurrence moves to
-      // 01:00Z on the same UTC date.
-      const anchor = fixtureAnchor();
-      const start = DateTime.utc(anchor.year, anchor.month, anchor.day, 2).minus({ weeks: 4 });
-      const created = await request(env.app)
         .post('/api/v1/events')
         .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           calendarId: ownerCalendarId,
-          content: { en: { name: 'UTC Standup', description: 'Stored as UTC' } },
+          content: { en: { name: 'Autumn Standup', description: 'Weekly through the DST change' } },
           schedules: [{
             start: start.toISO(),
-            end: start.plus({ weeks: 24 }).toISO(),
+            end: start.plus({ weeks: 12 }).toISO(),
             eventEndTime: start.plus({ hours: 1 }).toISO(),
-            timezone: 'UTC',
+            timezone: start.zoneName,
             frequency: 'weekly',
             interval: 1,
           }],
         });
-      expect(created.status).toBe(201);
-      const eventId = created.body.id;
-      await settleInstanceMaterialization(eventId, start.plus({ weeks: 23, days: 3 }));
+      expect(response.status).toBe(201);
+      return response.body.id;
+    }
 
-      const target = (await upcoming(eventId, 3))[2];
-      const cancel = await request(env.app)
+    async function cancelOccurrence(eventId: string, start: string, hideFromPublic: boolean): Promise<void> {
+      const response = await request(env.app)
         .post(`/api/v1/events/${eventId}/occurrences/cancel`)
         .set('Authorization', `Bearer ${ownerToken}`)
-        .send({ start: target.start, hideFromPublic: false });
-      expect(cancel.status).toBe(204);
+        .send({ start, hideFromPublic });
+      expect(response.status).toBe(204);
+    }
 
-      const positive = await positiveSchedule(eventId);
-      expect(positive.timezone).toBe('UTC');
-      const inLosAngeles = (iso: string) => DateTime.fromISO(iso).setZone('America/Los_Angeles').toISO();
-      await putSchedule(eventId, {
-        id: positive.id,
-        start: inLosAngeles(positive.start),
-        end: inLosAngeles(positive.end),
-        eventEndTime: inLosAngeles(positive.eventEndTime),
-        timezone: 'America/Los_Angeles',
-        frequency: positive.frequency,
-        interval: positive.interval,
-      });
+    /** Every occurrence that is not active, as UTC instants with their state. */
+    async function notActive(eventId: string): Promise<Array<{ start: string; state: string }>> {
+      const response = await request(env.app)
+        .get(`/api/v1/events/${eventId}/upcoming-occurrences`)
+        .query({ after: AFTER, limit: 50 })
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(response.status).toBe(200);
+      return response.body.occurrences
+        .filter((o: { state: string }) => o.state !== 'active')
+        .map((o: { start: string; state: string }) => ({ start: DateTime.fromISO(o.start, { zone: 'utc' }).toISO(), state: o.state }));
+    }
 
-      const utcDate = (iso: string) => DateTime.fromISO(iso, { zone: 'utc' }).toISODate();
-      const after = await upcoming(eventId, 5);
-      const notActive = after.filter(o => o.state !== 'active');
-      expect(notActive).toHaveLength(1);
-      expect(notActive[0].state).toBe('cancelled-shown');
-      expect(utcDate(notActive[0].start)).toBe(utcDate(target.start));
+    async function putSchedule(eventId: string, start: DateTime): Promise<void> {
+      const current = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(current.status).toBe(200);
+      const positive = current.body.schedules.find((s: { isException?: boolean }) => s.isException !== true);
+      const response = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          schedules: [{
+            id: positive.id,
+            start: start.toISO(),
+            end: start.plus({ weeks: 12 }).toISO(),
+            eventEndTime: start.plus({ hours: 1 }).toISO(),
+            timezone: start.zoneName,
+            frequency: 'weekly',
+            interval: 1,
+          }],
+        });
+      expect(response.status).toBe(200);
+    }
+
+    it('moves cancellations to the new time on their own dates when the start time moves an hour later', async () => {
+      // Mondays at 10:00 Los Angeles from 2040-10-01.
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      await cancelOccurrence(eventId, '2040-10-15T17:00:00.000Z', false); // 10:00 PDT
+      await cancelOccurrence(eventId, '2040-11-12T18:00:00.000Z', true); // 10:00 PST
+
+      await putSchedule(eventId, DateTime.fromISO('2040-10-01T11:00:00', { zone: LA }));
+
+      expect(await notActive(eventId)).toEqual([
+        { start: '2040-10-15T18:00:00.000Z', state: 'cancelled-shown' }, // 11:00 PDT
+        { start: '2040-11-12T19:00:00.000Z', state: 'hidden' }, // 11:00 PST
+      ]);
+    });
+
+    it('keeps each cancellation on its occurrence when a stored-UTC series is re-saved in a zone at the same instant', async () => {
+      // Tuesdays at 02:00 UTC from 2040-10-02, which is Monday 19:00 in Los
+      // Angeles: the wall date changes, so the unchanged instant is what lets
+      // the cancellations follow by position.
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-02T02:00:00', { zone: 'UTC' }));
+      await cancelOccurrence(eventId, '2040-10-16T02:00:00.000Z', false);
+      await cancelOccurrence(eventId, '2040-11-13T02:00:00.000Z', false);
+
+      await putSchedule(eventId, DateTime.fromISO('2040-10-01T19:00:00', { zone: LA }));
+
+      expect(await notActive(eventId)).toEqual([
+        // 19:00 PDT is still 02:00Z, so this row stays where it is.
+        { start: '2040-10-16T02:00:00.000Z', state: 'cancelled-shown' },
+        // 19:00 PST is 03:00Z: the row moves with its occurrence.
+        { start: '2040-11-13T03:00:00.000Z', state: 'cancelled-shown' },
+      ]);
     });
   });
 });
