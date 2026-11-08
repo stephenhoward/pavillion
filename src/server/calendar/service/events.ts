@@ -961,7 +961,7 @@ class EventService {
    *
    * Both rules are enforced by {@link reconcileSchedules}, the single guard
    * site, which loads all existing rows scoped strictly by event_id,
-   * partitions the payload against them before any write, applies the
+   * partitions the payload against them before any schedule write, applies the
    * payload's positive schedules, and moves or removes exclusions only as
    * the schedule edit requires.
    *
@@ -1308,8 +1308,8 @@ class EventService {
    * entry that echoes an existing exclusion by id with isException set (any
    * value but undefined, null or false) is skipped and never written; any
    * other entry with the flag set, a positive-flagged entry carrying an
-   * exclusion's id, or a payload that is not a list of objects, throws a
-   * ValidationError. Every entry left on the positive path is written with
+   * exclusion's id or an id that names none of this event's rows, or a
+   * payload that is not a list of objects, throws a ValidationError. Every entry left on the positive path is written with
    * the flag false. Exclusion rows therefore change only through the remap,
    * never from payload contents. No payload id is used in a query. Scoping of
    * every query, update and destroy is strictly by event_id to prevent
@@ -1319,8 +1319,9 @@ class EventService {
    * @param incomingSchedules - the schedule payloads from the client: the
    *        positives to keep, plus any echoed exclusions (an array with no
    *        positive clears all positives)
-   * @param event - the CalendarEvent domain model being mutated; positive
-   *        and preserved-exclusion schedules are added back to this model
+   * @param event - the CalendarEvent domain model being mutated; the written
+   *        positives are added back to it, with the exclusions as they stand
+   *        after the remap (moved rows at their new start, removed rows absent)
    */
   async reconcileSchedules(
     eventId: string,
@@ -1362,7 +1363,12 @@ class EventService {
     // intent, because the storage layer coerces 'true' or 1 to true. Entries
     // that reach the positive path have the flag forced to false, so no row
     // written from the payload can become an exclusion whatever the check.
+    //
+    // A positive entry with an id must name one of this event's positive
+    // rows. Checking that here, not in the write loop, keeps an unknown id
+    // from failing after earlier entries were written and before the remap.
     const exclusionIds = new Set(existingExclusions.map(s => s.id));
+    const positiveIds = new Set(existingPositives.map(s => s.id));
     const incomingPositiveSchedules: any[] = [];
     for (const schedule of incomingSchedules) {
       const flagged = schedule.isException !== undefined
@@ -1372,7 +1378,7 @@ class EventService {
       if (isEcho && flagged) {
         continue;
       }
-      if (isEcho || flagged) {
+      if (isEcho || flagged || (schedule.id && !positiveIds.has(schedule.id))) {
         throw rejectExclusion();
       }
       incomingPositiveSchedules.push({ ...schedule, isException: false });
@@ -1384,12 +1390,8 @@ class EventService {
 
     for (const schedule of incomingPositiveSchedules) {
       if (schedule.id) {
-        const scheduleEntity = existingPositives.find(s => s.id === schedule.id);
-
-        if (!scheduleEntity) {
-          // Exclusion ids were partitioned out above, so this id is unknown.
-          throw Error('Schedule not found for event');
-        }
+        // The partition above admits only ids of this event's positive rows.
+        const scheduleEntity = existingPositives.find(s => s.id === schedule.id)!;
 
         unseenPositiveIds = unseenPositiveIds.filter(id => id !== schedule.id);
 

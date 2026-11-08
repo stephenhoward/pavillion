@@ -875,17 +875,24 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     expect(preservedExclusion?.id).toBe('exclusionScheduleId');
   });
 
-  it('should scope destroy to positive rows only when payload clears schedules (omit-case with deletion)', async () => {
+  it('should destroy positives and the cancellations on them, each scoped to its class, when payload clears schedules', async () => {
     const positiveEntity = EventScheduleEntity.build({
       id: 'positiveScheduleId',
       event_id: eventId,
+      start_date: new Date('2026-01-05T10:00:00Z'),
+      timezone: 'UTC',
       frequency: EventFrequency.WEEKLY as string,
+      interval: 1,
       is_exclusion: false,
     });
+    // A cancellation on the series' second occurrence.
     const exclusionEntity = EventScheduleEntity.build({
       id: 'exclusionScheduleId',
       event_id: eventId,
+      start_date: new Date('2026-01-12T10:00:00Z'),
+      timezone: 'UTC',
       is_exclusion: true,
+      hide_from_public: false,
     });
 
     sandbox.stub(EventEntity, 'findByPk').resolves(
@@ -897,18 +904,16 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     const updated = await service.updateEvent(acct, eventId, { schedules: [] });
 
-    // Destroy is called, but scoped to positive ids only and double-gated by
-    // event_id and is_exclusion=false.
-    expect(destroyStub.calledOnce).toBe(true);
-    const whereArg = destroyStub.firstCall.args[0].where;
-    expect(whereArg.event_id).toBe(eventId);
-    expect(whereArg.is_exclusion).toBe(false);
-    expect(whereArg.id).toEqual(['positiveScheduleId']);
+    // Two destroys, each double-gated by event_id and its own is_exclusion
+    // value: the positives the payload dropped, then the cancellation that
+    // no longer lines up with any occurrence.
+    expect(destroyStub.getCalls().map(c => c.args[0].where)).toEqual([
+      { id: ['positiveScheduleId'], event_id: eventId, is_exclusion: false },
+      { id: ['exclusionScheduleId'], event_id: eventId, is_exclusion: true },
+    ]);
 
-    // Exclusion row is preserved and returned on the model.
-    expect(updated.schedules.length).toBe(1);
-    expect(updated.schedules[0].isExclusion).toBe(true);
-    expect(updated.schedules[0].id).toBe('exclusionScheduleId');
+    // The removed cancellation is absent from the returned model.
+    expect(updated.schedules).toEqual([]);
   });
 
   it('should re-key the exclusion row to the new start_date when a single event date is edited', async () => {
@@ -999,16 +1004,18 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     expect(reKeyedInstantMs).not.toBe(oldOccurrenceInstantMs);
   });
 
-  it('should not re-key exclusions for a recurring single event date edit', async () => {
-    // A recurring event's exclusions are keyed to individual occurrence dates,
-    // not the lone schedule's start_date, so editing the schedule must NOT
-    // re-key them.
+  it('should remove a weekly series\' cancellation when the series moves to another date', async () => {
+    // A recurring schedule's cancellations follow it by position only through
+    // the shift gate, which requires the same wall date or the same instant.
+    // Moving the series from January to June fails it, so the cancellation on
+    // its first occurrence is removed rather than re-keyed.
     const oldStart = new Date('2026-01-01T10:00:00Z');
     const positiveEntity = EventScheduleEntity.build({
       id: 'positiveScheduleId',
       event_id: eventId,
       start_date: oldStart,
       frequency: EventFrequency.WEEKLY as string,
+      interval: 1,
       timezone: 'UTC',
       is_exclusion: false,
     });
@@ -1032,16 +1039,21 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       }
       return this;
     });
+    const staticUpdateStub = sandbox.stub(EventScheduleEntity, 'update').resolves([1]);
+    const destroyStub = sandbox.stub(EventScheduleEntity, 'destroy').resolves(1);
 
-    await service.updateEvent(acct, eventId, {
+    const updated = await service.updateEvent(acct, eventId, {
       schedules: [
         { id: 'positiveScheduleId', start: '2026-06-15T14:00:00' },
       ],
     });
 
-    // The exclusion row's update must not have been invoked.
-    const exclusionUpdate = updateScheduleStub.getCalls().find(c => c.thisValue === exclusionEntity);
-    expect(exclusionUpdate).toBeUndefined();
+    // Removed through the scoped destroy, never moved or written in place.
+    expect(destroyStub.calledOnce).toBe(true);
+    expect(destroyStub.firstCall.args[0].where).toEqual({ id: ['exclusionScheduleId'], event_id: eventId, is_exclusion: true });
+    expect(staticUpdateStub.called).toBe(false);
+    expect(updateScheduleStub.getCalls().some(c => c.thisValue === exclusionEntity)).toBe(false);
+    expect(updated.schedules.some(s => s.isExclusion)).toBe(false);
   });
 
   /**
@@ -1231,6 +1243,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     ['has no id and a string flag', { start: '2026-02-02T18:00:00Z', isException: 'true' }],
     ['has no id and a numeric flag', { start: '2026-02-02T18:00:00Z', isException: 1 }],
     ['has an unknown id', { id: '22222222-2222-4222-8222-222222222222', isException: true }],
+    ['has an unknown id with no flag', { id: '22222222-2222-4222-8222-222222222222' }],
     ['carries a positive row\'s id', { id: 'positiveScheduleId', isException: true }],
     ['carries a cancellation\'s id flagged as positive', { id: 'secondMondayId', isException: false }],
     ['carries a cancellation\'s id with no flag', { id: 'secondMondayId' }],
@@ -1305,8 +1318,10 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
   it('should clear positives for an echo-only payload exactly as for an empty one', async () => {
     // Recorded contract, not a guard: an echoed cancellation is skipped, so a
     // payload holding nothing else has no positive in it, like schedules: [].
-    // Neither payload writes to a loaded row, so both runs can share the
-    // fixture; each run's writes are the calls it adds.
+    // Both destroy the positives and, with them, every cancellation that lined
+    // up with one. The writes are stubbed and leave the loaded rows as they
+    // were, so both runs can share the fixture; each run's writes are the
+    // calls it adds.
     const { instanceUpdate, instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
     const writesFor = async (schedules: unknown[]) => {
       const before = [instanceUpdate, instanceSave, staticUpdate, destroy].map(s => s.callCount);
@@ -1324,7 +1339,10 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       { id: 'secondMondayId', start: '2026-01-12T18:00:00Z', timezone: 'UTC', isException: true },
     ]);
 
-    expect(empty.destroys[0]).toEqual({ id: ['positiveScheduleId'], event_id: eventId, is_exclusion: false });
+    expect(empty.destroys).toEqual([
+      { id: ['positiveScheduleId'], event_id: eventId, is_exclusion: false },
+      { id: ['secondMondayId', 'fourthMondayId'], event_id: eventId, is_exclusion: true },
+    ]);
     expect(echoOnly).toEqual(empty);
   });
 
