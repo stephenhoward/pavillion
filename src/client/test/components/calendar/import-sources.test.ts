@@ -9,7 +9,8 @@ import ImportSourceList from '@/client/components/logged_in/calendar-management/
 import VerifyOwnershipWizard from '@/client/components/logged_in/calendar-management/import-sources/VerifyOwnershipWizard.vue';
 import AddImportSourceForm from '@/client/components/logged_in/calendar-management/import-sources/AddImportSourceForm.vue';
 import ImportSourceService from '@/client/service/import_source';
-import { ImportSourceCapExceededError } from '@/common/exceptions/import';
+import { ImportSourceCapExceededError, ImportSourceFileBadFormatError } from '@/common/exceptions/import';
+import { UnknownError } from '@/common/exceptions/base';
 import { useToast, resetToastState, type Toast } from '@/client/composables/useToast';
 
 const routes: RouteRecordRaw[] = [
@@ -329,6 +330,30 @@ describe('ImportSourcesSection', () => {
       expect(alert.exists()).toBe(true);
       expect(alert.text()).not.toContain('IMPORT_SOURCE_CAP_EXCEEDED');
       expect(alert.text()).toMatch(/maximum number of import sources/);
+    });
+
+    it.each([
+      ['a server error', new UnknownError(), 'Unknown error occurred', /server couldn't finish importing this file/],
+      ['an unreadable file', new ImportSourceFileBadFormatError(), 'IMPORT_FILE_BAD_FORMAT', /could not be read as a calendar/],
+    ])('names the problem when the upload fails with %s', async (_label, error, rawMessage, expected) => {
+      listSourcesMock.mockResolvedValue([]);
+      createSourceFromFileMock.mockRejectedValue(error);
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['x'], 'events.ics', { type: 'text/calendar' });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+
+      const alert = wrapper.find('.add-import-source-form [role="alert"]');
+      expect(alert.exists()).toBe(true);
+      expect(alert.text()).not.toContain(rawMessage);
+      expect(alert.text()).toMatch(expected);
     });
 
     it('renders the filename and a File badge, hiding Sync Now and Verify', async () => {

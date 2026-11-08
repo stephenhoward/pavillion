@@ -268,7 +268,13 @@
       "relme_link_not_found": "Aucun lien rel=\"me\" correspondant n'a été trouvé sur la page de vérification. Veuillez confirmer que le lien est publié et réessayer.",
       "relme_hostname_mismatch": "La page de vérification doit être sur le même nom d'hôte que le flux du calendrier.",
       "relme_psl_violation": "Le domaine de la page de vérification n'est pas éligible à la vérification.",
-      "source_cap_exceeded": "Ce calendrier a atteint le nombre maximal de sources d'importation. Supprimez un flux avant d'importer un fichier."
+      "source_cap_exceeded": "Ce calendrier a atteint le nombre maximal de sources d'importation. Supprimez un flux avant d'importer un fichier.",
+      "file_empty": "Ce fichier est vide. Choisissez un fichier de calendrier .ics contenant des événements.",
+      "file_bad_format": "Ce fichier n'a pas pu être lu comme un calendrier. Exportez votre calendrier au format .ics et réessayez.",
+      "file_no_events": "Ce fichier de calendrier ne contient aucun événement à importer.",
+      "file_too_many_events": "Ce fichier contient plus d'événements qu'il n'est possible d'en importer en une fois. Divisez-le en fichiers plus petits et importez-les un par un.",
+      "no_edit_permission": "Vous n'avez pas l'autorisation d'importer des événements dans ce calendrier.",
+      "unknown_file_upload": "Le serveur n'a pas pu terminer l'importation de ce fichier. Réessayez dans un instant ; si le problème persiste, contactez l'administration de votre instance."
     },
     "verify_wizard": {
       "title": "Vérifier la propriété",

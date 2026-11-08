@@ -15,6 +15,14 @@ export interface SchemaDifference {
   extraTables: string[];
   missingColumns: { table: string; column: string }[];
   extraColumns: { table: string; column: string }[];
+  /**
+   * Migration columns the entity does not declare that are NOT NULL with no
+   * database default. Sequelize omits undeclared columns from its INSERTs, so
+   * every insert through the entity violates the constraint on a
+   * migration-built database — while the sync-built dev and test schema,
+   * which never creates the column, hides it.
+   */
+  unwritableColumns: { table: string; column: string }[];
   constraintMismatches: {
     table: string;
     column: string;
@@ -66,6 +74,7 @@ export async function compareSchemas(
 
   const missingColumns: SchemaDifference['missingColumns'] = [];
   const extraColumns: SchemaDifference['extraColumns'] = [];
+  const unwritableColumns: SchemaDifference['unwritableColumns'] = [];
   const constraintMismatches: SchemaDifference['constraintMismatches'] = [];
 
   // Compare columns for tables that exist in both
@@ -89,6 +98,10 @@ export async function compareSchemas(
     for (const col of migrationCols) {
       if (!entityCols.includes(col)) {
         extraColumns.push({ table, column: col });
+        const { allowNull, defaultValue } = migrationSchema[col];
+        if (!allowNull && (defaultValue === null || defaultValue === undefined)) {
+          unwritableColumns.push({ table, column: col });
+        }
       }
     }
 
@@ -132,5 +145,5 @@ export async function compareSchemas(
     }
   }
 
-  return { missingTables, extraTables, missingColumns, extraColumns, constraintMismatches };
+  return { missingTables, extraTables, missingColumns, extraColumns, unwritableColumns, constraintMismatches };
 }

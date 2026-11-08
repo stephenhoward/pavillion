@@ -8,6 +8,11 @@ import {
   ImportSourceSsrfBlockedError,
   ImportSourceParseError,
   ImportSourceVerifyRateLimitError,
+  ImportSourceFileEmptyError,
+  ImportSourceFileTooLargeError,
+  ImportSourceFileBadFormatError,
+  ImportSourceFileTooManyEventsError,
+  ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
   IMPORT_DNS_MISMATCH,
   IMPORT_DNS_RESOLVER_DISAGREEMENT,
@@ -19,6 +24,9 @@ import {
   IMPORT_RELME_HOSTNAME_MISMATCH,
   IMPORT_RELME_PSL_VIOLATION,
 } from '@/common/exceptions/import';
+import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+import { RateLimitError } from '@/common/exceptions/report';
+import { UnknownError } from '@/common/exceptions/base';
 
 describe('importSourceErrorKey', () => {
   describe('verify-dns context', () => {
@@ -111,6 +119,38 @@ describe('importSourceErrorKey', () => {
         .toBe('errors.unknown_sync');
       expect(importSourceErrorKey(null, 'sync'))
         .toBe('errors.unknown_sync');
+    });
+  });
+
+  describe('file-upload context', () => {
+    const fileCases: [Error, string][] = [
+      [new ImportSourceFileEmptyError(), 'errors.file_empty'],
+      [new ImportSourceFileTooLargeError(), 'file_too_large'],
+      [new ImportSourceFileBadFormatError(), 'errors.file_bad_format'],
+      [new ImportSourceFileTooManyEventsError(), 'errors.file_too_many_events'],
+      [new ImportSourceCapExceededError(), 'errors.source_cap_exceeded'],
+      [new CalendarEditorPermissionError(), 'errors.no_edit_permission'],
+      [new RateLimitError(), 'errors.rate_limited'],
+    ];
+
+    for (const [err, expectedKey] of fileCases) {
+      it(`maps ${err.name} to ${expectedKey}`, () => {
+        expect(importSourceErrorKey(err, 'file-upload')).toBe(expectedKey);
+      });
+    }
+
+    it('reads a parse error as a file with no events, not an unreadable feed', () => {
+      expect(importSourceErrorKey(new ImportSourceParseError(), 'file-upload'))
+        .toBe('errors.file_no_events');
+      expect(importSourceErrorKey(new ImportSourceParseError(), 'sync'))
+        .toBe('errors.parse_error');
+    });
+
+    it('falls back to errors.unknown_file_upload for a server error or an unrecognized error', () => {
+      expect(importSourceErrorKey(new UnknownError(), 'file-upload'))
+        .toBe('errors.unknown_file_upload');
+      expect(importSourceErrorKey(new Error('boom'), 'file-upload'))
+        .toBe('errors.unknown_file_upload');
     });
   });
 });

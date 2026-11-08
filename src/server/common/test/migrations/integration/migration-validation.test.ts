@@ -57,6 +57,19 @@ describe('Migration Schema Validation', () => {
       }
     });
 
+    it('should not have NOT NULL columns without a default that entities never write', async () => {
+      const diff = await compareSchemas(migrationDb, db);
+
+      if (diff.unwritableColumns.length > 0) {
+        const msg = `NOT NULL columns with no default that no entity declares:\n` +
+          diff.unwritableColumns.map((c) => `  - ${c.table}.${c.column}`).join('\n') +
+          `\n\nEvery insert through the entity fails on a migration-built database.` +
+          ` Declare the column on the entity (for a timestamp, let Sequelize manage it)` +
+          ` or give it a database default.`;
+        expect.fail(msg);
+      }
+    });
+
     it('should not have allowNull or primaryKey constraint mismatches', async () => {
       const diff = await compareSchemas(migrationDb, db);
 
