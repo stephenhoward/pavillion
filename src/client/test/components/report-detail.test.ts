@@ -122,6 +122,38 @@ describe('ReportDetail', () => {
     });
   });
 
+  describe('Escalation history', () => {
+    it('shows a dash for a record with no recorded time', async () => {
+      const report = createMockReport(false);
+      store.currentReport = {
+        report,
+        escalationHistory: [{
+          id: 'esc-1',
+          reportId: 'report-123',
+          fromStatus: 'submitted',
+          toStatus: 'under_review',
+          reviewerId: null,
+          reviewerRole: 'owner',
+          decision: 'escalated',
+          notes: null,
+          createdAt: null,
+        }],
+      };
+      sandbox.stub(store, 'fetchReport').resolves();
+
+      wrapper = mount(ReportDetail, {
+        props: { calendarId: 'calendar-789', reportId: 'report-123' },
+        global: {
+          plugins: [pinia],
+          stubs: { LoadingMessage: true, PillButton: true, ArrowLeft: true },
+        },
+      });
+      await flushPromises();
+
+      expect(wrapper.find('.report-detail__timeline-date').text()).toBe('—');
+    });
+  });
+
   describe('Loading the report', () => {
     const mountDetail = (props: Record<string, unknown>) => mount(ReportDetail, {
       props: { calendarId: 'calendar-789', reportId: 'report-123', ...props },

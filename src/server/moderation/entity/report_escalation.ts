@@ -16,7 +16,8 @@ import db from '@/server/common/entity/db';
  */
 @Table({
   tableName: 'report_escalation',
-  timestamps: false,
+  timestamps: true,
+  updatedAt: false,
   underscored: true,
 })
 class ReportEscalationEntity extends Model {
@@ -46,6 +47,8 @@ class ReportEscalationEntity extends Model {
   @Column({ type: DataType.TEXT, allowNull: true })
   declare notes: string | null;
 
+  // Explicit column keeps the sync schema nullable, matching migrations/0001_initial_schema.ts;
+  // a bare @CreatedAt would emit NOT NULL.
   @CreatedAt
   @Column({ type: DataType.DATE })
   declare created_at: Date;

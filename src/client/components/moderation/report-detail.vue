@@ -39,7 +39,8 @@ const { statusBadgeClass, statusLabel, categoryLabel, reporterTypeLabel } = useR
  * @param date - Date or ISO string to format
  * @returns Formatted date/time string
  */
-const formatDateTime = (date: Date | string): string => {
+const formatDateTime = (date: Date | string | null): string => {
+  if (!date) return '—';
   const dt = date instanceof Date ? DateTime.fromJSDate(date) : DateTime.fromISO(date as string);
   return dt.toLocaleString(DateTime.DATETIME_MED);
 };

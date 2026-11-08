@@ -232,7 +232,7 @@ interface EscalationRecord {
   reviewerRole: string;
   decision: string;
   notes: string | null;
-  createdAt: Date;
+  createdAt: Date | null;
 }
 
 /**
