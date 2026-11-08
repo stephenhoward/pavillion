@@ -1305,10 +1305,12 @@ class EventService {
    *
    * This method is the update path's only guard on exclusion entries. Before
    * any write it partitions the payload against the event's stored rows: an
-   * entry that echoes an existing exclusion by id with isException=true is
-   * skipped and never written; any other isException=true entry, or a
-   * positive-flagged entry carrying an exclusion's id, throws a
-   * ValidationError. Exclusion rows therefore change only through the remap,
+   * entry that echoes an existing exclusion by id with isException set (any
+   * value but undefined, null or false) is skipped and never written; any
+   * other entry with the flag set, a positive-flagged entry carrying an
+   * exclusion's id, or a payload that is not a list of objects, throws a
+   * ValidationError. Every entry left on the positive path is written with
+   * the flag false. Exclusion rows therefore change only through the remap,
    * never from payload contents. No payload id is used in a query. Scoping of
    * every query, update and destroy is strictly by event_id to prevent
    * cross-event leakage.
@@ -1326,6 +1328,16 @@ class EventService {
     event: CalendarEvent,
     tx?: Transaction,
   ): Promise<void> {
+    const rejectExclusion = () => new ValidationError(
+      'Exclusion schedules cannot be created or modified through updateEvent',
+    );
+    // Anything but a list of objects cannot be partitioned: a string would
+    // iterate into one bogus positive per character, a null entry would throw.
+    if (!Array.isArray(incomingSchedules)
+      || incomingSchedules.some(s => typeof s !== 'object' || s === null || Array.isArray(s))) {
+      throw rejectExclusion();
+    }
+
     // Load every schedule row for this event, scoped strictly by event_id
     // (never by calendar or owner) to guarantee we only touch rows belonging
     // to this event and can't leak into other events' cancellations.
@@ -1345,19 +1357,25 @@ class EventService {
     // never written. Any other exclusion entry, or a positive-flagged entry
     // carrying an exclusion's id, is rejected; one message for every case, so
     // the response reveals nothing about which ids exist.
+    //
+    // Any flag value other than undefined, null or false counts as exclusion
+    // intent, because the storage layer coerces 'true' or 1 to true. Entries
+    // that reach the positive path have the flag forced to false, so no row
+    // written from the payload can become an exclusion whatever the check.
     const exclusionIds = new Set(existingExclusions.map(s => s.id));
     const incomingPositiveSchedules: any[] = [];
     for (const schedule of incomingSchedules) {
-      const isEcho = Boolean(schedule?.id) && exclusionIds.has(schedule.id);
-      if (isEcho && schedule.isException === true) {
+      const flagged = schedule.isException !== undefined
+        && schedule.isException !== null
+        && schedule.isException !== false;
+      const isEcho = Boolean(schedule.id) && exclusionIds.has(schedule.id);
+      if (isEcho && flagged) {
         continue;
       }
-      if (isEcho || schedule?.isException === true) {
-        throw new ValidationError(
-          'Exclusion schedules cannot be created or modified through updateEvent',
-        );
+      if (isEcho || flagged) {
+        throw rejectExclusion();
       }
-      incomingPositiveSchedules.push(schedule);
+      incomingPositiveSchedules.push({ ...schedule, isException: false });
     }
     let unseenPositiveIds = existingPositives.map(s => s.id);
     // Snapshot before the loop: updating a row mutates its entity.

@@ -813,5 +813,32 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
       expect(omitted.status).toBe(200);
       expect(await notActive(eventId)).toEqual(cancelled);
     });
+
+    it('refuses another event\'s cancellation echoed into a PUT, and leaves both events\' cancellations as they were', async () => {
+      const targetId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      const otherId = await createWeekly(DateTime.fromISO('2040-10-02T10:00:00', { zone: LA }));
+      await cancelOccurrence(targetId, '2040-10-15T17:00:00.000Z', false);
+      await cancelOccurrence(otherId, '2040-10-16T17:00:00.000Z', true);
+      const targetCancelled = [{ start: '2040-10-15T17:00:00.000Z', state: 'cancelled-shown' }];
+      const otherCancelled = [{ start: '2040-10-16T17:00:00.000Z', state: 'hidden' }];
+
+      const target = await request(env.app)
+        .get(`/api/v1/events/${targetId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const other = await request(env.app)
+        .get(`/api/v1/events/${otherId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const foreignExclusion = other.body.schedules.find((s: { isException?: boolean }) => s.isException === true);
+      expect(foreignExclusion?.id).toBeDefined();
+
+      const response = await request(env.app)
+        .put(`/api/v1/events/${targetId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ...target.body, schedules: [...target.body.schedules, foreignExclusion] });
+
+      expect(response.status).toBe(400);
+      expect(await notActive(targetId)).toEqual(targetCancelled);
+      expect(await notActive(otherId)).toEqual(otherCancelled);
+    });
   });
 });

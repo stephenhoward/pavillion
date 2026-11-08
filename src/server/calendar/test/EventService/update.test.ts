@@ -1228,6 +1228,8 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
   it.each([
     ['has no id', { start: '2026-02-02T18:00:00Z', isException: true }],
+    ['has no id and a string flag', { start: '2026-02-02T18:00:00Z', isException: 'true' }],
+    ['has no id and a numeric flag', { start: '2026-02-02T18:00:00Z', isException: 1 }],
     ['has an unknown id', { id: '22222222-2222-4222-8222-222222222222', isException: true }],
     ['carries a positive row\'s id', { id: 'positiveScheduleId', isException: true }],
     ['carries a cancellation\'s id flagged as positive', { id: 'secondMondayId', isException: false }],
@@ -1250,6 +1252,80 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     expect(instanceSave.called).toBe(false);
     expect(staticUpdate.called).toBe(false);
     expect(destroy.called).toBe(false);
+  });
+
+  it.each([
+    ['a string', 'not-a-list'],
+    ['a list with a null entry', [
+      { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+      null,
+    ]],
+  ])('should reject a schedules payload that is %s before any write', async (_label, schedules) => {
+    const { instanceUpdate, instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
+
+    const result = service.updateEvent(acct, eventId, { schedules });
+
+    await expect(result).rejects.toBeInstanceOf(ValidationError);
+    await expect(result).rejects.toThrow('Exclusion schedules cannot be created or modified through updateEvent');
+    expect(instanceUpdate.called).toBe(false);
+    expect(instanceSave.called).toBe(false);
+    expect(staticUpdate.called).toBe(false);
+    expect(destroy.called).toBe(false);
+  });
+
+  it('should update a positive that carries isException: false without touching is_exclusion', async () => {
+    const { instanceUpdate } = weeklySeriesWithCancellations();
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', isException: false },
+      ],
+    });
+
+    expect(instanceUpdate.calledOnce).toBe(true);
+    const call = instanceUpdate.firstCall;
+    expect((call.thisValue as EventScheduleEntity).id).toBe('positiveScheduleId');
+    expect(call.args[0]).not.toHaveProperty('is_exclusion');
+    expect((call.thisValue as EventScheduleEntity).is_exclusion).toBe(false);
+  });
+
+  it('should create an id-less positive that carries isException: false as a positive row', async () => {
+    const { instanceSave } = weeklySeriesWithCancellations();
+
+    await service.updateEvent(acct, eventId, {
+      schedules: [
+        { start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1, isException: false },
+      ],
+    });
+
+    expect(instanceSave.calledOnce).toBe(true);
+    expect((instanceSave.firstCall.thisValue as EventScheduleEntity).is_exclusion).toBe(false);
+  });
+
+  it('should clear positives for an echo-only payload exactly as for an empty one', async () => {
+    // Recorded contract, not a guard: an echoed cancellation is skipped, so a
+    // payload holding nothing else has no positive in it, like schedules: [].
+    // Neither payload writes to a loaded row, so both runs can share the
+    // fixture; each run's writes are the calls it adds.
+    const { instanceUpdate, instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
+    const writesFor = async (schedules: unknown[]) => {
+      const before = [instanceUpdate, instanceSave, staticUpdate, destroy].map(s => s.callCount);
+      await service.updateEvent(acct, eventId, { schedules });
+      return {
+        instanceUpdates: instanceUpdate.callCount - before[0],
+        instanceSaves: instanceSave.callCount - before[1],
+        staticUpdates: staticUpdate.getCalls().slice(before[2]).map(c => c.args),
+        destroys: destroy.getCalls().slice(before[3]).map(c => (c.args[0] as Record<string, any>).where),
+      };
+    };
+
+    const empty = await writesFor([]);
+    const echoOnly = await writesFor([
+      { id: 'secondMondayId', start: '2026-01-12T18:00:00Z', timezone: 'UTC', isException: true },
+    ]);
+
+    expect(empty.destroys[0]).toEqual({ id: ['positiveScheduleId'], event_id: eventId, is_exclusion: false });
+    expect(echoOnly).toEqual(empty);
   });
 
   it('should move a cancellation when an import replaces the lone schedule with an id-less one', async () => {
