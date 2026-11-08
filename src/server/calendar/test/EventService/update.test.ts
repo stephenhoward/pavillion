@@ -1136,7 +1136,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     // its own date, the 4th falls past the new end.
     const updated = await service.updateEvent(acct, eventId, {
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', count: 3 },
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles', count: 3 },
       ],
     }, undefined, fakeTx);
 
@@ -1169,7 +1169,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     await service.updateEvent(acct, eventId, {
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles' },
       ],
     });
 
@@ -1188,7 +1188,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     await service.updateEvent(acct, eventId, {
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles' },
       ],
     });
 
@@ -1212,7 +1212,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     await service.updateEvent(acct, eventId, {
       content: { en: { name: 'Standup', description: 'New description' } },
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
+        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00-08:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
       ],
     });
 
