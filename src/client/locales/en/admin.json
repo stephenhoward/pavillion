@@ -536,6 +536,8 @@
     "status_cancelled": "Cancelled",
     "force_cancel_button": "Cancel",
     "force_cancel_confirm": "Are you sure you want to force-cancel this funding plan? This action cannot be undone.",
+    "force_cancel_confirm_title": "Force-cancel this funding plan?",
+    "force_cancel_dismiss_button": "Keep Plan",
     "force_cancel_success": "Funding plan cancelled successfully.",
     "force_cancel_failed": "Failed to cancel funding plan.",
     "previous_page": "Previous",

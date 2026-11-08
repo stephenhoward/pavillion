@@ -536,6 +536,8 @@
     "status_cancelled": "Annulé",
     "force_cancel_button": "Annuler",
     "force_cancel_confirm": "Voulez-vous vraiment forcer l’annulation de ce plan de financement ? Cette action est irréversible.",
+    "force_cancel_confirm_title": "Forcer l’annulation de ce plan de financement ?",
+    "force_cancel_dismiss_button": "Conserver le plan",
     "force_cancel_success": "Plan de financement annulé avec succès.",
     "force_cancel_failed": "Échec de l’annulation du plan de financement.",
     "previous_page": "Précédent",

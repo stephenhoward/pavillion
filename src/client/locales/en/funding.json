@@ -48,6 +48,8 @@
   "manage_payment_button": "Manage Payment Method",
   "cancel_funding_plan_button": "Cancel Plan",
   "cancel_confirm": "Cancel your funding plan? Your plan ends at the close of the current billing period, and you'll keep extended features until then. Your calendars stay up either way.",
+  "cancel_confirm_title": "Cancel your funding plan?",
+  "cancel_dismiss_button": "Keep Plan",
   "cancel_success": "Funding plan cancelled. You'll keep extended features until the end of your billing period.",
   "cancel_error": "Failed to cancel funding plan. Please try again.",
   "resume_funding_plan_button": "Keep My Plan",

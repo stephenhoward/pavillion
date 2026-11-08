@@ -536,6 +536,8 @@
     "status_cancelled": "Cancelado",
     "force_cancel_button": "Cancelar",
     "force_cancel_confirm": "¿Seguro que quieres cancelar de forma forzosa este plan de financiación? Esta acción no se puede deshacer.",
+    "force_cancel_confirm_title": "¿Cancelar de forma forzosa este plan de financiación?",
+    "force_cancel_dismiss_button": "Conservar plan",
     "force_cancel_success": "Plan de financiación cancelado correctamente.",
     "force_cancel_failed": "Error al cancelar el plan de financiación.",
     "previous_page": "Anterior",
