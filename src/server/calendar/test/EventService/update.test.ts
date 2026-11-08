@@ -1222,7 +1222,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     const updated = await service.updateEvent(acct, eventId, {
       content: { en: { name: 'Standup', description: 'New description' } },
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
+        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00-08:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
         { id: 'secondMondayId', start: '2026-02-02T18:00:00Z', timezone: 'UTC', isException: true, hideFromPublic: true },
       ],
     });
@@ -1254,7 +1254,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     // first if the guard did not partition the whole payload up front.
     const result = service.updateEvent(acct, eventId, {
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles' },
         entry,
       ],
     });
@@ -1270,7 +1270,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
   it.each([
     ['a string', 'not-a-list'],
     ['a list with a null entry', [
-      { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+      { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles' },
       null,
     ]],
   ])('should reject a schedules payload that is %s before any write', async (_label, schedules) => {
@@ -1291,7 +1291,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     await service.updateEvent(acct, eventId, {
       schedules: [
-        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', isException: false },
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles', isException: false },
       ],
     });
 
@@ -1307,7 +1307,7 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     await service.updateEvent(acct, eventId, {
       schedules: [
-        { start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1, isException: false },
+        { start: '2026-01-05T11:00:00-08:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1, isException: false },
       ],
     });
 
