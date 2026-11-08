@@ -16,6 +16,11 @@ import type { EventCategory } from '@/common/model/event_category';
 const props = defineProps<{
   instance: CalendarEventInstance;
   categoryHrefBuilder?: (category: EventCategory) => string;
+  /**
+   * Open links that lead outside the current view (the source-calendar pill)
+   * in a new tab. The widget sets this so such links never navigate the iframe.
+   */
+  externalLinksInNewTab?: boolean;
 }>();
 
 const { t } = useTranslation('system');
@@ -183,8 +188,8 @@ const safePrompt = computed<UrlPrompt | null>(() => {
     :href="sourceCalendar.url"
     class="source-calendar-pill"
     :aria-label="t('event_source_calendar_label', { name: sourceCalendarLabel })"
-    :target="isRemoteSourceCalendar ? '_blank' : undefined"
-    :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : undefined"
+    :target="isRemoteSourceCalendar || externalLinksInNewTab ? '_blank' : undefined"
+    :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : externalLinksInNewTab ? 'noopener' : undefined"
   >
     <Calendar :size="14" aria-hidden="true" />
     <span>{{ sourceCalendarLabel }}</span>
