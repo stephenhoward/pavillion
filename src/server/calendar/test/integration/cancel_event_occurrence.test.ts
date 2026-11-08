@@ -780,5 +780,38 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
         { start: '2040-11-13T03:00:00.000Z', state: 'cancelled-shown' },
       ]);
     });
+
+    it('accepts the GET body PUT back with its cancellation, and keeps the cancellation when it is omitted', async () => {
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      await cancelOccurrence(eventId, '2040-10-15T17:00:00.000Z', false);
+      const cancelled = [{ start: '2040-10-15T17:00:00.000Z', state: 'cancelled-shown' }];
+
+      const current = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(current.status).toBe(200);
+      const body = current.body;
+      expect(body.schedules.some((s: { isException?: boolean }) => s.isException === true)).toBe(true);
+      body.content.en.description = 'Edited with the cancellation echoed';
+
+      const echoed = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(body);
+      expect(echoed.status).toBe(200);
+      expect(await notActive(eventId)).toEqual(cancelled);
+
+      const reread = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(reread.body.content.en.description).toBe('Edited with the cancellation echoed');
+
+      const omitted = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ...body, schedules: body.schedules.filter((s: { isException?: boolean }) => s.isException !== true) });
+      expect(omitted.status).toBe(200);
+      expect(await notActive(eventId)).toEqual(cancelled);
+    });
   });
 });

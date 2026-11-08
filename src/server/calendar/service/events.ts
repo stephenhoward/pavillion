@@ -954,14 +954,16 @@ class EventService {
    *   2. Exclusion schedules (is_exclusion=true): cancellation markers for
    *      individual occurrences (created via the cancel-instance flow on
    *      EventInstanceService). These are NOT owned by the generic edit
-   *      surface and must survive unrelated event edits. Clients must not
-   *      submit them through updateEvent; any payload that tries to do so
-   *      is rejected with a 400 ValidationError.
+   *      surface and must survive unrelated event edits. A payload may echo
+   *      one of this event's existing exclusions back by id (so a GET body
+   *      can be PUT back); the echo is ignored and never written. Any other
+   *      exclusion entry is rejected with a 400 ValidationError.
    *
-   * Preservation of existing exclusion rows is delegated to
-   * {@link reconcileSchedules}, which loads all existing rows scoped
-   * strictly by event_id, separates them into the two classes, applies
-   * the payload's positive schedules, and leaves exclusions untouched.
+   * Both rules are enforced by {@link reconcileSchedules}, the single guard
+   * site, which loads all existing rows scoped strictly by event_id,
+   * partitions the payload against them before any write, applies the
+   * payload's positive schedules, and moves or removes exclusions only as
+   * the schedule edit requires.
    *
    * @param eventId - the id of the event to update
    * @param eventParams - the parameters and values to update for the event
@@ -1301,33 +1303,29 @@ class EventService {
    * removals are written in the same transaction, and the returned model
    * carries the cancellations as they stand afterwards.
    *
-   * The caller must reject payloads containing is_exclusion=true entries
-   * before invoking this method. Scoping of every query, update and destroy
-   * is strictly by event_id to prevent cross-event leakage.
+   * This method is the update path's only guard on exclusion entries. Before
+   * any write it partitions the payload against the event's stored rows: an
+   * entry that echoes an existing exclusion by id with isException=true is
+   * skipped and never written; any other isException=true entry, or a
+   * positive-flagged entry carrying an exclusion's id, throws a
+   * ValidationError. Exclusion rows therefore change only through the remap,
+   * never from payload contents. No payload id is used in a query. Scoping of
+   * every query, update and destroy is strictly by event_id to prevent
+   * cross-event leakage.
    *
    * @param eventId - the id of the event whose schedules are being reconciled
-   * @param incomingPositiveSchedules - the array of positive-schedule
-   *        payloads from the client (empty array clears all positives)
+   * @param incomingSchedules - the schedule payloads from the client: the
+   *        positives to keep, plus any echoed exclusions (an array with no
+   *        positive clears all positives)
    * @param event - the CalendarEvent domain model being mutated; positive
    *        and preserved-exclusion schedules are added back to this model
    */
   async reconcileSchedules(
     eventId: string,
-    incomingPositiveSchedules: any[],
+    incomingSchedules: any[],
     event: CalendarEvent,
     tx?: Transaction,
   ): Promise<void> {
-    // Reject payloads that try to create or modify exclusion rows directly.
-    // Exclusions are only created via the cancel-instance flow; allowing them
-    // through updateEvent would let unrelated edits fabricate cancellations.
-    for (const s of incomingPositiveSchedules) {
-      if (s && s.isException === true) {
-        throw new ValidationError(
-          'Exclusion schedules cannot be created or modified through updateEvent',
-        );
-      }
-    }
-
     // Load every schedule row for this event, scoped strictly by event_id
     // (never by calendar or owner) to guarantee we only touch rows belonging
     // to this event and can't leak into other events' cancellations.
@@ -1340,6 +1338,27 @@ class EventService {
     // outside the replace-from-payload codepath below.
     const existingExclusions = existingSchedules.filter(s => s.is_exclusion === true);
     const existingPositives = existingSchedules.filter(s => s.is_exclusion !== true);
+
+    // Partition the whole payload before the first write, keyed on the
+    // stored row's class. An exclusion echoed back by id with its flag set
+    // (a client saving the GET body) is skipped: its contents are ignored and
+    // never written. Any other exclusion entry, or a positive-flagged entry
+    // carrying an exclusion's id, is rejected; one message for every case, so
+    // the response reveals nothing about which ids exist.
+    const exclusionIds = new Set(existingExclusions.map(s => s.id));
+    const incomingPositiveSchedules: any[] = [];
+    for (const schedule of incomingSchedules) {
+      const isEcho = Boolean(schedule?.id) && exclusionIds.has(schedule.id);
+      if (isEcho && schedule.isException === true) {
+        continue;
+      }
+      if (isEcho || schedule?.isException === true) {
+        throw new ValidationError(
+          'Exclusion schedules cannot be created or modified through updateEvent',
+        );
+      }
+      incomingPositiveSchedules.push(schedule);
+    }
     let unseenPositiveIds = existingPositives.map(s => s.id);
     // Snapshot before the loop: updating a row mutates its entity.
     const oldPositives = existingPositives.map(s => s.toModel());
@@ -1350,8 +1369,7 @@ class EventService {
         const scheduleEntity = existingPositives.find(s => s.id === schedule.id);
 
         if (!scheduleEntity) {
-          // Either the id doesn't exist or it refers to an exclusion row,
-          // which the generic edit surface is not allowed to touch.
+          // Exclusion ids were partitioned out above, so this id is unknown.
           throw Error('Schedule not found for event');
         }
 
@@ -1375,8 +1393,8 @@ class EventService {
         // request keys to distinguish "explicitly cleared" from "not sent".
         // Raw key names: start/end/eventEndTime/frequency/interval/count.
         // is_exclusion is intentionally NOT written from the payload: this
-        // helper is positive-only, and payload rejection above guarantees
-        // we never see isException=true here.
+        // helper is positive-only, and the partition above guarantees we
+        // never see isException=true here.
         const toStorage = EventScheduleEntity.toStorageDate;
         const newStartDate = toStorage(parsed.startDate) ?? scheduleEntity.start_date;
         const newFrequency = 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency;

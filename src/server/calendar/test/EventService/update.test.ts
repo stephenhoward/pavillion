@@ -11,6 +11,7 @@ import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/c
 import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 import { SpaceLocationMismatchError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import EventService from '@/server/calendar/service/events';
 
 describe('updateEvent with content', () => {
@@ -910,30 +911,6 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
     expect(updated.schedules[0].id).toBe('exclusionScheduleId');
   });
 
-  it('should reject payload that includes a schedule with isException=true (include-case)', async () => {
-    sandbox.stub(EventEntity, 'findByPk').resolves(
-      EventEntity.build({ account_id: 'testAccountId', id: eventId, calendar_id: 'testCalendarId' }),
-    );
-    sandbox.stub(EventEntity.prototype, 'save');
-    const findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
-    findSchedulesStub.resolves([]);
-
-    await expect(service.updateEvent(acct, eventId, {
-      schedules: [
-        {
-          start: new Date(),
-          end: new Date(),
-          isException: true,
-        },
-      ],
-    })).rejects.toThrow('Exclusion schedules cannot be created or modified through updateEvent');
-
-    // Payload rejection must be short-circuited: no findAll/destroy against
-    // the existing rows should run in the failure path. (findAll is inside
-    // reconcileSchedules, which throws on the first rejection loop.)
-    expect(findSchedulesStub.called).toBe(false);
-  });
-
   it('should re-key the exclusion row to the new start_date when a single event date is edited', async () => {
     // A single (non-recurring) event with one positive schedule and a
     // cancellation exclusion row keyed to the same occurrence. Editing the
@@ -1114,13 +1091,16 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       hide_from_public: hidden,
     }));
     sandbox.stub(EventScheduleEntity, 'findAll').resolves([positiveEntity, secondMonday, fourthMonday, ...extras]);
-    sandbox.stub(EventScheduleEntity.prototype, 'update').callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
+    const instanceUpdate = sandbox.stub(EventScheduleEntity.prototype, 'update').callsFake(async function(this: typeof positiveEntity, params: Record<string, unknown>) {
       for (const key in params) {
         this.set(key, params[key]);
       }
       return this;
     });
     return {
+      secondMonday,
+      instanceUpdate,
+      instanceSave: sandbox.stub(EventScheduleEntity.prototype, 'save').resolves(),
       staticUpdate: sandbox.stub(EventScheduleEntity, 'update').resolves([1]),
       destroy: sandbox.stub(EventScheduleEntity, 'destroy').resolves(1),
     };
@@ -1218,6 +1198,81 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
 
     expect(staticUpdate.called).toBe(false);
     expect(destroy.called).toBe(false);
+  });
+
+  it('should accept an echoed cancellation without writing it', async () => {
+    const { secondMonday, instanceUpdate, instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
+    sandbox.stub(EventContentEntity, 'findOne').resolves(EventContentEntity.build({ event_id: eventId, language: 'en' }));
+    sandbox.stub(EventContentEntity.prototype, 'save');
+
+    // A client that saves the GET body back: the unchanged positive, plus the
+    // cancellation by id — here with a tampered start that must be ignored.
+    const updated = await service.updateEvent(acct, eventId, {
+      content: { en: { name: 'Standup', description: 'New description' } },
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T10:00:00', timezone: 'America/Los_Angeles', frequency: 'weekly', interval: 1 },
+        { id: 'secondMondayId', start: '2026-02-02T18:00:00Z', timezone: 'UTC', isException: true, hideFromPublic: true },
+      ],
+    });
+
+    expect(instanceUpdate.getCalls().some(c => c.thisValue === secondMonday)).toBe(false);
+    expect(instanceSave.called).toBe(false);
+    expect(staticUpdate.called).toBe(false);
+    expect(destroy.called).toBe(false);
+
+    const echoed = updated.schedules.find(s => s.id === 'secondMondayId');
+    expect(echoed?.isExclusion).toBe(true);
+    expect(echoed?.startDate?.toUTC().toISO()).toBe('2026-01-12T18:00:00.000Z');
+    expect(echoed?.hideFromPublic).toBe(false);
+  });
+
+  it.each([
+    ['has no id', { start: '2026-02-02T18:00:00Z', isException: true }],
+    ['has an unknown id', { id: '22222222-2222-4222-8222-222222222222', isException: true }],
+    ['carries a positive row\'s id', { id: 'positiveScheduleId', isException: true }],
+    ['carries a cancellation\'s id flagged as positive', { id: 'secondMondayId', isException: false }],
+    ['carries a cancellation\'s id with no flag', { id: 'secondMondayId' }],
+  ])('should reject a schedule entry that %s before any write', async (_label, entry) => {
+    const { instanceUpdate, instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
+
+    // A valid positive edit precedes the bad entry, so a write would run
+    // first if the guard did not partition the whole payload up front.
+    const result = service.updateEvent(acct, eventId, {
+      schedules: [
+        { id: 'positiveScheduleId', start: '2026-01-05T11:00:00', timezone: 'America/Los_Angeles' },
+        entry,
+      ],
+    });
+
+    await expect(result).rejects.toBeInstanceOf(ValidationError);
+    await expect(result).rejects.toThrow('Exclusion schedules cannot be created or modified through updateEvent');
+    expect(instanceUpdate.called).toBe(false);
+    expect(instanceSave.called).toBe(false);
+    expect(staticUpdate.called).toBe(false);
+    expect(destroy.called).toBe(false);
+  });
+
+  it('should move a cancellation when an import replaces the lone schedule with an id-less one', async () => {
+    const { instanceSave, staticUpdate, destroy } = weeklySeriesWithCancellations();
+
+    // The shape buildEventParamsForUpdate sends: a positive with no id, an
+    // hour later than the stored series.
+    const imported = new CalendarEventSchedule(undefined, DateTime.fromISO('2026-01-05T11:00:00', { zone: 'America/Los_Angeles' }));
+    imported.frequency = EventFrequency.WEEKLY;
+    imported.interval = 1;
+
+    await service.updateEvent(acct, eventId, { schedules: [imported.toObject()] });
+
+    // The replacement is created and the old positive destroyed, positive-scoped.
+    expect(instanceSave.calledOnce).toBe(true);
+    const positiveDestroy = destroy.getCalls().find(c => (c.args[0] as Record<string, any>).where.is_exclusion === false);
+    expect((positiveDestroy?.args[0] as Record<string, any>).where).toEqual({ id: ['positiveScheduleId'], event_id: eventId, is_exclusion: false });
+
+    const moveWrite = staticUpdate.getCalls().find(c => (c.args[1] as Record<string, any>).where.id === 'secondMondayId');
+    expect(moveWrite).toBeDefined();
+    const [values, options] = moveWrite!.args as [Record<string, unknown>, Record<string, any>];
+    expect(options.where).toEqual({ id: 'secondMondayId', event_id: eventId, is_exclusion: true });
+    expect((values.start_date as Date).toISOString()).toBe('2026-01-12T19:00:00.000Z');
   });
 
   it('should leave exclusions deleted after a restore (edit unrelated field post-restore)', async () => {

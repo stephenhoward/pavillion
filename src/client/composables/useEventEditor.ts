@@ -203,7 +203,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         return null;
       }
 
-      return CalendarEvent.fromObject(eventData);
+      const event = CalendarEvent.fromObject(eventData);
+      // Cancelled dates (exclusion schedules) are owned by the cancellation
+      // endpoints and are not part of the edit surface. Dropping them here
+      // keeps them out of the schedule list, validation, the dirty snapshot,
+      // the save payload and duplicates alike.
+      event.schedules = event.schedules.filter(s => !s.isExclusion);
+      return event;
     }
     catch (error: any) {
       console.error('Error loading event:', error);
