@@ -207,7 +207,21 @@ describe('widget-container event links', () => {
     expect(eventRoute(instance)).toEqual({
       name: 'widget-event-detail',
       params: { urlName: 'test_calendar', eventId: 'evt-1', startTime: '20260508-1800' },
+      query: {},
     });
+  });
+
+  it('carries the forced color mode, accent and language into the event link, but not the view state', async () => {
+    useWidgetStore().applyServerConfig({ view: 'month' });
+    const { wrapper } = await mountContainerAt('/widget/test_calendar?view=month&date=2026-05-01&colorMode=dark&accentColor=%2377bb41&lang=es');
+
+    const eventRoute = wrapper.findComponent(MonthView).props('eventRoute') as (instance: unknown) => any;
+    const instance = {
+      start: DateTime.fromISO('2026-05-08T18:00:00.000Z', { zone: 'utc' }),
+      event: { id: 'evt-1' },
+    };
+
+    expect(eventRoute(instance).query).toEqual({ colorMode: 'dark', accentColor: '#77bb41', lang: 'es' });
   });
 });
 

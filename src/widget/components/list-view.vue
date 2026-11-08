@@ -8,6 +8,7 @@ import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import EmptyState from '@/common/ui/components/EmptyState.vue';
+import { stickyQuery } from '../sticky-query';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -31,6 +32,9 @@ const calendarUrlName = computed(() => route.params.urlName as string);
  * anchor's href, and intercepts a plain click on that anchor to push it
  * through the router it is mounted under — here, the widget router — so the
  * list view needs no openEvent handler of its own.
+ *
+ * The href carries the sticky display keys (see ../sticky-query), so the
+ * detail opened in a new tab or reloaded keeps the list's theme and language.
  */
 const buildDetailHref = (instance: CalendarEventInstance): string => {
   return router.resolve({
@@ -40,6 +44,7 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
       eventId: instance.event.id,
       startTime: formatInstanceSlug(instance.start),
     },
+    query: stickyQuery(route.query),
   }).href;
 };
 </script>

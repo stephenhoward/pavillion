@@ -307,6 +307,28 @@ test.describe('Widget Embedding', () => {
     await expect(cards).toHaveCount(listCount, { timeout: 10000 });
   });
 
+  test('forced color mode and language survive reloading the event detail', async ({ page }) => {
+    // A reload, a new tab or a shared link loads the detail as a fresh
+    // document, which knows only what its own URL carries.
+    const html = page.locator('html');
+    await page.goto(`${env.baseURL}/widget/test_calendar?colorMode=dark&lang=es`);
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 15000 });
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await expect(html).toHaveAttribute('lang', 'es');
+
+    await page.locator('article.event-card .event-title-link').first().click();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await page.reload();
+    await expect(page.locator('.event-detail-overlay h1')).toBeVisible({ timeout: 10000 });
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await expect(html).toHaveAttribute('lang', 'es');
+
+    await page.locator('.back-link').first().click();
+    await expect(page.locator('article.event-card').first()).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL((url) => url.searchParams.get('colorMode') === 'dark');
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+  });
+
   test("Back from an event's detail returns to the list", async ({ page }) => {
     // Playwright traverses through its browser protocol, not a Back button, so
     // a pass in the webkit project says nothing about Back in Safari itself.
