@@ -14,7 +14,8 @@
  * Validates:
  *   - Back button renders and returns to the widget calendar list with the
  *     list's query intact (history back when the list is the previous entry,
- *     otherwise a push carrying the recorded list query or at least `lang`).
+ *     otherwise a push carrying the recorded list query or at least the
+ *     sticky display keys: color mode, accent, language).
  *   - <EventDetailBody> is composed inside <main> with the correct props
  *     (categoryHrefBuilder is omitted, so categories render as <span>).
  *   - Slug routing: parseInstanceSlug + service-call selection between
@@ -348,8 +349,8 @@ describe('widget event-detail-overlay shell', () => {
     wrapper.unmount();
   });
 
-  it('back-button click keeps lang when no list query was recorded (direct entry to detail)', async () => {
-    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1?lang=fr');
+  it('back-button click keeps the color mode, accent and language when no list query was recorded (direct entry or reload)', async () => {
+    const { wrapper, router } = await mountOverlay('/widget/test_calendar/events/evt-1?lang=fr&colorMode=dark&accentColor=%2377bb41&utm_source=x');
     const pushSpy = vi.spyOn(router, 'push');
 
     await wrapper.find('.instance-back-header .back-link').trigger('click');
@@ -357,7 +358,7 @@ describe('widget event-detail-overlay shell', () => {
     expect(pushSpy).toHaveBeenCalledWith({
       name: 'widget-calendar',
       params: { urlName: 'test_calendar' },
-      query: { lang: 'fr' },
+      query: { colorMode: 'dark', accentColor: '#77bb41', lang: 'fr' },
     });
     wrapper.unmount();
   });
@@ -386,6 +387,20 @@ describe('widget event-detail-overlay shell', () => {
     const href = builder!({ id: 'cat-123' } as any);
     expect(href).toContain('/widget/test_calendar');
     expect(href).toContain('categories=cat-123');
+    wrapper.unmount();
+  });
+
+  it('keeps the color mode, accent and language on category links', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1?colorMode=dark&accentColor=%2377bb41&lang=es');
+
+    const builder = wrapper.findComponent({ name: 'EventDetailBody' }).props('categoryHrefBuilder') as (c: { id: string }) => string;
+    const query = new URL(builder({ id: 'cat-123' }), 'http://widget.test').searchParams;
+    expect(Object.fromEntries(query)).toEqual({
+      colorMode: 'dark',
+      accentColor: '#77bb41',
+      lang: 'es',
+      categories: 'cat-123',
+    });
     wrapper.unmount();
   });
 });

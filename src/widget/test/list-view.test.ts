@@ -87,4 +87,21 @@ describe('widget list view detail links', () => {
     expect(href).toMatch(/^\/widget\/shown_cal\/events\/e1\//);
     wrapper.unmount();
   });
+
+  it('carries the forced color mode, accent and language into the detail link, and nothing else', async () => {
+    const router = buildRouter();
+    await router.push('/widget/shown_cal?view=list&colorMode=dark&accentColor=%2377bb41&lang=es&search=jazz&startDate=2026-01-01');
+    usePublicCalendarStore().allEvents = [buildInstance()] as any;
+
+    const wrapper = mount(ListView, {
+      global: { plugins: [[I18NextVue, { i18next }], router] },
+    });
+
+    // A new tab or a reload loads the detail as a fresh document, which only
+    // knows what its own URL says.
+    const href = wrapper.find('ul.day-events a[href*="/events/"]').attributes('href')!;
+    const query = new URL(href, 'http://widget.test').searchParams;
+    expect(Object.fromEntries(query)).toEqual({ colorMode: 'dark', accentColor: '#77bb41', lang: 'es' });
+    wrapper.unmount();
+  });
 });

@@ -10,6 +10,7 @@ import NotFound from '@/site/components/not-found.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
 import { useLocalizedContent } from '@/common/ui/composables/useLocalizedContent';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
+import { stickyQuery } from '../sticky-query';
 import type { Calendar } from '@/common/model/calendar';
 import type { EventCategory } from '@/common/model/event_category';
 
@@ -64,7 +65,9 @@ function previousEntryIsCalendarList(): boolean {
  * Returns to the calendar list without losing its filters. Steps back through
  * history when the list is the previous entry, so browser and in-widget back
  * behave alike; otherwise pushes the list with the query recorded when the
- * visitor left it, or — on direct entry to detail — at least keeps `lang`.
+ * visitor left it, or — on direct entry to detail, or after a reload that
+ * dropped the recorded query — at least keeps the sticky display keys
+ * (color mode, accent, language; see ../sticky-query).
  */
 const goBack = () => {
   if (previousEntryIsCalendarList()) {
@@ -72,24 +75,24 @@ const goBack = () => {
     return;
   }
 
-  const lang = route.query.lang;
   router.push({
     name: 'widget-calendar',
     params: { urlName: calendarId as string },
-    query: widgetStore.lastListQuery ?? (typeof lang === 'string' ? { lang } : {}),
+    query: widgetStore.lastListQuery ?? stickyQuery(route.query),
   });
 };
 
 /**
  * Builds a widget-scoped category filter href that returns to the widget
- * calendar list pre-filtered by the chosen category. Uses the resolved
- * router URL so the iframe-aware base path is preserved.
+ * calendar list pre-filtered by the chosen category, keeping the sticky
+ * display keys. Uses the resolved router URL so the iframe-aware base path is
+ * preserved.
  */
 function categoryHrefBuilder(category: EventCategory): string {
   return router.resolve({
     name: 'widget-calendar',
     params: { urlName: calendarId as string },
-    query: { categories: category.id },
+    query: { ...stickyQuery(route.query), categories: category.id },
   }).href;
 }
 

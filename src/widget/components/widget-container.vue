@@ -18,6 +18,7 @@ import { CalendarViewToolbar, MonthView, WeekView } from '@/common/ui/calendar-v
 import { useCalendarViewContainer } from '@/common/ui/calendar-views/useCalendarViewContainer';
 import { useLocale } from '@/common/ui/composables/useLocale';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
+import { stickyQuery } from '../sticky-query';
 import type Config from '@/client/service/config';
 
 const { t } = useTranslation('system');
@@ -92,7 +93,8 @@ const {
     || publicCalendarStore.isLoadingEvents
     || !publicCalendarStore.hasLoadedEvents,
   locale: currentLocale,
-  // An event chip opens the widget's event detail for that occurrence.
+  // An event chip opens the widget's event detail for that occurrence,
+  // keeping the sticky display keys (see ../sticky-query).
   eventRoute: (instance: CalendarEventInstance) => ({
     name: 'widget-event-detail',
     params: {
@@ -100,6 +102,7 @@ const {
       eventId: instance.event.id,
       startTime: formatInstanceSlug(instance.start),
     },
+    query: stickyQuery(route.query),
   }),
   calendarRoute: query => ({
     name: 'widget-calendar',
