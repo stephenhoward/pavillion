@@ -43,7 +43,10 @@ export type ImportRunOutcome =
  */
 @Table({
   tableName: 'import_run',
-  timestamps: false,
+  // Sequelize stamps created_at on insert. The migration's NOT NULL column has
+  // no database default, so the entity must write it; there is no updated_at.
+  timestamps: true,
+  updatedAt: false,
   underscored: true,
 })
 class ImportRunEntity extends Model {

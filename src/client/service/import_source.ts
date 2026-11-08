@@ -17,6 +17,7 @@ import {
 } from '@/common/exceptions/import';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+import { RateLimitError } from '@/common/exceptions/report';
 import {
   UnauthenticatedError,
   UnknownError,
@@ -84,6 +85,9 @@ const errorMap = {
   ImportSourceFileBadFormatError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
+  // The per-account limiter on every import-source route answers 429 with
+  // this name; without the entry it would surface as UnknownError.
+  RateLimitError,
   UnauthenticatedError,
   ValidationError,
   UnknownError,

@@ -268,7 +268,13 @@
       "relme_link_not_found": "No matching rel=\"me\" link was found on the verification page. Please confirm the link is published and try again.",
       "relme_hostname_mismatch": "The verification page must be on the same hostname as the calendar feed.",
       "relme_psl_violation": "The verification page domain is not eligible for verification.",
-      "source_cap_exceeded": "This calendar has reached the maximum number of import sources. Remove a feed before importing a file."
+      "source_cap_exceeded": "This calendar has reached the maximum number of import sources. Remove a feed before importing a file.",
+      "file_empty": "That file is empty. Choose an .ics calendar file that contains events.",
+      "file_bad_format": "That file could not be read as a calendar. Export your calendar as an .ics file and try again.",
+      "file_no_events": "That calendar file contains no events to import.",
+      "file_too_many_events": "That file has more events than can be imported at once. Split it into smaller files and import each one.",
+      "no_edit_permission": "You don't have permission to import events into this calendar.",
+      "unknown_file_upload": "The server couldn't finish importing this file. Try again in a moment; if it keeps happening, contact your instance administrator."
     },
     "verify_wizard": {
       "title": "Verify ownership",

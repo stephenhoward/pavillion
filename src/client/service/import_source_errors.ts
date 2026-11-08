@@ -1,20 +1,22 @@
 /**
- * Maps an error returned by `ImportSourceService` (verify or sync) to an
- * i18n key under `calendars.import.errors.*`. Centralizes the
+ * Maps an error returned by `ImportSourceService` (verify, sync or file
+ * upload) to an i18n key under `calendars.import`. Centralizes the
  * exception-to-message classification so the component layer only owns
  * UI orchestration.
  *
- * Three call sites consume this:
+ * Four call sites consume this:
  *  - `DnsChallengeStep.vue` (context: `'verify-dns'`)
  *  - `RelMeChallengeStep.vue` (context: `'verify-rel-me'`)
- *  - `ImportSourcesSection.vue` (context: `'sync'`)
+ *  - `ImportSourcesSection.vue` (contexts: `'sync'` and `'file-upload'`)
  *
  * The verify contexts unwrap the discriminator-specific verification
  * exception to its `reason` field; the sync context skips that step.
- * Common transport-layer errors (fetch, SSRF, parse, rate-limit) map
- * uniformly across all contexts. Unrecognized errors fall back to
- * `errors.unknown_verify` or `errors.unknown_sync` so the UI never
- * shows a blank error surface.
+ * The file-upload context maps the upload's own exceptions first — where
+ * `ImportSourceParseError` means a readable file with no events, not an
+ * unreadable feed. Common transport-layer errors (fetch, SSRF, parse,
+ * rate-limit) map uniformly across all contexts. Unrecognized errors fall
+ * back to a per-context `errors.unknown_*` key so the UI never shows a
+ * blank error surface or a raw exception message.
  *
  * @see DnsChallengeStep.vue — verify-dns consumer
  * @see RelMeChallengeStep.vue — verify-rel-me consumer
@@ -26,7 +28,7 @@ import {
   ImportSourceRelMeVerificationError,
 } from '@/common/exceptions/import';
 
-export type ImportSourceErrorContext = 'verify-dns' | 'verify-rel-me' | 'sync';
+export type ImportSourceErrorContext = 'verify-dns' | 'verify-rel-me' | 'sync' | 'file-upload';
 
 const DNS_REASON_KEYS: Record<string, string> = {
   IMPORT_DNS_NOT_FOUND: 'errors.dns_not_found',
@@ -49,6 +51,24 @@ const COMMON_NAME_KEYS: Record<string, string> = {
   ImportSourceSsrfBlockedError: 'errors.ssrf_blocked',
   ImportSourceParseError: 'errors.parse_error',
   ImportSourceVerifyRateLimitError: 'errors.rate_limited',
+  RateLimitError: 'errors.rate_limited',
+};
+
+const FILE_UPLOAD_NAME_KEYS: Record<string, string> = {
+  ImportSourceFileEmptyError: 'errors.file_empty',
+  ImportSourceFileTooLargeError: 'file_too_large',
+  ImportSourceFileBadFormatError: 'errors.file_bad_format',
+  ImportSourceFileTooManyEventsError: 'errors.file_too_many_events',
+  ImportSourceParseError: 'errors.file_no_events',
+  ImportSourceCapExceededError: 'errors.source_cap_exceeded',
+  CalendarEditorPermissionError: 'errors.no_edit_permission',
+};
+
+const UNKNOWN_KEYS: Record<ImportSourceErrorContext, string> = {
+  'verify-dns': 'errors.unknown_verify',
+  'verify-rel-me': 'errors.unknown_verify',
+  'sync': 'errors.unknown_sync',
+  'file-upload': 'errors.unknown_file_upload',
 };
 
 export function importSourceErrorKey(
@@ -69,9 +89,12 @@ export function importSourceErrorKey(
   }
 
   const name = (err as { name?: string })?.name;
+  if (context === 'file-upload' && name && name in FILE_UPLOAD_NAME_KEYS) {
+    return FILE_UPLOAD_NAME_KEYS[name];
+  }
   if (name && name in COMMON_NAME_KEYS) {
     return COMMON_NAME_KEYS[name];
   }
 
-  return context === 'sync' ? 'errors.unknown_sync' : 'errors.unknown_verify';
+  return UNKNOWN_KEYS[context];
 }
