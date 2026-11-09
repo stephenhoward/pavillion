@@ -249,9 +249,7 @@ describe('Outbox delivery invariants', () => {
   });
 
   describe('Invariant 2: a public Create is served whatever its delivery outcome', () => {
-    // un-skipped by pv-w8sl.4
-    // fails today because readOutbox serves only rows whose processed_status is exactly 'ok'.
-    it.skip('serves a public Create whose delivery to one recipient failed and counts it in totalItems', async () => {
+    it('serves a public Create whose delivery to one recipient failed and counts it in totalItems', async () => {
       const calendar = await createLocalCalendar('invariantpartial');
 
       const partial = publicCreate(calendar, 'partial');
@@ -279,9 +277,7 @@ describe('Outbox delivery invariants', () => {
   });
 
   describe('Invariant 3: the public outbox serves only the calendar\'s own public activities', () => {
-    // un-skipped by pv-w8sl.4
-    // fails today because readOutbox filters on type and status only, so a user-actor Update anchored on the calendar is served.
-    it.skip('does not serve or count a user-actor Update addressed only to a remote calendar and anchored on a local calendar', async () => {
+    it('does not serve or count a user-actor Update addressed only to a remote calendar and anchored on a local calendar', async () => {
       const calendar = await createLocalCalendar('invariantuseractor');
       const remoteCalendarActor = 'https://peer.example/calendars/theirs';
       const userActor = `https://${DOMAIN}/users/editor`;

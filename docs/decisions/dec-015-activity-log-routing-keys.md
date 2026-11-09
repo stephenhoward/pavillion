@@ -20,6 +20,8 @@ Three rules follow.
 
 **3. The emitted target is an affordance, never a trust boundary.** Every destination a routing key can produce enforces its own authorization server-side (`userCanReviewReports` on the owner reports page; `account.hasRole('admin')` in every admin report handler). A mis-routed link is a usability defect, not an access-control one — which is why rule 2 can hold without a membership check on the read path.
 
+A third class, the **write-once derived fact** — a value computed once from the row's own write-once content, such as `ap_outbox.is_public` — is recorded in [DEC-024](dec-024-outbox-contract.md). Rule 2 binds it too.
+
 ## Context
 
 Epic pv-mvfk made inbox notification rows navigable. Its read path needed the calendar that owns a reported event, so a non-admin recipient could be linked to their own calendar's reports page rather than the admin moderation surface. The epic's original non-goals forbade any schema change to `notification_activity`. That non-goal was retracted mid-epic and one nullable column (`object_calendar_id`, migration `0040`) was added at emit time from a bus payload field the handlers already read.

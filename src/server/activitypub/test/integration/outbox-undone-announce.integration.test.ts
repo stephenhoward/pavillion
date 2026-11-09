@@ -39,6 +39,10 @@ describe('readOutbox and undone reposts', () => {
       calendar_id: calendar.id,
       message_time: new Date(clock),
       message: activity.toObject(),
+      // Written directly rather than through addToOutbox, so the row carries
+      // what addToOutbox and the outbox processor would have recorded.
+      is_public: true,
+      processed_time: new Date(clock),
       processed_status: 'ok',
     });
   }

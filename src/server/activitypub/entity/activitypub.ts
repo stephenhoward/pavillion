@@ -143,6 +143,20 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
   ],
 })
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
+
+  /**
+   * Whether this row belongs in the calendar's public outbox (DEC-024): a
+   * write-once fact derived from the row's own message, set at insert by
+   * `isPublicOutboxActivity` and, for rows that predate it, by migration
+   * 0050's backfill. Read only by `readOutbox`; it never answers whether an
+   * activity is visible now.
+   */
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_public: boolean;
 }
 
 /**
