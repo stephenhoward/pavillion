@@ -501,13 +501,15 @@ describe('Public API - toPublicEventObject shape contract', () => {
    * Nested objects (location, space, media, series, categories) are checked
    * independently by their own `assert*Projection` helpers.
    */
-  function assertEventRootProjection(eventBody: Record<string, any>) {
+  function assertEventRootProjection(eventBody: Record<string, any>, extraKeys: string[] = []) {
     expect(eventBody).not.toBeNull();
 
     // Bidirectional allow-list assertion. `toPublicEventObject` always emits
     // every field as a key (optional nested objects collapse to null, not
     // omitted), so the key set is fixed. `toEqual` catches both an extra key
     // (FK leak) and a missing required key (dropped public field).
+    // `extraKeys` names what a handler adds beside the projection, such as
+    // getEvent's `sameDayOccurrenceStart`.
     expect(Object.keys(eventBody).sort()).toEqual([
       'categories',
       'content',
@@ -525,10 +527,12 @@ describe('Public API - toPublicEventObject shape contract', () => {
       'recurrenceSummary',
       'repostStatus',
       'series',
+      'singleOccurrenceStart',
       'sourceCalendar',
       'space',
       'urlPrompt',
-    ]);
+      ...extraKeys,
+    ].sort());
 
     // Disallowed internal fields must be absent.
     expect(eventBody.calendarId).toBeUndefined();
@@ -736,6 +740,115 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.status).toBe(404);
       expect(response.body.errorName).toBe('EventNotFoundError');
       expect(eventStub.called).toBe(false);
+    });
+
+    describe('singleOccurrenceStart', () => {
+      function schedule(startIso: string, options: { frequency?: EventFrequency; isExclusion?: boolean } = {}): CalendarEventSchedule {
+        const s = new CalendarEventSchedule(
+          `sched-${startIso}`,
+          DateTime.fromISO(startIso, { zone: 'America/Chicago' }),
+        );
+        s.frequency = options.frequency ?? null;
+        s.isExclusion = options.isExclusion ?? false;
+        return s;
+      }
+
+      async function getEventWith(schedules: CalendarEventSchedule[]): Promise<Record<string, any>> {
+        const event = new CalendarEvent(EVENT_UUID, 'cal-id');
+        event.schedules = schedules;
+        apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+        router.get('/handler/:id', (req, res) => {
+          routes.getEvent(req, res);
+        });
+        const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
+        expect(response.status).toBe(200);
+        return response.body;
+      }
+
+      it('is the UTC start of an event with one schedule that does not recur', async () => {
+        const body = await getEventWith([schedule('2026-11-14T18:00:00')]);
+
+        expect(body.singleOccurrenceStart).toBe('2026-11-15T00:00:00.000Z');
+      });
+
+      it('is null for a recurring schedule', async () => {
+        const body = await getEventWith([
+          schedule('2026-11-14T18:00:00', { frequency: EventFrequency.WEEKLY }),
+        ]);
+
+        expect(body.singleOccurrenceStart).toBeNull();
+      });
+
+      it('is null for two schedules that do not recur', async () => {
+        const body = await getEventWith([
+          schedule('2026-11-14T18:00:00'),
+          schedule('2026-11-21T18:00:00'),
+        ]);
+
+        expect(body.singleOccurrenceStart).toBeNull();
+      });
+
+      it('is the non-exclusion start when an earlier hidden exclusion row exists, and the exclusion does not reach the response', async () => {
+        const hidden = schedule('2026-11-07T18:00:00', { isExclusion: true });
+        hidden.hideFromPublic = true;
+        const body = await getEventWith([hidden, schedule('2026-11-14T18:00:00')]);
+
+        expect(body.singleOccurrenceStart).toBe('2026-11-15T00:00:00.000Z');
+        expect(JSON.stringify(body)).not.toContain('2026-11-08');
+        expect(JSON.stringify(body)).not.toContain('2026-11-07');
+      });
+    });
+
+    describe('?sameDayAs=', () => {
+      it('answers the occurrence the service finds on the slug\'s day, passing the parsed slug and the loaded event', async () => {
+        const event = new CalendarEvent(EVENT_UUID, 'cal-id');
+        event.schedules = [];
+        apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+        const sameDayStub = apiSandbox.stub(publicInterface, 'findSameDayOccurrence')
+          .resolves(DateTime.utc(2026, 11, 14, 16, 30));
+        router.get('/handler/:id', (req, res) => {
+          routes.getEvent(req, res);
+        });
+
+        const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?sameDayAs=20261115-0000`);
+
+        expect(response.status).toBe(200);
+        expect(response.body.sameDayOccurrenceStart).toBe('2026-11-14T16:30:00.000Z');
+        expect(sameDayStub.calledOnce).toBe(true);
+        expect(sameDayStub.firstCall.args[0]).toBe(event);
+        expect(sameDayStub.firstCall.args[1].toISO()).toBe('2026-11-15T00:00:00.000Z');
+      });
+
+      it('answers null without a lookup when sameDayAs is absent', async () => {
+        const event = new CalendarEvent(EVENT_UUID, 'cal-id');
+        event.schedules = [];
+        apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+        const sameDayStub = apiSandbox.stub(publicInterface, 'findSameDayOccurrence');
+        router.get('/handler/:id', (req, res) => {
+          routes.getEvent(req, res);
+        });
+
+        const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}`);
+
+        expect(response.body.sameDayOccurrenceStart).toBeNull();
+        expect(sameDayStub.called).toBe(false);
+      });
+
+      it('answers null without a lookup when sameDayAs is not a valid slug', async () => {
+        const event = new CalendarEvent(EVENT_UUID, 'cal-id');
+        event.schedules = [];
+        apiSandbox.stub(publicInterface, 'getEventById').resolves(event);
+        const sameDayStub = apiSandbox.stub(publicInterface, 'findSameDayOccurrence');
+        router.get('/handler/:id', (req, res) => {
+          routes.getEvent(req, res);
+        });
+
+        const response = await request(testApp(router)).get(`/handler/${EVENT_UUID}?sameDayAs=20261340-9999`);
+
+        expect(response.status).toBe(200);
+        expect(response.body.sameDayOccurrenceStart).toBeNull();
+        expect(sameDayStub.called).toBe(false);
+      });
     });
   });
 
@@ -1326,7 +1439,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
       const response = await request(testApp(router)).get(`/handler/${EVENT_PROJ_UUID}`);
 
       expect(response.status).toBe(200);
-      assertEventRootProjection(response.body);
+      assertEventRootProjection(response.body, ['sameDayOccurrenceStart']);
     });
 
     it('listInstances: returns only allow-listed event-root keys on each instance event', async () => {
@@ -1387,7 +1500,7 @@ describe('Public API - toPublicEventObject shape contract', () => {
       expect(response.body.content.en.imageAlt).toBe('A crowd dancing under string lights');
       expect(response.body.content.fr.imageAlt).toBe('Une foule qui danse');
       // No other projection change: the event-root allow-list is untouched.
-      assertEventRootProjection(response.body);
+      assertEventRootProjection(response.body, ['sameDayOccurrenceStart']);
     });
 
     it('getSeries: returns only allow-listed event-root keys on each event in events[]', async () => {

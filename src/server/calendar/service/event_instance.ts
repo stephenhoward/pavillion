@@ -1687,6 +1687,43 @@ export default class EventInstanceService {
   }
 
   /**
+   * The event's only occurrence on the local calendar day of `startTime`, or
+   * null when that day holds none or several.
+   *
+   * The day is taken in the event's own zone, its base schedule's (DEC-023),
+   * so a link to an evening occurrence finds the same evening after the
+   * owner moves the time, wherever the visitor is. Occurrences come from the
+   * same set listing and materialization expand: a hidden cancellation is
+   * not one, a shown cancellation still is. Nothing is persisted.
+   *
+   * Bounded like {@link findOrMaterializeInstanceWithDetails}: a probe past
+   * the generation horizon on an unbounded recurring schedule returns null
+   * before rrule runs.
+   *
+   * @param event - The event; its schedules must be loaded
+   * @param startTime - Any instant on the day to search
+   * @returns The occurrence's start in UTC, or null
+   */
+  async findSameDayOccurrence(event: CalendarEvent, startTime: DateTime): Promise<DateTime | null> {
+    const base = event.baseSchedule();
+    if (!base?.startDate) {
+      return null;
+    }
+    const preflightMonths = await this.resolveGenerationHorizonMonths()
+      + EventInstanceService.UNBOUNDED_PREFLIGHT_MARGIN_MONTHS;
+    if (this.exceedsUnboundedHorizon(event, startTime, preflightMonths)) {
+      return null;
+    }
+
+    const local = startTime.setZone(base.startDate.zone);
+    const hits = this.rrules(event).between(
+      local.startOf('day').toJSDate(),
+      local.endOf('day').toJSDate(),
+    );
+    return hits.length === 1 ? DateTime.fromJSDate(hits[0]).toUTC() : null;
+  }
+
+  /**
    * Generates event instances from the event's schedules using RRule.
    *
    * Instance materialization differentiates between two schedule kinds:

@@ -106,6 +106,9 @@
   "event_source_calendar": "Source Calendar",
   "event_source_calendar_label": "View source calendar {{name}}",
   "event_details_sidebar": "Event details",
+  "event_page": {
+    "missing_occurrence_note": "This link was for {{date}}. There is no occurrence of this event at that time."
+  },
   "opens_in_new_tab": "opens in new tab",
   "url_prompt": {
     "tickets": "Tickets",

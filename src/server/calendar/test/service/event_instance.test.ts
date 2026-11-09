@@ -1122,6 +1122,107 @@ describe('EventInstanceService.listUpcomingOccurrences', () => {
 });
 
 /**
+ * Tests for EventInstanceService.findSameDayOccurrence: the occurrence an
+ * outdated dated link is sent to after the owner moves an event's time.
+ * Pure over the event's in-memory schedules, like listUpcomingOccurrences.
+ */
+describe('EventInstanceService.findSameDayOccurrence', () => {
+  const CHICAGO = 'America/Chicago';
+  let service: EventInstanceService;
+
+  function schedule(startIso: string, opts: {
+    frequency?: EventFrequency;
+    isExclusion?: boolean;
+    hideFromPublic?: boolean;
+  } = {}): CalendarEventSchedule {
+    const s = new CalendarEventSchedule(uuidv4(), DateTime.fromISO(startIso, { zone: CHICAGO }));
+    s.frequency = opts.frequency ?? null;
+    s.interval = opts.frequency ? 1 : 0;
+    s.count = 0;
+    s.byDay = [];
+    s.isExclusion = opts.isExclusion ?? false;
+    s.hideFromPublic = opts.hideFromPublic ?? true;
+    return s;
+  }
+
+  function eventWith(...schedules: CalendarEventSchedule[]): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = schedules;
+    return event;
+  }
+
+  async function sameDay(event: CalendarEvent, probeIso: string): Promise<string | null> {
+    const found = await service.findSameDayOccurrence(event, DateTime.fromISO(probeIso, { zone: 'utc' }));
+    return found?.toISO() ?? null;
+  }
+
+  beforeEach(() => {
+    service = new EventInstanceService(new EventEmitter());
+  });
+
+  it('finds a weekly series\' new time on the day an old link named', async () => {
+    // The series moved from Saturdays 18:00 to 10:30; the old link named 18:00.
+    const event = eventWith(schedule('2026-11-07T10:30:00', { frequency: EventFrequency.WEEKLY }));
+
+    expect(await sameDay(event, '2026-11-15T00:00:00Z')).toBe('2026-11-14T16:30:00.000Z');
+  });
+
+  it('finds a single date moved within its day', async () => {
+    const event = eventWith(schedule('2026-11-14T10:30:00'));
+
+    expect(await sameDay(event, '2026-11-15T00:00:00Z')).toBe('2026-11-14T16:30:00.000Z');
+  });
+
+  it('takes the day in the event\'s zone, not UTC', async () => {
+    // 19:00 Chicago is 01:00 UTC the next day; the old 17:00 link is still
+    // Saturday 14 November in UTC, so a UTC day would find nothing.
+    const event = eventWith(schedule('2026-11-07T19:00:00', { frequency: EventFrequency.WEEKLY }));
+
+    expect(await sameDay(event, '2026-11-14T23:00:00Z')).toBe('2026-11-15T01:00:00.000Z');
+  });
+
+  it('is null when the day holds two occurrences', async () => {
+    const event = eventWith(
+      schedule('2026-11-14T10:30:00'),
+      schedule('2026-11-14T15:00:00'),
+    );
+
+    expect(await sameDay(event, '2026-11-15T00:00:00Z')).toBeNull();
+  });
+
+  it('is null when the day holds no occurrence', async () => {
+    const event = eventWith(schedule('2026-11-07T10:30:00', { frequency: EventFrequency.WEEKLY }));
+
+    expect(await sameDay(event, '2026-11-12T00:00:00Z')).toBeNull();
+  });
+
+  it('does not count a hidden cancellation as an occurrence', async () => {
+    const event = eventWith(
+      schedule('2026-11-07T10:30:00', { frequency: EventFrequency.WEEKLY }),
+      schedule('2026-11-14T10:30:00', { isExclusion: true, hideFromPublic: true }),
+    );
+
+    expect(await sameDay(event, '2026-11-15T00:00:00Z')).toBeNull();
+  });
+
+  it('still finds an occurrence whose cancellation is shown', async () => {
+    const event = eventWith(
+      schedule('2026-11-07T10:30:00', { frequency: EventFrequency.WEEKLY }),
+      schedule('2026-11-14T10:30:00', { isExclusion: true, hideFromPublic: false }),
+    );
+
+    expect(await sameDay(event, '2026-11-15T00:00:00Z')).toBe('2026-11-14T16:30:00.000Z');
+  });
+
+  it('is null for a probe past the horizon on an unbounded series', async () => {
+    const event = eventWith(schedule('2026-11-07T10:30:00', { frequency: EventFrequency.DAILY }));
+    const farFuture = DateTime.utc().plus({ years: 5 }).toISO()!;
+
+    expect(await sameDay(event, farFuture)).toBeNull();
+  });
+});
+
+/**
  * Tests for EventInstanceService.cancelOccurrenceByDate and
  * .restoreOccurrenceByDate.
  *

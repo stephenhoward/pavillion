@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { reactive, onBeforeMount, ref, computed, watchEffect } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { DateTime } from 'luxon';
+import i18next from 'i18next';
 import { ArrowLeft, Calendar, MapPin, Accessibility } from 'lucide-vue-next';
 
 import CalendarService from '../service/calendar';
@@ -12,9 +14,11 @@ import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import { calendarPath, seriesPath } from '@/common/routing/public-paths';
+import { parseInstanceSlug } from '@/common/utils/instance-slug';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const router = useRouter();
 const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
@@ -28,6 +32,26 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+
+// Transient one-shot notices travel in router state, durable view state in
+// the query. event-instance.vue replaces an outdated dated link with this
+// page and leaves the linked start here, as an instance slug, so the page can
+// say that date has no occurrence. Read once: the history entry keeps it.
+const missingOccurrenceStart = (() => {
+  const slug = router.options.history.state?.missingOccurrence;
+  return typeof slug === 'string' ? parseInstanceSlug(slug) : null;
+})();
+
+/**
+ * The note for a link to a date with no occurrence, in the viewer's zone and
+ * the page's language (DEC-023: views show the viewer's zone); empty when
+ * this page was not reached from such a link.
+ */
+const missingOccurrenceNote = computed(() => {
+  if (!missingOccurrenceStart) return '';
+  const date = missingOccurrenceStart.toLocal().setLocale(i18next.language).toLocaleString(DateTime.DATETIME_MED);
+  return t('event_page.missing_occurrence_note', { date });
+});
 
 /**
  * Computed event-level accessibility info from event content.
@@ -215,6 +239,9 @@ function closeReportModal() {
 
     <main class="event-main" :aria-busy="state.isLoading">
       <div v-if="state.err" role="alert" class="error">{{ state.err }}</div>
+
+      <!-- Always mounted so the status region exists before its text does. -->
+      <p role="status" class="event-note">{{ missingOccurrenceNote }}</p>
 
       <!-- Hero image -->
       <div v-if="state.event.media" class="hero-image-wrapper">
@@ -450,6 +477,27 @@ function closeReportModal() {
 .source-calendar-pill {
   @include public-source-calendar-pill;
   margin-bottom: $public-space-md;
+}
+
+// ================================================================
+// MISSING-OCCURRENCE NOTE
+// ================================================================
+
+.event-note {
+  margin: 0 0 $public-space-lg 0;
+  padding: $public-space-md;
+  border-inline-start: 3px solid var(--pav-border-strong);
+  background: var(--pav-surface-secondary);
+  border-radius: $public-radius-sm;
+  color: var(--pav-text-primary);
+  font-size: $public-font-size-base;
+  line-height: $public-line-height-normal;
+
+  &:empty {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 }
 
 // ================================================================

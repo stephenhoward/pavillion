@@ -258,3 +258,71 @@ describe('CalendarService.listPublicCalendars', () => {
     expect(typeof result[0].lastEventActivity).toBe('string');
   });
 });
+
+describe('CalendarService.loadEventForMissingOccurrence', () => {
+  const sandbox = sinon.createSandbox();
+  const EVENT_ID = '11111111-1111-4111-8111-111111111111';
+  const LINKED = DateTime.fromISO('2026-11-15T00:00:00Z', { zone: 'utc' });
+  let service: CalendarService;
+
+  beforeEach(() => {
+    service = new CalendarService({} as any, {} as any);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('requests the event with the link\'s calendar and linked start', async () => {
+    const getModel = sandbox.stub(ModelService, 'getModel').resolves(null);
+
+    await service.loadEventForMissingOccurrence(EVENT_ID, LINKED, 'my cal');
+
+    expect(getModel.firstCall.args[0]).toBe(
+      `/api/public/v1/events/${EVENT_ID}?calendar=my%20cal&sameDayAs=20261115-0000`,
+    );
+  });
+
+  it('answers the event\'s only date when it has one', async () => {
+    sandbox.stub(ModelService, 'getModel').resolves({
+      id: EVENT_ID,
+      singleOccurrenceStart: '2026-11-21T16:30:00.000Z',
+      sameDayOccurrenceStart: null,
+    });
+
+    const result = await service.loadEventForMissingOccurrence(EVENT_ID, LINKED, 'cal');
+
+    expect(result!.event.id).toBe(EVENT_ID);
+    expect(result!.occurrenceStart!.toISO()).toBe('2026-11-21T16:30:00.000Z');
+  });
+
+  it('answers the same-day occurrence of an event with several dates', async () => {
+    sandbox.stub(ModelService, 'getModel').resolves({
+      id: EVENT_ID,
+      singleOccurrenceStart: null,
+      sameDayOccurrenceStart: '2026-11-14T16:30:00.000Z',
+    });
+
+    const result = await service.loadEventForMissingOccurrence(EVENT_ID, LINKED, 'cal');
+
+    expect(result!.occurrenceStart!.toISO()).toBe('2026-11-14T16:30:00.000Z');
+  });
+
+  it('answers no occurrence when the response names neither', async () => {
+    sandbox.stub(ModelService, 'getModel').resolves({
+      id: EVENT_ID,
+      singleOccurrenceStart: null,
+      sameDayOccurrenceStart: null,
+    });
+
+    const result = await service.loadEventForMissingOccurrence(EVENT_ID, LINKED, 'cal');
+
+    expect(result!.occurrenceStart).toBeNull();
+  });
+
+  it('answers null when the event is not found on that calendar', async () => {
+    sandbox.stub(ModelService, 'getModel').resolves(null);
+
+    expect(await service.loadEventForMissingOccurrence(EVENT_ID, LINKED, 'cal')).toBeNull();
+  });
+});
