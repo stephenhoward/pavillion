@@ -82,6 +82,22 @@ describe('EventInstanceService.generateInstances', () => {
     service = new EventInstanceService(new EventEmitter());
   });
 
+  it.each([
+    ['null', null],
+    ['zero', 0],
+  ])('expands a weekly schedule stored with a %s interval as interval 1', (_label, interval) => {
+    const schedule = createSchedule({
+      startDate: DateTime.fromISO('2026-04-10T09:00:00-07:00'),
+      endDate: DateTime.fromISO('2026-04-30T09:00:00-07:00'),
+      frequency: EventFrequency.WEEKLY,
+    });
+    schedule.interval = interval as unknown as number;
+
+    const instances = (service as any).generateInstances(createEvent([schedule]), new Date('2026-04-01T00:00:00Z'), HORIZON_MONTHS);
+
+    expect(instances).toHaveLength(3);
+  }, 5000);
+
   it('should compute correct end time for non-recurring event with eventEndTime', () => {
     const start = DateTime.fromISO('2026-04-10T10:00:00');
     const endTime = DateTime.fromISO('2026-04-10T12:00:00');
