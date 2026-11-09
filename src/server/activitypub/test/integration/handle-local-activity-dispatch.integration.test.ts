@@ -31,6 +31,10 @@
  *      observable invariant (one row after two dispatches) rather than the
  *      specific Sequelize method used.
  *
+ *   6. Dispatch runs once per recipient: a row already marked ok is not
+ *      dispatched again (Announce to two recipients, and a redelivered
+ *      Create), while a row left in error is.
+ *
  * These tests were previously colocated with the unit tests in
  * src/server/activitypub/test/inbox.test.ts but are behaviorally integration
  * tests — they set up the full AP schema, create real CalendarEntity /
@@ -532,5 +536,103 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       rows.length,
       'duplicate dispatches of the same activity must produce exactly one inbox row',
     ).toBe(1);
+  });
+
+  describe('dispatch runs once per recipient', () => {
+    /**
+     * A local source calendar with its actor row, and the EventObjectEntity
+     * for one of its events, so an Announce of that event resolves locally.
+     */
+    const createSourceWithEvent = async (urlName: string): Promise<{ actorUri: string; eventApId: string }> => {
+      const calendarId = uuidv4();
+      await CalendarEntity.create({ id: calendarId, url_name: urlName, account_id: uuidv4(), languages: 'en' });
+      const actorUri = `https://test.local/calendars/${urlName}`;
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'local',
+        actor_uri: actorUri,
+        remote_display_name: null,
+        remote_domain: null,
+        calendar_id: calendarId,
+        private_key: null,
+      });
+      const eventApId = `${actorUri}/events/once`;
+      await EventObjectEntity.create({ event_id: uuidv4(), ap_id: eventApId, attributed_to: actorUri });
+      return { actorUri, eventApId };
+    };
+
+    const inboxRow = (calendarId: string, activityId: string) =>
+      ActivityPubInboxMessageEntity.findOne({ where: { calendar_id: calendarId, id: activityId } });
+
+    it('dispatches again when the earlier dispatch left the row in error', async () => {
+      const { actorUri, eventApId } = await createSourceWithEvent('source-retry');
+      const announce = new AnnounceActivity(actorUri, eventApId);
+
+      const dispatchByType = sandbox.stub(inboxService as any, 'dispatchByType');
+      dispatchByType.onFirstCall().rejects(new Error('transient failure'));
+      dispatchByType.callThrough();
+
+      await expect(inboxService.handleLocalActivityDispatch(testCalendar, announce)).rejects.toThrow('transient failure');
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('error');
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+
+      expect(dispatchByType.callCount, 'a row left in error must be dispatched again').toBe(2);
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('ok');
+    });
+
+    // ap_inbox is keyed on the activity id alone, so the second recipient's
+    // row collides on the primary key and its dispatch throws (the same gap
+    // inbox-dispatch-every-local-recipient.integration.test.ts records for
+    // the HTTP path). Un-skip when the ap_inbox composite-key change lands.
+    it.skip('runs each of two local recipients once when the activity is dispatched to both twice', async () => {
+      const { actorUri, eventApId } = await createSourceWithEvent('source-two-recipients');
+      const secondCalendar = new Calendar(uuidv4(), 'second-recipient');
+      await CalendarEntity.create({
+        id: secondCalendar.id,
+        url_name: secondCalendar.urlName,
+        account_id: uuidv4(),
+        languages: 'en',
+      });
+      const announce = new AnnounceActivity(actorUri, eventApId);
+
+      const dispatchByType = sandbox.spy(inboxService as any, 'dispatchByType');
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(secondCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(secondCalendar, announce);
+
+      const dispatchedCalendarIds = dispatchByType.getCalls().map((call) => (call.args[0] as Calendar).id);
+      expect(dispatchedCalendarIds.sort()).toEqual([testCalendar.id, secondCalendar.id].sort());
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('ok');
+      expect((await inboxRow(secondCalendar.id, announce.id!))!.processed_status).toBe('ok');
+    });
+
+    it('adds the event once when the same Create is dispatched twice', async () => {
+      // Drain redelivery to a local follower is a Create(Event) through
+      // processCreateEvent under trustLocalOrigin, not the Announce path.
+      const { actorUri } = await createSourceWithEvent('source-create-twice');
+      const addRemoteEventStub = sandbox
+        .stub(calendarInterface, 'addRemoteEvent')
+        .resolves(new CalendarEvent(uuidv4(), null));
+
+      const apEventId = `${actorUri}/events/create-twice`;
+      const createActivity = CreateActivity.fromObject({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        actor: actorUri,
+        id: `${apEventId}/create`,
+        object: { type: 'Event', id: apEventId, name: 'Create Twice', attributedTo: actorUri },
+      });
+      expect(createActivity, 'CreateActivity must parse').not.toBeNull();
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, createActivity!);
+      await inboxService.handleLocalActivityDispatch(testCalendar, createActivity!);
+
+      expect(addRemoteEventStub.callCount, 'a redelivered Create must not add the event again').toBe(1);
+      expect(await EventObjectEntity.count({ where: { ap_id: apEventId } })).toBe(1);
+      expect((await inboxRow(testCalendar.id, createActivity!.id!))!.processed_status).toBe('ok');
+    });
   });
 });

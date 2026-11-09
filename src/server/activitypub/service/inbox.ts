@@ -2623,7 +2623,9 @@ class ProcessInboxService {
       return;
     }
 
-    // Idempotent inbox row insertion. Mirrors the same lookup-then-build
+    // Idempotent inbox row insertion and idempotent dispatch: a row already
+    // marked 'ok' is not dispatched again (see the check after this block).
+    // Mirrors the same lookup-then-build
     // pattern used by ProcessActivityPubServerService.addToInbox so the
     // shape of the persisted row (id == activity AP id, calendar_id ==
     // recipient calendar) matches the HTTP-arrived path exactly. The
@@ -2683,6 +2685,20 @@ class ProcessInboxService {
           throw createError;
         }
       }
+    }
+
+    // Dispatching the same activity to the same recipient twice has the
+    // effect of once: a row this recipient already processed successfully is
+    // not run again. Any other status ('error', or null on a fresh row)
+    // dispatches, so a failed delivery can be retried. The check sits after
+    // the find-or-create block so the create-race path gets it too. Trusting
+    // an 'ok' row is safe because a peer cannot write a row under one of our
+    // ids: writeInboxRow refuses an id not on the authenticated origin.
+    //
+    // This covers repeat dispatch, not concurrent dispatch: two overlapping
+    // calls can both see a non-ok status and both dispatch.
+    if (messageEntity.processed_status === 'ok') {
+      return;
     }
 
     try {

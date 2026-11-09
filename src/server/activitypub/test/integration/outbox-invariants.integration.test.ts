@@ -408,9 +408,7 @@ describe('Outbox delivery invariants', () => {
       sandbox.restore();
     });
 
-    // un-skipped by pv-w8sl.3
-    // fails today because handleLocalActivityDispatch reuses the processed inbox row but dispatches it again.
-    it.skip('runs dispatchByType once when the same activity is dispatched to the same local calendar twice', async () => {
+    it('runs dispatchByType once when the same activity is dispatched to the same local calendar twice', async () => {
       const source = await createLocalCalendar('invariantsource');
       const recipient = await createLocalCalendar('invariantrecipient');
 

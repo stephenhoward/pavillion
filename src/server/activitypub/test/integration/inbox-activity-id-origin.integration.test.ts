@@ -22,6 +22,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import crypto from 'crypto';
+import config from 'config';
 
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
@@ -110,6 +111,26 @@ describe('Inbox activity id must be on the signing origin', () => {
       type: 'Announce',
       actor: FOREIGN_ACTOR,
       object: `https://${ORIGIN_HOST}/events/claimed-by-foreign`,
+    };
+
+    const response = await postSigned(activity, FOREIGN_ACTOR);
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ActivityIdOriginMismatchError');
+    expect(await ActivityPubInboxMessageEntity.findByPk(activityId)).toBeNull();
+  });
+
+  it('refuses a peer-signed POST whose id is on this instance\'s origin and writes no row', async () => {
+    // Local dispatch skips an inbox row already marked ok, so a peer that
+    // could plant a row under one of our ids could suppress our own
+    // activity's local dispatch. The gate must refuse it.
+    const activityId = `https://${config.get<string>('domain')}/calendars/${testCalendar.urlName}/activities/claimed-by-peer`;
+    const activity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      id: activityId,
+      type: 'Announce',
+      actor: FOREIGN_ACTOR,
+      object: `https://${FOREIGN_HOST}/events/claimed-by-peer`,
     };
 
     const response = await postSigned(activity, FOREIGN_ACTOR);
