@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import config from 'config';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
@@ -55,6 +56,18 @@ const REMOTE_CALENDAR_HANDLE = 'remotecalendar@remotedomain.test';
 const REMOTE_PROFILE_URL = 'https://remotedomain.test/calendars/testcalendar';
 const REMOTE_INBOX_URL = 'https://remotedomain.test/calendars/testcalendar/inbox';
 const OBSERVER_CALENDAR_HANDLE = 'observercalendar@observerdomain.test';
+
+// The fixtures mint activity ids on local.federation.test, standing for this
+// instance. processOutboxMessage refuses local dispatch of an id off the
+// configured domain, so the configured domain is that host for this file.
+const configGet = config.get.bind(config);
+beforeEach(() => {
+  vi.spyOn(config, 'get').mockImplementation(((key: string) =>
+    key === 'domain' ? 'local.federation.test' : configGet(key)) as typeof config.get);
+});
+afterEach(() => {
+  vi.mocked(config.get).mockRestore?.();
+});
 
 /** Stub signing on a service so deliverViaHttp can proceed without real keypairs. */
 function stubSigning(service: ProcessOutboxService, sandbox: sinon.SinonSandbox) {

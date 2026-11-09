@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
 import { Op } from "sequelize";
+import config from "config";
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -43,7 +44,7 @@ import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { boundProcessedStatus } from "@/server/activitypub/helper/outbox";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
-import { ActivityIdOriginMismatchError } from "@/server/activitypub/helper/activity-id-origin";
+import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from "@/server/activitypub/helper/activity-id-origin";
 
 /** Options for {@link ProcessOutboxService.processOutboxMessages}. */
 export interface ProcessOutboxMessagesOptions {
@@ -272,22 +273,22 @@ class ProcessOutboxService {
   }
 
   /**
-   * Whether a later row in the same outbox already retracts this one: for a
-   * Create, Update or Announce, a Delete with id `{objectId}/delete` or an
-   * Undo with id `{rowId}/undo` (DEC-024 rule 10). The type is matched as
-   * well as the id, as `readOutbox`'s Undo probe does.
+   * Whether a later row in the same outbox already retracts this one: for any
+   * row, an Undo with id `{rowId}/undo` (an Undo(Follow) retracts a Follow);
+   * for a Create, Update or Announce, also a Delete with id `{objectId}/delete`
+   * (DEC-024 rule 10). The type is matched as well as the id, as
+   * `readOutbox`'s Undo probe does.
    *
    * @param message - An unprocessed outbox row
    * @returns True when the row should be skipped rather than delivered
    */
   private async isSupersededOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<boolean> {
-    if ( !['Create', 'Update', 'Announce'].includes(message.type) ) {
-      return false;
-    }
     const retractions: Record<string, string>[] = [{ id: `${message.id}/undo`, type: 'Undo' }];
-    const objectId = objectIdOf((message.message as Record<string, unknown> | null)?.object);
-    if ( objectId ) {
-      retractions.push({ id: `${objectId}/delete`, type: 'Delete' });
+    if ( ['Create', 'Update', 'Announce'].includes(message.type) ) {
+      const objectId = objectIdOf((message.message as Record<string, unknown> | null)?.object);
+      if ( objectId ) {
+        retractions.push({ id: `${objectId}/delete`, type: 'Delete' });
+      }
     }
     const found = await ActivityPubOutboxMessageEntity.count({ where: { [Op.or]: retractions } });
     return found > 0;
@@ -510,9 +511,21 @@ class ProcessOutboxService {
       // actor URI resolves to a local calendar via
       // getLocalCalendarByActorUri.
 
+      const resolved: { recipient: string; localCalendar: Calendar | null }[] = [];
       for (const recipient of recipients) {
-        const localCalendar = await this.calendarActorService.getLocalCalendarByActorUri(recipient);
+        resolved.push({ recipient, localCalendar: await this.calendarActorService.getLocalCalendarByActorUri(recipient) });
+      }
 
+      // Local dispatch accepts only activity ids on our own origin. Checked
+      // once, before anyone receives anything, so a broken own-origin
+      // invariant ends the row `error:` (unpublished) whatever the recipient
+      // order. Remote-only delivery of an off-origin id stays valid.
+      if ( activity.id && resolved.some(entry => entry.localCalendar)
+        && !isActivityIdOnOrigin(activity.id, `https://${config.get<string>('domain')}`) ) {
+        throw new ActivityIdOriginMismatchError('Local dispatch refused: activity id is not on this instance\'s domain');
+      }
+
+      for (const { recipient, localCalendar } of resolved) {
         if (localCalendar) {
           // Local in-process path: skip HTTP entirely.
           try {
@@ -520,9 +533,7 @@ class ProcessOutboxService {
             logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
-            // An activity id off our own origin is a broken invariant of this
-            // row, not one recipient's delivery failure: it ends the row as
-            // `error:` (unserved), never `partial:` (served).
+            // Defence in depth behind the check above: never a `partial:`.
             if (error instanceof ActivityIdOriginMismatchError) {
               throw error;
             }

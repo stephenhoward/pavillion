@@ -25,8 +25,14 @@ import CreateActivity from '@/server/activitypub/model/action/create';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import UndoActivity from '@/server/activitypub/model/action/undo';
+import FollowActivity from '@/server/activitypub/model/action/follow';
+import ActivityPubService from '@/server/activitypub/service/server';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
-import { ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import {
+  ActivityPubInboxMessageEntity,
+  ActivityPubOutboxMessageEntity,
+  FollowerCalendarEntity,
+} from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -140,6 +146,20 @@ function postedActivityIds(post: sinon.SinonStub): string[] {
 function outboxService(): ProcessOutboxService {
   const eventBus = new EventEmitter();
   return new ProcessOutboxService(eventBus, new ProcessInboxService(eventBus, new CalendarInterface(eventBus)));
+}
+
+/** Makes `follower` (a local calendar) follow `calendar`. */
+async function addLocalFollower(calendar: Calendar, follower: Calendar): Promise<void> {
+  const followerActor = await CalendarActorEntity.findOne({ where: { calendar_id: follower.id } });
+  await FollowerCalendarEntity.create({ id: uuidv4(), calendar_actor_id: followerActor!.id, calendar_id: calendar.id });
+}
+
+/** An Announce by `calendar` of its own event, resolvable locally. */
+async function localAnnounce(calendar: Calendar, slug: string): Promise<AnnounceActivity> {
+  const actor = calendarActorUri(calendar);
+  const eventApId = `${actor}/events/${slug}`;
+  await EventObjectEntity.create({ event_id: uuidv4(), ap_id: eventApId, attributed_to: actor });
+  return new AnnounceActivity(actor, eventApId);
 }
 
 describe('Outbox drain', () => {
@@ -276,6 +296,24 @@ describe('Outbox drain', () => {
       expect((await storedRow(unrelated.id)).processed_status).toBe('ok');
     });
 
+    it('skips a stranded Follow whose Undo(Follow) is in the outbox, and delivers the Undo', async () => {
+      const calendar = await createFollowedCalendar('drainundofollow');
+      const actor = calendarActorUri(calendar);
+      const follow = new FollowActivity(actor, FOLLOWER);
+      const followRow = await writeOutboxRow(calendar, follow);
+      // The shape the unfollow path writes: the Follow embedded, sent to the
+      // followed actor; its id is `{followId}/undo`.
+      const undo = new UndoActivity(actor, { id: follow.id, type: 'Follow', actor, object: FOLLOWER });
+      undo.to = [FOLLOWER];
+      const undoRow = await writeOutboxRow(calendar, undo);
+
+      await outboxService().processOutboxMessages();
+
+      expect((await storedRow(followRow.id)).processed_status).toBe('skipped: superseded');
+      expect((await storedRow(undoRow.id)).processed_status).toBe('ok');
+      expect(postedActivityIds(axiosPost), 'the peer gets the Undo, never the Follow it retracts').toEqual([undo.id]);
+    });
+
     it('is not superseded by a row of another type whose id ends in /delete or /undo', async () => {
       const calendar = await createFollowedCalendar('drainsupersededtype');
       const actor = calendarActorUri(calendar);
@@ -399,21 +437,86 @@ describe('Outbox drain', () => {
     // Local dispatch refuses an activity id off the instance domain. That is a
     // broken invariant of the row, not one recipient's failure, so the row is
     // unserved (error:) rather than served with a delivery note (partial:).
+    // The source also has a remote follower; the check runs before anyone
+    // is reached, so that follower gets nothing either, whatever the order.
     const source = await createFollowedCalendar('drainorigin');
-    const local = await createFollowedCalendar('drainoriginlocal');
-    const localActor = await CalendarActorEntity.findOne({ where: { calendar_id: local.id } });
-    await FollowerCalendarEntity.create({ id: uuidv4(), calendar_actor_id: localActor!.id, calendar_id: source.id });
-
-    const sourceActor = calendarActorUri(source);
-    const eventApId = `${sourceActor}/events/foreign-id`;
-    await EventObjectEntity.create({ event_id: uuidv4(), ap_id: eventApId, attributed_to: sourceActor });
-    const announce = new AnnounceActivity(sourceActor, eventApId);
+    await addLocalFollower(source, await createFollowedCalendar('drainoriginlocal'));
+    const announce = await localAnnounce(source, 'foreign-id');
     announce.id = `https://foreign.example/activities/${uuidv4()}`;
     const row = await writeOutboxRow(source, announce);
 
     await outboxService().processOutboxMessages();
 
     expect((await storedRow(row.id)).processed_status).toMatch(/^error: Local dispatch refused/);
+    expect(axiosPost.called, 'no remote recipient receives an unpublished row').toBe(false);
+  });
+
+  it('still delivers an off-origin activity id when every recipient is remote', async () => {
+    const source = await createFollowedCalendar('drainoriginremote');
+    const announce = await localAnnounce(source, 'remote-only');
+    announce.id = `https://foreign.example/activities/${uuidv4()}`;
+    const row = await writeOutboxRow(source, announce);
+
+    await outboxService().processOutboxMessages();
+
+    expect((await storedRow(row.id)).processed_status).toBe('ok');
+    expect(postedInboxes(axiosPost)).toEqual([`${FOLLOWER}/inbox`]);
+  });
+
+  it('does not dispatch again to a local recipient that already took a stranded row', async () => {
+    // A restart after local dispatch finished but before the outbox row was
+    // marked: the recipient's inbox row is ok, the outbox row is still null.
+    const source = await createFollowedCalendar('drainredispatch');
+    const recipient = await createFollowedCalendar('drainredispatchlocal');
+    await addLocalFollower(source, recipient);
+    // A Create(Event) whose event identity exists, as handleEventCreated
+    // writes it before the fan-out.
+    const create = publicCreate(source, 'once');
+    await EventObjectEntity.create({
+      event_id: uuidv4(),
+      ap_id: (create.object as { id: string }).id,
+      attributed_to: calendarActorUri(source),
+    });
+    const row = await writeOutboxRow(source, create);
+
+    const eventBus = new EventEmitter();
+    const inboxService = new ProcessInboxService(eventBus, new CalendarInterface(eventBus));
+    await inboxService.handleLocalActivityDispatch(recipient, create);
+    const inboxRow = await ActivityPubInboxMessageEntity.findOne({ where: { calendar_id: recipient.id, id: create.id } });
+    expect(inboxRow?.processed_status, 'fixture: the first dispatch completed').toBe('ok');
+    expect((await storedRow(row.id)).processed_time, 'fixture: the outbox row is stranded').toBeNull();
+
+    const dispatchByType = sandbox.spy(inboxService as unknown as { dispatchByType: () => Promise<void> }, 'dispatchByType');
+    await new ProcessOutboxService(eventBus, inboxService).processOutboxMessages();
+
+    expect(dispatchByType.called, 'the recipient is not dispatched to a second time').toBe(false);
+    expect(await ActivityPubInboxMessageEntity.count({ where: { calendar_id: recipient.id, id: create.id } })).toBe(1);
+    expect((await storedRow(row.id)).processed_status).toBe('ok');
+  });
+
+  it('serves and counts a drained public row whose delivery to one follower failed', async () => {
+    const calendar = await createFollowedCalendar('drainpartial');
+    // A second remote follower whose actor fetch rejects (no stub answers it).
+    const gone = await CalendarActorEntity.create({
+      id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
+      actor_uri: 'https://gone.example/calendars/gone',
+      inbox_url: 'https://gone.example/calendars/gone/inbox',
+      remote_domain: 'gone.example',
+    });
+    await FollowerCalendarEntity.create({ id: uuidv4(), calendar_actor_id: gone.id, calendar_id: calendar.id });
+    const create = publicCreate(calendar, 'partly-delivered');
+    const row = await writeOutboxRow(calendar, create);
+
+    await outboxService().processOutboxMessages();
+
+    expect((await storedRow(row.id)).processed_status).toMatch(/^partial: /);
+    const eventBus = new EventEmitter();
+    const reader = new ActivityPubService(eventBus, new CalendarInterface(eventBus), new AccountsInterface());
+    const { items, totalItems } = await reader.readOutbox(calendar.id);
+    expect(items.map(item => item.id)).toEqual([create.id]);
+    expect(totalItems).toBe(1);
   });
 
   it('the live handler does not deliver a row the drain processed while it sat queued', async () => {
