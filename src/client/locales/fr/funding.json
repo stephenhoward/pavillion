@@ -48,6 +48,8 @@
   "manage_payment_button": "Gérer le mode de paiement",
   "cancel_funding_plan_button": "Annuler le plan",
   "cancel_confirm": "Annuler votre plan de financement ? Votre plan prendra fin à la clôture de la période de facturation en cours, et vous conserverez les fonctionnalités étendues jusque-là. Vos calendriers restent en ligne quoi qu'il arrive.",
+  "cancel_confirm_title": "Annuler votre plan de financement ?",
+  "cancel_dismiss_button": "Conserver le plan",
   "cancel_success": "Plan de financement annulé. Vous conserverez les fonctionnalités étendues jusqu'à la fin de votre période de facturation.",
   "cancel_error": "Échec de l'annulation du plan de financement. Veuillez réessayer.",
   "resume_funding_plan_button": "Conserver mon plan",

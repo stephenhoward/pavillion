@@ -31,6 +31,7 @@ describe('Funding Plan UI Components', () => {
       getStatus: vi.spyOn(FundingService.prototype, 'getStatus').mockResolvedValue(null),
       getCalendarsInFundingPlan: vi.spyOn(FundingService.prototype, 'getCalendarsInFundingPlan').mockResolvedValue([]),
       cancel: vi.spyOn(FundingService.prototype, 'cancel').mockResolvedValue(true),
+      forceCancel: vi.spyOn(FundingService.prototype, 'forceCancelFundingPlan').mockResolvedValue(true),
     };
 
     // Create router for component testing
@@ -57,6 +58,11 @@ describe('Funding Plan UI Components', () => {
               currency_label: 'Currency',
               pwyc_label: 'Pay What You Can',
               grace_period_label: 'Grace Period (days)',
+              status_active: 'Active',
+              force_cancel_button: 'Cancel',
+              force_cancel_confirm_title: 'Force-cancel this funding plan?',
+              force_cancel_confirm: 'This action cannot be undone.',
+              force_cancel_dismiss_button: 'Keep Plan',
             },
           },
           funding: {
@@ -69,6 +75,9 @@ describe('Funding Plan UI Components', () => {
             billing_cycle_monthly: 'Monthly',
             billing_cycle_yearly: 'Yearly',
             cancel_success: 'Your funding plan has been cancelled',
+            cancel_confirm_title: 'Cancel your funding plan?',
+            cancel_confirm: 'Your plan ends at the close of the billing period.',
+            cancel_dismiss_button: 'Keep Plan',
             status_suspended: 'Suspended',
             suspended_message: 'Update your payment details to reactivate it.',
           },
@@ -201,12 +210,18 @@ describe('Funding Plan UI Components', () => {
     expect(wrapper.find('.no-funding-plan').exists()).toBe(false);
   });
 
-  it('cancels the plan after confirmation and stops offering to cancel', async () => {
+  const clickButton = async (wrapper: any, label: string) => {
+    await wrapper.findAll('button').find((b: any) => b.text() === label)!.trigger('click');
+    await flushPromises();
+  };
+
+  it('asks in the app modal before cancelling, and cancels once confirmed', async () => {
     fundingStubs.getOptions.mockResolvedValue({ enabled: true });
     fundingStubs.getStatus
       .mockResolvedValueOnce(activePlan)
       .mockResolvedValue({ ...activePlan, cancelAt: '2026-11-01T00:00:00Z' });
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    const nativeConfirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', nativeConfirm);
 
     const wrapper = await mountAccount();
     const cancelButton = wrapper.find('.funding-plan-actions button.danger');
@@ -215,9 +230,71 @@ describe('Funding Plan UI Components', () => {
     await cancelButton.trigger('click');
     await flushPromises();
 
+    // The modal asks; nothing is cancelled yet.
+    expect(wrapper.find('dialog').text()).toContain('Your plan ends at the close of the billing period.');
+    expect(fundingStubs.cancel).not.toHaveBeenCalled();
+
+    await clickButton(wrapper.find('dialog'), 'Cancel Plan');
+
+    expect(nativeConfirm).not.toHaveBeenCalled();
     expect(fundingStubs.cancel).toHaveBeenCalledOnce();
+    expect(wrapper.find('dialog').exists()).toBe(false);
     expect(wrapper.find('.success-message').text()).toBe('Your funding plan has been cancelled');
     expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(false);
+  });
+
+  it('keeps the plan when the cancellation modal is dismissed', async () => {
+    fundingStubs.getOptions.mockResolvedValue({ enabled: true });
+    fundingStubs.getStatus.mockResolvedValue(activePlan);
+
+    const wrapper = await mountAccount();
+    await wrapper.find('.funding-plan-actions button.danger').trigger('click');
+    await flushPromises();
+    await clickButton(wrapper.find('dialog'), 'Keep Plan');
+
+    expect(fundingStubs.cancel).not.toHaveBeenCalled();
+    expect(wrapper.find('dialog').exists()).toBe(false);
+    expect(wrapper.find('.funding-plan-actions button.danger').exists()).toBe(true);
+  });
+
+  describe('admin force-cancel', () => {
+    const mountWithPlan = async () => {
+      fundingStubs.getSettings.mockResolvedValue(enabledSettings);
+      fundingStubs.getProviders.mockResolvedValue([stripe(true)]);
+      fundingStubs.listFundingPlans.mockResolvedValue({
+        fundingPlans: [{ ...activePlan, id: 'plan-9' }],
+        pagination: { totalCount: 1 },
+      } as any);
+      return mountAdmin();
+    };
+
+    it('asks in the app modal and force-cancels once confirmed', async () => {
+      const nativeConfirm = vi.fn(() => true);
+      vi.stubGlobal('confirm', nativeConfirm);
+      const wrapper = await mountWithPlan();
+
+      await wrapper.find('.action-link--danger').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('dialog').text()).toContain('This action cannot be undone.');
+      expect(fundingStubs.forceCancel).not.toHaveBeenCalled();
+
+      await clickButton(wrapper.find('dialog'), 'Cancel');
+
+      expect(nativeConfirm).not.toHaveBeenCalled();
+      expect(fundingStubs.forceCancel).toHaveBeenCalledWith('plan-9');
+      expect(wrapper.find('dialog').exists()).toBe(false);
+    });
+
+    it('does not force-cancel when the modal is dismissed', async () => {
+      const wrapper = await mountWithPlan();
+
+      await wrapper.find('.action-link--danger').trigger('click');
+      await flushPromises();
+      await clickButton(wrapper.find('dialog'), 'Keep Plan');
+
+      expect(fundingStubs.forceCancel).not.toHaveBeenCalled();
+      expect(wrapper.find('dialog').exists()).toBe(false);
+    });
   });
 
   it('offers the billing portal to a suspended plan, where its payment details are updated', async () => {

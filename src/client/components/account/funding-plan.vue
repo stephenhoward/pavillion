@@ -5,6 +5,7 @@ import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { CoveredCalendarInfo } from '@/client/service/funding';
+import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const { t } = useTranslation('funding');
@@ -17,6 +18,7 @@ const router = useRouter();
 // State management
 const loading = ref(true);
 const processing = ref(false);
+const showCancelConfirm = ref(false);
 const successMessage = ref('');
 const errorMessage = ref('');
 
@@ -164,9 +166,7 @@ async function loadData() {
  * Cancel funding plan
  */
 async function cancelFundingPlan() {
-  if (!confirm(t('cancel_confirm'))) {
-    return;
-  }
+  showCancelConfirm.value = false;
 
   processing.value = true;
   errorMessage.value = '';
@@ -318,7 +318,7 @@ onMounted(async () => {
             type="button"
             class="danger"
             :disabled="processing"
-            @click="cancelFundingPlan"
+            @click="showCancelConfirm = true"
           >
             {{ t("cancel_funding_plan_button") }}
           </button>
@@ -346,6 +346,16 @@ onMounted(async () => {
         <p>{{ t("funding_disabled") }}</p>
       </div>
     </div>
+
+    <ConfirmDeleteDialog
+      :visible="showCancelConfirm"
+      :title="t('cancel_confirm_title')"
+      :message="t('cancel_confirm')"
+      :delete-label="t('cancel_funding_plan_button')"
+      :cancel-label="t('cancel_dismiss_button')"
+      @confirm="cancelFundingPlan"
+      @close="showCancelConfirm = false"
+    />
   </section>
 </template>
 

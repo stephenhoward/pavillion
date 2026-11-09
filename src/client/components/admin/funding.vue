@@ -5,6 +5,7 @@ import { ref, computed, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
+import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
 import StripeWebhookCheck from './stripe-webhook-check.vue';
@@ -51,6 +52,7 @@ const providersLoading = ref(false);
 // null until checked, and never checked without a configured Stripe provider
 const stripeWebhookCheck = ref<StripeWebhookCheckResult | null>(null);
 const connectingProvider = ref(null); // Track which provider is currently connecting
+const planToForceCancel = ref<string | null>(null); // Plan id awaiting force-cancel confirmation
 const showDisconnectModal = ref(false); // Control disconnect confirmation modal visibility
 const disconnectModalData = ref({
   providerType: '',
@@ -462,9 +464,7 @@ async function confirmDisconnect() {
  * Force cancel a funding plan
  */
 async function forceCancelFundingPlan(planId) {
-  if (!confirm(t('force_cancel_confirm'))) {
-    return;
-  }
+  planToForceCancel.value = null;
 
   try {
     const success = await fundingService.forceCancelFundingPlan(planId);
@@ -682,7 +682,7 @@ onMounted(async () => {
                       v-if="sub.status === 'active'"
                       type="button"
                       class="action-link action-link--danger"
-                      @click="forceCancelFundingPlan(sub.id)"
+                      @click="planToForceCancel = sub.id"
                     >
                       {{ t("force_cancel_button") }}
                     </button>
@@ -718,7 +718,7 @@ onMounted(async () => {
                   v-if="sub.status === 'active'"
                   type="button"
                   class="action-link-mobile action-link--danger"
-                  @click="forceCancelFundingPlan(sub.id)"
+                  @click="planToForceCancel = sub.id"
                 >
                   {{ t("force_cancel_button") }}
                 </button>
@@ -1188,6 +1188,17 @@ onMounted(async () => {
         </div>
       </section>
     </template>
+
+    <!-- Force-cancel Confirmation Modal -->
+    <ConfirmDeleteDialog
+      :visible="planToForceCancel !== null"
+      :title="t('force_cancel_confirm_title')"
+      :message="t('force_cancel_confirm')"
+      :delete-label="t('force_cancel_button')"
+      :cancel-label="t('force_cancel_dismiss_button')"
+      @confirm="forceCancelFundingPlan(planToForceCancel)"
+      @close="planToForceCancel = null"
+    />
 
     <!-- Disconnect Confirmation Modal -->
     <ConfirmDisconnectModal
