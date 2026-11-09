@@ -219,8 +219,8 @@ class ProcessOutboxService {
 
   /**
    * The outbox drain: delivers unprocessed rows oldest first, skipping
-   * superseded ones and marking a row that throws `error:` (DEC-024 rules 9
-   * and 10). Web process only, because delivery runs local dispatch.
+   * superseded ones and marking a row that throws `error:` (DEC-024 rules 6
+   * and 7). Web process only, because delivery runs local dispatch.
    *
    * @param options.skipNewerThanMs - Leave rows whose `message_time` is later
    *   than this many ms before the call; the cutoff is fixed once per call
@@ -276,7 +276,7 @@ class ProcessOutboxService {
    * Whether a later row in the same outbox already retracts this one: for any
    * row, an Undo with id `{rowId}/undo` (an Undo(Follow) retracts a Follow);
    * for a Create, Update or Announce, also a Delete with id `{objectId}/delete`
-   * (DEC-024 rule 10). The type is matched as well as the id, as
+   * (DEC-024 rule 7). The type is matched as well as the id, as
    * `readOutbox`'s Undo probe does.
    *
    * @param message - An unprocessed outbox row

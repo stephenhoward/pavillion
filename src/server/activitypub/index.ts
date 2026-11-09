@@ -22,7 +22,7 @@ export const INBOX_DRAIN_SKIP_NEWER_THAN_MS = 10_000;
 /**
  * Interval ticks leave outbox rows written this recently to the live
  * handler, which delivers without a claim. Fifteen minutes because one
- * fan-out with a dead peer can outlast ten seconds (DEC-024 rule 9).
+ * fan-out with a dead peer can outlast ten seconds (DEC-024 rule 6).
  */
 export const OUTBOX_DRAIN_SKIP_NEWER_THAN_MS = 900_000;
 
@@ -119,7 +119,7 @@ export default class ActivityPubDomain {
    * Start delivering outbox rows a restart stranded: once now, taking only
    * rows written before the drain began, then every
    * `activitypub.outboxDrain.intervalMs`, leaving rows newer than
-   * {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery (DEC-024 rule 9).
+   * {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery (DEC-024 rule 6).
    * Called by the web process once every domain has installed its handlers,
    * never from {@link initialize} and never from the worker.
    *

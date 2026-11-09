@@ -381,7 +381,7 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Drains the outbox (DEC-024 rule 9). Web process only: delivery runs local
+   * Drains the outbox (DEC-024 rule 6). Web process only: delivery runs local
    * dispatch, which needs every domain's handlers, so the worker's bare
    * `ActivityPubInterface` must never call this.
    *

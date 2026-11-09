@@ -160,7 +160,7 @@ class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
    * Meaningful only for the types `readOutbox` serves (Create, Announce,
    * Update, Delete). The backfill set it true on unaddressed rows of other
    * types too (Follow, Accept, Flag, Undo, Add, Remove), so on those it is not
-   * evidence that the activity is public (DEC-024 rule 8).
+   * evidence that the activity is public (DEC-024 rule 5).
    */
   @Column({
     type: DataType.BOOLEAN,

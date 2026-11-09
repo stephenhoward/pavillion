@@ -7,7 +7,7 @@ import {
 /**
  * Index the unprocessed ap_outbox rows for the outbox drain's
  * `WHERE processed_time IS NULL AND message_time <= cutoff ORDER BY
- * message_time` (DEC-024 rule 9). Partial, as 0047's inbox twin is, so its
+ * message_time` (DEC-024 rule 6). Partial, as 0047's inbox twin is, so its
  * size tracks the backlog, not the table. A plain CREATE INDEX (the runner's
  * transaction rules out CONCURRENTLY) briefly blocks outbox writes.
  */
