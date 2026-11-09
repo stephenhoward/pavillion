@@ -7,9 +7,10 @@
  * Four call sites consume this:
  *  - `DnsChallengeStep.vue` (context: `'verify-dns'`)
  *  - `RelMeChallengeStep.vue` (context: `'verify-rel-me'`)
- *  - `ImportSourcesSection.vue` (contexts: `'sync'` and `'file-upload'`)
+ *  - `ImportSourcesSection.vue` (contexts: `'sync'`, `'file-upload'` and `'create-url'`)
  *
- * The verify contexts unwrap the discriminator-specific verification
+ * The create-url context maps the cap, permission and URL-validation
+ * failures of adding a feed first. The verify contexts unwrap the discriminator-specific verification
  * exception to its `reason` field; the sync context skips that step.
  * The file-upload context maps the upload's own exceptions first — where
  * `ImportSourceParseError` means a readable file with no events, not an
@@ -28,7 +29,7 @@ import {
   ImportSourceRelMeVerificationError,
 } from '@/common/exceptions/import';
 
-export type ImportSourceErrorContext = 'verify-dns' | 'verify-rel-me' | 'sync' | 'file-upload';
+export type ImportSourceErrorContext = 'verify-dns' | 'verify-rel-me' | 'sync' | 'file-upload' | 'create-url';
 
 const DNS_REASON_KEYS: Record<string, string> = {
   IMPORT_DNS_NOT_FOUND: 'errors.dns_not_found',
@@ -64,11 +65,18 @@ const FILE_UPLOAD_NAME_KEYS: Record<string, string> = {
   CalendarEditorPermissionError: 'errors.no_edit_permission',
 };
 
+const CREATE_URL_NAME_KEYS: Record<string, string> = {
+  ImportSourceCapExceededError: 'errors.source_cap_exceeded_url',
+  CalendarEditorPermissionError: 'errors.no_edit_permission',
+  ValidationError: 'errors.invalid_url',
+};
+
 const UNKNOWN_KEYS: Record<ImportSourceErrorContext, string> = {
   'verify-dns': 'errors.unknown_verify',
   'verify-rel-me': 'errors.unknown_verify',
   'sync': 'errors.unknown_sync',
   'file-upload': 'errors.unknown_file_upload',
+  'create-url': 'errors.unknown_create_url',
 };
 
 export function importSourceErrorKey(
@@ -91,6 +99,9 @@ export function importSourceErrorKey(
   const name = (err as { name?: string })?.name;
   if (context === 'file-upload' && name && name in FILE_UPLOAD_NAME_KEYS) {
     return FILE_UPLOAD_NAME_KEYS[name];
+  }
+  if (context === 'create-url' && name && name in CREATE_URL_NAME_KEYS) {
+    return CREATE_URL_NAME_KEYS[name];
   }
   if (name && name in COMMON_NAME_KEYS) {
     return COMMON_NAME_KEYS[name];

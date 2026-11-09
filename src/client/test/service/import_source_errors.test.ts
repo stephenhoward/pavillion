@@ -26,7 +26,7 @@ import {
 } from '@/common/exceptions/import';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { RateLimitError } from '@/common/exceptions/report';
-import { UnknownError } from '@/common/exceptions/base';
+import { UnknownError, ValidationError } from '@/common/exceptions/base';
 
 describe('importSourceErrorKey', () => {
   describe('verify-dns context', () => {
@@ -151,6 +151,26 @@ describe('importSourceErrorKey', () => {
         .toBe('errors.unknown_file_upload');
       expect(importSourceErrorKey(new Error('boom'), 'file-upload'))
         .toBe('errors.unknown_file_upload');
+    });
+  });
+
+  describe('create-url context', () => {
+    it('maps cap, permission and validation failures to create-url keys', () => {
+      expect(importSourceErrorKey(new ImportSourceCapExceededError(), 'create-url'))
+        .toBe('errors.source_cap_exceeded_url');
+      expect(importSourceErrorKey(new CalendarEditorPermissionError(), 'create-url'))
+        .toBe('errors.no_edit_permission');
+      expect(importSourceErrorKey(new ValidationError('bad'), 'create-url'))
+        .toBe('errors.invalid_url');
+    });
+
+    it('maps common transport errors and falls back to errors.unknown_create_url', () => {
+      expect(importSourceErrorKey(new ImportSourceFetchError(), 'create-url'))
+        .toBe('errors.fetch_error');
+      expect(importSourceErrorKey(new UnknownError(), 'create-url'))
+        .toBe('errors.unknown_create_url');
+      expect(importSourceErrorKey(null, 'create-url'))
+        .toBe('errors.unknown_create_url');
     });
   });
 });
