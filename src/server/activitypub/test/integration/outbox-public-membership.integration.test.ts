@@ -254,7 +254,7 @@ describe('Public-outbox membership', () => {
         await row(eventActivity('Update', actor, `partial-${i}`), 'partial: Failed to deliver to https://peer.example/calendars/gone: timeout', true);
         await row(eventActivity('Update', userActor, `user-${i}`), 'ok', false);
       }
-      await row(eventActivity('Create', actor, 'skipped'), 'skipped: superseded', true);
+      await row(eventActivity('Create', actor, 'skipped'), 'skipped: superseded', false);
       await row(eventActivity('Create', actor, 'errored'), 'error: Failed to parse Create activity', false);
       await row(eventActivity('Create', actor, 'bad-type'), 'bad message type', false);
       await row(eventActivity('Create', actor, 'unprocessed'), null, false);

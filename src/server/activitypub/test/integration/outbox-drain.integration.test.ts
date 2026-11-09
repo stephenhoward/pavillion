@@ -314,6 +314,24 @@ describe('Outbox drain', () => {
       expect(postedActivityIds(axiosPost), 'the peer gets the Undo, never the Follow it retracts').toEqual([undo.id]);
     });
 
+    it('leaves a superseded Create unpublished while its Delete is served and counted', async () => {
+      const calendar = await createFollowedCalendar('drainsupersededserve');
+      const actor = calendarActorUri(calendar);
+      const create = publicCreate(calendar, 'never-published');
+      await writeOutboxRow(calendar, create);
+      const del = new DeleteActivity(actor, (create.object as { id: string }).id).addressPublic(`${actor}/followers`);
+      await writeOutboxRow(calendar, del);
+
+      await outboxService().processOutboxMessages();
+
+      expect((await storedRow(create.id)).processed_status).toBe('skipped: superseded');
+      const eventBus = new EventEmitter();
+      const reader = new ActivityPubService(eventBus, new CalendarInterface(eventBus), new AccountsInterface());
+      const { items, totalItems } = await reader.readOutbox(calendar.id);
+      expect(items.map(item => item.id), 'only the Delete is published').toEqual([del.id]);
+      expect(totalItems).toBe(1);
+    });
+
     it('is not superseded by a row of another type whose id ends in /delete or /undo', async () => {
       const calendar = await createFollowedCalendar('drainsupersededtype');
       const actor = calendarActorUri(calendar);
