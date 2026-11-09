@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import EventsService, { validateMediaTransform } from '@/server/calendar/service/events';
+import EventsService, { validateMediaTransform, validateSchedulesByDay } from '@/server/calendar/service/events';
 import { ValidationError } from '@/common/exceptions/base';
 import { Account } from '@/common/model/account';
 import { EventEmitter } from 'events';
@@ -186,6 +186,41 @@ describe('EventsService - Validation', () => {
       await expect(
         service.updateEvent(mockAccount, validUuid, { mediaZoom: 0.2 }),
       ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('schedule byDay validation', () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+    const badSchedules = [{ frequency: 'monthly', byDay: ['6MO'] }];
+
+    it('createEvent rejects an unreachable ordinal before persistence', async () => {
+      await expect(
+        service.createEvent(mockAccount, { calendarId: 'cal-1', schedules: badSchedules }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('updateEvent rejects an unreachable ordinal before persistence', async () => {
+      await expect(
+        service.updateEvent(mockAccount, validUuid, { schedules: badSchedules }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('reports the offending schedule under fields.schedules', () => {
+      try {
+        validateSchedulesByDay([{ frequency: 'weekly', byDay: ['MO'] }, { frequency: 'monthly', byDay: ['0MO'] }]);
+        expect.unreachable();
+      }
+      catch (e) {
+        expect(e).toBeInstanceOf(ValidationError);
+        expect((e as ValidationError).message).toContain('schedules[1].byDay');
+        expect((e as ValidationError).fields?.schedules).toHaveLength(1);
+      }
+    });
+
+    it('accepts valid rules, one-offs with byDay, and non-array input', () => {
+      expect(() => validateSchedulesByDay([{ frequency: 'monthly', byDay: ['5MO'] }])).not.toThrow();
+      expect(() => validateSchedulesByDay([{ byDay: ['6MO'] }])).not.toThrow();
+      expect(() => validateSchedulesByDay(undefined)).not.toThrow();
     });
   });
 });

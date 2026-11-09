@@ -8,7 +8,7 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
-import EventInstanceService from '@/server/calendar/service/event_instance';
+import EventInstanceService, { expandScheduleOccurrences } from '@/server/calendar/service/event_instance';
 import type ConfigurationInterface from '@/server/configuration/interface';
 import { getDefaultDateRange } from '@/common/utils/datePresets';
 import EventService from '@/server/calendar/service/events';
@@ -269,6 +269,43 @@ describe('EventInstanceService.generateInstances', () => {
   });
 
   describe('byDay parsing', () => {
+    describe('unreachable ordinals', () => {
+      const monthly = (byDay: string[], frequency = EventFrequency.MONTHLY) => createSchedule({
+        startDate: DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' }),
+        frequency,
+        interval: 1,
+        byDay,
+      });
+
+      it('generates nothing for monthly 6MO', () => {
+        const event = createEvent([monthly(['6MO'])]);
+        const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
+        expect(instances).toEqual([]);
+      });
+
+      it('generates nothing and does not throw for a stored 0MO', () => {
+        const event = createEvent([monthly(['0MO'])]);
+        expect(() => (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS)).not.toThrow();
+        expect((service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS)).toEqual([]);
+      });
+
+      it('still generates monthly 5MO occurrences', () => {
+        const event = createEvent([monthly(['5MO'])]);
+        const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'), HORIZON_MONTHS);
+        expect(instances.length).toBeGreaterThan(0);
+      });
+
+      it('expandScheduleOccurrences returns [] for monthly 6MO', () => {
+        const s = monthly(['6MO']);
+        expect(expandScheduleOccurrences(s, s, null, 10)).toEqual([]);
+      });
+
+      it('expandScheduleOccurrences still returns a yearly 53MO date', () => {
+        const s = monthly(['53MO'], EventFrequency.YEARLY);
+        expect(expandScheduleOccurrences(s, s, null, 1)).toHaveLength(1);
+      });
+    });
+
     // Monthly "first Monday of the month" — the canonical bug case.
     // Sept 2025 first Monday is the 1st; Oct is the 6th; Nov is the 3rd.
     it('should generate "first Monday of the month" for monthly 1MO', () => {
