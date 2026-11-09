@@ -204,6 +204,21 @@ describe('outbox event listener', () => {
     expect(processorStub.calledOnce).toBe(true);
   });
 
+  it('marks the row failed when processing it rejects', async () => {
+    const failure = new Error('Failed to parse Create activity');
+    sandbox.stub(service, 'processOutboxMessage').rejects(failure);
+    const markFailed = sandbox.stub(service, 'markOutboxMessageFailed').resolves();
+    const row = ActivityPubOutboxMessageEntity.build({
+      id: 'https://local.example/activities/failing',
+      calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } },
+    });
+    sandbox.stub(ActivityPubOutboxMessageEntity, 'findByPk').resolves(row);
+
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'outboxMessageAdded', { id: row.id });
+
+    expect(markFailed.calledOnceWithExactly(row, failure)).toBe(true);
+  });
+
   it('should ignore message not found in database', async () => {
 
     let processorStub = sandbox.stub(service,'processOutboxMessage');

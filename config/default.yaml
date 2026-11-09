@@ -299,11 +299,8 @@ activitypub:
     # this value is a latency choice only.
     intervalMs: 30000  # 30 seconds
   outboxDrain:
-    # How often the web process drains unprocessed ap_outbox rows. Every row
-    # has a live handler, so a tick only finds rows a restart stranded that the
-    # boot drain did not already take. A tick leaves rows newer than 15 minutes
-    # (OUTBOX_DRAIN_SKIP_NEWER_THAN_MS) to live delivery; that window, not this
-    # tick, keeps a tick off a row still being delivered.
+    # How often the web process re-delivers stranded ap_outbox rows; a latency
+    # choice only (see DEC-024 rule 9).
     intervalMs: 60000  # 60 seconds
 
 # Housekeeping configuration for automated server maintenance

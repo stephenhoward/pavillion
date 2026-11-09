@@ -381,18 +381,11 @@ export default class ActivityPubInterface {
   }
 
   /**
-   * Drains the outbox: delivers every unprocessed `ap_outbox` row, oldest
-   * `message_time` first. Called by the web process's outbox drain
-   * (`ActivityPubDomain.startOutboxDrain`): once at startup with no options,
-   * taking every row, and on each interval tick with `skipNewerThanMs`,
-   * leaving fresh rows to the live `outboxMessageAdded` handler.
+   * Drains the outbox (DEC-024 rule 9). Web process only: delivery runs local
+   * dispatch, which needs every domain's handlers, so the worker's bare
+   * `ActivityPubInterface` must never call this.
    *
-   * Web process only. Delivering a row runs local dispatch for same-instance
-   * recipients, which needs every domain's event handlers installed. The
-   * worker holds an `ActivityPubInterface` without them and must never call
-   * this.
-   *
-   * @param options.skipNewerThanMs - Minimum age of a row's `message_time`, in ms
+   * @param options.skipNewerThanMs - Leave rows newer than this many ms
    * @returns {Promise<void>}
    */
   async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {

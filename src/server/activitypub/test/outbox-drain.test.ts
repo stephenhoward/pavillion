@@ -70,12 +70,18 @@ describe('ActivityPubDomain outbox drain', () => {
     vi.useRealTimers();
   });
 
-  it('drains once at startup with no skip window', async () => {
+  it('drains once at startup, cut off at the moment the drain starts', async () => {
     stopDrain = domain.startOutboxDrain();
     await settleDrain(domain);
 
     expect(drainStub.calledOnce).toBe(true);
-    expect(drainStub.firstCall.args[0]?.skipNewerThanMs).toBeUndefined();
+    // A zero window: rows written before the drain starts, none after.
+    expect(drainStub.firstCall.args[0]).toEqual({ skipNewerThanMs: 0 });
+  });
+
+  it('pins the configured interval and the window', () => {
+    expect(OUTBOX_DRAIN_INTERVAL_MS).toBe(60_000);
+    expect(OUTBOX_DRAIN_SKIP_NEWER_THAN_MS).toBe(900_000);
   });
 
   it('does not block its caller on the startup drain', () => {
@@ -86,7 +92,7 @@ describe('ActivityPubDomain outbox drain', () => {
     expect((domain as any)['outboxDrain'], 'the startup drain is still in flight').not.toBeNull();
   });
 
-  it('drains on every interval tick with the 15-minute skip window', async () => {
+  it('drains on every interval tick with the skip window', async () => {
     stopDrain = domain.startOutboxDrain();
     await settleDrain(domain);
 
@@ -99,8 +105,6 @@ describe('ActivityPubDomain outbox drain', () => {
     await vi.advanceTimersByTimeAsync(OUTBOX_DRAIN_INTERVAL_MS);
     await settleDrain(domain);
 
-    expect(OUTBOX_DRAIN_INTERVAL_MS).toBe(60_000);
-    expect(OUTBOX_DRAIN_SKIP_NEWER_THAN_MS).toBe(900_000);
     expect(drainStub.callCount).toBe(3);
     expect(drainStub.secondCall.args[0]).toEqual({ skipNewerThanMs: OUTBOX_DRAIN_SKIP_NEWER_THAN_MS });
     expect(drainStub.thirdCall.args[0]).toEqual({ skipNewerThanMs: OUTBOX_DRAIN_SKIP_NEWER_THAN_MS });

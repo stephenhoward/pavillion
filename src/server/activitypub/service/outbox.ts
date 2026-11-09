@@ -52,6 +52,25 @@ export interface ProcessOutboxMessagesOptions {
 }
 
 /**
+ * The id of an activity's `object`, which is either a bare IRI or an object
+ * carrying `id`; null for anything else. (`extractObjectId` in the backfill
+ * service does the same, but importing it here would close an import cycle
+ * through `ActivityPubInterface`.)
+ */
+function objectIdOf(object: unknown): string | null {
+  if (typeof object === 'string') {
+    return object;
+  }
+  if (object && typeof object === 'object') {
+    const id = (object as Record<string, unknown>).id;
+    if (typeof id === 'string') {
+      return id;
+    }
+  }
+  return null;
+}
+
+/**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
  * Handles delivery of various activity types to followers and other recipients.
  */
@@ -198,37 +217,21 @@ class ProcessOutboxService {
   }
 
   /**
-   * Processes all unprocessed outbox messages in batches, oldest first: the
-   * outbox drain (`ActivityPubDomain.startOutboxDrain`).
+   * The outbox drain: delivers unprocessed rows oldest first, skipping
+   * superseded ones and marking a row that throws `error:` (DEC-024 rules 9
+   * and 10). Web process only, because delivery runs local dispatch.
    *
-   * With `skipNewerThanMs`, rows whose `message_time` is less than that many
-   * milliseconds before the call are left to the live `outboxMessageAdded`
-   * handler. The inbox drain filters on `createdAt` because an inbox row's
-   * `message_time` is the sender's published time; an outbox row's
-   * `message_time` is our own clock at write (`addToOutbox`), so it is the
-   * write time, and it is the column `idx_ap_outbox_unprocessed` orders by.
-   *
-   * A Create, Update or Announce that a later Delete or Undo in the outbox
-   * already retracts is marked `skipped: superseded` and not delivered (see
-   * {@link isSupersededOutboxMessage}). The live handler does not make this
-   * check: it delivers a row as soon as it is written, before anything can
-   * retract it.
-   *
-   * A row that throws is marked `error:` and the drain moves on to the next.
-   * If even that mark cannot be written, the drain rejects: the re-query
-   * would return the same unprocessed row forever.
-   *
-   * Only a process with every domain's handlers installed may call this,
-   * because delivery runs local dispatch (`dispatchByType`) on this process.
-   *
-   * @param options.skipNewerThanMs - Minimum age of a row's `message_time`, in ms
+   * @param options.skipNewerThanMs - Leave rows whose `message_time` is later
+   *   than this many ms before the call; the cutoff is fixed once per call
    * @returns {Promise<void>}
    */
   async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {
 
     const where: Record<string, unknown> = { processed_time: null };
     if ( options.skipNewerThanMs !== undefined ) {
-      where.message_time = { [Op.lt]: new Date(Date.now() - options.skipNewerThanMs) };
+      // Fixed once, so rows written while this drain runs are never taken;
+      // `lte` keeps a row written in the same millisecond as the call.
+      where.message_time = { [Op.lte]: new Date(Date.now() - options.skipNewerThanMs) };
     }
 
     let delivered = 0;
@@ -269,13 +272,10 @@ class ProcessOutboxService {
   }
 
   /**
-   * Whether a stranded row has already been retracted by a later row in the
-   * same outbox, so delivering it now would only resurrect what its calendar
-   * took back. True for a Create, Update or Announce when ap_outbox holds
-   * `{objectId}/delete` (the id `DeleteActivity` gives a Delete of that
-   * object) or `{rowId}/undo` (the id `UndoActivity` gives an Undo of this
-   * row). Both are primary-key lookups. The retracting row is drained as
-   * usual, so peers that did receive the original still get the retraction.
+   * Whether a later row in the same outbox already retracts this one: for a
+   * Create, Update or Announce, a Delete with id `{objectId}/delete` or an
+   * Undo with id `{rowId}/undo` (DEC-024 rule 10). The type is matched as
+   * well as the id, as `readOutbox`'s Undo probe does.
    *
    * @param message - An unprocessed outbox row
    * @returns True when the row should be skipped rather than delivered
@@ -284,18 +284,12 @@ class ProcessOutboxService {
     if ( !['Create', 'Update', 'Announce'].includes(message.type) ) {
       return false;
     }
-    const object = (message.message as Record<string, unknown> | null)?.object;
-    const objectId = typeof object === 'string'
-      ? object
-      : (object && typeof object === 'object' && typeof (object as Record<string, unknown>).id === 'string')
-        ? (object as Record<string, string>).id
-        : null;
-
-    const retractions = [`${message.id}/undo`];
+    const retractions: Record<string, string>[] = [{ id: `${message.id}/undo`, type: 'Undo' }];
+    const objectId = objectIdOf((message.message as Record<string, unknown> | null)?.object);
     if ( objectId ) {
-      retractions.push(`${objectId}/delete`);
+      retractions.push({ id: `${objectId}/delete`, type: 'Delete' });
     }
-    const found = await ActivityPubOutboxMessageEntity.count({ where: { id: retractions } });
+    const found = await ActivityPubOutboxMessageEntity.count({ where: { [Op.or]: retractions } });
     return found > 0;
   }
 
@@ -316,8 +310,10 @@ class ProcessOutboxService {
    */
   async markOutboxMessageFailed(message: ActivityPubOutboxMessageEntity, error: unknown): Promise<void> {
     logError(error, `[ActivityPub] Outbox message ${message.id} (calendar ${message.calendar_id}) marked error`);
-    const detail = error instanceof Error ? error.message : String(error);
     try {
+      // Inside the try: a thrown value String() cannot convert (a null-
+      // prototype object, say) falls through to the fallback status.
+      const detail = error instanceof Error ? error.message : String(error);
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: boundProcessedStatus(`error: ${detail}`),

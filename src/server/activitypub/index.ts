@@ -21,13 +21,8 @@ export const INBOX_DRAIN_SKIP_NEWER_THAN_MS = 10_000;
 
 /**
  * Interval ticks leave outbox rows written this recently to the live
- * `outboxMessageAdded` handler, which delivers without a claim; on PostgreSQL
- * a tick taking a row still in live delivery would deliver it twice. Fifteen
- * minutes, not the inbox's ten seconds: each recipient can cost two HTTP
- * timeouts (actor fetch, then POST), so one fan-out with a dead peer routinely
- * runs past ten seconds. Every outbox row has a live handler, so no row waits
- * on a tick to be delivered; only rows a restart stranded do, and the boot
- * drain takes those regardless of age.
+ * handler, which delivers without a claim. Fifteen minutes because one
+ * fan-out with a dead peer can outlast ten seconds (DEC-024 rule 9).
  */
 export const OUTBOX_DRAIN_SKIP_NEWER_THAN_MS = 900_000;
 
@@ -121,18 +116,12 @@ export default class ActivityPubDomain {
   }
 
   /**
-   * Start draining unprocessed outbox rows in this process: once now, taking
-   * every row, then every `activitypub.outboxDrain.intervalMs`, leaving rows
-   * written within {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery.
-   * This is what delivers rows whose `outboxMessageAdded` emit went to a
-   * process that stopped before handling it. Delivery is at-least-once: a row
-   * a restart cut off mid-fan-out is delivered again from the start.
-   *
+   * Start delivering outbox rows a restart stranded: once now, taking only
+   * rows written before the drain began, then every
+   * `activitypub.outboxDrain.intervalMs`, leaving rows newer than
+   * {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery (DEC-024 rule 9).
    * Called by the web process once every domain has installed its handlers,
-   * never from {@link initialize} and never from the worker: delivering a row
-   * runs local dispatch, which needs the full handler set. Unlike the inbox
-   * drain it needs no moderation interface, since outbound delivery has no
-   * blocked-instance gate on the live path either.
+   * never from {@link initialize} and never from the worker.
    *
    * @returns A function that stops the interval; a drain in flight finishes
    */
@@ -153,7 +142,9 @@ export default class ActivityPubDomain {
     };
 
     const intervalMs = config.get<number>('activitypub.outboxDrain.intervalMs');
-    drain({});
+    // A zero window still fixes a cutoff: every stranded row predates boot,
+    // and rows written after it belong to their live handler.
+    drain({ skipNewerThanMs: 0 });
     const interval = setInterval(
       () => drain({ skipNewerThanMs: OUTBOX_DRAIN_SKIP_NEWER_THAN_MS }),
       intervalMs,

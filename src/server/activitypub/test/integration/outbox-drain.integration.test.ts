@@ -208,6 +208,29 @@ describe('Outbox drain', () => {
     expect((await storedRow(newer.id)).processed_time, 'a row inside the window is left to live delivery').toBeNull();
   });
 
+  it('the boot drain leaves a row written after it started to the row\'s live handler', async () => {
+    const calendar = await createFollowedCalendar('drainbootcutoff');
+    const stranded = await writeOutboxRow(calendar, publicCreate(calendar, 'stranded'));
+    const later = publicCreate(calendar, 'written-during-drain');
+
+    // While the stranded row is being delivered, a new row is written, as a
+    // live request would write one moments after boot.
+    axiosPost.callsFake(async () => {
+      if (!(await ActivityPubOutboxMessageEntity.findByPk(later.id))) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        await writeOutboxRow(calendar, later);
+      }
+      return { status: 202, data: {} };
+    });
+
+    // The options startOutboxDrain passes to its boot drain.
+    await outboxService().processOutboxMessages({ skipNewerThanMs: 0 });
+
+    expect((await storedRow(stranded.id)).processed_status).toBe('ok');
+    expect((await storedRow(later.id)).processed_time, 'a row written after the boot drain began is not its to take').toBeNull();
+    expect(postedActivityIds(axiosPost)).toEqual([stranded.id]);
+  });
+
   describe('superseded rows', () => {
     it('skips a Create with a later Delete and an Announce with an Undo, and delivers the rest', async () => {
       const calendar = await createFollowedCalendar('drainsuperseded');
@@ -253,6 +276,34 @@ describe('Outbox drain', () => {
       expect((await storedRow(unrelated.id)).processed_status).toBe('ok');
     });
 
+    it('is not superseded by a row of another type whose id ends in /delete or /undo', async () => {
+      const calendar = await createFollowedCalendar('drainsupersededtype');
+      const actor = calendarActorUri(calendar);
+      const create = publicCreate(calendar, 'kept');
+      const row = await writeOutboxRow(calendar, create);
+      const objectId = (create.object as { id: string }).id;
+
+      // Creates whose ids happen to be the retraction ids a Delete or Undo
+      // would carry. Only a Delete or an Undo retracts.
+      for (const impostorId of [`${objectId}/delete`, `${create.id}/undo`]) {
+        await ActivityPubOutboxMessageEntity.create({
+          id: impostorId,
+          type: 'Create',
+          calendar_id: calendar.id,
+          message_time: new Date(),
+          message: { actor, object: { id: `${actor}/events/${uuidv4()}`, type: 'Event' } },
+          processed_time: new Date(),
+          processed_status: 'ok',
+          is_public: false,
+        });
+      }
+
+      await outboxService().processOutboxMessages();
+
+      expect((await storedRow(row.id)).processed_status).toBe('ok');
+      expect(postedActivityIds(axiosPost)).toEqual([create.id]);
+    });
+
     it('is a drain rule only: live delivery of a row with a Delete still delivers it', async () => {
       const calendar = await createFollowedCalendar('drainsupersededlive');
       const actor = calendarActorUri(calendar);
@@ -280,6 +331,20 @@ describe('Outbox drain', () => {
     expect(status.length).toBeLessThanOrEqual(PROCESSED_STATUS_MAX_LENGTH);
     // eslint-disable-next-line no-control-regex
     expect(status).not.toMatch(/[\u0000-\u001f]/);
+  });
+
+  it('writes the fallback status when the thrown value cannot be turned into text', async () => {
+    const calendar = await createFollowedCalendar('drainunstringable');
+    const row = await writeOutboxRow(calendar, publicCreate(calendar, 'unstringable'));
+    const service = outboxService();
+    // String() throws on an object with no prototype and no toString.
+    sandbox.stub(service, 'processOutboxMessage').callsFake(async () => {
+      throw Object.create(null);
+    });
+
+    await service.processOutboxMessages();
+
+    expect((await storedRow(row.id)).processed_status).toBe('error: processing failed');
   });
 
   describe('when the error status cannot be written', () => {

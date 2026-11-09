@@ -7,7 +7,7 @@ const INDEX_NAME = 'idx_ap_outbox_unprocessed';
 /**
  * Migration 0051 adds a partial index over message_time on the unprocessed
  * ap_outbox rows, so the outbox drain's
- * `WHERE processed_time IS NULL [AND message_time < cutoff] ORDER BY message_time`
+ * `WHERE processed_time IS NULL AND message_time <= cutoff ORDER BY message_time`
  * query reads a tiny index instead of scanning a table that only grows.
  */
 describe('Migration 0051: partial index on unprocessed ap_outbox rows', () => {
@@ -62,10 +62,10 @@ describe('Migration 0051: partial index on unprocessed ap_outbox rows', () => {
     expect(sql).toMatch(/WHERE\s+`?"?processed_time`?"?\s+IS\s+NULL/i);
   });
 
-  it('should be used by the outbox drain query, with and without the window', async () => {
+  it('should be used by the outbox drain query', async () => {
     await migration.up({ context: sequelize });
 
-    for (const windowClause of ['', 'AND message_time < \'2026-11-09 00:00:00\'']) {
+    for (const windowClause of ['', 'AND message_time <= \'2026-11-09 00:00:00\'']) {
       const plan = await sequelize.query<{ detail: string }>(
         `EXPLAIN QUERY PLAN
          SELECT * FROM ap_outbox
