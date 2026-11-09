@@ -398,10 +398,11 @@ describe('expandScheduleOccurrences', () => {
     ['undefined', undefined],
     ['zero', 0],
     ['fractional', 1.5],
-  ])('returns nothing for a recurring schedule with a %s interval', (_label, interval) => {
-    const schedule = recurring('series', '2026-01-05T10:00:00', LA);
+  ])('expands a recurring schedule with a %s interval as interval 1', (_label, interval) => {
+    const schedule = recurring('series', '2026-03-02T10:00:00', LA);
     schedule.interval = interval as unknown as number;
-    expect(expandScheduleOccurrences(schedule, schedule, null, 10)).toEqual([]);
+    const starts = expandScheduleOccurrences(schedule, schedule, null, 2).map(d => d.toISOString());
+    expect(starts).toEqual(['2026-03-02T18:00:00.000Z', '2026-03-09T17:00:00.000Z']);
   });
 
   it('returns raw occurrences as instants in the frame schedule\'s zone, up to the limit', () => {

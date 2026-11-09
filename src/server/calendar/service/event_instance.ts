@@ -322,7 +322,8 @@ function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFram
   }
   let options: Record<string,any> = {
     freq: frequency,
-    interval: schedule.interval,
+    // RFC 5545 INTERVAL defaults to 1; rrule hangs on an explicit null/undefined.
+    interval: Number.isInteger(schedule.interval) && schedule.interval > 0 ? schedule.interval : 1,
     dtstart: schedule.startDate ? frame.toFloating(schedule.startDate) : undefined,
   };
   if ( schedule.count ) {
@@ -350,9 +351,9 @@ function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFram
  * A one-off schedule yields its start. At most `limit` occurrences are
  * returned, so a result of length `limit` may have been cut short.
  *
- * Returns [] for a schedule with no start, and for a recurring schedule
- * whose interval is not a positive integer: rrule never returns for a null
- * interval and defaults a missing dtstart to now.
+ * Returns [] for a schedule with no start (rrule would default dtstart to
+ * now). A recurring schedule whose interval is not a positive integer
+ * expands as interval 1.
  */
 export function expandScheduleOccurrences(
   schedule: CalendarEventSchedule,
@@ -367,9 +368,6 @@ export function expandScheduleOccurrences(
   if (schedule.frequency === null || FREQUENCY_MAP[schedule.frequency] === undefined) {
     const start = schedule.startDate.toJSDate();
     return start.getTime() <= untilMs ? [start] : [];
-  }
-  if (!Number.isInteger(schedule.interval) || schedule.interval <= 0) {
-    return [];
   }
   const frame = WallClockFrame.of(frameSchedule);
   const rule = buildScheduleRule(schedule, frame)!;
