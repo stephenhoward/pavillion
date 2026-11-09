@@ -8,7 +8,7 @@ import PillButton from '@/client/components/common/pill-button.vue';
 import ToggleChip from '@/client/components/common/toggle-chip.vue';
 import Sheet from '@/client/components/common/sheet.vue';
 
-const { t } = useTranslation('calendars', {
+const { t, i18next } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
 });
 
@@ -42,6 +42,46 @@ const availableCategories = computed(() => {
   if (!props.calendarId) return [];
   return categoryStore.categories[props.calendarId] || [];
 });
+
+// Resolves a category's display name in the current locale, falling back to
+// English and then to whichever language the category has.
+const categoryName = (category) => {
+  const language = i18next.language;
+  if (language && category.hasContent(language)) {
+    return category.content(language).name;
+  }
+  if (category.hasContent('en')) {
+    return category.content('en').name;
+  }
+  return category.displayName();
+};
+
+// The events being assigned to, read from the store the list already loaded.
+const selectedEvents = computed(() => {
+  return eventStore.eventsForCalendar(props.calendarId)
+    .filter(event => props.selectedEventIds.includes(event.id));
+});
+
+// How many of the selected events already carry each category.
+const carriedByCount = (category) => {
+  return selectedEvents.value
+    .filter(event => event.categories.some(c => c.id === category.id)).length;
+};
+
+const isOnAllEvents = (category) => {
+  return selectedEvents.value.length > 0 && carriedByCount(category) === selectedEvents.value.length;
+};
+
+const categoriesOnAll = computed(() => availableCategories.value.filter(isOnAllEvents));
+
+const categoriesOnSome = computed(() => {
+  return availableCategories.value.filter(category => {
+    const count = carriedByCount(category);
+    return count > 0 && count < selectedEvents.value.length;
+  });
+});
+
+const namesOf = (categories) => categories.map(categoryName).join(', ');
 
 const isFormValid = computed(() => {
   return selectedCategoryIds.value.length > 0;
@@ -125,6 +165,18 @@ const toggleCategory = (categoryId) => {
         {{ t('assign_categories_summary', { count: selectedEventIds.length }) }}
       </p>
 
+      <p class="assign-note">
+        {{ t('assign_categories_adds_only') }}
+      </p>
+
+      <p v-if="categoriesOnAll.length" class="already-assigned" data-testid="already-on-all">
+        {{ t('already_on_all', { names: namesOf(categoriesOnAll) }) }}
+      </p>
+
+      <p v-if="categoriesOnSome.length" class="already-assigned" data-testid="already-on-some">
+        {{ t('already_on_some', { names: namesOf(categoriesOnSome) }) }}
+      </p>
+
       <div v-if="errorMessage" class="error-message" role="alert">
         {{ errorMessage }}
       </div>
@@ -140,8 +192,9 @@ const toggleCategory = (categoryId) => {
           <ToggleChip
             v-for="category in availableCategories"
             :key="category.id"
-            :model-value="selectedCategoryIds.includes(category.id)"
-            :label="category.content('en').name"
+            :model-value="isOnAllEvents(category) || selectedCategoryIds.includes(category.id)"
+            :disabled="isOnAllEvents(category)"
+            :label="categoryName(category)"
             variant="orange"
             @update:model-value="() => toggleCategory(category.id)"
           />
@@ -179,7 +232,9 @@ const toggleCategory = (categoryId) => {
   gap: 1rem;
 }
 
-.selection-summary {
+.selection-summary,
+.assign-note,
+.already-assigned {
   margin: 0;
   color: var(--pav-color-stone-600);
   font-size: 0.875rem;
