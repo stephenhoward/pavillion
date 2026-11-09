@@ -7,6 +7,7 @@ import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
 import SeriesService from '@/client/service/series';
+import { eventPath } from '@/common/routing/public-paths';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
@@ -471,11 +472,25 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         onDirtyReset();
       }
 
-      // Show success toast before navigating away
-      toast.success(t('event_saved_success'));
+      const calendar = state.availableCalendars.find(c => c.id === model.calendarId);
+
+      // Show success toast before navigating away. There is no publish step,
+      // so a newly created event is public as soon as it is saved: say so and
+      // link to its public page. Edits keep the plain confirmation.
+      if (state.mode !== 'edit' && calendar) {
+        toast.success(t('event_saved_public'), {
+          link: {
+            href: `${window.location.origin}${eventPath(calendar.urlName, savedEvent.id)}`,
+            text: t('event_saved_public_link'),
+          },
+          duration: 15000,
+        });
+      }
+      else {
+        toast.success(t('event_saved_success'));
+      }
 
       // Navigate to the calendar view for this event's calendar
-      const calendar = state.availableCalendars.find(c => c.id === model.calendarId);
       if (calendar) {
         router.push({
           name: 'calendar',

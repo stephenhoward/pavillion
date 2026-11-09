@@ -24,6 +24,8 @@
     "dates_label": "Fechas",
     "calendar_label": "Calendario",
     "event_saved_success": "Evento guardado con éxito",
+    "event_saved_public": "Evento guardado. Ya es público.",
+    "event_saved_public_link": "Ver en la página pública",
     "error_no_calendar": "Por favor, selecciona un calendario",
     "error_loading_calendars": "Error al cargar los calendarios",
     "error_saving_event": "Error al guardar el evento",

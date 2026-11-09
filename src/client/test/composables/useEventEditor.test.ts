@@ -568,8 +568,16 @@ describe('useEventEditor', () => {
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
 
-      expect(mockT).toHaveBeenCalledWith('event_saved_success');
-      expect(mockToast.success).toHaveBeenCalledWith('event_saved_success');
+      expect(mockToast.success).toHaveBeenCalledWith(
+        'event_saved_public',
+        expect.objectContaining({
+          link: {
+            href: `${window.location.origin}/test-calendar/events/event-123`,
+            text: 'event_saved_public_link',
+          },
+        }),
+      );
+      expect(mockToast.success).not.toHaveBeenCalledWith('event_saved_success');
     });
 
     it('should show a success toast after saving event in duplicate mode', async () => {
@@ -596,7 +604,7 @@ describe('useEventEditor', () => {
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
 
-      expect(mockToast.success).toHaveBeenCalledWith('event_saved_success');
+      expect(mockToast.success).toHaveBeenCalledWith('event_saved_public', expect.anything());
     });
 
     it('should show a success toast after saving event in edit mode', async () => {
