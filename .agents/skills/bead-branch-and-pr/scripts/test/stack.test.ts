@@ -184,8 +184,12 @@ describe('stackCreate', () => {
       };
       const result = stackCreate('feat.add-search', 'main', true, { spawnFn: spawn as never });
       expect(result.ok).toBe(true);
-      expect(calls).toHaveLength(1);
-      expect(calls[0]).toBe('gh stack init --base main feat.add-search');
+      // The branch is created from origin/main first (local main may be
+      // stale) and then adopted by gh stack init.
+      expect(calls).toEqual([
+        'git branch --no-track feat.add-search origin/main',
+        'gh stack init --base main feat.add-search',
+      ]);
     });
 
     it('treats origin/main as trunk for a chain head (gh stack init --base main)', () => {
@@ -196,7 +200,22 @@ describe('stackCreate', () => {
       };
       const result = stackCreate('feat.add-search', 'origin/main', true, { spawnFn: spawn as never });
       expect(result.ok).toBe(true);
-      expect(calls).toEqual(['gh stack init --base main feat.add-search']);
+      expect(calls).toEqual([
+        'git branch --no-track feat.add-search origin/main',
+        'gh stack init --base main feat.add-search',
+      ]);
+    });
+
+    it('does not run gh stack init when creating the branch from origin/main fails', () => {
+      const calls: string[] = [];
+      const spawn = (cmd: string, args: string[], _opts: unknown) => {
+        calls.push([cmd, ...(args as string[])].join(' '));
+        return fakeSpawn('', 'fatal: invalid reference: origin/main', 128);
+      };
+      const result = stackCreate('feat.add-search', 'main', true, { spawnFn: spawn as never });
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain('invalid reference');
+      expect(calls).toEqual(['git branch --no-track feat.add-search origin/main']);
     });
 
     it('runs gh stack add (no --base) when parent is a stack level, not trunk', () => {
@@ -228,6 +247,7 @@ describe('stackCreate', () => {
 
     it('returns ok=false with stderr when gh stack init fails', () => {
       const spawn = seqSpawn(
+        fakeSpawn(''),
         fakeSpawn('', 'current branch "main" is already part of a stack', 5),
       );
       const result = stackCreate('feat.add-search', 'main', true, { spawnFn: spawn as never });
