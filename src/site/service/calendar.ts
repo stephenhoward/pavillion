@@ -178,6 +178,42 @@ export default class CalendarService {
   }
 
   /**
+   * Load the event behind a dated link whose occurrence no longer exists,
+   * with the occurrence that link should now open, if there is one.
+   *
+   * Calls the same endpoint as {@link loadEvent}, so `?calendar=` keeps
+   * the event bound to a calendar that shows it (DEC-020), and adds
+   * `?sameDayAs=<slug>`. The occurrence is the event's only date when it has
+   * a single date that does not recur (`singleOccurrenceStart`), else its
+   * only occurrence on the linked start's day in the event's zone
+   * (`sameDayOccurrenceStart`), else null.
+   *
+   * @param eventId - The event id from the link
+   * @param linkedStart - The start the link named
+   * @param calendarUrlName - The calendar in the link
+   * @returns The event and occurrence start, or null if the backend returned 404
+   */
+  async loadEventForMissingOccurrence(
+    eventId: string,
+    linkedStart: DateTime,
+    calendarUrlName: string,
+  ): Promise<{ event: CalendarEvent; occurrenceStart: DateTime | null } | null> {
+    const url = `/api/public/v1/events/${eventId}`
+      + `?calendar=${encodeURIComponent(calendarUrlName)}`
+      + `&sameDayAs=${formatInstanceSlug(linkedStart)}`;
+    const data = await ModelService.getModel(url);
+    if (!data) {
+      return null;
+    }
+    const startIso = data.singleOccurrenceStart ?? data.sameDayOccurrenceStart;
+    const occurrenceStart = typeof startIso === 'string' ? DateTime.fromISO(startIso, { zone: 'utc' }) : null;
+    return {
+      event: CalendarEvent.fromObject(data),
+      occurrenceStart: occurrenceStart?.isValid ? occurrenceStart : null,
+    };
+  }
+
+  /**
    * Load the list of series for a calendar.
    *
    * @param calendarUrlName - The URL name of the calendar

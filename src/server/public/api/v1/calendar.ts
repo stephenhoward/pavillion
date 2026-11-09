@@ -4,7 +4,7 @@ import { SeriesNotFoundError } from '@/common/exceptions/series';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEventSchedule } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { EventSeries } from '@/common/model/event_series';
 import { EventCategory } from '@/common/model/event_category';
@@ -129,8 +129,8 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
  *   id, date, repostStatus, isRepost (deprecated; derived here from
  *   repostStatus for wire-contract stability), sourceCalendar, mediaFocalPointX,
  *   mediaFocalPointY, mediaZoom, eventSourceUrl, externalUrl, urlPrompt,
- *   isRecurring, recurrenceSummary, content, plus projected location, space,
- *   media, series, categories.
+ *   isRecurring, recurrenceSummary, singleOccurrenceStart, content, plus
+ *   projected location, space, media, series, categories.
  *
  * Dropped from the event root: calendarId, locationId, spaceId, mediaId
  * (internal FKs), schedules (cancellation / hide-from-public metadata),
@@ -148,6 +148,12 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
  * `isRecurring` and `recurrenceSummary` are computed here (not carried from
  * the model) so the model can keep the full authenticated payload while
  * presentation receives a localized-summary intent.
+ *
+ * `singleOccurrenceStart` is computed here too: the UTC ISO start of an event
+ * with exactly one non-exclusion schedule that does not recur, else null. It
+ * lets the site send a dated link outdated by a time change to the event's
+ * current date. That start is already public through the calendar listing,
+ * and exclusion rows never contribute to it, so it reveals no cancellation.
  */
 function toPublicEventObject(eventObj: Record<string, any>): Record<string, any> {
   const rawSchedules = Array.isArray(eventObj.schedules) ? eventObj.schedules : [];
@@ -160,6 +166,7 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
   );
   const summary = getRecurrenceSummary(scheduleModels);
   const isRecurring = summary !== null;
+  const singleOccurrenceStart = singleOccurrenceStartOf(scheduleModels);
 
   // Project media to { id, mimeType } only — internal fields such as
   // calendarId, sha256, originalFilename, fileSize, and status are removed.
@@ -214,6 +221,7 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
     urlPrompt: eventObj.urlPrompt,
     isRecurring,
     recurrenceSummary: summary,
+    singleOccurrenceStart,
     content: eventObj.content,
     location,
     space,
@@ -221,6 +229,22 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
     series,
     categories,
   };
+}
+
+/**
+ * The UTC ISO start of an event whose only non-exclusion schedule does not
+ * recur, else null. The schedule is chosen by `CalendarEvent.baseScheduleOf`,
+ * the one rule for an event's base schedule (DEC-023).
+ */
+function singleOccurrenceStartOf(schedules: CalendarEventSchedule[]): string | null {
+  if (schedules.filter(s => !s.isExclusion).length !== 1) {
+    return null;
+  }
+  const base = CalendarEvent.baseScheduleOf(schedules);
+  if (!base?.startDate || base.frequency) {
+    return null;
+  }
+  return base.startDate.toUTC().toISO();
 }
 
 /**
@@ -631,7 +655,23 @@ export default class CalendarRoutes {
       // the feed / list paths. A future feature needing repost provenance here
       // must wire SharedEventEntity into getEventById or resolve it here.
       const event = await this.service.getEventById(eventId, displayCalendarId);
-      res.json(toPublicEventObject(event.toObject()));
+
+      // Optional `?sameDayAs=<instance slug>` asks for the event's only
+      // occurrence on that slug's local day, so the site can send a dated
+      // link outdated by a time change to the occurrence that replaced it.
+      // An absent or unparseable slug answers null, as does a day with no
+      // occurrence or several.
+      const sameDayAs = typeof req.query.sameDayAs === 'string'
+        ? parseInstanceSlug(req.query.sameDayAs)
+        : null;
+      const sameDayOccurrence = sameDayAs
+        ? await this.service.findSameDayOccurrence(event, sameDayAs)
+        : null;
+
+      res.json({
+        ...toPublicEventObject(event.toObject()),
+        sameDayOccurrenceStart: sameDayOccurrence?.toUTC().toISO() ?? null,
+      });
     }
     catch (error) {
       if (error instanceof EventNotFoundError) {

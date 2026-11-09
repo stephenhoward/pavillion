@@ -1,6 +1,8 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect, APIRequestContext, Page } from '@playwright/test';
+import axios from 'axios';
+import { DateTime } from 'luxon';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
-import { INSTANCE_SLUG_PATTERN } from '@/common/utils/instance-slug';
+import { INSTANCE_SLUG_PATTERN, formatInstanceSlug } from '@/common/utils/instance-slug';
 
 /**
  * E2E Tests: Public Calendar Browsing & Event Detail Viewing
@@ -202,6 +204,168 @@ test.describe('Public Calendar', () => {
 
     await expect(page.locator('h1.event-title')).toHaveText(eventTitle, { timeout: 10000 });
     await expect(page).toHaveTitle(`${eventTitle} | Pavillion`, { timeout: 10000 });
+  });
+});
+
+/**
+ * A dated event link names the occurrence's start, so a link shared before
+ * the owner changes the time names a start that no longer exists. Each case
+ * creates its own event through the API, changes it the way an owner would,
+ * and opens the address handed out before the change.
+ */
+test.describe('Dated links after a time change', () => {
+  const ZONE = 'America/Chicago';
+  // test_calendar, owned by the seeded admin.
+  const CALENDAR_ID = 'c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3';
+  let token: string;
+
+  type ScheduleInput = { start: DateTime; frequency?: 'weekly' };
+
+  /** The local day `days` from now in the event's zone, at `hour:minute`. */
+  function at(days: number, hour: number, minute: number = 0): DateTime {
+    return DateTime.now().setZone(ZONE).plus({ days }).set({ hour, minute, second: 0, millisecond: 0 });
+  }
+
+  function schedulePayload(input: ScheduleInput, id?: string): Record<string, unknown> {
+    return {
+      ...(id ? { id } : {}),
+      start: input.start.toISO(),
+      eventEndTime: input.start.plus({ hours: 2 }).toISO(),
+      timezone: ZONE,
+      frequency: input.frequency ?? null,
+      interval: input.frequency ? 1 : 0,
+      count: 0,
+    };
+  }
+
+  async function createEvent(name: string, schedules: ScheduleInput[]): Promise<{ id: string; scheduleIds: string[] }> {
+    const response = await axios.post(
+      `${env.baseURL}/api/v1/events`,
+      {
+        calendarId: CALENDAR_ID,
+        content: { en: { name } },
+        schedules: schedules.map(s => schedulePayload(s)),
+      },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return { id: response.data.id, scheduleIds: response.data.schedules.map((s: { id: string }) => s.id) };
+  }
+
+  /** Moves the event's one schedule, as the owner does in the editor. */
+  async function moveSchedule(eventId: string, scheduleId: string, name: string, to: ScheduleInput): Promise<void> {
+    await axios.put(
+      `${env.baseURL}/api/v1/events/${eventId}`,
+      {
+        calendarId: CALENDAR_ID,
+        content: { en: { name } },
+        schedules: [schedulePayload(to, scheduleId)],
+      },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  }
+
+  /** The event's current dated slug, read from the public calendar listing. */
+  async function currentSlug(eventId: string): Promise<string> {
+    const response = await axios.get(`${env.baseURL}/api/public/v1/calendar/test_calendar/events`);
+    const starts = (response.data as Array<{ start: string; event: { id: string } }>)
+      .filter(instance => instance.event.id === eventId)
+      .map(instance => instance.start);
+    expect(starts).toHaveLength(1);
+    return formatInstanceSlug(DateTime.fromISO(starts[0]));
+  }
+
+  function datedPath(calendar: string, eventId: string, slug: string): string {
+    return `/${calendar}/events/${eventId}/${slug}`;
+  }
+
+  async function expectNoNotFound(page: Page): Promise<void> {
+    await expect(page.getByRole('heading', { name: 'Not Found' })).toHaveCount(0);
+  }
+
+  test.beforeAll(async () => {
+    const login = await axios.post(`${env.baseURL}/api/auth/v1/login`, {
+      email: 'admin@pavillion.dev',
+      password: 'admin',
+    });
+    token = login.data;
+  });
+
+  test('opens a one-off event\'s old link on its new date', async ({ page }) => {
+    const name = 'Moved Supper';
+    const event = await createEvent(name, [{ start: at(20, 18) }]);
+    const oldSlug = await currentSlug(event.id);
+
+    await moveSchedule(event.id, event.scheduleIds[0], name, { start: at(23, 10, 30) });
+    const newSlug = await currentSlug(event.id);
+    expect(newSlug).not.toBe(oldSlug);
+
+    await page.goto(env.baseURL + datedPath('test_calendar', event.id, oldSlug));
+
+    await expect(page.locator('h1.instance-title')).toHaveText(name, { timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`${datedPath('test_calendar', event.id, newSlug)}$`));
+    await expectNoNotFound(page);
+  });
+
+  test('opens a one-off event moved within its day on its new time', async ({ page }) => {
+    const name = 'Earlier Supper';
+    const event = await createEvent(name, [{ start: at(20, 18) }]);
+    const oldSlug = await currentSlug(event.id);
+
+    await moveSchedule(event.id, event.scheduleIds[0], name, { start: at(20, 10, 30) });
+    const newSlug = await currentSlug(event.id);
+
+    await page.goto(env.baseURL + datedPath('test_calendar', event.id, oldSlug));
+
+    await expect(page.locator('h1.instance-title')).toHaveText(name, { timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`${datedPath('test_calendar', event.id, newSlug)}$`));
+  });
+
+  test('opens a series\' old link on that day\'s new time', async ({ page }) => {
+    const name = 'Weekly Choir';
+    const event = await createEvent(name, [{ start: at(14, 18), frequency: 'weekly' }]);
+    const linkedOccurrence = at(21, 18);
+
+    await moveSchedule(event.id, event.scheduleIds[0], name, { start: at(14, 10, 30), frequency: 'weekly' });
+
+    await page.goto(env.baseURL + datedPath('test_calendar', event.id, formatInstanceSlug(linkedOccurrence)));
+
+    await expect(page.locator('h1.instance-title')).toHaveText(name, { timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`${datedPath('test_calendar', event.id, formatInstanceSlug(at(21, 10, 30)))}$`));
+  });
+
+  test('opens a series on its undated page, with a note, for a date it never had', async ({ page }) => {
+    const name = 'Weekly Reading';
+    const event = await createEvent(name, [{ start: at(14, 18), frequency: 'weekly' }]);
+    const neverOccurred = at(16, 18);
+
+    await page.goto(env.baseURL + datedPath('test_calendar', event.id, formatInstanceSlug(neverOccurred)));
+
+    await expect(page.locator('h1.event-title')).toHaveText(name, { timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`/test_calendar/events/${event.id}$`));
+    const note = page.locator('p[role="status"].event-note');
+    await expect(note).toBeVisible();
+    await expect(note).toContainText(String(neverOccurred.year));
+    await expectNoNotFound(page);
+  });
+
+  test('opens an event with two dates that day on its undated page, with a note', async ({ page }) => {
+    const name = 'Two Sittings';
+    const event = await createEvent(name, [{ start: at(18, 10) }, { start: at(18, 15) }]);
+
+    await page.goto(env.baseURL + datedPath('test_calendar', event.id, formatInstanceSlug(at(18, 18))));
+
+    await expect(page.locator('h1.event-title')).toHaveText(name, { timeout: 10000 });
+    await expect(page.locator('p[role="status"].event-note')).toBeVisible();
+  });
+
+  test('stays Not Found for an event the link\'s calendar does not show', async ({ page }) => {
+    const event = await createEvent('Elsewhere Supper', [{ start: at(20, 18) }]);
+    const path = datedPath('testuser_calendar', event.id, formatInstanceSlug(at(21, 18)));
+
+    await page.goto(env.baseURL + path);
+
+    await expect(page.getByRole('heading', { name: 'Not Found' })).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
   });
 });
 

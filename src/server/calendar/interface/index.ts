@@ -563,6 +563,19 @@ export default class CalendarInterface {
   }
 
   /**
+   * The event's only occurrence on the local day (in the event's zone) of
+   * `startTime`, or null when that day holds none or several.
+   * See EventInstanceService.findSameDayOccurrence.
+   *
+   * @param event - The event; its schedules must be loaded
+   * @param startTime - Any instant on the day to search
+   * @returns The occurrence's start in UTC, or null
+   */
+  async findSameDayOccurrence(event: CalendarEvent, startTime: DateTime): Promise<DateTime | null> {
+    return this.eventInstanceService.findSameDayOccurrence(event, startTime);
+  }
+
+  /**
    * Cancel a single occurrence of a recurring event by its start datetime
    * rather than by a materialized instance ID. Decouples the UI from the
    * instance materialization horizon.

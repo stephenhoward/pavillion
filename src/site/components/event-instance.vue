@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
+import type { DateTime } from 'luxon';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -10,12 +11,13 @@ import NotFound from './not-found.vue';
 import ReportEvent from './report-event.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
 import { useLocale } from '@/site/composables/useLocale';
-import { parseInstanceSlug } from '@/common/utils/instance-slug';
-import { calendarPath, seriesPath } from '@/common/routing/public-paths';
+import { formatInstanceSlug, parseInstanceSlug } from '@/common/utils/instance-slug';
+import { calendarPath, eventPath, seriesPath } from '@/common/routing/public-paths';
 import type { EventCategory } from '@/common/model/event_category';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const router = useRouter();
 const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event as string;
@@ -53,6 +55,51 @@ function categoryHrefBuilder(category: EventCategory): string {
   return localizedPath(calendarPath(state.calendar.urlName)) + '?categories=' + category.id;
 }
 
+/**
+ * Opens a dated link whose occurrence no longer exists, typically because the
+ * owner changed the event's time after the link was shared.
+ *
+ * The event is loaded with the link's calendar, so an event that calendar
+ * does not show stays Not Found (DEC-020). When the event names the
+ * occurrence the link now means (its only date, or its only occurrence that
+ * day), that occurrence is loaded here and the URL replaced with its
+ * address. The site's router view is not keyed, so this page stays mounted
+ * across that replace and must hold the new occurrence itself. Otherwise
+ * the URL is replaced with the event's undated page, which explains the
+ * missing date.
+ *
+ * Never replaces to the slug it was asked for: if the named occurrence is the
+ * linked one, it exists but failed to load, and only the undated page is
+ * left.
+ *
+ * Transient one-shot notices travel in router state, durable view state in
+ * the query: the linked start rides in `history.state.missingOccurrence`,
+ * which event.vue reads, so no query key is added to the public page.
+ */
+async function openMovedOccurrence(linkedStart: DateTime): Promise<void> {
+  const urlName = state.calendar.urlName;
+  const found = await calendarService.loadEventForMissingOccurrence(eventId, linkedStart, urlName);
+  if (!found) {
+    state.notFound = true;
+    return;
+  }
+  const { event, occurrenceStart } = found;
+
+  if (occurrenceStart && formatInstanceSlug(occurrenceStart) !== formatInstanceSlug(linkedStart)) {
+    const moved = await calendarService.loadEventInstance(event.id, occurrenceStart, urlName);
+    if (moved) {
+      state.instance = moved;
+      await router.replace(localizedPath(eventPath(urlName, event.id, formatInstanceSlug(occurrenceStart))));
+      return;
+    }
+  }
+
+  await router.replace({
+    path: localizedPath(eventPath(urlName, event.id)),
+    state: { missingOccurrence: formatInstanceSlug(linkedStart) },
+  });
+}
+
 onBeforeMount(async () => {
   try {
     state.isLoading = true;
@@ -77,8 +124,10 @@ onBeforeMount(async () => {
 
     state.instance = await calendarService.loadEventInstance(eventId, parsedStartTime, state.calendar.urlName);
     if (!state.instance) {
-      state.notFound = true;
-      return;
+      await openMovedOccurrence(parsedStartTime);
+      if (!state.instance) {
+        return;
+      }
     }
 
     // Set page title to event name

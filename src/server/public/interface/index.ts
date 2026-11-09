@@ -79,6 +79,14 @@ export default class PublicCalendarInterface {
     return this.publicCalendarService.findOrMaterializeInstanceWithDetails(eventId, startTime, displayCalendarId);
   }
 
+  /**
+   * Proxy — see EventInstanceService.findSameDayOccurrence. Lets the public
+   * event page send an outdated dated link to the occurrence that replaced it.
+   */
+  async findSameDayOccurrence(event: CalendarEvent, startTime: DateTime): Promise<DateTime | null> {
+    return this.calendarInterface.findSameDayOccurrence(event, startTime);
+  }
+
   async listCategoriesForCalendar(
     calendar: Calendar,
     options?: { startDate?: string; endDate?: string; search?: string },
