@@ -7,7 +7,7 @@
 
 ## Decision
 
-A recurring event keeps its local time across daylight-saving changes. Six rules govern how zones are used, and one accepted exposure is recorded.
+A recurring event keeps its local time across daylight-saving changes. Seven rules govern how zones are used and what happens to cancellations when schedules change, and one accepted exposure is recorded.
 
 **1. Recurrence expands in the base schedule's zone.** Each occurrence steps in wall-clock time in the IANA zone of the event's base schedule. Expansion uses a floating wall-clock frame (`WallClockFrame` in `src/server/calendar/service/event_instance.ts`), not rrule's `tzid` option, because `tzid` takes offsets from the process zone and results would differ between machines. A schedule stored with zone `UTC` expands as a plain UTC series.
 
@@ -21,11 +21,23 @@ A recurring event keeps its local time across daylight-saving changes. Six rules
 
 **6. The wire format carries the zone per schedule.** The schedule's `timezone` is carried on the wire and stored per schedule.
 
+**7. Cancellations follow an edit to the event's schedules where it is clear which occurrence they now belong to; the rest are removed.** When an event's positive schedules are edited, each single-date cancellation row is settled by `remapCancellations` (`src/server/calendar/service/cancellation_remap.ts`), with each side expanded in its own base schedule's frame (rule 1):
+
+- A row whose instant is still an occurrence of the edited schedules is kept.
+- A row that matched no occurrence before the edit is left alone. It is not deleted, so it becomes live again if a later edit puts an occurrence on its instant.
+- A row on a one-off schedule that still exists moves to that schedule's new start.
+- A row on a recurring schedule moves by position when it passes the **shift gate**: the schedule still exists, its frequency, interval and weekdays are unchanged, and either its start keeps the same wall date (the old start in the old frame's zone, the new start in the new frame's zone) or its start instant is unchanged. The row moves to the new schedule's occurrence at the same position in its raw expansion (no exclusions applied); past the new series' end it is removed.
+- Any other row is removed.
+
+A schedule still exists when the edited event has a schedule with its id. A lone schedule also pairs across an id change: when the event has exactly one positive schedule before the edit and exactly one after, and both are one-off or both recurring, they are the same schedule whatever their ids. Imports replace the schedule rather than editing it (an ICS sync sends a schedule with no id on every run), so without the pairing a time change in the feed would delete the owner's cancellations. A pattern change on a lone schedule still removes them.
+
+Collisions resolve the same way whatever the row order: rows that stay claim their instants first, a row moving onto a claimed instant is removed, and of several rows moving onto one free instant the one with the lowest id survives. The surviving row is hidden if any row in the collision was, so a collision never publishes a date the owner hid. A moved row is written as the occurrence's UTC instant (rule 3). Recurring cancellation rows, and rows beyond the remap's walk limits, are left untouched.
+
 **Accepted exposure: hidden cancellations federate.** A cancellation that is hidden from the public stays in `pavillion:schedules` on the ActivityPub object so that peers can honour it. The public API strips schedules (`toPublicEventObject` in `src/server/public/api/v1/calendar.ts` drops them), but the ActivityPub object is fetchable by anyone, so a hidden date is readable by anyone who fetches that object. This exposure is accepted by the owner (2026-11-06). It is an owner-configuration disclosure, not a [DEC-004](dec-004-privacy-first-public-access.md) matter: no attendee or visitor data is involved.
 
 ## Context
 
-The zone-aware recurrence work made the schedule's IANA zone survive from the editor to the database and made expansion step in that zone. The rules above were settled during that work and lived only in bead notes while further changes to this code were pending. The follow-up work on a single zone per event and on re-keying cancellations when the zone changes builds on them.
+The zone-aware recurrence work made the schedule's IANA zone survive from the editor to the database and made expansion step in that zone. The rules above were settled during that work and lived only in bead notes while further changes to this code were pending. The follow-up work on a single zone per event builds on them. Rule 7 was settled when unblocking the editor for events with cancelled dates: without it, a change to a recurring event's start time or zone silently un-cancelled dates, publicly and over federation.
 
 ## Alternatives Considered
 
@@ -40,6 +52,9 @@ Wall-clock stepping in a named zone is the only behaviour that matches what orga
 ## Consequences
 
 - Code that picks a schedule for an event must use `baseSchedule()`.
-- A change to an event's zone must move its cancellation rows to the instants of the occurrences they cancel.
+- A change to a schedule's time or zone moves its cancellations to the new instants of the occurrences they cancel; a change to its pattern (weekdays, interval, frequency) or a replaced schedule removes the cancellations that no longer line up.
+- The editor shows no notice when cancellations are removed: a removed row matched no occurrence of the edited event, so nothing it cancelled reappears.
+- A row that already matched no occurrence is left alone (rule 7), so it becomes live again if a later edit puts an occurrence on its instant.
+- An import that replaces an event's only schedule keeps its cancellations on a time or zone change, as an edit by id does.
 - Anyone fetching an event's ActivityPub object can read hidden cancellation dates.
 - Deployments run in UTC and do not set `TZ` (see `docs/deployment.md`).

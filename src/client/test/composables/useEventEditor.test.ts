@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import { DateTime } from 'luxon';
 import { createPinia, setActivePinia } from 'pinia';
 import { useEventEditor } from '@/client/composables/useEventEditor';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
 import { EventLocation } from '@/common/model/location';
@@ -421,6 +421,60 @@ describe('useEventEditor', () => {
       await initializeEvent();
 
       expect(mockRouter.push).toHaveBeenCalledWith({ name: 'calendars' });
+    });
+  });
+
+  describe('Cancelled dates', () => {
+    /** The GET /events/:id wire shape of a weekly event with one cancelled date. */
+    function eventWithCancellation(id: string): Record<string, any> {
+      const event = new CalendarEvent(id, 'cal-1');
+      event.content('en').name = 'Weekly Standup';
+      const positive = new CalendarEventSchedule('pos-1', DateTime.fromISO('2040-10-01T10:00:00', { zone: 'America/Los_Angeles' }));
+      positive.frequency = EventFrequency.WEEKLY;
+      positive.interval = 1;
+      const cancellation = new CalendarEventSchedule('exc-1', DateTime.fromISO('2040-10-15T17:00:00Z', { zone: 'UTC' }));
+      cancellation.isExclusion = true;
+      event.addSchedule(positive);
+      event.addSchedule(cancellation);
+      return event.toObject();
+    }
+
+    it('should drop cancellations at load in edit mode, so a save sends only the positive schedule', async () => {
+      mockRoute.params.eventId = 'event-123';
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([new Calendar('cal-1', 'test-calendar')]);
+      sandbox.stub(ModelService, 'getModel').resolves(eventWithCancellation('event-123'));
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
+      const saveStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(new CalendarEvent('event-123', 'cal-1'));
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent('event-123');
+
+      expect(state.event!.schedules.map(s => s.id)).toEqual(['pos-1']);
+
+      await saveEvent(vi.fn((key) => key));
+
+      const saved = saveStub.firstCall.args[0];
+      expect(saved.schedules.some(s => s.isExclusion)).toBe(false);
+      expect(saved.schedules.map(s => s.id)).toEqual(['pos-1']);
+    });
+
+    it('should give a duplicate no cancelled dates', async () => {
+      mockRoute.query.from = 'source-event-123';
+      const actual = await vi.importActual<typeof import('@/client/composables/useEventDuplication')>('@/client/composables/useEventDuplication');
+      mockStripEventForDuplication.mockImplementationOnce(actual.useEventDuplication().stripEventForDuplication);
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([new Calendar('cal-1', 'test-calendar')]);
+      sandbox.stub(ModelService, 'getModel').resolves(eventWithCancellation('source-event-123'));
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
+
+      const { state, initializeEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      expect(state.event!.schedules).toHaveLength(1);
+      expect(state.event!.schedules.every(s => !s.isExclusion)).toBe(true);
     });
   });
 

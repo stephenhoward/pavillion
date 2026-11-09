@@ -674,4 +674,171 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
       expect(response.status).toBe(404);
     });
   });
+
+  describe('PUT /events/:eventId with cancelled occurrences', () => {
+    /*
+     * Literal dates in autumn 2040, across the US daylight-saving change of
+     * 2040-11-04, so every instant is exact and nothing depends on the day the
+     * suite runs. The series lie past the instance-generation horizon, so the
+     * listener chains the POST and PUT start write no instance rows and there
+     * is nothing to settle; occurrences are read with an explicit `after`.
+     */
+    const AFTER = '2040-09-30T00:00:00Z';
+    const LA = 'America/Los_Angeles';
+
+    async function createWeekly(start: DateTime): Promise<string> {
+      const response = await request(env.app)
+        .post('/api/v1/events')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          calendarId: ownerCalendarId,
+          content: { en: { name: 'Autumn Standup', description: 'Weekly through the DST change' } },
+          schedules: [{
+            start: start.toISO(),
+            end: start.plus({ weeks: 12 }).toISO(),
+            eventEndTime: start.plus({ hours: 1 }).toISO(),
+            timezone: start.zoneName,
+            frequency: 'weekly',
+            interval: 1,
+          }],
+        });
+      expect(response.status).toBe(201);
+      return response.body.id;
+    }
+
+    async function cancelOccurrence(eventId: string, start: string, hideFromPublic: boolean): Promise<void> {
+      const response = await request(env.app)
+        .post(`/api/v1/events/${eventId}/occurrences/cancel`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ start, hideFromPublic });
+      expect(response.status).toBe(204);
+    }
+
+    /** Every occurrence that is not active, as UTC instants with their state. */
+    async function notActive(eventId: string): Promise<Array<{ start: string; state: string }>> {
+      const response = await request(env.app)
+        .get(`/api/v1/events/${eventId}/upcoming-occurrences`)
+        .query({ after: AFTER, limit: 50 })
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(response.status).toBe(200);
+      return response.body.occurrences
+        .filter((o: { state: string }) => o.state !== 'active')
+        .map((o: { start: string; state: string }) => ({ start: DateTime.fromISO(o.start, { zone: 'utc' }).toISO(), state: o.state }));
+    }
+
+    async function putSchedule(eventId: string, start: DateTime): Promise<void> {
+      const current = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(current.status).toBe(200);
+      const positive = current.body.schedules.find((s: { isException?: boolean }) => s.isException !== true);
+      const response = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          schedules: [{
+            id: positive.id,
+            start: start.toISO(),
+            end: start.plus({ weeks: 12 }).toISO(),
+            eventEndTime: start.plus({ hours: 1 }).toISO(),
+            timezone: start.zoneName,
+            frequency: 'weekly',
+            interval: 1,
+          }],
+        });
+      expect(response.status).toBe(200);
+    }
+
+    it('moves cancellations to the new time on their own dates when the start time moves an hour later', async () => {
+      // Mondays at 10:00 Los Angeles from 2040-10-01.
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      await cancelOccurrence(eventId, '2040-10-15T17:00:00.000Z', false); // 10:00 PDT
+      await cancelOccurrence(eventId, '2040-11-12T18:00:00.000Z', true); // 10:00 PST
+
+      await putSchedule(eventId, DateTime.fromISO('2040-10-01T11:00:00', { zone: LA }));
+
+      expect(await notActive(eventId)).toEqual([
+        { start: '2040-10-15T18:00:00.000Z', state: 'cancelled-shown' }, // 11:00 PDT
+        { start: '2040-11-12T19:00:00.000Z', state: 'hidden' }, // 11:00 PST
+      ]);
+    });
+
+    it('keeps each cancellation on its occurrence when a stored-UTC series is re-saved in a zone at the same instant', async () => {
+      // Tuesdays at 02:00 UTC from 2040-10-02, which is Monday 19:00 in Los
+      // Angeles: the wall date changes, so the unchanged instant is what lets
+      // the cancellations follow by position.
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-02T02:00:00', { zone: 'UTC' }));
+      await cancelOccurrence(eventId, '2040-10-16T02:00:00.000Z', false);
+      await cancelOccurrence(eventId, '2040-11-13T02:00:00.000Z', false);
+
+      await putSchedule(eventId, DateTime.fromISO('2040-10-01T19:00:00', { zone: LA }));
+
+      expect(await notActive(eventId)).toEqual([
+        // 19:00 PDT is still 02:00Z, so this row stays where it is.
+        { start: '2040-10-16T02:00:00.000Z', state: 'cancelled-shown' },
+        // 19:00 PST is 03:00Z: the row moves with its occurrence.
+        { start: '2040-11-13T03:00:00.000Z', state: 'cancelled-shown' },
+      ]);
+    });
+
+    it('accepts the GET body PUT back with its cancellation, and keeps the cancellation when it is omitted', async () => {
+      const eventId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      await cancelOccurrence(eventId, '2040-10-15T17:00:00.000Z', false);
+      const cancelled = [{ start: '2040-10-15T17:00:00.000Z', state: 'cancelled-shown' }];
+
+      const current = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(current.status).toBe(200);
+      const body = current.body;
+      expect(body.schedules.some((s: { isException?: boolean }) => s.isException === true)).toBe(true);
+      body.content.en.description = 'Edited with the cancellation echoed';
+
+      const echoed = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(body);
+      expect(echoed.status).toBe(200);
+      expect(await notActive(eventId)).toEqual(cancelled);
+
+      const reread = await request(env.app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(reread.body.content.en.description).toBe('Edited with the cancellation echoed');
+
+      const omitted = await request(env.app)
+        .put(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ...body, schedules: body.schedules.filter((s: { isException?: boolean }) => s.isException !== true) });
+      expect(omitted.status).toBe(200);
+      expect(await notActive(eventId)).toEqual(cancelled);
+    });
+
+    it('refuses another event\'s cancellation echoed into a PUT, and leaves both events\' cancellations as they were', async () => {
+      const targetId = await createWeekly(DateTime.fromISO('2040-10-01T10:00:00', { zone: LA }));
+      const otherId = await createWeekly(DateTime.fromISO('2040-10-02T10:00:00', { zone: LA }));
+      await cancelOccurrence(targetId, '2040-10-15T17:00:00.000Z', false);
+      await cancelOccurrence(otherId, '2040-10-16T17:00:00.000Z', true);
+      const targetCancelled = [{ start: '2040-10-15T17:00:00.000Z', state: 'cancelled-shown' }];
+      const otherCancelled = [{ start: '2040-10-16T17:00:00.000Z', state: 'hidden' }];
+
+      const target = await request(env.app)
+        .get(`/api/v1/events/${targetId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const other = await request(env.app)
+        .get(`/api/v1/events/${otherId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const foreignExclusion = other.body.schedules.find((s: { isException?: boolean }) => s.isException === true);
+      expect(foreignExclusion?.id).toBeDefined();
+
+      const response = await request(env.app)
+        .put(`/api/v1/events/${targetId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ...target.body, schedules: [...target.body.schedules, foreignExclusion] });
+
+      expect(response.status).toBe(400);
+      expect(await notActive(targetId)).toEqual(targetCancelled);
+      expect(await notActive(otherId)).toEqual(otherCancelled);
+    });
+  });
 });

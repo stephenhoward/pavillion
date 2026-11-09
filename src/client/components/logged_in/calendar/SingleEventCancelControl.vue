@@ -68,8 +68,8 @@ async function loadState() {
     // Single-occurrence state read: we anchor one millisecond before the
     // occurrence and read the returned occurrence's `state` field (active /
     // cancelled-shown / hidden), past or future — NOT its absence. The editor
-    // schedule rows are not the source of truth for cancellation: reconcileSchedules
-    // rejects exclusion rows in its update payload, so a cancellation never
+    // schedule rows are not the source of truth for cancellation: the editor
+    // drops exclusion rows when it loads the event, so a cancellation never
     // round-trips through the editor model.
     const result = await eventService.listUpcomingOccurrences(
       props.event.id,

@@ -298,6 +298,91 @@ class ZonedOccurrenceSet {
   }
 }
 
+/** Our EventFrequency enum mapped to rrule's Frequency enum. */
+const FREQUENCY_MAP: Record<EventFrequency, number> = {
+  [EventFrequency.DAILY]: RRule.DAILY,
+  [EventFrequency.WEEKLY]: RRule.WEEKLY,
+  [EventFrequency.MONTHLY]: RRule.MONTHLY,
+  [EventFrequency.YEARLY]: RRule.YEARLY,
+};
+
+/**
+ * The rrule a recurring schedule expands by, stepping in `frame`; null when
+ * the schedule has no mapped frequency (a one-off date).
+ */
+function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFrame): InstanceType<typeof RRule> | null {
+  const frequency = schedule.frequency !== null
+    ? FREQUENCY_MAP[schedule.frequency]
+    : undefined;
+  // NB: RRule.YEARLY === 0 so a truthy check would skip yearly schedules.
+  // Compare against undefined explicitly so all mapped frequencies (0..3)
+  // flow into the rrule branch.
+  if ( frequency === undefined ) {
+    return null;
+  }
+  let options: Record<string,any> = {
+    freq: frequency,
+    interval: schedule.interval,
+    dtstart: schedule.startDate ? frame.toFloating(schedule.startDate) : undefined,
+  };
+  if ( schedule.count ) {
+    options.count = schedule.count;
+  }
+  else if ( schedule.endDate ) {
+    options.until = frame.toFloating(schedule.endDate);
+  }
+  if ( schedule.byDay?.length ) {
+    const weekdays = schedule.byDay
+      .map(parseByDay)
+      .filter((w): w is InstanceType<typeof Weekday> => w !== null);
+    if (weekdays.length) {
+      options.byweekday = weekdays;
+    }
+  }
+  return new RRule(options);
+}
+
+/**
+ * A schedule's own occurrences up to `until` (open-ended when null), as true
+ * instants in instant order, with no exclusions applied. A recurring
+ * schedule steps in the {@link WallClockFrame} of `frameSchedule`, the
+ * event's base schedule, exactly as listing and materialization expand it.
+ * A one-off schedule yields its start. At most `limit` occurrences are
+ * returned, so a result of length `limit` may have been cut short.
+ *
+ * Returns [] for a schedule with no start, and for a recurring schedule
+ * whose interval is not a positive integer: rrule never returns for a null
+ * interval and defaults a missing dtstart to now.
+ */
+export function expandScheduleOccurrences(
+  schedule: CalendarEventSchedule,
+  frameSchedule: CalendarEventSchedule | null,
+  until: Date | null,
+  limit: number,
+): Date[] {
+  if (!schedule.startDate || limit <= 0) {
+    return [];
+  }
+  const untilMs = until?.getTime() ?? Infinity;
+  if (schedule.frequency === null || FREQUENCY_MAP[schedule.frequency] === undefined) {
+    const start = schedule.startDate.toJSDate();
+    return start.getTime() <= untilMs ? [start] : [];
+  }
+  if (!Number.isInteger(schedule.interval) || schedule.interval <= 0) {
+    return [];
+  }
+  const frame = WallClockFrame.of(frameSchedule);
+  const rule = buildScheduleRule(schedule, frame)!;
+  const hiMs = until
+    ? frame.toFloating(DateTime.fromJSDate(until)).getTime() + FLOATING_WINDOW_SLACK_MS
+    : END_OF_RRULE_TIME.getTime();
+  return rule
+    .all((floating, length) => length < limit && floating.getTime() <= hiMs)
+    .map(floating => frame.fromFloating(floating).toJSDate())
+    .filter(d => d.getTime() <= untilMs)
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
 export default class EventInstanceService {
   private eventBus: EventEmitter;
   private categoryService: CategoryService;
@@ -1416,13 +1501,6 @@ export default class EventInstanceService {
     const frame = WallClockFrame.of(event.baseSchedule());
     const occurrences = new ZonedOccurrenceSet(frame);
 
-    // Map our EventFrequency enum to RRule's Frequency enum
-    const frequencyMap: Record<EventFrequency, number> = {
-      [EventFrequency.DAILY]: RRule.DAILY,
-      [EventFrequency.WEEKLY]: RRule.WEEKLY,
-      [EventFrequency.MONTHLY]: RRule.MONTHLY,
-      [EventFrequency.YEARLY]: RRule.YEARLY,
-    };
     for (let schedule of event.schedules) {
       // Only hidden cancellations (is_exclusion=true AND hide_from_public=true)
       // contribute suppression to the rrule set. Shown cancellations are no-ops
@@ -1434,33 +1512,9 @@ export default class EventInstanceService {
         continue;
       }
 
-      const frequency = schedule.frequency !== null
-        ? frequencyMap[schedule.frequency]
-        : undefined;
-      // NB: RRule.YEARLY === 0 so a truthy check would skip yearly schedules.
-      // Compare against undefined explicitly so all mapped frequencies (0..3)
-      // flow into the rrule branch.
-      if ( frequency !== undefined ) {
-        let options: Record<string,any> = {
-          freq: frequency,
-          interval: schedule.interval,
-          dtstart: schedule.startDate ? frame.toFloating(schedule.startDate) : undefined,
-        };
-        if ( schedule.count ) {
-          options.count = schedule.count;
-        }
-        else if ( schedule.endDate ) {
-          options.until = frame.toFloating(schedule.endDate);
-        }
-        if ( schedule.byDay?.length ) {
-          const weekdays = schedule.byDay
-            .map(parseByDay)
-            .filter((w): w is InstanceType<typeof Weekday> => w !== null);
-          if (weekdays.length) {
-            options.byweekday = weekdays;
-          }
-        }
-        occurrences.addRule(new RRule(options), isHiddenCancellation);
+      const rule = buildScheduleRule(schedule, frame);
+      if ( rule ) {
+        occurrences.addRule(rule, isHiddenCancellation);
       }
       else if (schedule.startDate) {
         occurrences.addDate(schedule.startDate, isHiddenCancellation);
