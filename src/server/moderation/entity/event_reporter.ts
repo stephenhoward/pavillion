@@ -16,7 +16,8 @@ import db from '@/server/common/entity/db';
  */
 @Table({
   tableName: 'event_reporter',
-  timestamps: false,
+  timestamps: true,
+  updatedAt: false,
   underscored: true,
   indexes: [
     {
@@ -41,6 +42,8 @@ class EventReporterEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: false })
   declare report_id: string;
 
+  // Explicit column keeps the sync schema nullable, matching migrations/0001_initial_schema.ts;
+  // a bare @CreatedAt would emit NOT NULL.
   @CreatedAt
   @Column({ type: DataType.DATE })
   declare created_at: Date;

@@ -88,7 +88,7 @@ export interface EscalationRecord {
   reviewerRole: string;
   decision: string;
   notes: string | null;
-  createdAt: string;
+  createdAt: string | null;
 }
 
 /**
