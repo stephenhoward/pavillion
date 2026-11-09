@@ -10,9 +10,11 @@ import migration from '../../../../../migrations/0050_add_ap_outbox_is_public';
  *
  * It runs on in-memory SQLite by default. CI runs only migrations up and down
  * on PostgreSQL, so the backfill is checked there by hand: with
- * DB_DIALECT=postgres and the DB_HOST / DB_PORT / DB_NAME / DB_USER /
- * DB_PASSWORD variables set, the same cases run against that database. Use a
- * scratch database — the test drops and recreates `calendar` and `ap_outbox`.
+ * MIGRATION_TEST_PG=1 and DB_DIALECT=postgres, plus the DB_HOST / DB_PORT /
+ * DB_NAME / DB_USER / DB_PASSWORD variables, the same cases run against that
+ * database. Both are required, so a shell that merely points the app at
+ * PostgreSQL never reaches this path. Use a scratch database — the test drops
+ * and recreates `calendar` and `ap_outbox`.
  */
 const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
 const DOMAIN = 'pavillion.test';
@@ -24,7 +26,8 @@ const FOLLOWERS = `${OUR_ACTOR}/followers`;
 const USER_ACTOR = `https://${DOMAIN}/users/editor`;
 const REMOTE_CALENDAR = 'https://peer.example/calendars/theirs';
 
-const onPostgres = process.env.DB_DIALECT === 'postgres';
+// Dropping tables needs an explicit opt-in, not just a PostgreSQL dialect.
+const onPostgres = process.env.MIGRATION_TEST_PG === '1' && process.env.DB_DIALECT === 'postgres';
 
 function openDatabase(): Sequelize {
   if (onPostgres) {
@@ -173,11 +176,32 @@ describe('Migration 0050: add is_public to ap_outbox', () => {
     expect(byVerdict).toEqual({ true: total - Math.ceil(total / 3), false: Math.ceil(total / 3) });
   });
 
-  it('leaves stored rows in place: nothing is deleted', async () => {
-    await insertRow('user-actor', 'Update', { actor: USER_ACTOR, to: [REMOTE_CALENDAR] });
+  it('sets is_public on unaddressed calendar-actor rows of non-served types, so the flag is not evidence of publicness for them', async () => {
+    // Before toObject wrote to/cc, every calendar-actor row was stored with no
+    // addressing, Follow and Flag included. The backfill marks them public;
+    // readOutbox never serves them only because its type filter excludes them.
+    await insertRow('unaddressed-follow', 'Follow', { id: 'unaddressed-follow', type: 'Follow', actor: OUR_ACTOR, object: REMOTE_CALENDAR });
+    await insertRow('unaddressed-flag', 'Flag', { id: 'unaddressed-flag', type: 'Flag', actor: OUR_ACTOR, object: 'https://peer.example/events/3' });
 
     await migration.up({ context: sequelize });
 
+    expect(await isPublic('unaddressed-follow')).toBe(true);
+    expect(await isPublic('unaddressed-flag')).toBe(true);
+  });
+
+  it('deletes no rows, including ones it leaves not public', async () => {
+    await insertRow('user-actor', 'Update', { actor: USER_ACTOR, to: [REMOTE_CALENDAR] });
+    await insertRow('public-create', 'Create', { actor: OUR_ACTOR, to: [AS_PUBLIC] });
+    await insertRow('malformed', 'Create', 'null');
+    const countRows = async () => {
+      const [{ n }] = await sequelize.query<{ n: string | number }>('SELECT COUNT(*) AS n FROM ap_outbox', { type: QueryTypes.SELECT });
+      return Number(n);
+    };
+    const before = await countRows();
+
+    await migration.up({ context: sequelize });
+
+    expect(await countRows()).toBe(before);
     expect(await isPublic('user-actor')).toBe(false);
   });
 

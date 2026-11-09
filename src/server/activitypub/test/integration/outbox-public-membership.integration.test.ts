@@ -174,6 +174,20 @@ describe('Public-outbox membership', () => {
       expect(totalItems).toBe(1);
     });
 
+    it('stores a user actor\'s activity addressed as:Public as not public and does not serve it', async () => {
+      const calendar = await createBareCalendar('membershipuserpublic');
+      const userActor = `https://${DOMAIN}/users/publiceditor`;
+
+      const row = await writeRow(calendar, eventActivity('Update', userActor, 'user-public'));
+      await row.update({ processed_time: new Date(), processed_status: 'ok' });
+
+      expect((row.message as Record<string, unknown>).to, 'fixture: addressed as:Public').toEqual(['https://www.w3.org/ns/activitystreams#Public']);
+      expect(row.is_public).toBe(false);
+      const { items, totalItems } = await outboxReader().readOutbox(calendar.id);
+      expect(items).toEqual([]);
+      expect(totalItems).toBe(0);
+    });
+
     it('keeps a user-actor row in ap_outbox while not serving it', async () => {
       const calendar = await createBareCalendar('membershipretained');
       const userActor = `https://${DOMAIN}/users/editor`;
@@ -194,6 +208,23 @@ describe('Public-outbox membership', () => {
       const stored = await ActivityPubOutboxMessageEntity.findByPk(update.id);
       expect(stored).not.toBeNull();
       expect(stored!.is_public).toBe(false);
+    });
+  });
+
+  describe('readOutbox status filter', () => {
+    it('does not serve a processed row whose processed_status is NULL', async () => {
+      const calendar = await createBareCalendar('membershipnullstatus');
+      const actor = ActivityPubActor.actorUrl(calendar);
+
+      const served = eventActivity('Create', actor, 'served');
+      await (await writeRow(calendar, served)).update({ processed_time: new Date(), processed_status: 'ok' });
+      const nullStatus = await writeRow(calendar, eventActivity('Create', actor, 'null-status'));
+      await nullStatus.update({ processed_time: new Date(), processed_status: null });
+
+      expect(nullStatus.is_public, 'fixture: the row is public').toBe(true);
+      const { items, totalItems } = await outboxReader().readOutbox(calendar.id);
+      expect(items.map(item => item.id)).toEqual([served.id]);
+      expect(totalItems).toBe(1);
     });
   });
 

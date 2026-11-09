@@ -47,6 +47,8 @@ const AS_PUBLIC = 'https://www.w3.org/ns/activitystreams#Public';
  * The actor is parsed with URL, never matched as a substring. Anything
  * malformed is not public and does not throw.
  *
+ * Exported only so the shared case table can test the frozen rule; nothing else imports it.
+ *
  * @param message - The stored message, already parsed from JSON
  * @param calendarUrlName - The url_name of the row's calendar
  */
