@@ -228,8 +228,8 @@ Every event a calendar publishes, edits, deletes or reposts is written to the `a
 | Status | What it means |
 |---|---|
 | `ok` | Delivered to every follower. |
-| `partial: …` | Delivered, but one or more followers couldn't be reached. The text after the colon names them and says why. The activity still appears in the calendar's public outbox, so a follower that was down can catch up from there. |
-| `error: …` | Pavillion couldn't process the activity at all, so nobody received it and it isn't in the public outbox. The text says what failed. One error never stops the rows behind it. |
+| `partial: …` | Delivered, but one or more followers couldn't be reached. The text after the colon names them and says why. The activity still appears in the calendar's public outbox, so anyone who follows the calendar later will see it when they load the outbox. |
+| `error: …` | Pavillion couldn't finish processing the activity, so it isn't published and isn't in the public outbox, though followers it reached before the failure may already have it. The text says what failed. One error never stops the rows behind it. |
 | `skipped: superseded` | A delivery that was interrupted (by a restart, say) and that the calendar had already taken back by the time Pavillion got to it — an event deleted, or a repost undone. Pavillion sends the deletion or undo instead of resurrecting the original. |
 | `bad message type` | An activity type Pavillion doesn't know how to send. Not delivered and not in the public outbox. |
 | empty | Not delivered yet. |
