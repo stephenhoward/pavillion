@@ -88,7 +88,7 @@ secrets:
 
 Both approaches work:
 
-1. **Direct environment variables**: Set `DB_PASSWORD=mysecret` in `.env`
+1. **Direct environment variables**: Set `DB_PASSWORD=<your password>` in `.env`
 2. **Docker secrets**: Set `DB_PASSWORD_FILE=/run/secrets/db_password`
 
 The `_FILE` pattern takes precedence if both are set.
@@ -604,8 +604,8 @@ ENCRYPTION_KEY=your_encryption_key_here
 CALENDAR_IMPORT_HMAC_SECRET=your_import_hmac_secret_here
 
 # Optional database settings
-DB_NAME=pavillion
-DB_USER=pavillion
+# DB_NAME=your_database_name
+# DB_USER=your_database_user
 
 # Optional host address for the app (default: loopback only)
 APP_PORT=127.0.0.1:3000

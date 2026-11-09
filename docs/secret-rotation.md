@@ -160,9 +160,10 @@ Restore the previous SESSION_SECRET from your password manager and restart.
 
 4. **Update PostgreSQL password:**
    ```bash
-   # Connect to database container
-   docker compose exec db psql -U pavillion -d pavillion -c \
-     "ALTER USER pavillion WITH PASSWORD '$NEW_DB_PASSWORD';"
+   # Connect to the database container as its own user and change that
+   # user's password
+   docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh \
+     "ALTER USER CURRENT_USER WITH PASSWORD '$NEW_DB_PASSWORD';"
    ```
 
 5. **Update `.env` file:**

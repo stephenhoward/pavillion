@@ -43,7 +43,7 @@ container image changes nothing in the application; see
 Backups are not automated. Run a `pg_dump` before any major upgrade:
 
 ```bash
-docker compose exec db pg_dump -U pavillion pavillion > \
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > \
   backup-pre-upgrade-$(date +%Y%m%d-%H%M%S).sql
 ```
 
