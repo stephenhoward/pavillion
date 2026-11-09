@@ -67,42 +67,21 @@ test.describe('Public Calendar', () => {
     const eventItems = page.locator('li.day-event-item');
     const daySections = page.locator('section.day-section');
 
-    // Wait for either events or an empty state to appear
-    await page.waitForSelector('section.day-section, .empty-state, li.day-event-item', { timeout: 15000 });
+    // The seeded test_calendar always has events; an empty calendar is a regression.
+    await expect(daySections.first()).toBeVisible({ timeout: 15000 });
+    await expect(eventItems.first()).toBeVisible();
 
-    const eventCount = await eventItems.count();
-    const dayCount = await daySections.count();
-
-    // In the seeded database, test_calendar should have events
-    // If no events, verify empty state renders correctly
-    if (eventCount === 0 && dayCount === 0) {
-      const emptyState = page.locator('.empty-state');
-      await expect(emptyState).toBeVisible();
-    }
-    else {
-      // Verify at least one event card has a title (article.event-card contains an h3 with a link)
-      const firstEventTitle = eventItems.first().locator('h3');
-      await expect(firstEventTitle).toBeVisible();
-    }
+    // Each event card carries a title (article.event-card contains an h3 with a link)
+    await expect(eventItems.first().locator('h3')).toBeVisible();
   });
 
   test('should filter events by category', async ({ page }) => {
     // Wait for categories to load
     // category-pill-selector is now the scrollable container div, not itself a button.
     // The interactive elements are button.category-pill inside it.
-    await page.waitForSelector('button.category-pill, .category-pill-selector-wrapper, .empty-state', { timeout: 15000 });
-
+    // The seeded test_calendar has categories, so pills must render.
     const categoryPills = page.locator('button.category-pill');
-    const pillCount = await categoryPills.count();
-
-    if (pillCount === 0) {
-      // No categories available, skip
-      test.skip();
-      return;
-    }
-
-    // Get the first category name
-    const firstPillText = await categoryPills.first().locator('.category-name').textContent();
+    await expect(categoryPills.first()).toBeVisible({ timeout: 15000 });
 
     // Click the first category pill to filter
     await categoryPills.first().click();
@@ -124,15 +103,8 @@ test.describe('Public Calendar', () => {
   test('should search events by text', async ({ page }) => {
     // Wait for page to load
     // New redesign uses section.day-section instead of section.day
-    await page.waitForSelector('#public-event-search, section.day-section, .empty-state', { timeout: 15000 });
-
     const searchInput = page.locator('#public-event-search');
-    const searchVisible = await searchInput.isVisible().catch(() => false);
-
-    if (!searchVisible) {
-      test.skip();
-      return;
-    }
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
 
     // Type a search query (use a term likely to exist in seeded data)
     await searchInput.fill('test');
@@ -146,27 +118,17 @@ test.describe('Public Calendar', () => {
 
     // Clear search
     const clearBtn = page.locator('.clear-search');
-    const clearVisible = await clearBtn.isVisible().catch(() => false);
-
-    if (clearVisible) {
-      await clearBtn.click();
-      // Verify search is cleared
-      await expect(searchInput).toHaveValue('');
-    }
+    await expect(clearBtn).toBeVisible();
+    await clearBtn.click();
+    // Verify search is cleared
+    await expect(searchInput).toHaveValue('');
   });
 
   test('should navigate to event detail page', async ({ page }) => {
     // Wait for events to load
     // New redesign uses li.day-event-item (containing article.event-card) instead of li.event
-    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
-
     const eventLinks = page.locator('li.day-event-item h3 a');
-    const linkCount = await eventLinks.count();
-
-    if (linkCount === 0) {
-      test.skip();
-      return;
-    }
+    await expect(eventLinks.first()).toBeVisible({ timeout: 15000 });
 
     // Get the event title before clicking
     const eventTitle = await eventLinks.first().textContent();
@@ -212,12 +174,8 @@ test.describe('Public Calendar', () => {
     await expect(page).toHaveTitle(/\| Pavillion$/, { timeout: 10000 });
     const calendarTitle = await page.title();
 
-    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
     const eventLinks = page.locator('li.day-event-item h3 a');
-    if (await eventLinks.count() === 0) {
-      test.skip();
-      return;
-    }
+    await expect(eventLinks.first()).toBeVisible({ timeout: 15000 });
 
     // In-SPA navigation to the event page, which sets its own title.
     await eventLinks.first().click();
@@ -230,12 +188,8 @@ test.describe('Public Calendar', () => {
   });
 
   test('should title the dateless event page after the event', async ({ page }) => {
-    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
     const eventLinks = page.locator('li.day-event-item h3 a');
-    if (await eventLinks.count() === 0) {
-      test.skip();
-      return;
-    }
+    await expect(eventLinks.first()).toBeVisible({ timeout: 15000 });
 
     const eventTitle = (await eventLinks.first().textContent())?.trim() ?? '';
     const href = await eventLinks.first().getAttribute('href');
