@@ -9,6 +9,7 @@ import AccountsInterface from '../accounts/interface';
 import ModerationInterface from '../moderation/interface';
 import HousekeepingInterface from '../housekeeping/interface';
 import type { ProcessInboxMessagesOptions } from '@/server/activitypub/service/inbox';
+import type { ProcessOutboxMessagesOptions } from '@/server/activitypub/service/outbox';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -17,6 +18,18 @@ import { logError } from '@/server/common/helper/error-logger';
  * PostgreSQL a tick taking the same fresh row would dispatch it twice.
  */
 export const INBOX_DRAIN_SKIP_NEWER_THAN_MS = 10_000;
+
+/**
+ * Interval ticks leave outbox rows written this recently to the live
+ * `outboxMessageAdded` handler, which delivers without a claim; on PostgreSQL
+ * a tick taking a row still in live delivery would deliver it twice. Fifteen
+ * minutes, not the inbox's ten seconds: each recipient can cost two HTTP
+ * timeouts (actor fetch, then POST), so one fan-out with a dead peer routinely
+ * runs past ten seconds. Every outbox row has a live handler, so no row waits
+ * on a tick to be delivered; only rows a restart stranded do, and the boot
+ * drain takes those regardless of age.
+ */
+export const OUTBOX_DRAIN_SKIP_NEWER_THAN_MS = 900_000;
 
 /**
  * ActivityPub domain entry point
@@ -32,6 +45,8 @@ export default class ActivityPubDomain {
   private eventHandlers: ActivityPubEventHandlers | null = null;
   /** The drain in flight, if any; a tick that finds one does nothing. */
   private inboxDrain: Promise<void> | null = null;
+  /** The outbox drain in flight, if any; a tick that finds one does nothing. */
+  private outboxDrain: Promise<void> | null = null;
 
   constructor(
     eventBus: EventEmitter,
@@ -100,6 +115,47 @@ export default class ActivityPubDomain {
     drain({});
     const interval = setInterval(
       () => drain({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS }),
+      intervalMs,
+    );
+    return () => clearInterval(interval);
+  }
+
+  /**
+   * Start draining unprocessed outbox rows in this process: once now, taking
+   * every row, then every `activitypub.outboxDrain.intervalMs`, leaving rows
+   * written within {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery.
+   * This is what delivers rows whose `outboxMessageAdded` emit went to a
+   * process that stopped before handling it. Delivery is at-least-once: a row
+   * a restart cut off mid-fan-out is delivered again from the start.
+   *
+   * Called by the web process once every domain has installed its handlers,
+   * never from {@link initialize} and never from the worker: delivering a row
+   * runs local dispatch, which needs the full handler set. Unlike the inbox
+   * drain it needs no moderation interface, since outbound delivery has no
+   * blocked-instance gate on the live path either.
+   *
+   * @returns A function that stops the interval; a drain in flight finishes
+   */
+  public startOutboxDrain(): () => void {
+    if (!this.eventHandlers) {
+      throw new Error('ActivityPubDomain.startOutboxDrain called before installEventHandlers');
+    }
+    const eventHandlers = this.eventHandlers;
+
+    const drain = (options: ProcessOutboxMessagesOptions): void => {
+      if (this.outboxDrain) {
+        return;
+      }
+      this.outboxDrain = eventHandlers
+        .runSerialized(() => this.interface.processOutboxMessages(options))
+        .catch((error) => logError(error, '[ActivityPub] Outbox drain failed'))
+        .finally(() => { this.outboxDrain = null; });
+    };
+
+    const intervalMs = config.get<number>('activitypub.outboxDrain.intervalMs');
+    drain({});
+    const interval = setInterval(
+      () => drain({ skipNewerThanMs: OUTBOX_DRAIN_SKIP_NEWER_THAN_MS }),
       intervalMs,
     );
     return () => clearInterval(interval);

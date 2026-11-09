@@ -12,7 +12,7 @@ import ActivityPubServerService, { EventSourceActor, InboxAuthContext, InboxRowI
 import UserActorService from '@/server/activitypub/service/user_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ProcessInboxService, { type ProcessInboxMessagesOptions } from '../service/inbox';
-import ProcessOutboxService from '../service/outbox';
+import ProcessOutboxService, { type ProcessOutboxMessagesOptions } from '../service/outbox';
 import FederationPublisher, {
   FederationEventInput,
   FederationRemoteUserActor,
@@ -378,6 +378,38 @@ export default class ActivityPubInterface {
 
   async processOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<void> {
     await this.outboxService.processOutboxMessage(message);
+  }
+
+  /**
+   * Drains the outbox: delivers every unprocessed `ap_outbox` row, oldest
+   * `message_time` first. Called by the web process's outbox drain
+   * (`ActivityPubDomain.startOutboxDrain`): once at startup with no options,
+   * taking every row, and on each interval tick with `skipNewerThanMs`,
+   * leaving fresh rows to the live `outboxMessageAdded` handler.
+   *
+   * Web process only. Delivering a row runs local dispatch for same-instance
+   * recipients, which needs every domain's event handlers installed. The
+   * worker holds an `ActivityPubInterface` without them and must never call
+   * this.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's `message_time`, in ms
+   * @returns {Promise<void>}
+   */
+  async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {
+    return this.outboxService.processOutboxMessages(options);
+  }
+
+  /**
+   * Marks an outbox row whose processing threw as `error:`, bounded for the
+   * `processed_status` column. The live `outboxMessageAdded` handler and the
+   * drain share this one write.
+   *
+   * @param message - The outbox row whose processing threw
+   * @param error - What it threw
+   * @returns {Promise<void>}
+   */
+  async markOutboxMessageFailed(message: ActivityPubOutboxMessageEntity, error: unknown): Promise<void> {
+    return this.outboxService.markOutboxMessageFailed(message, error);
   }
 
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {

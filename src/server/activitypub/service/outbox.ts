@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
+import { Op } from "sequelize";
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -42,6 +43,13 @@ import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { boundProcessedStatus } from "@/server/activitypub/helper/outbox";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
+import { ActivityIdOriginMismatchError } from "@/server/activitypub/helper/activity-id-origin";
+
+/** Options for {@link ProcessOutboxService.processOutboxMessages}. */
+export interface ProcessOutboxMessagesOptions {
+  /** Leave rows whose `message_time` is less than this many ms ago. */
+  skipNewerThanMs?: number;
+}
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -190,25 +198,92 @@ class ProcessOutboxService {
   }
 
   /**
-   * Processes all unprocessed outbox messages in batches.
+   * Processes all unprocessed outbox messages in batches, oldest first: the
+   * outbox drain (`ActivityPubDomain.startOutboxDrain`).
    *
+   * With `skipNewerThanMs`, rows whose `message_time` is less than that many
+   * milliseconds before the call are left to the live `outboxMessageAdded`
+   * handler. The inbox drain filters on `createdAt` because an inbox row's
+   * `message_time` is the sender's published time; an outbox row's
+   * `message_time` is our own clock at write (`addToOutbox`), so it is the
+   * write time, and it is the column `idx_ap_outbox_unprocessed` orders by.
+   *
+   * A row that throws is marked `error:` and the drain moves on to the next.
+   * If even that mark cannot be written, the drain rejects: the re-query
+   * would return the same unprocessed row forever.
+   *
+   * Only a process with every domain's handlers installed may call this,
+   * because delivery runs local dispatch (`dispatchByType`) on this process.
+   *
+   * @param options.skipNewerThanMs - Minimum age of a row's `message_time`, in ms
    * @returns {Promise<void>}
    */
-  async processOutboxMessages() {
+  async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {
 
+    const where: Record<string, unknown> = { processed_time: null };
+    if ( options.skipNewerThanMs !== undefined ) {
+      where.message_time = { [Op.lt]: new Date(Date.now() - options.skipNewerThanMs) };
+    }
+
+    let delivered = 0;
+    let failed = 0;
     let messages: ActivityPubOutboxMessageEntity[] = [];
 
     do {
       messages = await ActivityPubOutboxMessageEntity.findAll({
-        where: { processed_time: null },
+        where,
         order: [ ['message_time', 'ASC'] ],
         limit: 1000,
       });
 
       for( const message of messages ) {
-        await this.processOutboxMessage(message);
+        try {
+          await this.processOutboxMessage(message);
+          delivered++;
+        }
+        catch (error) {
+          failed++;
+          await this.markOutboxMessageFailed(message, error);
+        }
       }
     } while( messages.length > 0 );
+
+    if ( delivered + failed > 0 ) {
+      logger.info({ delivered, failed }, 'Outbox drain finished');
+    }
+  }
+
+  /**
+   * Records that processing an outbox row threw: `processed_time` is set and
+   * `processed_status` becomes `error: <message>`, bounded and stripped of
+   * control characters by {@link boundProcessedStatus}. Used by the drain and
+   * the live `outboxMessageAdded` handler, so both write the same status.
+   *
+   * If that write throws (a status the database still refuses), it is retried
+   * once with the constant `error: processing failed`. If the retry throws
+   * too, the database is failing and the error propagates.
+   *
+   * Logs the row's activity id and calendar id, never its message body.
+   *
+   * @param message - The outbox row whose processing threw
+   * @param error - What it threw
+   */
+  async markOutboxMessageFailed(message: ActivityPubOutboxMessageEntity, error: unknown): Promise<void> {
+    logError(error, `[ActivityPub] Outbox message ${message.id} (calendar ${message.calendar_id}) marked error`);
+    const detail = error instanceof Error ? error.message : String(error);
+    try {
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: boundProcessedStatus(`error: ${detail}`),
+      });
+    }
+    catch (writeError) {
+      logError(writeError, `[ActivityPub] Could not record the error on outbox message ${message.id}; writing the fallback status`);
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'error: processing failed',
+      });
+    }
   }
 
   /**
@@ -403,6 +478,12 @@ class ProcessOutboxService {
             logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
+            // An activity id off our own origin is a broken invariant of this
+            // row, not one recipient's delivery failure: it ends the row as
+            // `error:` (unserved), never `partial:` (served).
+            if (error instanceof ActivityIdOriginMismatchError) {
+              throw error;
+            }
             const errorMsg = `Failed local dispatch to ${recipient}: ${error.message}`;
             logError(error, `[ActivityPub] Failed local dispatch to ${recipient}`);
             deliveryErrors.push(errorMsg);

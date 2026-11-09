@@ -1,11 +1,9 @@
 /**
  * Outbox delivery invariants.
  *
- * Five invariants a calendar's federation depends on. Each fails on the code
- * this file was written against and is skipped until the change that makes it
- * hold lands; the comment beside each `it.skip` names that change. Un-skipping
- * one is a one-token edit, so every invariant has its own describe and its own
- * fixtures.
+ * Five invariants a calendar's federation depends on. Each failed on the code
+ * this file was written against and now holds; every invariant has its own
+ * describe and its own fixtures.
  *
  * Rows are written through `addToOutbox` with an event bus nothing listens
  * to, so a row stays exactly as the test leaves it until the test itself
@@ -361,9 +359,10 @@ describe('Outbox delivery invariants', () => {
       return domain;
     }
 
-    // un-skipped by pv-w8sl.5
-    // fails today because only the live outboxMessageAdded emit delivers a row, and no drain exists to pick up one left behind.
-    it.skip('delivers an ap_outbox row left with processed_time null before the web process starts', async () => {
+    // A superseded row (a Create with a later Delete, an Announce with an
+    // Undo) is skipped rather than delivered (DEC-024), so the stranded row
+    // here has neither.
+    it('delivers a non-superseded ap_outbox row left with processed_time null before the web process starts', async () => {
       const calendar = await createLocalCalendar('invariantdrain');
       const follower = await addRemoteFollower(calendar, 'https://peer.example/calendars/follower');
       stubActorFetch(sandbox, [follower]);
@@ -374,10 +373,7 @@ describe('Outbox delivery invariants', () => {
       expect(row.processed_time).toBeNull();
 
       const domain = wireDomain();
-      // startOutboxDrain does not exist until the drain lands; the optional
-      // call then starts nothing and the wait below reports the missing POST.
-      const drainable = domain as ActivityPubDomain & { startOutboxDrain?: () => () => void };
-      stopDrain = drainable.startOutboxDrain?.();
+      stopDrain = domain.startOutboxDrain();
 
       await waitFor(
         async () => postedInboxes(axiosPost).includes(`${follower}/inbox`) || null,

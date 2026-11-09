@@ -512,6 +512,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
       // so the startup drain dispatches with the full set. Not in test mode:
       // suites drive dispatch themselves and must not get a running timer.
       const stopInboxDrain = activityPubDomain.startInboxDrain();
+      // Delivers outbox rows a restart left undelivered. Web process only:
+      // delivery runs local dispatch, which needs every domain's handlers.
+      const stopOutboxDrain = activityPubDomain.startOutboxDrain();
 
       // Add graceful shutdown handlers for clean server termination
       if (process.env.NODE_ENV === 'e2e') {
@@ -519,6 +522,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
         // The test helper sends SIGTERM and waits 5s before SIGKILL
         const shutdownE2e = () => {
           stopInboxDrain();
+          stopOutboxDrain();
           metricsServer?.close();
           metricsServer?.closeAllConnections();
           server.close(() => process.exit(0));
@@ -533,6 +537,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
           try {
             stopInboxDrain();
+            stopOutboxDrain();
 
             // Stop accepting scrapes and drop existing sockets before the
             // database goes away. close() alone only stops new connections and

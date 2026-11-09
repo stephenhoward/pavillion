@@ -38,3 +38,7 @@ housekeeping:
 activitypub:
   inboxDrain:
     intervalMs: 5000
+  # Outbox drain tick (default 60s). Inert in tests: a tick leaves rows
+  # newer than 15 minutes, so it never finds a row a spec wrote.
+  outboxDrain:
+    intervalMs: 5000
