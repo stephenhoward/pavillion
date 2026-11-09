@@ -257,23 +257,27 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     );
   }
 
+  /**
+   * Live delivery of a freshly written outbox row. A row that already has
+   * `processed_time` was delivered by the outbox drain while this handler sat
+   * queued (on SQLite the drain holds the dispatch chain), so it is skipped,
+   * as the inbox handler skips a processed inbox row.
+   */
   private async processOutboxMessage(e) {
     let message = await ActivityPubOutboxMessageEntity.findByPk(e.id);
-    if ( message ) {
-      try {
-        await this.service.processOutboxMessage(message);
-      }
-      catch (error) {
-        logError(error, `[ActivityPub] Error processing outbox message ${message.id}`);
-        // Mark message as processed with error status to prevent retry loop
-        await message.update({
-          processed_time: new Date(),
-          processed_status: `error: ${error.message}`,
-        });
-      }
-    }
-    else {
+    if ( ! message ) {
       logger.error('Outbox message not found for processing');
+      return;
+    }
+    if ( message.processed_time ) {
+      return;
+    }
+    try {
+      await this.service.processOutboxMessage(message);
+    }
+    catch (error) {
+      // Marked processed with an error status so it is not retried.
+      await this.service.markOutboxMessageFailed(message, error);
     }
   }
 

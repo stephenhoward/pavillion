@@ -221,6 +221,34 @@ Whichever route you choose, glance at your proxy's access log for that path now 
 
 **Expecting zeros on a fresh install.** Missing backup series mean no backup has run yet, not that something's broken. Don't write alerts that treat absence and zero as the same thing.
 
+## Outbound federation delivery
+
+Every event a calendar publishes, edits, deletes or reposts is written to the `ap_outbox` table first, then delivered to the calendar's followers. Each row records how that went in its `processed_status` column:
+
+| Status | What it means |
+|---|---|
+| `ok` | Delivered to every follower. |
+| `partial: …` | Delivered, but one or more followers couldn't be reached. The text after the colon names them and says why. The activity still appears in the calendar's public outbox, so anyone who follows the calendar later will see it when they load the outbox. |
+| `error: …` | Pavillion couldn't finish processing the activity, so it isn't published and isn't in the public outbox, though followers it reached before the failure may already have it. The text says what failed. One error never stops the rows behind it. |
+| `skipped: superseded` | A delivery that was interrupted (by a restart, say) and that the calendar had already taken back by the time Pavillion got to it — an event deleted, a repost undone, or a follow withdrawn. Pavillion sends the deletion or undo instead of resurrecting the original, and the original stays out of the public outbox. |
+| `bad message type` | An activity type Pavillion doesn't know how to send. Not delivered and not in the public outbox. |
+| empty | Not delivered yet. |
+
+If the app restarts while it's delivering, the rows it hadn't finished stay empty. When the app starts again it delivers them, and it checks again every minute for any it missed, leaving anything written in the last 15 minutes to normal delivery. A follower can occasionally receive the same activity twice after a restart; that's expected.
+
+Each row marked `error:` writes a log line naming the activity and the calendar, and each catch-up pass logs a summary (`Outbox drain finished`) with how many rows it delivered, failed and skipped.
+
+**Counting what's waiting.** To see how many rows are waiting, by type, from the server:
+
+```bash
+docker compose exec db psql -U pavillion pavillion -c \
+  "SELECT type, count(*) FROM ap_outbox WHERE processed_time IS NULL GROUP BY type ORDER BY type;"
+```
+
+A handful of rows in the last few minutes is normal traffic. Rows days old mean deliveries were interrupted and not yet caught up. Use your own `DB_USER` and `DB_NAME` if you changed them in `.env`.
+
+**The first start after upgrading.** Before Pavillion could catch up on interrupted deliveries, those rows were left behind for good. The first start of a version that catches up delivers all of them, however old. Run the count above before you upgrade so you know how many to expect; activities that were since deleted or undone are skipped rather than sent.
+
 ## Still to come
 
 These topics are planned for this guide and not written yet:

@@ -12,7 +12,7 @@ import ActivityPubServerService, { EventSourceActor, InboxAuthContext, InboxRowI
 import UserActorService from '@/server/activitypub/service/user_actor';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ProcessInboxService, { type ProcessInboxMessagesOptions } from '../service/inbox';
-import ProcessOutboxService from '../service/outbox';
+import ProcessOutboxService, { type ProcessOutboxMessagesOptions } from '../service/outbox';
 import FederationPublisher, {
   FederationEventInput,
   FederationRemoteUserActor,
@@ -378,6 +378,31 @@ export default class ActivityPubInterface {
 
   async processOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<void> {
     await this.outboxService.processOutboxMessage(message);
+  }
+
+  /**
+   * Drains the outbox (DEC-024 rule 6). Web process only: delivery runs local
+   * dispatch, which needs every domain's handlers, so the worker's bare
+   * `ActivityPubInterface` must never call this.
+   *
+   * @param options.skipNewerThanMs - Leave rows newer than this many ms
+   * @returns {Promise<void>}
+   */
+  async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {
+    return this.outboxService.processOutboxMessages(options);
+  }
+
+  /**
+   * Marks an outbox row whose processing threw as `error:`, bounded for the
+   * `processed_status` column. The live `outboxMessageAdded` handler and the
+   * drain share this one write.
+   *
+   * @param message - The outbox row whose processing threw
+   * @param error - What it threw
+   * @returns {Promise<void>}
+   */
+  async markOutboxMessageFailed(message: ActivityPubOutboxMessageEntity, error: unknown): Promise<void> {
+    return this.outboxService.markOutboxMessageFailed(message, error);
   }
 
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {

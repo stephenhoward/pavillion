@@ -131,8 +131,9 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 }
 
 // messages from the calendar holder to their followers/ the public
-// The index serves per-calendar outbox paging (readOutbox); declared here
-// so sync-built schemas match migration 0048.
+// The indexes serve per-calendar outbox paging (readOutbox, migration 0048)
+// and the outbox drain (partial over unprocessed rows, migration 0051);
+// declared here so sync-built schemas match the migrations.
 @Table({
   tableName: 'ap_outbox',
   indexes: [
@@ -140,9 +141,33 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
       fields: ['calendar_id', 'message_time'],
       name: 'idx_ap_outbox_calendar_message_time',
     },
+    {
+      fields: ['message_time'],
+      name: 'idx_ap_outbox_unprocessed',
+      where: { processed_time: null },
+    },
   ],
 })
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
+
+  /**
+   * Whether this row belongs in the calendar's public outbox (DEC-024): a
+   * write-once fact derived from the row's own message, set at insert by
+   * `isPublicOutboxActivity` and, for rows that predate it, by migration
+   * 0050's backfill. Read only by `readOutbox`; it never answers whether an
+   * activity is visible now.
+   *
+   * Meaningful only for the types `readOutbox` serves (Create, Announce,
+   * Update, Delete). The backfill set it true on unaddressed rows of other
+   * types too (Follow, Accept, Flag, Undo, Add, Remove), so on those it is not
+   * evidence that the activity is public (DEC-024 rule 5).
+   */
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_public: boolean;
 }
 
 /**

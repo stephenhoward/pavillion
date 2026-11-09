@@ -298,6 +298,10 @@ activitypub:
     # is what keeps a tick off a row the live handler is still dispatching, so
     # this value is a latency choice only.
     intervalMs: 30000  # 30 seconds
+  outboxDrain:
+    # How often the web process re-delivers stranded ap_outbox rows; a latency
+    # choice only (see DEC-024 rule 6).
+    intervalMs: 60000  # 60 seconds
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

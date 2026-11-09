@@ -421,10 +421,20 @@ export default class ActivityPubService {
 
   /**
    * Retrieve paginated outbox messages for a calendar.
-   * Returns only public activity types (Create, Announce, Update, Delete) that
-   * were successfully processed, minus any Announce this calendar has since
-   * undone — otherwise a peer backfilling the outbox would show a repost the
-   * calendar withdrew.
+   *
+   * Serves the calendar's own public activities (DEC-024): rows marked
+   * `is_public`, of a public activity type (Create, Announce, Update,
+   * Delete), that have been processed and whose processing did not fail —
+   * whatever their delivery outcome, so a `partial:` row is served — minus
+   * any Announce this calendar has since undone, which a peer backfilling the
+   * outbox would otherwise show as a repost the calendar withdrew.
+   *
+   * An `error:` status means processing threw and `bad message type` means the
+   * type is unknown; neither row was published. A `skipped:` row was retracted
+   * before the drain delivered it, so it stays unpublished too; the Delete or
+   * Undo that retracted it is served. An unprocessed row has not
+   * been validated yet. Every writer sets `processed_status` together with
+   * `processed_time`, so a processed row with no status does not occur.
    *
    * @param calendarId - The calendar ID to query
    * @param cursor - Optional ISO 8601 timestamp cursor for paging (exclusive upper bound)
@@ -442,13 +452,20 @@ export default class ActivityPubService {
     const baseWhere: Record<string, any> = {
       calendar_id: calendarId,
       type: publicTypes,
-      processed_status: 'ok',
-      // Any recorded Undo withdraws its target, whatever its delivery status.
-      // Every outbox row is our own activity, and UndoActivity always takes
-      // the id `{targetId}/undo`, so the matching Undo is a primary-key probe
-      // per candidate row: the cost follows the page, not the calendar's
-      // Undo history.
+      is_public: true,
+      processed_time: { [Op.ne]: null },
       [Op.and]: [
+        // A partial: delivery outcome does not affect membership; a failure
+        // to process the row at all does, and so does a row the drain
+        // skipped because it was retracted before the drain delivered it.
+        { processed_status: { [Op.notLike]: 'error:%' } },
+        { processed_status: { [Op.notLike]: 'skipped:%' } },
+        { processed_status: { [Op.ne]: 'bad message type' } },
+        // Any recorded Undo withdraws its target, whatever its delivery status.
+        // Every outbox row is our own activity, and UndoActivity always takes
+        // the id `{targetId}/undo`, so the matching Undo is a primary-key probe
+        // per candidate row: the cost follows the page, not the calendar's
+        // Undo history.
         literal(`NOT EXISTS (SELECT 1 FROM ap_outbox undo_row WHERE undo_row.id = "ActivityPubOutboxMessageEntity"."id" || '/undo' AND undo_row.type = 'Undo')`),
       ],
     };

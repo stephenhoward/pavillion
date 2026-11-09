@@ -4,6 +4,7 @@ import { EventEmitter } from "events";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
 import { flagActorHostUri } from '../helper/flag-actor-host';
+import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from '../helper/activity-id-origin';
 import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import { looksLikeUuid } from '@/server/common/helper/uuid';
 import { createLogger } from '@/server/common/helper/logger';
@@ -2614,6 +2615,9 @@ class ProcessInboxService {
    *   not established this guarantee. In particular, do NOT call it with
    *   activity data originating from HTTP request bodies, user input, or
    *   untrusted external sources. New callers must uphold the same contract.
+   *   The method enforces the id half of this itself: it throws
+   *   ActivityIdOriginMismatchError, writing no row, for an activity whose id
+   *   is not on the configured instance domain.
    *
    *   Current authorized callers: ProcessOutboxService.processOutboxMessage.
    */
@@ -2623,7 +2627,20 @@ class ProcessInboxService {
       return;
     }
 
-    // Idempotent inbox row insertion. Mirrors the same lookup-then-build
+    // Only activities minted by this instance may be dispatched locally. Their
+    // ids are built on the configured domain, so an id on any other host is
+    // refused before a row is written or a handler runs. The skip-if-ok rule
+    // below depends on this: it trusts an existing 'ok' row only because rows
+    // under our own ids are written by this method alone (writeInboxRow
+    // refuses a peer's activity whose id is not on its authenticated origin).
+    // Keyed on the id's host, never on a row's auth_source (DEC-013).
+    if (!isActivityIdOnOrigin(activity.id, `https://${config.get<string>('domain')}`)) {
+      throw new ActivityIdOriginMismatchError('Local dispatch refused: activity id is not on this instance\'s domain');
+    }
+
+    // Idempotent inbox row insertion and idempotent dispatch: a row already
+    // marked 'ok' is not dispatched again (see the check after this block).
+    // Mirrors the same lookup-then-build
     // pattern used by ProcessActivityPubServerService.addToInbox so the
     // shape of the persisted row (id == activity AP id, calendar_id ==
     // recipient calendar) matches the HTTP-arrived path exactly. The
@@ -2683,6 +2700,21 @@ class ProcessInboxService {
           throw createError;
         }
       }
+    }
+
+    // Dispatching the same activity to the same recipient twice has the
+    // effect of once: a row this recipient already processed successfully is
+    // not run again. Any other status ('error', or null on a fresh row)
+    // dispatches, so a failed delivery can be retried. The check sits after
+    // the find-or-create block so the create-race path gets it too. Trusting
+    // an 'ok' row is safe because of the own-domain guard at the top of this
+    // method: the id is ours, and a peer cannot write a row under one of our
+    // ids (writeInboxRow refuses an id not on the authenticated origin).
+    //
+    // This covers repeat dispatch, not concurrent dispatch: two overlapping
+    // calls can both see a non-ok status and both dispatch.
+    if (messageEntity.processed_status === 'ok') {
+      return;
     }
 
     try {

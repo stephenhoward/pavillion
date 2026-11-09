@@ -536,6 +536,41 @@ describe('GET /calendars/:urlname/outbox', () => {
     expect(result.orderedItems[0].to).toBeDefined();
   });
 
+  it('builds each served item from the stored message only, never the row\'s processing columns', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    const message = {
+      type: 'Create',
+      id: 'act-1',
+      actor: 'https://ex.com/calendars/mycal',
+      to: ['https://www.w3.org/ns/activitystreams#Public'],
+    };
+    // A partial: status names the follower whose delivery failed; it is
+    // DB-only and must not reach an anonymous reader.
+    const mockItems = [{
+      id: 'act-1',
+      type: 'Create',
+      message,
+      message_time: new Date('2026-03-20T10:00:00Z'),
+      processed_time: new Date('2026-03-20T10:00:01Z'),
+      processed_status: 'partial: Failed to deliver to https://peer.example/calendars/gone: timeout',
+      is_public: true,
+      calendar_id: 'cal-id',
+    }];
+
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: mockItems as any, totalItems: 1 });
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true' } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.orderedItems).toEqual([message]);
+    expect(JSON.stringify(result)).not.toContain('processed_status');
+    expect(JSON.stringify(result)).not.toContain('peer.example');
+  });
+
   it('should treat non-true page values as collection summary', async () => {
     const calendar = new Calendar('cal-id', 'mycal');
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);

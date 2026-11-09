@@ -31,6 +31,10 @@
  *      observable invariant (one row after two dispatches) rather than the
  *      specific Sequelize method used.
  *
+ *   6. Dispatch runs once per recipient: a row already marked ok is not
+ *      dispatched again (Announce to two recipients, and a redelivered
+ *      Create), while a row left in error is.
+ *
  * These tests were previously colocated with the unit tests in
  * src/server/activitypub/test/inbox.test.ts but are behaviorally integration
  * tests — they set up the full AP schema, create real CalendarEntity /
@@ -52,6 +56,7 @@ import { EventEmitter } from 'events';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
+import { ActivityIdOriginMismatchError } from '@/server/activitypub/helper/activity-id-origin';
 import {
   ActivityPubInboxMessageEntity,
   EventActivityEntity,
@@ -68,6 +73,13 @@ import { CalendarEvent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
+import config from 'config';
+
+// Local dispatch refuses an activity whose id is not on this instance's
+// domain, so every fixture actor (and the activity ids derived from it) lives
+// on the configured domain.
+const LOCAL_DOMAIN = config.get<string>('domain');
+const LOCAL_ORIGIN = `https://${LOCAL_DOMAIN}`;
 
 describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => {
   let sandbox: sinon.SinonSandbox;
@@ -117,7 +129,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       languages: 'en',
     });
 
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
+    const sourceCalendarActorUri = `${LOCAL_ORIGIN}/calendars/${sourceUrlName}`;
     const sourceActorId = uuidv4();
     await CalendarActorEntity.create({
       id: sourceActorId,
@@ -134,7 +146,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     await CalendarActorEntity.create({
       id: followerActorId,
       actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
+      actor_uri: `${LOCAL_ORIGIN}/calendars/${testCalendar.urlName}`,
       remote_display_name: null,
       remote_domain: null,
       calendar_id: testCalendar.id,
@@ -190,7 +202,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       languages: 'en',
     });
 
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
+    const sourceCalendarActorUri = `${LOCAL_ORIGIN}/calendars/${sourceUrlName}`;
     const sourceActorId = uuidv4();
     await CalendarActorEntity.create({
       id: sourceActorId,
@@ -206,7 +218,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     await CalendarActorEntity.create({
       id: followerActorId,
       actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
+      actor_uri: `${LOCAL_ORIGIN}/calendars/${testCalendar.urlName}`,
       remote_display_name: null,
       remote_domain: null,
       calendar_id: testCalendar.id,
@@ -234,7 +246,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     // observable contract for an orphan-on-the-network is the same: no
     // SharedEventEntity is created. Stubbing to null short-circuits the
     // real network call (which would otherwise time out against
-    // test.local) and exercises the documented null-fetch branch.
+    // the test domain) and exercises the documented null-fetch branch.
     //
     // We use vi.spyOn here rather than sandbox.stub because vitest's ESM
     // namespace objects in the integration runner cannot be patched via
@@ -283,7 +295,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       languages: 'en',
     });
 
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
+    const sourceCalendarActorUri = `${LOCAL_ORIGIN}/calendars/${sourceUrlName}`;
     await CalendarActorEntity.create({
       id: uuidv4(),
       actor_type: 'local',
@@ -297,7 +309,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     await CalendarActorEntity.create({
       id: uuidv4(),
       actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
+      actor_uri: `${LOCAL_ORIGIN}/calendars/${testCalendar.urlName}`,
       remote_display_name: null,
       remote_domain: null,
       calendar_id: testCalendar.id,
@@ -383,14 +395,14 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       languages: 'en',
     });
 
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
+    const sourceCalendarActorUri = `${LOCAL_ORIGIN}/calendars/${sourceUrlName}`;
     const sourceActorId = uuidv4();
     await CalendarActorEntity.create({
       id: sourceActorId,
       actor_type: 'remote',
       actor_uri: sourceCalendarActorUri,
       remote_display_name: null,
-      remote_domain: 'test.local',
+      remote_domain: LOCAL_DOMAIN,
       calendar_id: null,
       private_key: null,
     });
@@ -398,7 +410,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     await CalendarActorEntity.create({
       id: uuidv4(),
       actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
+      actor_uri: `${LOCAL_ORIGIN}/calendars/${testCalendar.urlName}`,
       remote_display_name: null,
       remote_domain: null,
       calendar_id: testCalendar.id,
@@ -489,7 +501,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       languages: 'en',
     });
 
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
+    const sourceCalendarActorUri = `${LOCAL_ORIGIN}/calendars/${sourceUrlName}`;
     await CalendarActorEntity.create({
       id: uuidv4(),
       actor_type: 'local',
@@ -503,7 +515,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     await CalendarActorEntity.create({
       id: uuidv4(),
       actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
+      actor_uri: `${LOCAL_ORIGIN}/calendars/${testCalendar.urlName}`,
       remote_display_name: null,
       remote_domain: null,
       calendar_id: testCalendar.id,
@@ -532,5 +544,118 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       rows.length,
       'duplicate dispatches of the same activity must produce exactly one inbox row',
     ).toBe(1);
+  });
+
+  it('refuses an activity whose id is not on this instance\'s domain and writes no inbox row', async () => {
+    // The skip-if-ok rule trusts an existing 'ok' row because only local
+    // dispatch writes rows under our own ids; that holds only while every
+    // activity reaching this method has an id on our domain.
+    const foreignActor = 'https://foreign.example.com/calendars/elsewhere';
+    const announce = new AnnounceActivity(foreignActor, `${foreignActor}/events/foreign`);
+    const dispatchByType = sandbox.spy(inboxService as any, 'dispatchByType');
+
+    await expect(inboxService.handleLocalActivityDispatch(testCalendar, announce))
+      .rejects.toThrow(ActivityIdOriginMismatchError);
+
+    expect(dispatchByType.called, 'a refused activity must not be dispatched').toBe(false);
+    expect(await ActivityPubInboxMessageEntity.count({ where: { id: announce.id! } })).toBe(0);
+  });
+
+  describe('dispatch runs once per recipient', () => {
+    /**
+     * A local source calendar with its actor row, and the EventObjectEntity
+     * for one of its events, so an Announce of that event resolves locally.
+     */
+    const createSourceWithEvent = async (urlName: string): Promise<{ actorUri: string; eventApId: string }> => {
+      const calendarId = uuidv4();
+      await CalendarEntity.create({ id: calendarId, url_name: urlName, account_id: uuidv4(), languages: 'en' });
+      const actorUri = `${LOCAL_ORIGIN}/calendars/${urlName}`;
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'local',
+        actor_uri: actorUri,
+        remote_display_name: null,
+        remote_domain: null,
+        calendar_id: calendarId,
+        private_key: null,
+      });
+      const eventApId = `${actorUri}/events/once`;
+      await EventObjectEntity.create({ event_id: uuidv4(), ap_id: eventApId, attributed_to: actorUri });
+      return { actorUri, eventApId };
+    };
+
+    const inboxRow = (calendarId: string, activityId: string) =>
+      ActivityPubInboxMessageEntity.findOne({ where: { calendar_id: calendarId, id: activityId } });
+
+    it('dispatches again when the earlier dispatch left the row in error', async () => {
+      const { actorUri, eventApId } = await createSourceWithEvent('source-retry');
+      const announce = new AnnounceActivity(actorUri, eventApId);
+
+      const dispatchByType = sandbox.stub(inboxService as any, 'dispatchByType');
+      dispatchByType.onFirstCall().rejects(new Error('transient failure'));
+      dispatchByType.callThrough();
+
+      await expect(inboxService.handleLocalActivityDispatch(testCalendar, announce)).rejects.toThrow('transient failure');
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('error');
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+
+      expect(dispatchByType.callCount, 'a row left in error must be dispatched again').toBe(2);
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('ok');
+    });
+
+    // ap_inbox is keyed on the activity id alone, so the second recipient's
+    // row collides on the primary key and its dispatch throws (the same gap
+    // inbox-dispatch-every-local-recipient.integration.test.ts records for
+    // the HTTP path). Un-skip when the ap_inbox composite-key change lands.
+    it.skip('runs each of two local recipients once when the activity is dispatched to both twice', async () => {
+      const { actorUri, eventApId } = await createSourceWithEvent('source-two-recipients');
+      const secondCalendar = new Calendar(uuidv4(), 'second-recipient');
+      await CalendarEntity.create({
+        id: secondCalendar.id,
+        url_name: secondCalendar.urlName,
+        account_id: uuidv4(),
+        languages: 'en',
+      });
+      const announce = new AnnounceActivity(actorUri, eventApId);
+
+      const dispatchByType = sandbox.spy(inboxService as any, 'dispatchByType');
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(secondCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(testCalendar, announce);
+      await inboxService.handleLocalActivityDispatch(secondCalendar, announce);
+
+      const dispatchedCalendarIds = dispatchByType.getCalls().map((call) => (call.args[0] as Calendar).id);
+      expect(dispatchedCalendarIds.sort()).toEqual([testCalendar.id, secondCalendar.id].sort());
+      expect((await inboxRow(testCalendar.id, announce.id!))!.processed_status).toBe('ok');
+      expect((await inboxRow(secondCalendar.id, announce.id!))!.processed_status).toBe('ok');
+    });
+
+    it('adds the event once when the same Create is dispatched twice', async () => {
+      // Drain redelivery to a local follower is a Create(Event) through
+      // processCreateEvent under trustLocalOrigin, not the Announce path.
+      const { actorUri } = await createSourceWithEvent('source-create-twice');
+      const addRemoteEventStub = sandbox
+        .stub(calendarInterface, 'addRemoteEvent')
+        .resolves(new CalendarEvent(uuidv4(), null));
+
+      const apEventId = `${actorUri}/events/create-twice`;
+      const createActivity = CreateActivity.fromObject({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        actor: actorUri,
+        id: `${apEventId}/create`,
+        object: { type: 'Event', id: apEventId, name: 'Create Twice', attributedTo: actorUri },
+      });
+      expect(createActivity, 'CreateActivity must parse').not.toBeNull();
+
+      await inboxService.handleLocalActivityDispatch(testCalendar, createActivity!);
+      await inboxService.handleLocalActivityDispatch(testCalendar, createActivity!);
+
+      expect(addRemoteEventStub.callCount, 'a redelivered Create must not add the event again').toBe(1);
+      expect(await EventObjectEntity.count({ where: { ap_id: apEventId } })).toBe(1);
+      expect((await inboxRow(testCalendar.id, createActivity!.id!))!.processed_status).toBe('ok');
+    });
   });
 });

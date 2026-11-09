@@ -2,6 +2,8 @@ import { createHash } from "crypto";
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
+import { Op } from "sequelize";
+import config from "config";
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -40,7 +42,34 @@ import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
+import { boundProcessedStatus } from "@/server/activitypub/helper/outbox";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
+import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from "@/server/activitypub/helper/activity-id-origin";
+
+/** Options for {@link ProcessOutboxService.processOutboxMessages}. */
+export interface ProcessOutboxMessagesOptions {
+  /** Leave rows whose `message_time` is less than this many ms ago. */
+  skipNewerThanMs?: number;
+}
+
+/**
+ * The id of an activity's `object`, which is either a bare IRI or an object
+ * carrying `id`; null for anything else. (`extractObjectId` in the backfill
+ * service does the same, but importing it here would close an import cycle
+ * through `ActivityPubInterface`.)
+ */
+function objectIdOf(object: unknown): string | null {
+  if (typeof object === 'string') {
+    return object;
+  }
+  if (object && typeof object === 'object') {
+    const id = (object as Record<string, unknown>).id;
+    if (typeof id === 'string') {
+      return id;
+    }
+  }
+  return null;
+}
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -189,25 +218,116 @@ class ProcessOutboxService {
   }
 
   /**
-   * Processes all unprocessed outbox messages in batches.
+   * The outbox drain: delivers unprocessed rows oldest first, skipping
+   * superseded ones and marking a row that throws `error:` (DEC-024 rules 6
+   * and 7). Web process only, because delivery runs local dispatch.
    *
+   * @param options.skipNewerThanMs - Leave rows whose `message_time` is later
+   *   than this many ms before the call; the cutoff is fixed once per call
    * @returns {Promise<void>}
    */
-  async processOutboxMessages() {
+  async processOutboxMessages(options: ProcessOutboxMessagesOptions = {}): Promise<void> {
 
+    const where: Record<string, unknown> = { processed_time: null };
+    if ( options.skipNewerThanMs !== undefined ) {
+      // Fixed once, so rows written while this drain runs are never taken;
+      // `lte` keeps a row written in the same millisecond as the call.
+      where.message_time = { [Op.lte]: new Date(Date.now() - options.skipNewerThanMs) };
+    }
+
+    let delivered = 0;
+    let failed = 0;
+    let skipped = 0;
     let messages: ActivityPubOutboxMessageEntity[] = [];
 
     do {
       messages = await ActivityPubOutboxMessageEntity.findAll({
-        where: { processed_time: null },
+        where,
         order: [ ['message_time', 'ASC'] ],
         limit: 1000,
       });
 
       for( const message of messages ) {
-        await this.processOutboxMessage(message);
+        try {
+          if ( await this.isSupersededOutboxMessage(message) ) {
+            await message.update({
+              processed_time: DateTime.now().toJSDate(),
+              processed_status: 'skipped: superseded',
+            });
+            skipped++;
+            continue;
+          }
+          await this.processOutboxMessage(message);
+          delivered++;
+        }
+        catch (error) {
+          failed++;
+          await this.markOutboxMessageFailed(message, error);
+        }
       }
     } while( messages.length > 0 );
+
+    if ( delivered + failed + skipped > 0 ) {
+      logger.info({ delivered, failed, skipped }, 'Outbox drain finished');
+    }
+  }
+
+  /**
+   * Whether a later row in the same outbox retracted this one before the
+   * drain delivered it: for any
+   * row, an Undo with id `{rowId}/undo` (an Undo(Follow) retracts a Follow);
+   * for a Create, Update or Announce, also a Delete with id `{objectId}/delete`
+   * (DEC-024 rule 7). The type is matched as well as the id, as
+   * `readOutbox`'s Undo probe does.
+   *
+   * @param message - An unprocessed outbox row
+   * @returns True when the row should be skipped rather than delivered
+   */
+  private async isSupersededOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<boolean> {
+    const retractions: Record<string, string>[] = [{ id: `${message.id}/undo`, type: 'Undo' }];
+    if ( ['Create', 'Update', 'Announce'].includes(message.type) ) {
+      const objectId = objectIdOf((message.message as Record<string, unknown> | null)?.object);
+      if ( objectId ) {
+        retractions.push({ id: `${objectId}/delete`, type: 'Delete' });
+      }
+    }
+    const found = await ActivityPubOutboxMessageEntity.count({ where: { [Op.or]: retractions } });
+    return found > 0;
+  }
+
+  /**
+   * Records that processing an outbox row threw: `processed_time` is set and
+   * `processed_status` becomes `error: <message>`, bounded and stripped of
+   * control characters by {@link boundProcessedStatus}. Used by the drain and
+   * the live `outboxMessageAdded` handler, so both write the same status.
+   *
+   * If that write throws (a status the database still refuses), it is retried
+   * once with the constant `error: processing failed`. If the retry throws
+   * too, the database is failing and the error propagates.
+   *
+   * Logs the row's activity id and calendar id, never its message body.
+   *
+   * @param message - The outbox row whose processing threw
+   * @param error - What it threw
+   */
+  async markOutboxMessageFailed(message: ActivityPubOutboxMessageEntity, error: unknown): Promise<void> {
+    logError(error, `[ActivityPub] Outbox message ${message.id} (calendar ${message.calendar_id}) marked error`);
+    try {
+      // Inside the try: a thrown value String() cannot convert (a null-
+      // prototype object, say) falls through to the fallback status.
+      const detail = error instanceof Error ? error.message : String(error);
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: boundProcessedStatus(`error: ${detail}`),
+      });
+    }
+    catch (writeError) {
+      logError(writeError, `[ActivityPub] Could not record the error on outbox message ${message.id}; writing the fallback status`);
+      await message.update({
+        processed_time: DateTime.now().toJSDate(),
+        processed_status: 'error: processing failed',
+      });
+    }
   }
 
   /**
@@ -392,9 +512,21 @@ class ProcessOutboxService {
       // actor URI resolves to a local calendar via
       // getLocalCalendarByActorUri.
 
+      const resolved: { recipient: string; localCalendar: Calendar | null }[] = [];
       for (const recipient of recipients) {
-        const localCalendar = await this.calendarActorService.getLocalCalendarByActorUri(recipient);
+        resolved.push({ recipient, localCalendar: await this.calendarActorService.getLocalCalendarByActorUri(recipient) });
+      }
 
+      // Local dispatch accepts only activity ids on our own origin. Checked
+      // once, before anyone receives anything, so a broken own-origin
+      // invariant ends the row `error:` (unpublished) whatever the recipient
+      // order. Remote-only delivery of an off-origin id stays valid.
+      if ( activity.id && resolved.some(entry => entry.localCalendar)
+        && !isActivityIdOnOrigin(activity.id, `https://${config.get<string>('domain')}`) ) {
+        throw new ActivityIdOriginMismatchError('Local dispatch refused: activity id is not on this instance\'s domain');
+      }
+
+      for (const { recipient, localCalendar } of resolved) {
         if (localCalendar) {
           // Local in-process path: skip HTTP entirely.
           try {
@@ -402,6 +534,10 @@ class ProcessOutboxService {
             logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
+            // Defence in depth behind the check above: never a `partial:`.
+            if (error instanceof ActivityIdOriginMismatchError) {
+              throw error;
+            }
             const errorMsg = `Failed local dispatch to ${recipient}: ${error.message}`;
             logError(error, `[ActivityPub] Failed local dispatch to ${recipient}`);
             deliveryErrors.push(errorMsg);
@@ -437,7 +573,7 @@ class ProcessOutboxService {
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: deliveryErrors.length > 0
-          ? `partial: ${deliveryErrors.join('; ')}`
+          ? boundProcessedStatus(`partial: ${deliveryErrors.join('; ')}`)
           : 'ok',
       });
     }
@@ -474,7 +610,19 @@ class ProcessOutboxService {
     activity: ActivityPubActivity,
     deliveryErrors: string[],
   ): Promise<void> {
-    const inboxUrl = await this.resolveInboxUrl(recipient);
+    // A peer that is gone (410), down or slow rejects here. That is this
+    // recipient's failure, never the loop's: record it and let the caller
+    // move on to the next recipient.
+    let inboxUrl: string | null;
+    try {
+      inboxUrl = await this.resolveInboxUrl(recipient);
+    }
+    catch (error) {
+      const errorMsg = `Failed to resolve inbox for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
+      logError(error, `[ActivityPub] Failed to resolve inbox for ${recipient}`);
+      deliveryErrors.push(errorMsg);
+      return;
+    }
     if (!inboxUrl) {
       logger.info({ recipient }, 'Skipping message because no inbox found');
       return;

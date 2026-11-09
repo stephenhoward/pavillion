@@ -76,3 +76,5 @@ media:
 activitypub:
   inboxDrain:
     intervalMs: 5000
+  outboxDrain:
+    intervalMs: 5000

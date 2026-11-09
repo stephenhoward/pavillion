@@ -9,6 +9,7 @@ import AccountsInterface from '../accounts/interface';
 import ModerationInterface from '../moderation/interface';
 import HousekeepingInterface from '../housekeeping/interface';
 import type { ProcessInboxMessagesOptions } from '@/server/activitypub/service/inbox';
+import type { ProcessOutboxMessagesOptions } from '@/server/activitypub/service/outbox';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -17,6 +18,13 @@ import { logError } from '@/server/common/helper/error-logger';
  * PostgreSQL a tick taking the same fresh row would dispatch it twice.
  */
 export const INBOX_DRAIN_SKIP_NEWER_THAN_MS = 10_000;
+
+/**
+ * Interval ticks leave outbox rows written this recently to the live
+ * handler, which delivers without a claim. Fifteen minutes because one
+ * fan-out with a dead peer can outlast ten seconds (DEC-024 rule 6).
+ */
+export const OUTBOX_DRAIN_SKIP_NEWER_THAN_MS = 900_000;
 
 /**
  * ActivityPub domain entry point
@@ -32,6 +40,8 @@ export default class ActivityPubDomain {
   private eventHandlers: ActivityPubEventHandlers | null = null;
   /** The drain in flight, if any; a tick that finds one does nothing. */
   private inboxDrain: Promise<void> | null = null;
+  /** The outbox drain in flight, if any; a tick that finds one does nothing. */
+  private outboxDrain: Promise<void> | null = null;
 
   constructor(
     eventBus: EventEmitter,
@@ -100,6 +110,43 @@ export default class ActivityPubDomain {
     drain({});
     const interval = setInterval(
       () => drain({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS }),
+      intervalMs,
+    );
+    return () => clearInterval(interval);
+  }
+
+  /**
+   * Start delivering outbox rows a restart stranded: once now, taking only
+   * rows written before the drain began, then every
+   * `activitypub.outboxDrain.intervalMs`, leaving rows newer than
+   * {@link OUTBOX_DRAIN_SKIP_NEWER_THAN_MS} to live delivery (DEC-024 rule 6).
+   * Called by the web process once every domain has installed its handlers,
+   * never from {@link initialize} and never from the worker.
+   *
+   * @returns A function that stops the interval; a drain in flight finishes
+   */
+  public startOutboxDrain(): () => void {
+    if (!this.eventHandlers) {
+      throw new Error('ActivityPubDomain.startOutboxDrain called before installEventHandlers');
+    }
+    const eventHandlers = this.eventHandlers;
+
+    const drain = (options: ProcessOutboxMessagesOptions): void => {
+      if (this.outboxDrain) {
+        return;
+      }
+      this.outboxDrain = eventHandlers
+        .runSerialized(() => this.interface.processOutboxMessages(options))
+        .catch((error) => logError(error, '[ActivityPub] Outbox drain failed'))
+        .finally(() => { this.outboxDrain = null; });
+    };
+
+    const intervalMs = config.get<number>('activitypub.outboxDrain.intervalMs');
+    // A zero window still fixes a cutoff: every stranded row predates boot,
+    // and rows written after it belong to their live handler.
+    drain({ skipNewerThanMs: 0 });
+    const interval = setInterval(
+      () => drain({ skipNewerThanMs: OUTBOX_DRAIN_SKIP_NEWER_THAN_MS }),
       intervalMs,
     );
     return () => clearInterval(interval);
