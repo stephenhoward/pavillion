@@ -652,6 +652,141 @@ describe('processOutboxMessage', () => {
   });
 });
 
+describe('processOutboxMessage — a failing recipient does not stop delivery to the others', () => {
+  const GONE_ACTOR = 'https://gone.example/calendars/gone';
+  const SECOND_ACTOR = 'https://second.example/calendars/second';
+  const THIRD_ACTOR = 'https://third.example/calendars/third';
+
+  let service: ProcessOutboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let postStub: sinon.SinonStub;
+  let updateStub: sinon.SinonStub;
+
+  /** An axios rejection for a non-2xx response, as axios.get raises it. */
+  function httpError(status: number): Error {
+    const error = new Error(`Request failed with status code ${status}`) as Error & { response: { status: number } };
+    error.response = { status };
+    return error;
+  }
+
+  /** Answers every actor fetch with an inbox on the actor's own host, except those in `failures`. */
+  function stubActorFetch(failures: Record<string, Error>) {
+    sandbox.stub(axios, 'get').callsFake(async (url: string) => {
+      if (failures[url]) {
+        throw failures[url];
+      }
+      return { status: 200, data: { inbox: `${url}/inbox` } } as any;
+    });
+  }
+
+  function createMessage(): ActivityPubOutboxMessageEntity {
+    const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/fanout`,
+      name: 'Fan-out Event',
+    });
+    return ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+  }
+
+  function storedStatus(): string {
+    expect(updateStub.calledOnce).toBe(true);
+    return updateStub.getCalls()[0].args[0]['processed_status'];
+  }
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const mockInbox = {
+      handleLocalActivityDispatch: sandbox.stub().resolves(),
+    } as unknown as ProcessInboxService;
+    service = new ProcessOutboxService(eventBus, mockInbox);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
+    sandbox.stub(service.calendarActorService, 'getLocalCalendarByActorUri').resolves(null);
+    sandbox.stub(service.calendarService, 'getCalendar').resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    stubSigning(service, sandbox);
+    postStub = sandbox.stub(axios, 'post').resolves({ status: 202, data: {} } as any);
+    updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+  });
+
+  it('records a recipient whose actor fetch returns 410 and delivers to the recipients after it', async () => {
+    sandbox.stub(service, 'getRecipients').resolves([GONE_ACTOR, SECOND_ACTOR, THIRD_ACTOR]);
+    stubActorFetch({ [GONE_ACTOR]: httpError(410) });
+
+    await service.processOutboxMessage(createMessage());
+
+    expect(postStub.getCalls().map(call => call.args[0])).toEqual([
+      `${SECOND_ACTOR}/inbox`,
+      `${THIRD_ACTOR}/inbox`,
+    ]);
+    const status = storedStatus();
+    expect(status).toBe(`partial: Failed to resolve inbox for ${GONE_ACTOR}: Request failed with status code 410`);
+  });
+
+  it('adds nothing to the delivery errors for a recipient with no inbox', async () => {
+    sandbox.stub(service, 'getRecipients').resolves([GONE_ACTOR, SECOND_ACTOR, THIRD_ACTOR]);
+    sandbox.stub(service, 'resolveInboxUrl').callsFake(async (recipient: string) => {
+      if (recipient === GONE_ACTOR) {
+        return null;
+      }
+      if (recipient === THIRD_ACTOR) {
+        throw httpError(410);
+      }
+      return `${recipient}/inbox`;
+    });
+
+    await service.processOutboxMessage(createMessage());
+
+    expect(postStub.getCalls().map(call => call.args[0])).toEqual([`${SECOND_ACTOR}/inbox`]);
+    const status = storedStatus();
+    expect(status).toBe(`partial: Failed to resolve inbox for ${THIRD_ACTOR}: Request failed with status code 410`);
+    expect(status).not.toContain(GONE_ACTOR);
+  });
+
+  it('ends partial when every recipient fails', async () => {
+    sandbox.stub(service, 'getRecipients').resolves([GONE_ACTOR, SECOND_ACTOR]);
+    stubActorFetch({
+      [GONE_ACTOR]: httpError(410),
+      [SECOND_ACTOR]: new Error('connect ECONNREFUSED'),
+    });
+
+    await service.processOutboxMessage(createMessage());
+
+    expect(postStub.called).toBe(false);
+    const status = storedStatus();
+    expect(status).toMatch(/^partial: /);
+    expect(status).toContain(GONE_ACTOR);
+    expect(status).toContain(SECOND_ACTOR);
+  });
+
+  it('stores a status within the column width, with no control characters, when the failures run long', async () => {
+    sandbox.stub(service, 'getRecipients').resolves([GONE_ACTOR, SECOND_ACTOR, THIRD_ACTOR]);
+    const longMessage = 'peer said:\r\n\u0000' + 'z'.repeat(200);
+    stubActorFetch({
+      [GONE_ACTOR]: new Error(longMessage),
+      [SECOND_ACTOR]: new Error(longMessage),
+      [THIRD_ACTOR]: new Error(longMessage),
+    });
+
+    await service.processOutboxMessage(createMessage());
+
+    const status = storedStatus();
+    // The unbounded status would be three ~260-character failures joined.
+    expect(3 * longMessage.length).toBeGreaterThan(255);
+    expect(status.length).toBeLessThanOrEqual(255);
+    expect(status).toMatch(/^partial: Failed to resolve inbox for https:\/\/gone\.example\/calendars\/gone: peer said:/);
+    // eslint-disable-next-line no-control-regex
+    expect(status).not.toMatch(/[\u0000-\u001f]/);
+  });
+});
+
 
 describe('processOutboxMessage — explicit `to` honoring and per-type local dispatch', () => {
   let service: ProcessOutboxService;

@@ -208,9 +208,7 @@ describe('Outbox delivery invariants', () => {
       sandbox.restore();
     });
 
-    // un-skipped by pv-w8sl.2
-    // fails today because the rejected actor fetch throws out of the recipient loop, so nobody after it is POSTed.
-    it.skip('POSTs to recipients 2 and 3 and ends the row partial when the first recipient\'s actor fetch rejects', async () => {
+    it('POSTs to recipients 2 and 3 and ends the row partial when the first recipient\'s actor fetch rejects', async () => {
       const calendar = await createLocalCalendar('invariantfanout');
       const unreachable = await addRemoteFollower(calendar, 'https://peer-one.example/calendars/one');
       const second = await addRemoteFollower(calendar, 'https://peer-two.example/calendars/two');

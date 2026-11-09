@@ -4,6 +4,27 @@ import { Calendar } from "@/common/model/calendar";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import { ActivityPubOutboxMessageEntity } from "@/server/activitypub/entity/activitypub";
 
+/** Width of the ap_outbox `processed_status` column (VARCHAR(255)). */
+export const PROCESSED_STATUS_MAX_LENGTH = 255;
+
+/**
+ * Makes a delivery outcome safe to store in `processed_status`.
+ *
+ * The status carries error text, some of it supplied by peers, so it can hold
+ * bytes PostgreSQL refuses (NUL) and run past the column width. Either makes
+ * the final write throw after delivery has already happened. Control
+ * characters (C0: NUL, CR, LF and the rest) become spaces, then everything
+ * past the column width is dropped; later failures in a long list may be cut.
+ * Cutting at 255 UTF-16 units never exceeds PostgreSQL's character count.
+ *
+ * @param status - The raw status text
+ * @returns The status with control characters replaced, at most 255 characters
+ */
+export function boundProcessedStatus(status: string): string {
+  // eslint-disable-next-line no-control-regex
+  return status.replace(/[\u0000-\u001f]/g, ' ').slice(0, PROCESSED_STATUS_MAX_LENGTH);
+}
+
 /**
  * Shared helper for adding messages to the ActivityPub outbox.
  * This ensures that the outboxMessageAdded event is properly emitted

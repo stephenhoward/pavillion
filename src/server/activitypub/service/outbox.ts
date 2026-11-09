@@ -40,6 +40,7 @@ import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
+import { boundProcessedStatus } from "@/server/activitypub/helper/outbox";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
 
 /**
@@ -437,7 +438,7 @@ class ProcessOutboxService {
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: deliveryErrors.length > 0
-          ? `partial: ${deliveryErrors.join('; ')}`
+          ? boundProcessedStatus(`partial: ${deliveryErrors.join('; ')}`)
           : 'ok',
       });
     }
@@ -474,7 +475,19 @@ class ProcessOutboxService {
     activity: ActivityPubActivity,
     deliveryErrors: string[],
   ): Promise<void> {
-    const inboxUrl = await this.resolveInboxUrl(recipient);
+    // A peer that is gone (410), down or slow rejects here. That is this
+    // recipient's failure, never the loop's: record it and let the caller
+    // move on to the next recipient.
+    let inboxUrl: string | null;
+    try {
+      inboxUrl = await this.resolveInboxUrl(recipient);
+    }
+    catch (error) {
+      const errorMsg = `Failed to resolve inbox for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
+      logError(error, `[ActivityPub] Failed to resolve inbox for ${recipient}`);
+      deliveryErrors.push(errorMsg);
+      return;
+    }
     if (!inboxUrl) {
       logger.info({ recipient }, 'Skipping message because no inbox found');
       return;
