@@ -138,8 +138,12 @@ export function gitSafeToStart(
  *     than a possibly-stale local `<main>`; `--no-track` keeps
  *     `origin/<main>` from becoming the upstream (a bare `git push` would
  *     otherwise target main). A non-trunk parent is used as given.
- *   - `chained` and trunk parent → chain head: `gh stack init --base
- *     <main> <branch>` starts a new stack. `--base` is passed explicitly
+ *   - `chained` and trunk parent → chain head: the branch is first cut from
+ *     `origin/<main>` (`git branch --no-track`), because `gh stack init`
+ *     would otherwise fork a new branch from the local `<main>`, which in a
+ *     linked worktree belongs to the primary checkout and is routinely
+ *     behind. `gh stack init --base <main> <branch>` then adopts the
+ *     existing branch and starts the stack. `--base` is passed explicitly
  *     (rather than relying on gh-stack's own default) so a non-default
  *     `GIT_SAFE_MAIN_BRANCH` is honored, matching gitSafeToStart.
  *   - `chained` and non-trunk parent (a previously-created stack level) →
@@ -170,7 +174,10 @@ export function stackCreate(
     result = run('git', ['checkout', '--no-track', '-b', branch, base], spawn, { cwd: deps.cwd });
   }
   else if (isTrunk) {
-    result = run('gh', ['stack', 'init', '--base', mainBranch, branch], spawn, { cwd: deps.cwd });
+    const branchResult = run('git', ['branch', '--no-track', branch, `origin/${mainBranch}`], spawn, { cwd: deps.cwd });
+    result = branchResult.exitCode === 0
+      ? run('gh', ['stack', 'init', '--base', mainBranch, branch], spawn, { cwd: deps.cwd })
+      : branchResult;
   }
   else {
     result = run('gh', ['stack', 'add', branch], spawn, { cwd: deps.cwd });
