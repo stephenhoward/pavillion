@@ -431,7 +431,7 @@ export default class ActivityPubService {
    *
    * An `error:` status means processing threw and `bad message type` means the
    * type is unknown; neither row was published. A `skipped:` row was retracted
-   * before it was ever delivered, so it stays unpublished too; the Delete or
+   * before the drain delivered it, so it stays unpublished too; the Delete or
    * Undo that retracted it is served. An unprocessed row has not
    * been validated yet. Every writer sets `processed_status` together with
    * `processed_time`, so a processed row with no status does not occur.
@@ -457,7 +457,7 @@ export default class ActivityPubService {
       [Op.and]: [
         // A partial: delivery outcome does not affect membership; a failure
         // to process the row at all does, and so does a row the drain
-        // skipped because it was retracted before anyone received it.
+        // skipped because it was retracted before the drain delivered it.
         { processed_status: { [Op.notLike]: 'error:%' } },
         { processed_status: { [Op.notLike]: 'skipped:%' } },
         { processed_status: { [Op.ne]: 'bad message type' } },

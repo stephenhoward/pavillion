@@ -455,15 +455,18 @@ describe('Outbox drain', () => {
     // Local dispatch refuses an activity id off the instance domain. That is a
     // broken invariant of the row, not one recipient's failure, so the row is
     // unserved (error:) rather than served with a delivery note (partial:).
-    // The source also has a remote follower; the check runs before anyone
-    // is reached, so that follower gets nothing either, whatever the order.
+    // The remote follower comes first, so only a check made before anyone
+    // is reached keeps it from receiving the row.
     const source = await createFollowedCalendar('drainorigin');
-    await addLocalFollower(source, await createFollowedCalendar('drainoriginlocal'));
+    const local = await createFollowedCalendar('drainoriginlocal');
+    await addLocalFollower(source, local);
     const announce = await localAnnounce(source, 'foreign-id');
     announce.id = `https://foreign.example/activities/${uuidv4()}`;
     const row = await writeOutboxRow(source, announce);
+    const service = outboxService();
+    sandbox.stub(service, 'getRecipients').resolves([FOLLOWER, calendarActorUri(local)]);
 
-    await outboxService().processOutboxMessages();
+    await service.processOutboxMessages();
 
     expect((await storedRow(row.id)).processed_status).toMatch(/^error: Local dispatch refused/);
     expect(axiosPost.called, 'no remote recipient receives an unpublished row').toBe(false);

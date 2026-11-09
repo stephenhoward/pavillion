@@ -273,7 +273,8 @@ class ProcessOutboxService {
   }
 
   /**
-   * Whether a later row in the same outbox already retracts this one: for any
+   * Whether a later row in the same outbox retracted this one before the
+   * drain delivered it: for any
    * row, an Undo with id `{rowId}/undo` (an Undo(Follow) retracts a Follow);
    * for a Create, Update or Announce, also a Delete with id `{objectId}/delete`
    * (DEC-024 rule 7). The type is matched as well as the id, as
