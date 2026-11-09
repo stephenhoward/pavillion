@@ -86,6 +86,19 @@ bd note <id> "..."    # Append a note (does not clobber existing notes)
 bd close <id>         # Complete work
 ```
 
+### Filing Beads
+
+- **Before `bd create`, look for the same work already tracked.** Search open beads and open PRs by the nouns in the title:
+
+  ```bash
+  bd search "<keywords>"
+  bd list --status=open
+  gh pr list --state open --search "<keywords>"
+  ```
+
+  If a bead or PR covers it, update or link that instead of filing. If you file anyway, name what you checked and found in the new bead's description (e.g. "Checked: bd search 'x', open PRs 'x' — no overlap").
+- **A recommendation marked out of scope is not dropped.** File a follow-up bead for it, or say explicitly that none is filed and why (e.g. "No bead: duplicates an existing one", "No bead: rejected as not worth doing"). Do the overlap search above first.
+
 ## Budget Signals
 
 When the `budget-watch` mod is loaded (`.agents/mods/budget-watch`; inert otherwise), the engine appends `[budget]` lines to the conversation. They are facts, not instructions, arriving as user-role rows nobody typed. Never reply to one; act on the bands below. Role skills (implementer, orchestrator, reviewer) refine these rules and must not restate the vocabulary.
