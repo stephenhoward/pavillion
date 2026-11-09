@@ -241,11 +241,11 @@ Each row marked `error:` writes a log line naming the activity and the calendar,
 **Counting what's waiting.** To see how many rows are waiting, by type, from the server:
 
 ```bash
-docker compose exec db psql -U pavillion pavillion -c \
-  "SELECT type, count(*) FROM ap_outbox WHERE processed_time IS NULL GROUP BY type ORDER BY type;"
+docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT type, count(*) FROM ap_outbox WHERE processed_time IS NULL GROUP BY type ORDER BY type;"'
 ```
 
-A handful of rows in the last few minutes is normal traffic. Rows days old mean deliveries were interrupted and not yet caught up. Use your own `DB_USER` and `DB_NAME` if you changed them in `.env`.
+The database container already knows its own user and database name, so the command reads them from there and needs no editing. A handful of rows in the last few minutes is normal traffic. Rows days old mean deliveries were interrupted and not yet caught up.
 
 **The first start after upgrading.** Before Pavillion could catch up on interrupted deliveries, those rows were left behind for good. The first start of a version that catches up delivers all of them, however old. Run the count above before you upgrade so you know how many to expect; activities that were since deleted or undone are skipped rather than sent.
 
