@@ -16,12 +16,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubDomain, { OUTBOX_DRAIN_SKIP_NEWER_THAN_MS } from '@/server/activitypub';
+import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { addToOutbox, PROCESSED_STATUS_MAX_LENGTH } from '@/server/activitypub/helper/outbox';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
+import UndoActivity from '@/server/activitypub/model/action/undo';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
@@ -205,6 +208,65 @@ describe('Outbox drain', () => {
     expect((await storedRow(newer.id)).processed_time, 'a row inside the window is left to live delivery').toBeNull();
   });
 
+  describe('superseded rows', () => {
+    it('skips a Create with a later Delete and an Announce with an Undo, and delivers the rest', async () => {
+      const calendar = await createFollowedCalendar('drainsuperseded');
+      const actor = calendarActorUri(calendar);
+
+      // Create carries its object as an object with an id.
+      const deletedCreate = publicCreate(calendar, 'deleted');
+      const createRow = await writeOutboxRow(calendar, deletedCreate);
+      // Announce carries its object as a string; this one is undone.
+      const undoneAnnounce = new AnnounceActivity(actor, `${actor}/events/shared`).addressPublic(`${actor}/followers`);
+      const announceRow = await writeOutboxRow(calendar, undoneAnnounce);
+      // Announce whose string object was later deleted.
+      const deletedTarget = `${actor}/events/target-gone`;
+      const announceOfDeleted = new AnnounceActivity(actor, deletedTarget).addressPublic(`${actor}/followers`);
+      const announceOfDeletedRow = await writeOutboxRow(calendar, announceOfDeleted);
+      const unrelated = await writeOutboxRow(calendar, publicCreate(calendar, 'unrelated'));
+
+      // The retractions, written after, with the ids the real classes give them.
+      const deleteOfCreate = await writeOutboxRow(
+        calendar,
+        new DeleteActivity(actor, (deletedCreate.object as { id: string }).id).addressPublic(`${actor}/followers`),
+      );
+      const undoOfAnnounce = await writeOutboxRow(calendar, new UndoActivity(actor, undoneAnnounce.id));
+      const deleteOfTarget = await writeOutboxRow(
+        calendar,
+        new DeleteActivity(actor, deletedTarget).addressPublic(`${actor}/followers`),
+      );
+
+      await outboxService().processOutboxMessages();
+
+      for (const superseded of [createRow, announceRow, announceOfDeletedRow]) {
+        const stored = await storedRow(superseded.id);
+        expect(stored.processed_status, `${superseded.type} ${superseded.id}`).toBe('skipped: superseded');
+        expect(stored.processed_time).not.toBeNull();
+      }
+      const posted = postedActivityIds(axiosPost);
+      expect(posted).not.toContain(createRow.id);
+      expect(posted).not.toContain(announceRow.id);
+      expect(posted).not.toContain(announceOfDeletedRow.id);
+      expect(posted, 'an unrelated row and the retractions themselves are delivered').toEqual(
+        expect.arrayContaining([unrelated.id, deleteOfCreate.id, undoOfAnnounce.id, deleteOfTarget.id]),
+      );
+      expect((await storedRow(unrelated.id)).processed_status).toBe('ok');
+    });
+
+    it('is a drain rule only: live delivery of a row with a Delete still delivers it', async () => {
+      const calendar = await createFollowedCalendar('drainsupersededlive');
+      const actor = calendarActorUri(calendar);
+      const create = publicCreate(calendar, 'live');
+      const row = await writeOutboxRow(calendar, create);
+      await writeOutboxRow(calendar, new DeleteActivity(actor, (create.object as { id: string }).id));
+
+      await outboxService().processOutboxMessage(row);
+
+      expect(postedActivityIds(axiosPost)).toEqual([create.id]);
+      expect((await storedRow(row.id)).processed_status).toBe('ok');
+    });
+  });
+
   it('stores an over-long error with control characters bounded and stripped', async () => {
     const calendar = await createFollowedCalendar('drainbounded');
     const row = await writeOutboxRow(calendar, publicCreate(calendar, 'bounded'));
@@ -295,23 +357,23 @@ describe('Outbox drain', () => {
     const row = await writeOutboxRow(calendar, create);
 
     const eventBus = new EventEmitter();
-    const domain = new ActivityPubDomain(
-      eventBus,
-      new CalendarInterface(eventBus),
-      new AccountsInterface(),
-      { publishJob: async () => {} } as unknown as HousekeepingInterface,
-    );
-    domain.installEventHandlers();
-    // Serialize as SQLite does on every dialect, so the handler is queued
-    // behind the drain deterministically.
-    (domain as any).eventHandlers.serializeDispatch = true;
+    const calendarInterface = new CalendarInterface(eventBus);
+    const housekeeping = { publishJob: async () => {} } as unknown as HousekeepingInterface;
+    const domain = new ActivityPubDomain(eventBus, calendarInterface, new AccountsInterface(), housekeeping);
+    // Install handlers that serialize as they do on SQLite, on every dialect,
+    // so the live handler is queued behind the drain deterministically. The
+    // flag is read when a handler is installed, so it is set before install.
+    const handlers = new ActivityPubEventHandlers(domain.interface, calendarInterface, housekeeping);
+    (handlers as any).serializeDispatch = true;
+    handlers.install(eventBus);
+    (domain as any).eventHandlers = handlers;
 
     const stopDrain = domain.startOutboxDrain();
     try {
       // The row's own emit, arriving while the boot drain holds the chain.
       eventBus.emit('outboxMessageAdded', create);
       await (domain as any).outboxDrain;
-      await waitFor(async () => ((domain as any).eventHandlers.dispatchQueue as Promise<void>).then(() => true), {
+      await waitFor(async () => ((handlers as any).dispatchQueue as Promise<void>).then(() => true), {
         label: 'queued live handler settled',
       });
     }

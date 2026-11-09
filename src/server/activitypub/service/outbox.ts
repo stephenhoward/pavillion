@@ -208,6 +208,12 @@ class ProcessOutboxService {
    * `message_time` is our own clock at write (`addToOutbox`), so it is the
    * write time, and it is the column `idx_ap_outbox_unprocessed` orders by.
    *
+   * A Create, Update or Announce that a later Delete or Undo in the outbox
+   * already retracts is marked `skipped: superseded` and not delivered (see
+   * {@link isSupersededOutboxMessage}). The live handler does not make this
+   * check: it delivers a row as soon as it is written, before anything can
+   * retract it.
+   *
    * A row that throws is marked `error:` and the drain moves on to the next.
    * If even that mark cannot be written, the drain rejects: the re-query
    * would return the same unprocessed row forever.
@@ -227,6 +233,7 @@ class ProcessOutboxService {
 
     let delivered = 0;
     let failed = 0;
+    let skipped = 0;
     let messages: ActivityPubOutboxMessageEntity[] = [];
 
     do {
@@ -238,6 +245,14 @@ class ProcessOutboxService {
 
       for( const message of messages ) {
         try {
+          if ( await this.isSupersededOutboxMessage(message) ) {
+            await message.update({
+              processed_time: DateTime.now().toJSDate(),
+              processed_status: 'skipped: superseded',
+            });
+            skipped++;
+            continue;
+          }
           await this.processOutboxMessage(message);
           delivered++;
         }
@@ -248,9 +263,40 @@ class ProcessOutboxService {
       }
     } while( messages.length > 0 );
 
-    if ( delivered + failed > 0 ) {
-      logger.info({ delivered, failed }, 'Outbox drain finished');
+    if ( delivered + failed + skipped > 0 ) {
+      logger.info({ delivered, failed, skipped }, 'Outbox drain finished');
     }
+  }
+
+  /**
+   * Whether a stranded row has already been retracted by a later row in the
+   * same outbox, so delivering it now would only resurrect what its calendar
+   * took back. True for a Create, Update or Announce when ap_outbox holds
+   * `{objectId}/delete` (the id `DeleteActivity` gives a Delete of that
+   * object) or `{rowId}/undo` (the id `UndoActivity` gives an Undo of this
+   * row). Both are primary-key lookups. The retracting row is drained as
+   * usual, so peers that did receive the original still get the retraction.
+   *
+   * @param message - An unprocessed outbox row
+   * @returns True when the row should be skipped rather than delivered
+   */
+  private async isSupersededOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<boolean> {
+    if ( !['Create', 'Update', 'Announce'].includes(message.type) ) {
+      return false;
+    }
+    const object = (message.message as Record<string, unknown> | null)?.object;
+    const objectId = typeof object === 'string'
+      ? object
+      : (object && typeof object === 'object' && typeof (object as Record<string, unknown>).id === 'string')
+        ? (object as Record<string, string>).id
+        : null;
+
+    const retractions = [`${message.id}/undo`];
+    if ( objectId ) {
+      retractions.push(`${objectId}/delete`);
+    }
+    const found = await ActivityPubOutboxMessageEntity.count({ where: { id: retractions } });
+    return found > 0;
   }
 
   /**

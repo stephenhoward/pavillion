@@ -20,7 +20,7 @@ Three rules follow.
 
 **3. The emitted target is an affordance, never a trust boundary.** Every destination a routing key can produce enforces its own authorization server-side (`userCanReviewReports` on the owner reports page; `account.hasRole('admin')` in every admin report handler). A mis-routed link is a usability defect, not an access-control one — which is why rule 2 can hold without a membership check on the read path.
 
-A third class, the **write-once derived fact** — a value computed once from the row's own write-once content, such as `ap_outbox.is_public` — is recorded in [DEC-024](dec-024-outbox-contract.md). Rule 2 binds it too.
+A third class, the **write-once derived fact** — a value computed once from the row's own write-once content, such as `ap_outbox.is_public` — is recorded in [DEC-024](dec-024-outbox-contract.md). It may feed the one gate that serves the row's own content, `readOutbox`'s anonymous-serving filter, because it is derived from the row itself rather than copied from another table's live state; rule 2 still forbids it deciding anything else.
 
 ## Context
 
