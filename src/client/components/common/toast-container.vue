@@ -137,6 +137,16 @@ onUnmounted(() => {
         <p class="alert__message">
           {{ toast.message }}
         </p>
+        <p
+          v-if="toast.link"
+          class="alert__message"
+        >
+          <a
+            :href="toast.link.href"
+            target="_blank"
+            rel="noopener"
+          >{{ toast.link.text }}</a>
+        </p>
       </div>
       <button
         class="alert__close"

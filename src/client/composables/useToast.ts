@@ -2,12 +2,21 @@ import { ref } from 'vue';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
+/**
+ * An optional link shown beneath a toast message.
+ */
+export interface ToastLink {
+  href: string;
+  text: string;
+}
+
 export interface Toast {
   id: number;
   type: ToastType;
   message: string;
   title?: string;
   duration: number;
+  link?: ToastLink;
 }
 
 export interface ToastOptions {
@@ -15,11 +24,13 @@ export interface ToastOptions {
   type: ToastType;
   title?: string;
   duration?: number;
+  link?: ToastLink;
 }
 
 interface ConvenienceOptions {
   title?: string;
   duration?: number;
+  link?: ToastLink;
 }
 
 const DEFAULT_DURATIONS: Record<ToastType, number> = {
@@ -62,6 +73,7 @@ export function useToast() {
       message: options.message,
       title: options.title,
       duration: options.duration ?? DEFAULT_DURATIONS[options.type],
+      link: options.link,
     };
 
     toasts.value.push(toast);
