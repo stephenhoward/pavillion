@@ -178,6 +178,7 @@ function makeInstance(overrides: InstanceOverrides = {}): any {
 function mountBody(props: {
   instance: any;
   categoryHrefBuilder?: (cat: EventCategory) => string;
+  externalLinksInNewTab?: boolean;
 }): VueWrapper {
   const pinia = createPinia();
   return mount(EventDetailBody, {
@@ -190,6 +191,7 @@ function mountBody(props: {
     props: {
       instance: props.instance,
       categoryHrefBuilder: props.categoryHrefBuilder,
+      externalLinksInNewTab: props.externalLinksInNewTab,
     },
   });
 }
@@ -417,6 +419,31 @@ describe('EventDetailBody', () => {
       expect(pill.text()).toBe('remote_cal@remote.example');
       expect(pill.attributes('target')).toBe('_blank');
       expect(pill.attributes('rel')).toBe('noopener noreferrer');
+      wrapper.unmount();
+    });
+  });
+
+  describe('local source-calendar pill', () => {
+    const localSource = { urlName: 'local_cal', host: 'example.test', url: '/local_cal' };
+
+    it('navigates in the same tab by default', () => {
+      const wrapper = mountBody({ instance: makeInstance({ sourceCalendar: localSource }) });
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.attributes('href')).toBe('/local_cal');
+      expect(pill.attributes('target')).toBeUndefined();
+      expect(pill.attributes('rel')).toBeUndefined();
+      wrapper.unmount();
+    });
+
+    it('opens in a new tab when externalLinksInNewTab is set', () => {
+      const wrapper = mountBody({
+        instance: makeInstance({ sourceCalendar: localSource }),
+        externalLinksInNewTab: true,
+      });
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.attributes('href')).toBe('/local_cal');
+      expect(pill.attributes('target')).toBe('_blank');
+      expect(pill.attributes('rel')).toBe('noopener');
       wrapper.unmount();
     });
   });

@@ -197,6 +197,7 @@ onBeforeMount(async () => {
         <EventDetailBody
           :instance="state.instance"
           :category-href-builder="categoryHrefBuilder"
+          external-links-in-new-tab
         />
       </main>
     </div>

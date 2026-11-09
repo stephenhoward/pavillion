@@ -108,7 +108,7 @@ vi.mock('@/site/components/not-found.vue', () => ({
 vi.mock('@/site/components/EventDetailBody.vue', () => ({
   default: {
     name: 'EventDetailBody',
-    props: ['instance', 'categoryHrefBuilder'],
+    props: { instance: null, categoryHrefBuilder: null, externalLinksInNewTab: Boolean },
     template: '<div data-test="event-detail-body" class="event-detail-body-stub"></div>',
   },
 }));
@@ -232,6 +232,13 @@ describe('widget event-detail-overlay shell', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('asks the detail body to open off-calendar links in a new tab', async () => {
+    const { wrapper } = await mountOverlay('/widget/test_calendar/events/evt-1');
+    const body = wrapper.getComponent({ name: 'EventDetailBody' });
+    expect(body.props('externalLinksInNewTab')).toBe(true);
+    wrapper.unmount();
   });
 
   it('carries data-loading while the event loads, and drops it once loaded', async () => {
