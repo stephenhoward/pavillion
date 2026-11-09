@@ -255,8 +255,6 @@ cat > .env << EOF
 JWT_SECRET=$(openssl rand -base64 32)
 SESSION_SECRET=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 32)
-DB_NAME=pavillion
-DB_USER=pavillion
 EOF
 chmod 600 .env
 
@@ -464,7 +462,7 @@ docker compose ps db
 docker compose logs db
 
 # Verify database is healthy
-docker compose exec db pg_isready -U pavillion
+docker compose exec db pg_isready
 ```
 
 ### Migration failures
