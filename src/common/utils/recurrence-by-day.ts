@@ -15,6 +15,8 @@
  * format once here keeps those two consumers from drifting apart.
  */
 
+import { EventFrequency } from '@/common/model/events';
+
 /**
  * The seven valid ISO weekday codes (RFC 5545 BYDAY values). Matches rrule's
  * `ALL_WEEKDAYS` exactly.
@@ -65,4 +67,80 @@ export function parseByDayEntry(entry: string): ParsedByDay | null {
     }
   }
   return { ordinal, dayCode: dayCode as ByDayCode };
+}
+
+/**
+ * Largest ordinal magnitude a BYDAY entry can use per frequency. A MONTHLY
+ * period holds at most five of any weekday, a YEARLY period at most 53.
+ * DAILY and WEEKLY take no ordinal.
+ */
+export const BY_DAY_ORDINAL_LIMIT: Partial<Record<EventFrequency, number>> = {
+  [EventFrequency.MONTHLY]: 5,
+  [EventFrequency.YEARLY]: 53,
+};
+
+/**
+ * Strict, author-facing check of a schedule's BYDAY list.
+ *
+ * An ordinal beyond the limit never matches any date. rrule then iterates to
+ * year 9999 looking for one (ignoring count and until), and a zero ordinal
+ * throws inside rrule, so such rules are rejected on the way in.
+ *
+ * @param frequency - The schedule's frequency, or null for a one-off
+ * @param byDay - The BYDAY list as received
+ * @returns A human-readable reason for the first problem, else null
+ */
+export function findInvalidByDayEntry(frequency: EventFrequency | null, byDay: unknown): string | null {
+  if (byDay === undefined || byDay === null) {
+    return null;
+  }
+  if (!Array.isArray(byDay)) {
+    return 'must be a list of weekday codes';
+  }
+  if (frequency === null) {
+    return null;
+  }
+  for (const entry of byDay) {
+    if (typeof entry !== 'string') {
+      return 'entries must be strings';
+    }
+    const parsed = parseByDayEntry(entry);
+    if (!parsed) {
+      return `"${entry}" is not a valid weekday code`;
+    }
+    if (parsed.ordinal === null) {
+      continue;
+    }
+    const limit = BY_DAY_ORDINAL_LIMIT[frequency];
+    if (limit === undefined) {
+      return `"${entry}": a ${frequency} rule cannot use an ordinal`;
+    }
+    if (parsed.ordinal === 0 || Math.abs(parsed.ordinal) > limit) {
+      return `"${entry}": ordinal must be between 1 and ${limit} (or -1 and -${limit}) for a ${frequency} rule`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Narrow, read-path check: does a stored MONTHLY or YEARLY BYDAY list hold an
+ * ordinal that can never match (or crashes rrule)? Unparsable tokens and
+ * DAILY/WEEKLY ordinals are not flagged; the expansion code already ignores them.
+ */
+export function hasUnreachableByDayOrdinal(
+  frequency: EventFrequency | null,
+  byDay: readonly string[] | null | undefined,
+): boolean {
+  if (frequency === null || !byDay) {
+    return false;
+  }
+  const limit = BY_DAY_ORDINAL_LIMIT[frequency];
+  if (limit === undefined) {
+    return false;
+  }
+  return byDay.some((entry) => {
+    const parsed = parseByDayEntry(entry);
+    return parsed !== null && parsed.ordinal !== null
+      && (parsed.ordinal === 0 || Math.abs(parsed.ordinal) > limit);
+  });
 }

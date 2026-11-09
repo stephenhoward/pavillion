@@ -28,6 +28,7 @@ import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFo
 import { ValidationError } from '@/common/exceptions/base';
 import { sanitizeImageAlt, validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
 import { validateMediaTransform } from '@/server/calendar/service/media_transform';
+import { validateSchedulesByDay } from '@/server/calendar/service/schedule_by_day';
 import { remapCancellations } from '@/server/calendar/service/cancellation_remap';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
@@ -40,6 +41,7 @@ import db from '@/server/common/entity/db';
 import { Op, where, fn, col, type Transaction } from 'sequelize';
 
 export { validateMediaTransform } from './media_transform';
+export { validateSchedulesByDay } from './schedule_by_day';
 
 /**
  * Normalizes an optional external URL attached to an event.
@@ -709,6 +711,7 @@ class EventService {
     // instead of throwing, so they skip the pre-pass.
     if (!untrusted) {
       validateContentImageAlts(eventParams.content);
+      validateSchedulesByDay(eventParams.schedules);
     }
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
@@ -996,6 +999,7 @@ class EventService {
     // Import writes normalize instead of throwing, so they skip the pre-pass.
     if (!untrusted) {
       validateContentImageAlts(eventParams.content);
+      validateSchedulesByDay(eventParams.schedules);
     }
 
     const eventEntity = await EventEntity.findByPk(eventId);

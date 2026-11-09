@@ -34,7 +34,7 @@ import {
   InvalidOccurrenceDateError,
 } from '@/common/exceptions/calendar';
 import { createLogger } from '@/server/common/helper/logger';
-import { parseByDayEntry } from '@/common/utils/recurrence-by-day';
+import { parseByDayEntry, hasUnreachableByDayOrdinal } from '@/common/utils/recurrence-by-day';
 
 const logger = createLogger('calendar');
 
@@ -361,6 +361,9 @@ export function expandScheduleOccurrences(
   limit: number,
 ): Date[] {
   if (!schedule.startDate || limit <= 0) {
+    return [];
+  }
+  if (hasUnreachableByDayOrdinal(schedule.frequency, schedule.byDay)) {
     return [];
   }
   const untilMs = until?.getTime() ?? Infinity;
@@ -1509,6 +1512,12 @@ export default class EventInstanceService {
       const isHiddenCancellation = schedule.isExclusion && schedule.hideFromPublic;
       const isShownCancellation = schedule.isExclusion && !schedule.hideFromPublic;
       if (isShownCancellation) {
+        continue;
+      }
+
+      // A stored ordinal that can never match would walk rrule to year 9999
+      // (or throw on 0), so the rule contributes nothing.
+      if (hasUnreachableByDayOrdinal(schedule.frequency, schedule.byDay)) {
         continue;
       }
 
