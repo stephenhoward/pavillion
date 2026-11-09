@@ -273,7 +273,7 @@ const handleCategoryDialogClose = () => {
 };
 
 const handleAssignmentComplete = (result) => {
-  toast.success(tBulk('delete_success', { count: result.eventCount }));
+  toast.success(tBulk('assign_success', { count: result.eventCount }));
   deselectAll();
 };
 

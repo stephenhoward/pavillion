@@ -65,4 +65,11 @@ describe('locale plural suffixes', () => {
   ])('renders the blocked instance count for %i as "%s"', async (count, expected) => {
     expect(await render('en', 'admin', 'blocked_instances.list.count', count)).toBe(expected);
   });
+
+  it.each([
+    [1, 'Assigned categories to 1 event'],
+    [2, 'Assigned categories to 2 events'],
+  ])('renders the bulk assign success for %i as "%s"', async (count, expected) => {
+    expect(await render('en', 'calendars', 'bulk_operations.assign_success', count)).toBe(expected);
+  });
 });

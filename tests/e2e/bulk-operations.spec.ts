@@ -149,13 +149,15 @@ test.describe('Bulk Event Operations', () => {
     const selectionSummary = page.locator('.selection-summary');
     await expect(selectionSummary).toBeVisible();
 
-    // Verify category toggle chips are present (scoped to dialog)
-    const toggleChips = dialog.locator('button.toggle-chip');
-    const chipCount = await toggleChips.count();
+    // Verify category toggle chips are present (scoped to dialog). A category
+    // every selected event already carries renders as a disabled, checked chip,
+    // so toggle the first chip that can still be added.
+    const addableChips = dialog.locator('button.toggle-chip:not([disabled])');
+    const chipCount = await addableChips.count();
 
-    // If categories exist, verify we can toggle them
+    // If addable categories exist, verify we can toggle them
     if (chipCount > 0) {
-      const firstChip = toggleChips.first();
+      const firstChip = addableChips.first();
       await expect(firstChip).toHaveAttribute('role', 'switch');
       await firstChip.click();
       await expect(firstChip).toHaveAttribute('aria-checked', 'true');
