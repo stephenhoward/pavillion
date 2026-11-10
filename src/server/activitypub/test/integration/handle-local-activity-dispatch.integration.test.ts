@@ -95,7 +95,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     calendarInterface = new CalendarInterface(eventBus);
     inboxService = new ProcessInboxService(eventBus, calendarInterface);
 
-    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar = new Calendar(uuidv4(), 'test-calendar');
     testCalendar.addContent('en', new CalendarContent('en'));
     testCalendar.content('en').title = 'Test Calendar';
 

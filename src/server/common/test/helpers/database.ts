@@ -19,20 +19,15 @@
  * This approach is ephemeral - tables are created fresh for each test.
  */
 
-import {
-  FollowingCalendarEntity,
-  FollowerCalendarEntity,
-  SharedEventEntity,
-  EventActivityEntity,
-  ActivityPubInboxMessageEntity,
-  ActivityPubOutboxMessageEntity,
-  RepostDismissalEntity,
-} from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import db from '@/server/common/entity/db';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { EventEntity } from '@/server/calendar/entity/event';
-import { MediaEntity } from '@/server/media/entity/media';
+// Imported for their side effect: each registers its models with db, which
+// setupActivityPubSchema() syncs.
+import '@/server/activitypub/entity/event_object';
+import '@/server/calendar/entity/calendar';
+import '@/server/calendar/entity/event';
+import '@/server/media/entity/media';
 
 /**
  * Setup ActivityPub database schema for unit tests
@@ -41,31 +36,10 @@ import { MediaEntity } from '@/server/media/entity/media';
  * This is an ephemeral setup - call in beforeEach hooks
  */
 export async function setupActivityPubSchema(): Promise<void> {
-  // Sync CalendarEntity first as it's referenced by many other tables
-  await CalendarEntity.sync({ force: true });
-
-  // Sync CalendarActorEntity before tables that reference it
-  await CalendarActorEntity.sync({ force: true });
-
-  // Sync ActivityPub models that depend on CalendarEntity and CalendarActorEntity
-  await FollowingCalendarEntity.sync({ force: true });
-  await FollowerCalendarEntity.sync({ force: true });
-  await SharedEventEntity.sync({ force: true });
-  await EventActivityEntity.sync({ force: true });
-  await ActivityPubInboxMessageEntity.sync({ force: true });
-  await ActivityPubOutboxMessageEntity.sync({ force: true });
-
-  // Sync MediaEntity before EventEntity (EventEntity has FK to media)
-  await MediaEntity.sync({ force: true });
-
-  // Sync EventEntity last
-  await EventEntity.sync({ force: true });
-
-  // Sync EventObjectEntity (ap_event_object) — links AP identity to local events
-  await EventObjectEntity.sync({ force: true });
-
-  // Sync RepostDismissalEntity (ap_repost_dismissal) — FKs to EventEntity + CalendarEntity
-  await RepostDismissalEntity.sync({ force: true });
+  // CalendarEntity and MediaEntity reference each other (calendar.default_event_image_id
+  // and media.calendar_id), so no per-model sync order satisfies PostgreSQL's
+  // foreign key checks. db.sync() resolves the cycle across all registered models.
+  await db.sync({ force: true });
 }
 
 /**
@@ -75,19 +49,9 @@ export async function setupActivityPubSchema(): Promise<void> {
  * This is an ephemeral teardown - call in afterEach hooks
  */
 export async function teardownActivityPubSchema(): Promise<void> {
-  // Drop tables in reverse order of dependencies
-  await RepostDismissalEntity.drop();
-  await EventObjectEntity.drop();
-  await EventActivityEntity.drop();
-  await SharedEventEntity.drop();
-  await ActivityPubOutboxMessageEntity.drop();
-  await ActivityPubInboxMessageEntity.drop();
-  await FollowerCalendarEntity.drop();
-  await FollowingCalendarEntity.drop();
-  await EventEntity.drop();
-  await MediaEntity.drop();
-  await CalendarActorEntity.drop();
-  await CalendarEntity.drop();
+  // db.drop() orders drops by dependency, which per-model drop() cannot do
+  // for the calendar/media cycle on PostgreSQL.
+  await db.drop({ cascade: db.getDialect() === 'postgres' });
 }
 
 /**
