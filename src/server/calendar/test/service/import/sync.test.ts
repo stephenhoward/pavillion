@@ -290,11 +290,11 @@ describe('SyncService', () => {
         .rejects.toBeInstanceOf(ImportSourceNotVerifiedError);
     });
 
-    it('refuses sync when verification is expired and beyond the grace window', async () => {
+    it('refuses sync when verification has lapsed beyond the grace window', async () => {
       const longAgo = new Date('2020-01-01T00:00:00Z');
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(
         makeSourceEntity({
-          verification_state: 'expired',
+          verification_state: 'verified',
           verification_expires_at: longAgo,
         }),
       );
@@ -302,11 +302,11 @@ describe('SyncService', () => {
         .rejects.toBeInstanceOf(ImportSourceNotVerifiedError);
     });
 
-    it('allows sync when expired but inside the 14-day grace window', async () => {
+    it('allows sync when lapsed but inside the 14-day grace window', async () => {
       const now = new Date('2026-04-22T00:00:00Z');
       const expiresAt = new Date('2026-04-20T00:00:00Z'); // 2 days ago
       const src = makeSourceEntity({
-        verification_state: 'expired',
+        verification_state: 'verified',
         verification_expires_at: expiresAt,
       });
       sandbox.stub(ImportSourceEntity, 'findByPk').resolves(src);
@@ -321,6 +321,29 @@ describe('SyncService', () => {
         now: () => now,
       });
 
+      const result = await service.syncSource({ account, importSourceId: 'src-1' });
+      expect(result.outcome).toBe('no_changes');
+    });
+  });
+
+  describe('before expiry', () => {
+    it('allows sync when verified and the expiry is still in the future', async () => {
+      const now = new Date('2026-04-22T00:00:00Z');
+      sandbox.stub(ImportSourceEntity, 'findByPk').resolves(
+        makeSourceEntity({
+          verification_state: 'verified',
+          verification_expires_at: new Date('2026-05-01T00:00:00Z'),
+        }),
+      );
+      fetcher.fetch.resolves({ outcome: 'not_modified', httpStatus: 304 });
+      service = new SyncService({
+        eventService: eventService as unknown as EventService,
+        calendarService: calendarService as unknown as CalendarService,
+        fetcher: fetcher as unknown as Fetcher,
+        rateLimiter,
+        parseICS: () => ({}) as never,
+        now: () => now,
+      });
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
       expect(result.outcome).toBe('no_changes');
     });

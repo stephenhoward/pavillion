@@ -5,9 +5,6 @@ import config from 'config';
 import {
   DnsVerifier,
   VERIFICATION_VALIDITY_DAYS,
-  VERIFICATION_GRACE_DAYS,
-  isVerificationCurrentlyValid,
-  isWithinGracePeriod,
 } from '@/server/calendar/service/import/dns-verifier';
 import {
   ImportSourceDnsVerificationError,
@@ -539,43 +536,8 @@ describe('DnsVerifier', () => {
   });
 });
 
-describe('verification lifecycle windows', () => {
-  it('treats record as valid when now is before expiresAt', () => {
-    const now = new Date('2026-01-01T00:00:00Z');
-    const verifiedAt = new Date('2025-12-01T00:00:00Z');
-    const expiresAt = new Date(verifiedAt.getTime() + VERIFICATION_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
-    expect(isVerificationCurrentlyValid(expiresAt, now)).toBe(true);
-  });
-
-  it('treats record as invalid once past expiresAt', () => {
-    const now = new Date('2026-04-10T00:00:00Z');
-    const verifiedAt = new Date('2025-12-01T00:00:00Z');
-    const expiresAt = new Date(verifiedAt.getTime() + VERIFICATION_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
-    // verifiedAt + 90d = 2026-03-01, now is 2026-04-10 → expired
-    expect(isVerificationCurrentlyValid(expiresAt, now)).toBe(false);
-  });
-
-  it('is within grace period at expiresAt + 13 days', () => {
-    const expiresAt = new Date('2026-03-01T00:00:00Z');
-    const withinGrace = new Date('2026-03-14T00:00:00Z'); // 13 days after
-    expect(isWithinGracePeriod(expiresAt, withinGrace)).toBe(true);
-  });
-
-  it('is outside grace period at expiresAt + 15 days', () => {
-    const expiresAt = new Date('2026-03-01T00:00:00Z');
-    const afterGrace = new Date('2026-03-16T00:00:00Z'); // 15 days after
-    expect(isWithinGracePeriod(expiresAt, afterGrace)).toBe(false);
-  });
-
-  it('grace period ends exactly at expiresAt + 14 days', () => {
-    const expiresAt = new Date('2026-03-01T00:00:00Z');
-    const atBoundary = new Date(expiresAt.getTime() + VERIFICATION_GRACE_DAYS * 24 * 60 * 60 * 1000);
-    // Inclusive end is a matter of convention; we define grace as strictly less than boundary
-    expect(isWithinGracePeriod(expiresAt, atBoundary)).toBe(false);
-  });
-
-  it('exposes 90-day and 14-day constants', () => {
+describe('verification validity constant', () => {
+  it('exposes the 90-day validity window', () => {
     expect(VERIFICATION_VALIDITY_DAYS).toBe(90);
-    expect(VERIFICATION_GRACE_DAYS).toBe(14);
   });
 });

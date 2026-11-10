@@ -1055,6 +1055,52 @@ describe('ImportSourceService', () => {
   });
 
   // --------------------------------------------------------------------
+  // Re-verifying a lapsed source
+  // --------------------------------------------------------------------
+
+  describe('re-verifying a lapsed source', () => {
+    function lapsedEntity(): ImportSourceEntity {
+      const entity = ImportSourceEntity.build({
+        id: SOURCE_ID,
+        calendar_id: CAL_ID,
+        url: VALID_URL,
+        verification_type: 'dns-txt',
+        verification_state: 'verified',
+        verified_at: new Date('2020-01-01T00:00:00Z'),
+        verification_expires_at: new Date('2020-04-01T00:00:00Z'),
+      });
+      sandbox.stub(entity, 'save').resolves(entity);
+      return entity;
+    }
+
+    it('keeps the stored state verified while a challenge is issued, and reads it as expired', async () => {
+      const entity = lapsedEntity();
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+
+      await service.issueVerificationChallenge(account, CAL_ID, SOURCE_ID);
+
+      expect(entity.verification_state).toBe('verified');
+      expect(entity.toModel().verificationState).toBe('expired');
+    });
+
+    it('reads as verified with sync allowed once verifySource moves the expiry forward', async () => {
+      const entity = lapsedEntity();
+      sandbox.stub(ImportSourceEntity, 'findOne').resolves(entity);
+      const verifiedAt = new Date();
+      const expiresAt = new Date(verifiedAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+      service.setDnsVerifier({
+        verify: sandbox.stub().resolves({ verified: true, verifiedAt, expiresAt }),
+      } as unknown as DnsVerifier);
+
+      const result = await service.verifySource(account, CAL_ID, SOURCE_ID);
+
+      expect(entity.verification_expires_at).toBe(expiresAt);
+      expect(result.verificationState).toBe('verified');
+      expect(result.canSync).toBe(true);
+    });
+  });
+
+  // --------------------------------------------------------------------
   // URL immutability
   // --------------------------------------------------------------------
 

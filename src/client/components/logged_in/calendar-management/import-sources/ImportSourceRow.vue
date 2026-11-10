@@ -155,7 +155,7 @@ const lastSyncLabel = computed(() => {
     : t('last_sync_at', { time });
 });
 
-const canSync = computed(() => props.source.verificationState === 'verified');
+const canSync = computed(() => props.source.canSync);
 
 const syncAriaDescribedBy = computed<string | undefined>(() =>
   canSync.value ? undefined : syncDisabledDescId,
