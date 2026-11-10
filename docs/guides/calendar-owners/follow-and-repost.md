@@ -32,14 +32,14 @@ Calendar handles take the shape `calendar-name@domain.example`. The part before 
 
 Connecting lives in **Feed > Following**. If you run more than one calendar, the name at the top of the page shows whose feed you're looking at; click it to switch calendars and you stay on the feed. Connections are *per-calendar*, not per-account; each of your calendars has its own list, its own feed, and its own followers.
 
-Click <Btn>Follow a Calendar</Btn> and type the identifier — `name@domain.example` for a remote calendar, or just `name` for one on your own instance. Pavillion looks it up and shows a preview matching the calendar's public page; use it to confirm you've got the right one. The auto-repost toggles below the preview control what happens to *new* events arriving from this connection from now on — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand, and you can change these toggles for any connection at any time.
+Click <Btn>Follow a Calendar</Btn> and type the identifier — `name@domain.example` for a remote calendar, or just `name` for one on your own instance. Pavillion looks it up and shows a preview matching the calendar's public page; use it to confirm you've got the right one. The auto-repost toggles below the preview control what gets published automatically from this connection, starting with the source's events that haven't ended yet — see [Let rules publish for you](#let-rules-publish-for-you) below for what each one does. If you're not sure what to pick, leave both off; you can publish any individual event by hand, and you can change these toggles for any connection at any time.
 
 Click <Btn>Follow</Btn>. Once the source server accepts the request (usually immediate), their events start arriving in your feed.
 
 To disconnect entirely, find the row in the **Following** tab and click <Btn>Unfollow</Btn>. That's a heavier action than unpublishing a single event — it ends the connection completely, no future events flow in, and any auto-repost rules on the connection go away with it.
 
 ::: tip <Lightbulb /> A note on the optional category-matching step.
-Right after a successful connection, a second step in the dialog offers to match the source calendar's categories to your own — *their* `Live Music` to *your* `Concerts`, for example. Setting these up now means any event you publish from this calendar — by hand or by rule — lands in the right category on yours without re-tagging. You can skip the step and configure it later from the **Match categories** link on the connection's row in your Following tab; the category-matching guide covers the details.
+Right after a successful connection, a second step in the dialog offers to match the source calendar's categories to your own — *their* `Live Music` to *your* `Concerts`, for example. Setting these up now means any event you publish from this calendar — by hand or by rule — lands in the right category on yours without re-tagging. Saving matchings also tags the events your rules have already published from this calendar, so nothing is lost if the first batch arrives before you finish the step. You can skip the step and configure it later from the **Match categories** link on the connection's row in your Following tab; the category-matching guide covers the details.
 :::
 
 ## What lands in your feed
@@ -63,12 +63,12 @@ If the calendar you're connected to posts the kind of events you'd publish almos
 - **Auto-repost original events.** From now on, when the source calendar posts an event of their own, publish it on yours automatically.
 - **Also auto-repost shared events.** Only available when the first toggle is on. From now on, when the source calendar *itself* publishes an event from another calendar, publish their repost too. This is how an event from a third calendar two hops away can end up on yours; turn it on if you trust the source's editorial taste, off if you only want the events they originate themselves.
 
-Both rules are forward-only. Turning a toggle on doesn't reach back and publish events from this calendar that are already sitting in your feed — only events that arrive from the source *after* the toggle is on get auto-published. To put already-arrived events on your calendar, publish them by hand from the **Events** tab.
+When you first connect with a rule on, Pavillion catches up on the source's existing events: the ones that haven't ended yet are published, and past events stay in your feed only — a new connection never republishes someone's history. After that the rules are forward-only. Turning a toggle on later doesn't reach back and publish events already sitting in your feed — only events that arrive from the source *after* the toggle is on get auto-published. To put already-arrived events on your calendar, publish them by hand from the **Events** tab.
 
 Rule-published events show up on your calendar like any other published event, with one small visible difference *in your feed*: the button reads **Auto-posted** in muted gray rather than **Reposted** in green. That's so you can tell at a glance which events you chose by hand and which arrived through a rule. Visitors to your public calendar see the same thing either way.
 
 ::: tip <Lightbulb /> A note on auto-repost and category matching.
-Rule-driven publishing works best when category matching is set up first. Without matchings, a rule-published event can land on your calendar with no categories — it'll publish, but it won't show up under any of your filters. The category-matching guide walks through the rules; if you're enabling auto-repost on a connection you didn't pre-map, take a minute to set the mappings up afterwards.
+Rule-driven publishing works best when category matching is set up first. Without matchings, a rule-published event can land on your calendar with no categories — it'll publish, but it won't show up under any of your filters. The category-matching guide walks through the rules; if you're enabling auto-repost on a connection you didn't pre-map, take a minute to set the mappings up afterwards — saving them tags the events the rules already published, too.
 :::
 
 ## Unpublish an event

@@ -918,6 +918,45 @@ export default class EventInstanceService {
   }
 
   /**
+   * Whether every occurrence of the event has ended by `now`. An occurrence
+   * ends at {@link computeOccurrenceEndTime}, or at its start when the event
+   * has no end time, so an occurrence in progress has not ended. Hidden
+   * cancellations are not occurrences; shown ones still are.
+   *
+   * An event with no dated schedule cannot be placed in time and is treated
+   * as not ended.
+   *
+   * @param event - The event; its schedules must be loaded
+   * @param now - The instant to compare against
+   */
+  hasEnded(event: CalendarEvent, now: DateTime = DateTime.now()): boolean {
+    const dated = (event.schedules ?? []).some(s => !s.isExclusion && s.startDate);
+    if (!dated) {
+      return false;
+    }
+
+    // An occurrence that began more than its duration ago can still be in
+    // progress when the clocks went back during it; the slack covers that,
+    // and the end check below drops the occurrences that did finish.
+    const base = event.baseSchedule();
+    const durationMs = base?.startDate && base.eventEndTime
+      ? Math.max(0, base.eventEndTime.toMillis() - base.startDate.toMillis())
+      : 0;
+    const occurrences = this.rrules(event);
+    const nowMs = now.toMillis();
+    let start = occurrences.after(new Date(nowMs - durationMs - FLOATING_WINDOW_SLACK_MS));
+    while (start && start.getTime() <= nowMs) {
+      const startTime = DateTime.fromJSDate(start).setZone(base?.startDate?.zone ?? 'utc');
+      const end = this.computeOccurrenceEndTime(event, startTime) ?? startTime;
+      if (end.toMillis() > nowMs) {
+        return false;
+      }
+      start = occurrences.after(start);
+    }
+    return start === null;
+  }
+
+  /**
    * Default bound on total persisted instances per event. Used when
    * `calendar.materializationCap` is not present in application config.
    * Protects the lazy-materialization path from anonymous-write amplification

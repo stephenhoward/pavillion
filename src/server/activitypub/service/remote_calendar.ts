@@ -44,6 +44,24 @@ export default class RemoteCalendarService {
   }
 
   /**
+   * Find the actor a local calendar follows, by its ActivityPub actor URI.
+   *
+   * Unlike {@link getByActorUri}, matches either actor type: a follow of a
+   * calendar on this instance stores the followed actor as
+   * `actor_type: 'local'` (see `followCalendar`).
+   *
+   * @param actorUri - The followed calendar's ActivityPub actor URI
+   * @returns The CalendarActor if found, null otherwise
+   */
+  async getFollowedActorByUri(actorUri: string): Promise<CalendarActor | null> {
+    const entity = await CalendarActorEntity.findOne({
+      where: { actor_uri: actorUri },
+    });
+
+    return entity ? entity.toModel() : null;
+  }
+
+  /**
    * Find an existing remote calendar by its local UUID
    *
    * @param id - The local UUID reference

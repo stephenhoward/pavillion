@@ -325,10 +325,18 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   }
 
   /**
-   * Publish a follow-backfill job in response to a remote Accept(Follow) that
-   * confirmed a follow we initiated. The actual outbox pull is performed by
-   * the worker (pv-wy2u.2.4); this handler only enqueues the job and returns
-   * synchronously — no HTTP work happens on this code path.
+   * Catch the follower up on the followed calendar's history once an
+   * Accept(Follow) confirms a follow we initiated.
+   *
+   * A followed calendar on this instance is replayed to the follower here, in
+   * the web process, through local dispatch (`catchUpLocalFollower`): the
+   * worker could only pull our own outbox back over HTTP, and rows it wrote
+   * would not dispatch as local ones do.
+   *
+   * For a remote calendar this handler publishes a follow-backfill job. The
+   * actual outbox pull is performed by the worker (pv-wy2u.2.4); this handler
+   * only enqueues the job and returns synchronously — no HTTP work happens on
+   * this code path.
    *
    * The retry policy is set here at publish time: a backfill that pauses on an
    * exhausted per-host rate budget throws `BackfillRateLimitError`, and the
@@ -343,6 +351,10 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
    * backfill that the next Accept (or manual trigger) will re-enqueue.
    */
   private async handleFollowAccepted(payload: ActivityPubFollowAcceptedPayload): Promise<void> {
+    if (payload.followedCalendarId) {
+      await this.service.catchUpLocalFollower(payload.followingCalendarId, payload.followedCalendarId);
+      return;
+    }
     try {
       await this.housekeepingInterface.publishJob('activitypub:follow:backfill', payload, {
         retryLimit: BACKFILL_RETRY_LIMIT,

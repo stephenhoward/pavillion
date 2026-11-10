@@ -679,6 +679,40 @@ class ActivityPubService {
   }
 
   /**
+   * The events a calendar auto-reposted that the given followed calendar
+   * authored (`attributed_to` is its actor), each with the source categories
+   * recorded when it arrived (empty when none were recorded).
+   *
+   * @param calendarId - The local calendar that auto-reposted
+   * @param sourceActorId - The CalendarActor entity ID of the followed calendar
+   */
+  async listAutoRepostedOriginals(calendarId: string, sourceActorId: string): Promise<{ eventId: string; sourceCategories: { id: string }[] }[]> {
+    const actor = await CalendarActorEntity.findByPk(sourceActorId);
+    if (!actor) {
+      return [];
+    }
+
+    const shares = await SharedEventEntity.findAll({
+      where: { calendar_id: calendarId, auto_posted: true },
+      attributes: ['event_id'],
+    });
+    if (shares.length === 0) {
+      return [];
+    }
+
+    const eventObjects = await EventObjectEntity.findAll({
+      where: {
+        event_id: shares.map(share => share.event_id),
+        attributed_to: actor.actor_uri,
+      },
+    });
+    return eventObjects.map(eventObject => ({
+      eventId: eventObject.event_id,
+      sourceCategories: eventObject.source_categories ?? [],
+    }));
+  }
+
+  /**
    * Update the auto-repost policy for a follow relationship
    * @param calendar The local calendar that owns the follow relationship
    * @param followId The ID of the follow relationship to update

@@ -23,7 +23,7 @@ import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
-import { ActivityPubEventRepostedPayload } from "@/server/activitypub/events/types";
+import { ActivityPubEventRepostedPayload, ActivityPubFollowAcceptedPayload } from "@/server/activitypub/events/types";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { NoteObject } from "@/server/activitypub/model/object/note";
 import { ActivityPubActivity, ActivityPubActor } from "@/server/activitypub/model/base";
@@ -1246,6 +1246,17 @@ class ProcessInboxService {
       // Already shared, skip
       return;
     }
+
+    // HISTORY GUARD: an event whose every occurrence has ended is not
+    // auto-reposted. A follow's backfill or same-instance catch-up delivers
+    // the source's history, and reposting it would re-federate past events to
+    // this calendar's followers. Keyed on the event's own end time, never on
+    // how the activity arrived (DEC-013).
+    const event = await this.calendarInterface.getEventById(eventObject.event_id);
+    if (event && this.calendarInterface.hasEventEnded(event)) {
+      logger.info({ event_id: eventObject.event_id }, '[AUTO-REPOST] Skip: event has ended');
+      return;
+    }
     logger.info('Creating SharedEventEntity and adding to outbox...');
 
     // Create SharedEventEntity with auto_posted: true
@@ -1270,7 +1281,6 @@ class ProcessInboxService {
     // Both emissions live below the DEC-008 dismissal gate above, so a
     // dismissed event suppresses both Announce(Event) and Create(Note)
     // together.
-    const event = await this.calendarInterface.getEventById(eventObject.event_id);
     if (event) {
       const noteActivity = new CreateActivity(
         localActorUrl,
@@ -2353,25 +2363,10 @@ class ProcessInboxService {
           return;
         }
 
-        // Hostnames match: treat as a Follow Accept. Use message.actor to find the remote calendar.
-        const remoteCalendar = await this.remoteCalendarService.getByActorUri(message.actor);
-        if (remoteCalendar) {
-          const followingRecord = await FollowingCalendarEntity.findOne({
-            where: {
-              calendar_actor_id: remoteCalendar.id,
-              calendar_id: calendar.id,
-            },
-          });
-
-          if (followingRecord) {
-            logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
-            this.eventBus.emit('activitypub:follow:accepted', {
-              followingCalendarId: calendar.id,
-              calendarActorId: remoteCalendar.id,
-              sourceActorUri: message.actor,
-            });
-            return;
-          }
+        // Hostnames match: treat as a Follow Accept. Use message.actor to find the followed calendar.
+        if (await this.confirmFollow(calendar, message.actor)) {
+          logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+          return;
         }
 
         logger.warn(`Accept with string URI object could not be matched to a known Follow: ${acceptedObject}`);
@@ -2407,39 +2402,56 @@ class ProcessInboxService {
         return;
       }
 
-      const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
-
-      if (!remoteCalendar) {
-        logger.warn(`No CalendarActorEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
-        return;
-      }
-
-      // Find the corresponding FollowingCalendarEntity record
-      const followingRecord = await FollowingCalendarEntity.findOne({
-        where: {
-          calendar_actor_id: remoteCalendar.id,
-          calendar_id: calendar.id,
-        },
-      });
-
-      if (followingRecord) {
-        // The follow relationship is now confirmed
-        // In the future, we could add a "confirmed" status field
-        // For now, the existence of the record means it's active
-        logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
-        this.eventBus.emit('activitypub:follow:accepted', {
-          followingCalendarId: calendar.id,
-          calendarActorId: remoteCalendar.id,
-          sourceActorUri: followActivity.object as string,
-        });
+      if (await this.confirmFollow(calendar, remoteActorUrl)) {
+        logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${remoteActorUrl}`);
       }
       else {
-        logger.warn(`No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
+        logger.warn(`No follow of ${remoteActorUrl} by calendar ${calendar.id}, Accept may be for unknown follow`);
       }
     }
     else {
       logger.warn(`Accept activity does not contain valid Follow or Flag object`);
     }
+  }
+
+  /**
+   * Confirms that `calendar` follows the accepting actor and emits
+   * `activitypub:follow:accepted`, which catches the follower up on the
+   * followed calendar's history. Returns false, emitting nothing, when the
+   * actor is unknown or `calendar` does not follow it.
+   *
+   * The followed actor may be a calendar on this instance, stored as
+   * `actor_type: 'local'`; the payload then carries its calendar id.
+   *
+   * @param calendar - The local calendar that sent the Follow
+   * @param followedActorUri - Actor URI of the calendar that accepted it
+   */
+  private async confirmFollow(calendar: Calendar, followedActorUri: string): Promise<boolean> {
+    const followed = await this.remoteCalendarService.getFollowedActorByUri(followedActorUri);
+    if (!followed) {
+      return false;
+    }
+
+    const followingRecord = await FollowingCalendarEntity.findOne({
+      where: {
+        calendar_actor_id: followed.id,
+        calendar_id: calendar.id,
+      },
+    });
+    if (!followingRecord) {
+      return false;
+    }
+
+    const payload: ActivityPubFollowAcceptedPayload = {
+      followingCalendarId: calendar.id,
+      calendarActorId: followed.id,
+      sourceActorUri: followedActorUri,
+    };
+    if (followed.actorType === 'local' && followed.calendarId) {
+      payload.followedCalendarId = followed.calendarId;
+    }
+    this.eventBus.emit('activitypub:follow:accepted', payload);
+    return true;
   }
 
   /**
@@ -2606,12 +2618,13 @@ class ProcessInboxService {
    *   traffic. The row-provenance trust anchor covers both bypasses.
    *
    *   INVARIANT: no remote-origin activity ever reaches
-   *   `handleLocalActivityDispatch`. The single caller in
-   *   ProcessOutboxService.processOutboxMessage gates entry on
-   *   CalendarActorService.getLocalCalendarByActorUri returning a non-null
-   *   local calendar; that lookup is the structural guarantee that the
-   *   recipient (and therefore the row we're about to write) belongs to
-   *   this instance. DO NOT call this method from any code path that has
+   *   `handleLocalActivityDispatch`. ProcessOutboxService.processOutboxMessage
+   *   gates entry on CalendarActorService.getLocalCalendarByActorUri
+   *   returning a non-null local calendar, and catchUpLocalFollower loads
+   *   the recipient as a local calendar by id; those lookups are the
+   *   structural guarantee that the recipient (and therefore the row we're
+   *   about to write) belongs to this instance. Both pass only activities
+   *   parsed from `ap_outbox` rows. DO NOT call this method from any code path that has
    *   not established this guarantee. In particular, do NOT call it with
    *   activity data originating from HTTP request bodies, user input, or
    *   untrusted external sources. New callers must uphold the same contract.
@@ -2619,7 +2632,9 @@ class ProcessInboxService {
    *   ActivityIdOriginMismatchError, writing no row, for an activity whose id
    *   is not on the configured instance domain.
    *
-   *   Current authorized callers: ProcessOutboxService.processOutboxMessage.
+   *   Current authorized callers: ProcessOutboxService.processOutboxMessage,
+   *   and ProcessOutboxService.catchUpLocalFollower, which replays rows read
+   *   from `ap_outbox` to a follower calendar it loaded by id.
    */
   async handleLocalActivityDispatch(calendar: Calendar, activity: ActivityPubActivity): Promise<void> {
     if (!activity.id || !activity.type) {

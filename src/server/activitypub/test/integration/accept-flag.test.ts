@@ -152,10 +152,10 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         object: followActivity,
       });
 
-      // The Follow logic will call RemoteCalendarService.getByActorUri
+      // The Follow logic will call RemoteCalendarService.getFollowedActorByUri
       // which we need to mock to prevent database access
       const remoteCalendarService = (inboxService as any).remoteCalendarService;
-      sandbox.stub(remoteCalendarService, 'getByActorUri').resolves(null);
+      sandbox.stub(remoteCalendarService, 'getFollowedActorByUri').resolves(null);
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 

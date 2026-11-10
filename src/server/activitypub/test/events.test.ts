@@ -235,6 +235,56 @@ describe('outbox event listener', () => {
   });
 });
 
+describe('follow accepted listener', () => {
+  let service: ActivityPubInterface;
+  let eventHandler: ActivityPubEventHandlers;
+  let eventBus: EventEmitter;
+  let publishJob: sinon.SinonStub;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    eventBus = new EventEmitter();
+    service = new ActivityPubInterface(eventBus);
+    publishJob = sinon.stub().resolves();
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus), { publishJob } as any);
+    eventHandler.install(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('publishes a backfill job for a follow of a remote calendar', async () => {
+    const catchUp = sandbox.stub(service, 'catchUpLocalFollower').resolves();
+    const payload = {
+      followingCalendarId: 'follower-calendar-id',
+      calendarActorId: 'remote-actor-id',
+      sourceActorUri: 'https://remote.example/calendars/source',
+    };
+
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'activitypub:follow:accepted', payload);
+
+    expect(publishJob.calledOnce).toBe(true);
+    expect(publishJob.firstCall.args[0]).toBe('activitypub:follow:backfill');
+    expect(publishJob.firstCall.args[1]).toEqual(payload);
+    expect(catchUp.called).toBe(false);
+  });
+
+  it('catches the follower up in process, with no backfill job, for a follow of a calendar on this instance', async () => {
+    const catchUp = sandbox.stub(service, 'catchUpLocalFollower').resolves();
+
+    await emitAndAwaitDispatch(eventBus, eventHandler, 'activitypub:follow:accepted', {
+      followingCalendarId: 'follower-calendar-id',
+      calendarActorId: 'local-actor-id',
+      sourceActorUri: 'https://pavillion.dev/calendars/organizer',
+      followedCalendarId: 'organizer-calendar-id',
+    });
+
+    expect(catchUp.calledOnceWithExactly('follower-calendar-id', 'organizer-calendar-id')).toBe(true);
+    expect(publishJob.called).toBe(false);
+  });
+});
+
 describe('handleEventUpdated guard', () => {
   let service: ActivityPubInterface;
   let eventHandler: ActivityPubEventHandlers;

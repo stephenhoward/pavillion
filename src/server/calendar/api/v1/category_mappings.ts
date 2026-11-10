@@ -228,6 +228,15 @@ class CategoryMappingRoutes {
         localCategoryId: m.localCategoryId,
       })));
 
+      // The mappings are saved; failing to apply them to earlier auto-reposts
+      // leaves those uncategorised but must not fail the save.
+      try {
+        await this.categoryMappingService.applyMappingsToAutoReposts(calendarId, actorId);
+      }
+      catch (error) {
+        logError(error, 'Error applying category mappings to existing auto-reposts');
+      }
+
       const updated = await this.categoryMappingService.getMappings(calendarId, actorId);
       res.json(updated.map(m => ({
         sourceCategoryId: m.source_category_id,

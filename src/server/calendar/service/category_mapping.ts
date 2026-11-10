@@ -4,6 +4,7 @@ import { CalendarCategoryMappingEntity } from '@/server/calendar/entity/category
 import type { CalendarCategoryMapping } from '@/server/calendar/entity/category_mapping';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
+import { EventEntity } from '@/server/calendar/entity/event';
 import type { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import db from '@/server/common/entity/db';
 import type ActivityPubInterface from '@/server/activitypub/interface';
@@ -188,10 +189,13 @@ class CategoryMappingService {
    * Used during auto-repost to tag incoming events with local categories based on mappings.
    * No-ops silently if there are no source categories or no mappings are defined.
    *
+   * With no recorded source categories, an event on this instance is mapped
+   * from the categories its own calendar gave it (see {@link ownCategoriesOf}).
+   *
    * @param calendarId - The local following calendar ID
-   * @param sourceActorId - The CalendarActor entity ID of the remote calendar
+   * @param sourceActorId - The CalendarActor entity ID of the followed calendar
    * @param eventId - The local event ID to assign categories to
-   * @param sourceCategories - Source category identifiers from the remote AP event
+   * @param sourceCategories - Source category identifiers recorded from the inbound AP event
    */
   async assignAutoRepostCategories(
     calendarId: string,
@@ -199,11 +203,12 @@ class CategoryMappingService {
     eventId: string,
     sourceCategories: { id: string }[],
   ): Promise<void> {
-    if (sourceCategories.length === 0) {
+    const categories = sourceCategories.length > 0 ? sourceCategories : await this.ownCategoriesOf(eventId);
+    if (categories.length === 0) {
       return;
     }
 
-    const localCategoryIds = await this.applyMappings(calendarId, sourceActorId, sourceCategories);
+    const localCategoryIds = await this.applyMappings(calendarId, sourceActorId, categories);
     if (localCategoryIds.length === 0) {
       return;
     }
@@ -212,6 +217,70 @@ class CategoryMappingService {
       localCategoryIds.map(catId => ({ id: uuidv4(), event_id: eventId, category_id: catId })),
       { ignoreDuplicates: true },
     );
+  }
+
+  /**
+   * Applies the current mappings to the events this calendar has already
+   * auto-reposted from the source, adding the mapped categories. Removes
+   * none, so an edit that drops a mapping leaves earlier assignments in place.
+   *
+   * Saving mappings runs this because a follow's history can be reposted
+   * before its mappings exist: the follow dialog saves them after the follow,
+   * and a same-instance follow is caught up at once.
+   *
+   * @param calendarId - The local following calendar ID
+   * @param sourceActorId - The CalendarActor entity ID of the followed calendar
+   */
+  async applyMappingsToAutoReposts(calendarId: string, sourceActorId: string): Promise<void> {
+    const mappings = await this.getMappings(calendarId, sourceActorId);
+    if (mappings.length === 0) {
+      return;
+    }
+    const localIdFor = new Map(mappings.map(m => [m.source_category_id, m.local_category_id]));
+
+    const reposts = await this.activityPubInterface!.listAutoRepostedOriginals(calendarId, sourceActorId);
+    const assignments: { id: string; event_id: string; category_id: string }[] = [];
+    for (const { eventId, sourceCategories } of reposts) {
+      const categories = sourceCategories.length > 0 ? sourceCategories : await this.ownCategoriesOf(eventId);
+      for (const category of categories) {
+        const localId = localIdFor.get(category.id);
+        if (localId !== undefined) {
+          assignments.push({ id: uuidv4(), event_id: eventId, category_id: localId });
+        }
+      }
+    }
+
+    if (assignments.length > 0) {
+      await EventCategoryAssignmentEntity.bulkCreate(assignments, { ignoreDuplicates: true });
+    }
+  }
+
+  /**
+   * The categories an event's own calendar gave it, as source categories.
+   * Only an inbound Create records source categories, so an event on this
+   * instance, reposted by a same-instance follower, has none recorded. The
+   * event's assignments are filtered to its own calendar because a follower's
+   * mapped categories are assigned to the same event row. Empty for an event
+   * from another instance.
+   *
+   * @param eventId - The event's id
+   */
+  private async ownCategoriesOf(eventId: string): Promise<{ id: string }[]> {
+    const event = await EventEntity.findByPk(eventId, { attributes: ['id', 'calendar_id'] });
+    if (!event?.calendar_id) {
+      return [];
+    }
+    const assignments = await EventCategoryAssignmentEntity.findAll({
+      where: { event_id: eventId },
+      include: [{
+        model: EventCategoryEntity,
+        as: 'category',
+        where: { calendar_id: event.calendar_id },
+        required: true,
+        attributes: ['id'],
+      }],
+    });
+    return assignments.map(assignment => ({ id: assignment.category_id }));
   }
 
   /**

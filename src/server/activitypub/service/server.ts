@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
 import config from 'config';
-import { Op, literal } from 'sequelize';
+import { Op } from 'sequelize';
 
 import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from "@/common/model/calendar";
@@ -15,6 +15,7 @@ import AccountsInterface from "@/server/accounts/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from "@/server/activitypub/helper/activity-id-origin";
 import { logActivityRejection } from "@/server/activitypub/helper/rejection-logger";
+import { OUTBOX_PAGE_SIZE, servedOutboxWhere } from "@/server/activitypub/helper/outbox";
 
 
 const logger = createLogger('activitypub');
@@ -441,34 +442,8 @@ export default class ActivityPubService {
    * @param limit - Page size (default 20)
    * @returns Object with items array and totalItems count
    */
-  async readOutbox(calendarId: string, cursor?: Date, limit: number = 20): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
-    // 'Create' MUST be served: local originals now federate as Create(Event)
-    // (Announce is reserved for reposts), so a follower's backfill walk of this
-    // outbox — and FEP-8a8e event consumers (Mobilizon/Gancio) — only see
-    // originals if Create is in the collection. Inbound Create(Note) is
-    // short-circuited by the receiver (ProcessInboxService.processCreateEvent),
-    // so serving the paired Note here cannot create a duplicate feed event.
-    const publicTypes = ['Create', 'Announce', 'Update', 'Delete'];
-    const baseWhere: Record<string, any> = {
-      calendar_id: calendarId,
-      type: publicTypes,
-      is_public: true,
-      processed_time: { [Op.ne]: null },
-      [Op.and]: [
-        // A partial: delivery outcome does not affect membership; a failure
-        // to process the row at all does, and so does a row the drain
-        // skipped because it was retracted before the drain delivered it.
-        { processed_status: { [Op.notLike]: 'error:%' } },
-        { processed_status: { [Op.notLike]: 'skipped:%' } },
-        { processed_status: { [Op.ne]: 'bad message type' } },
-        // Any recorded Undo withdraws its target, whatever its delivery status.
-        // Every outbox row is our own activity, and UndoActivity always takes
-        // the id `{targetId}/undo`, so the matching Undo is a primary-key probe
-        // per candidate row: the cost follows the page, not the calendar's
-        // Undo history.
-        literal(`NOT EXISTS (SELECT 1 FROM ap_outbox undo_row WHERE undo_row.id = "ActivityPubOutboxMessageEntity"."id" || '/undo' AND undo_row.type = 'Undo')`),
-      ],
-    };
+  async readOutbox(calendarId: string, cursor?: Date, limit: number = OUTBOX_PAGE_SIZE): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
+    const baseWhere = servedOutboxWhere(calendarId);
 
     const pageWhere: Record<string, any> = { ...baseWhere };
     if (cursor) {

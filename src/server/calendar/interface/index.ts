@@ -563,6 +563,16 @@ export default class CalendarInterface {
   }
 
   /**
+   * Whether every occurrence of the event has ended.
+   * See EventInstanceService.hasEnded.
+   *
+   * @param event - The event; its schedules must be loaded
+   */
+  hasEventEnded(event: CalendarEvent): boolean {
+    return this.eventInstanceService.hasEnded(event);
+  }
+
+  /**
    * The event's only occurrence on the local day (in the event's zone) of
    * `startTime`, or null when that day holds none or several.
    * See EventInstanceService.findSameDayOccurrence.
