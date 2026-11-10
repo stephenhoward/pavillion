@@ -131,5 +131,7 @@ All checks pass. The build is green and the work is complete.
 - **Integration tests:** `npm run test:integration`
 - **Build:** `npm run build`
 - **E2E (single instance):** `npm run test:e2e`
-- **E2E (federation):** `npm run test:federation`
+- **E2E (federation):** needs the Docker stack, which is a machine-wide singleton. Before starting, check for a stack owned by another checkout:
+  `docker ps -a --filter name=pavillion-federation --format '{{.Names}}	{{.Status}}	{{.Label "com.docker.compose.project.working_dir"}}'`
+  If any row's directory is not this checkout's root, do not run the federation tests: report the owner and never stop another checkout's stack without the maintainer's approval. Otherwise run `npm run federation:start`, then `npm run test:federation`, then always `npm run federation:stop` from the same checkout, including when tests fail.
 - **Coverage report:** `npm run test:coverage`

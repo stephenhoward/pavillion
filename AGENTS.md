@@ -61,7 +61,7 @@ npm run test:unit        # Unit tests only
 npm run test:integration # Integration tests only
 npm run test:e2e         # Single-instance e2e, Chromium only (fast, no Docker)
 npm run test:e2e:webkit  # Widget and public-calendar specs in WebKit (needs: npx playwright install webkit)
-npm run test:federation  # Federation e2e (requires Docker)
+npm run test:federation  # Federation e2e (requires Docker; see Federation Stack below)
 npm run test:coverage    # Coverage report
 npm run test:watch       # Tests in watch mode with UI
 
@@ -152,6 +152,23 @@ Recurring agent time-wasters, verified against session history — read before s
 - Running a single integration test file requires the integration config: `npx vitest run <file> --config vitest.integration.config.ts`. The default vitest config excludes `src/server/**/test/integration/**`, so without the flag vitest reports "No test files found" and exits 1 — an exclusion, not a failure.
 - Before editing a file, view it with the Read tool, not `sed`/`cat` — the Edit tool refuses files that were only viewed via Bash, and the failed attempt plus forced re-read wastes two calls.
 - There is no `timeout` (or `gtimeout`) binary on this macOS host. `timeout 240 npx vitest run …` fails with `command not found: timeout` and the wrapped command never runs — and when piped (`| tail`) the call still exits 0 with no output. Bound a command with the Bash tool's `timeout` parameter instead.
+
+## Federation Stack
+
+The federation Docker stack is a machine-wide singleton (fixed `pavillion-federation-*` container names, nginx on 80/443). A stack left running from one checkout blocks or silently contaminates a run from another. When running `npm run test:federation`:
+
+1. **Check for another checkout's stack first.** From the checkout under test:
+
+   ```bash
+   docker ps -a --filter name=pavillion-federation --format '{{.Names}}	{{.Status}}	{{.Label "com.docker.compose.project.working_dir"}}'
+   ```
+
+   (`docker inspect pavillion-federation-nginx --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'` reads one container's owner.) No output means no stack. If any row's directory is not your checkout's root (`pwd`), stop and report it. Never stop, remove or reset another checkout's stack without the maintainer's approval.
+2. Start it from the checkout under test: `npm run federation:start`.
+3. Run `npm run test:federation`.
+4. Always run `npm run federation:stop` from that same checkout afterwards, including when tests fail.
+
+Human procedure: `docs/federation-testing.md`.
 
 ## Path Aliases
 
