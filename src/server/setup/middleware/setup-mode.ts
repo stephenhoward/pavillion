@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import SetupInterface from '@/server/setup/interface';
+import { renderClientShell } from '@/server/app_routes';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('setup');
@@ -85,6 +86,12 @@ export function createSetupModeMiddleware(setupInterface: SetupInterface) {
 
         if (path === '/setup' || path.startsWith('/setup/')) {
           // Block /setup route when setup is complete
+          if (req.accepts(['html', 'json']) === 'html') {
+            // Browsers get the client app's not-found view
+            res.status(404);
+            await renderClientShell(res);
+            return;
+          }
           res.status(404).json({ error: 'Not found' });
           return;
         }
