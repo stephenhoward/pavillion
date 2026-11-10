@@ -233,7 +233,6 @@
     },
     "status": {
       "submitted": "Envoyé",
-      "under_review": "En cours d'examen",
       "resolved": "Résolu",
       "dismissed": "Rejeté",
       "escalated": "Escaladé"
@@ -306,8 +305,7 @@
       "success": "Le signalement a été transféré au propriétaire du calendrier distant.",
       "error": "Impossible de transférer le signalement. Veuillez réessayer.",
       "status_pending": "Transféré (en attente)",
-      "status_acknowledged": "Transféré (accusé de réception)",
-      "status_no_response": "Transféré (sans réponse)"
+      "status_acknowledged": "Transféré (accusé de réception)"
     },
     "patterns": {
       "source_flooding": "Schéma de saturation par la source",

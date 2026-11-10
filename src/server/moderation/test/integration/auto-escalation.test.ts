@@ -161,7 +161,7 @@ describe('ModerationService - Auto-Escalation Integration', () => {
       }
     });
 
-    it('should only escalate pending and owner_review reports', async () => {
+    it('should only escalate submitted reports', async () => {
       // Set threshold to 3
       await ServiceSettingEntity.create({
         parameter: 'moderation.autoEscalationThreshold',
@@ -179,18 +179,6 @@ describe('ModerationService - Auto-Escalation Integration', () => {
         reporter_type: 'anonymous',
         reporter_email_hash: 'hash1',
         status: ReportStatus.SUBMITTED,
-      });
-
-      const reviewId = uuidv4();
-      await ReportEntity.create({
-        id: reviewId,
-        event_id: eventId,
-        calendar_id: uuidv4(),
-        category: ReportCategory.SPAM,
-        description: 'Under review report',
-        reporter_type: 'anonymous',
-        reporter_email_hash: 'hash2',
-        status: ReportStatus.UNDER_REVIEW,
       });
 
       const escalatedId = uuidv4();
@@ -219,15 +207,12 @@ describe('ModerationService - Auto-Escalation Integration', () => {
 
       const escalatedCount = await service.checkAutoEscalation(eventId);
 
-      // Should escalate pending and owner_review only
-      expect(escalatedCount).toBe(2);
+      // Should escalate submitted only
+      expect(escalatedCount).toBe(1);
 
       // Verify correct reports were escalated
       const pendingReport = await ReportEntity.findByPk(pendingId);
       expect(pendingReport?.status).toBe(ReportStatus.ESCALATED);
-
-      const reviewReport = await ReportEntity.findByPk(reviewId);
-      expect(reviewReport?.status).toBe(ReportStatus.ESCALATED);
 
       // Verify other statuses were not changed
       const escalatedReport = await ReportEntity.findByPk(escalatedId);

@@ -42,7 +42,6 @@ onMounted(async () => {
 const statusOptions = [
   { value: '', label: t('filters.all_statuses') },
   { value: ReportStatus.SUBMITTED, label: t('status.submitted') },
-  { value: ReportStatus.UNDER_REVIEW, label: t('status.under_review') },
   { value: ReportStatus.ESCALATED, label: t('status.escalated') },
   { value: ReportStatus.RESOLVED, label: t('status.resolved') },
   { value: ReportStatus.DISMISSED, label: t('status.dismissed') },

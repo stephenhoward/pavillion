@@ -85,7 +85,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -130,7 +129,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -271,7 +269,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -314,14 +311,13 @@ describe('Analytics Component', () => {
         card.find('.metric-label').text().includes('total_reports'),
       );
       expect(totalReportsCard).toBeDefined();
-      expect(totalReportsCard?.find('.metric-value').text()).toBe('21');
+      expect(totalReportsCard?.find('.metric-value').text()).toBe('18');
     });
 
     it('should display resolution rate percentage', async () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -370,7 +366,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -419,7 +414,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -455,7 +449,7 @@ describe('Analytics Component', () => {
       await flushPromises();
 
       const legendItems = wrapper.findAll('.legend-item');
-      expect(legendItems.length).toBe(5);
+      expect(legendItems.length).toBe(4);
 
       // Verify each status has correct count in legend
       const statusCounts = legendItems.map(item => ({
@@ -465,7 +459,6 @@ describe('Analytics Component', () => {
 
       // Verify all statuses are present in the legend
       expect(statusCounts.some(item => item.label.includes('submitted'))).toBe(true);
-      expect(statusCounts.some(item => item.label.includes('under_review'))).toBe(true);
       expect(statusCounts.some(item => item.label.includes('escalated'))).toBe(true);
       expect(statusCounts.some(item => item.label.includes('resolved'))).toBe(true);
       expect(statusCounts.some(item => item.label.includes('dismissed'))).toBe(true);
@@ -476,7 +469,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -525,7 +517,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -572,7 +563,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -617,7 +607,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           resolved: 10,
         },
         resolutionRate: 0.85,
@@ -659,7 +648,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           escalated: 2,
           resolved: 10,
           dismissed: 1,
@@ -737,7 +725,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
         },
         resolutionRate: 0.85,
         averageResolutionTime: 24.5,
@@ -776,7 +763,6 @@ describe('Analytics Component', () => {
       const mockData = {
         reportsByStatus: {
           submitted: 5,
-          under_review: 3,
           resolved: 10,
         },
         resolutionRate: 0.85,

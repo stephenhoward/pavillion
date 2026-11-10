@@ -85,11 +85,6 @@
   color: var(--pav-badge-sky-text);
 }
 
-@mixin report-status-badge--under-review {
-  background: var(--pav-badge-amber-bg);
-  color: var(--pav-badge-amber-text);
-}
-
 @mixin report-status-badge--resolved {
   background: var(--pav-badge-emerald-bg);
   color: var(--pav-badge-emerald-text);

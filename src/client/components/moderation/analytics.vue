@@ -70,7 +70,6 @@ const statusChartData = computed(() => {
   // Map statuses to accessible colors
   const statusColors: Record<string, string> = {
     'submitted': 'var(--pav-color-sky-500)',
-    'under_review': 'var(--pav-color-amber-500)',
     'escalated': 'var(--pav-color-orange-600)',
     'resolved': 'var(--pav-color-emerald-600)',
     'dismissed': 'var(--pav-color-stone-400)',

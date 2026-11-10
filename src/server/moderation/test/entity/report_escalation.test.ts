@@ -13,7 +13,7 @@ describe('ReportEscalationEntity', () => {
     const entity = ReportEscalationEntity.fromModel({
       reportId: uuidv4(),
       fromStatus: 'submitted',
-      toStatus: 'under_review',
+      toStatus: 'escalated',
       reviewerRole: 'owner',
       decision: 'escalated',
     });

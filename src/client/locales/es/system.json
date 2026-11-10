@@ -233,7 +233,6 @@
     },
     "status": {
       "submitted": "Enviado",
-      "under_review": "En Revisión",
       "resolved": "Resuelto",
       "dismissed": "Descartado",
       "escalated": "Escalado"
@@ -306,8 +305,7 @@
       "success": "El reporte ha sido reenviado al propietario del calendario remoto.",
       "error": "No se pudo reenviar el reporte. Por favor intenta de nuevo.",
       "status_pending": "Reenviado (Pendiente)",
-      "status_acknowledged": "Reenviado (Confirmado)",
-      "status_no_response": "Reenviado (Sin Respuesta)"
+      "status_acknowledged": "Reenviado (Confirmado)"
     },
     "patterns": {
       "source_flooding": "Patrón de Saturación de Origen",

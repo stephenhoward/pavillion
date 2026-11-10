@@ -17,7 +17,6 @@ enum ReportCategory {
 enum ReportStatus {
   PENDING_VERIFICATION = 'pending_verification',
   SUBMITTED = 'submitted',
-  UNDER_REVIEW = 'under_review',
   RESOLVED = 'resolved',
   DISMISSED = 'dismissed',
   ESCALATED = 'escalated',
@@ -44,7 +43,6 @@ type EscalationType = 'manual' | 'automatic';
 enum ForwardStatus {
   PENDING = 'pending',
   ACKNOWLEDGED = 'acknowledged',
-  NO_RESPONSE = 'no_response',
 }
 
 /**

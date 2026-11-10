@@ -218,6 +218,14 @@ describe('ModerationService', () => {
     });
   });
 
+  describe('validateListFilters', () => {
+    it('should reject the retired under_review status filter', () => {
+      expect(() => {
+        service.validateListFilters({ status: 'under_review' } as any);
+      }).toThrow(/Invalid status/);
+    });
+  });
+
   describe('validateEmailField', () => {
 
     it('should return no errors for a valid email', () => {
@@ -1370,7 +1378,6 @@ describe('ModerationService', () => {
       expect(callArgs.where.calendar_id[Op.in]).toEqual(['cal-a', 'cal-b']);
       expect(callArgs.where.status[Op.in]).toEqual([
         ReportStatus.SUBMITTED,
-        ReportStatus.UNDER_REVIEW,
         ReportStatus.ESCALATED,
       ]);
       expect(callArgs.group).toEqual(['calendar_id']);
@@ -1417,7 +1424,6 @@ describe('ModerationService', () => {
       const callArgs = findAllStub.firstCall.args[0] as any;
       expect(callArgs.where.status[Op.in]).toEqual([
         ReportStatus.SUBMITTED,
-        ReportStatus.UNDER_REVIEW,
         ReportStatus.ESCALATED,
       ]);
       expect(callArgs.where.calendar_id[Op.not]).toBe(null);
@@ -1819,7 +1825,7 @@ describe('ModerationService', () => {
       report.status = ReportStatus.ESCALATED;
 
       sandbox.stub(ReportEntity, 'findByPk').resolves({
-        status: ReportStatus.UNDER_REVIEW,
+        status: ReportStatus.SUBMITTED,
         update: sandbox.stub().resolves(),
         toModel: () => report,
       } as any);
@@ -1833,7 +1839,7 @@ describe('ModerationService', () => {
       await service.escalateReport('report-id-1', 'Complex case');
 
       expect(capturedEscalationData).not.toBeNull();
-      expect(capturedEscalationData.fromStatus).toBe(ReportStatus.UNDER_REVIEW);
+      expect(capturedEscalationData.fromStatus).toBe(ReportStatus.SUBMITTED);
       expect(capturedEscalationData.toStatus).toBe(ReportStatus.ESCALATED);
       expect(capturedEscalationData.decision).toBe('escalated');
       expect(capturedEscalationData.reviewerRole).toBe('system');

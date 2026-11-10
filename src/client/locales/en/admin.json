@@ -97,7 +97,6 @@
       "charts_coming_soon": "Charts and visualizations coming soon",
       "status": {
         "submitted": "Submitted",
-        "under_review": "Under Review",
         "escalated": "Escalated",
         "resolved": "Resolved",
         "dismissed": "Dismissed"
@@ -121,7 +120,6 @@
     },
     "status": {
       "submitted": "Submitted",
-      "under_review": "Under Review",
       "escalated": "Escalated",
       "resolved": "Resolved",
       "dismissed": "Dismissed"

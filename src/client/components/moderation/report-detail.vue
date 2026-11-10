@@ -842,10 +842,6 @@ onMounted(async () => {
     @include report-status-badge--submitted;
   }
 
-  &--under-review {
-    @include report-status-badge--under-review;
-  }
-
   &--resolved {
     @include report-status-badge--resolved;
   }

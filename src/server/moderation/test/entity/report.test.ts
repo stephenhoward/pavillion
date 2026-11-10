@@ -146,7 +146,7 @@ describe('ReportEntity', () => {
       model.description = 'Harassing content';
       model.reporterEmailHash = 'hash123abc';
       model.reporterType = 'authenticated';
-      model.status = ReportStatus.UNDER_REVIEW;
+      model.status = ReportStatus.ESCALATED;
       model.createdAt = createdAt;
       model.updatedAt = updatedAt;
 
@@ -161,7 +161,7 @@ describe('ReportEntity', () => {
       expect(convertedModel.description).toBe('Harassing content');
       expect(convertedModel.reporterEmailHash).toBe('hash123abc');
       expect(convertedModel.reporterType).toBe('authenticated');
-      expect(convertedModel.status).toBe(ReportStatus.UNDER_REVIEW);
+      expect(convertedModel.status).toBe(ReportStatus.ESCALATED);
       expect(convertedModel.createdAt).toEqual(createdAt);
       expect(convertedModel.updatedAt).toEqual(updatedAt);
     });
