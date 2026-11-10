@@ -81,6 +81,7 @@ interface InstanceOverrides {
   end?: any;
   accessibilityInfo?: string;
   imageAlt?: string;
+  description?: string;
 }
 
 /**
@@ -154,7 +155,7 @@ function makeInstance(overrides: InstanceOverrides = {}): any {
       id: 'evt-1',
       content: (_lang: string) => ({
         name: 'Test Event',
-        description: 'A description of the event.',
+        description: overrides.description ?? 'A description of the event.',
         accessibilityInfo: overrides.accessibilityInfo ?? '',
         imageAlt: overrides.imageAlt ?? '',
       }),
@@ -215,6 +216,7 @@ beforeAll(async () => {
     event_cancelled: 'Cancelled',
     event_source_calendar_label: 'View source calendar {{name}}',
     get_directions: 'Get directions',
+    opens_in_new_tab: 'opens in new tab',
     url_prompt: {
       tickets: 'Tickets',
       rsvp: 'RSVP',
@@ -250,6 +252,28 @@ beforeAll(async () => {
 describe('EventDetailBody', () => {
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('description links', () => {
+    it('renders a URL as one safe link and keeps hostile text inert', () => {
+      const hostile = '<img src=x onerror=alert(1)> <script>alert(1)</script>';
+      const wrapper = mountBody({
+        instance: makeInstance({
+          description: `Tickets at https://example.org/tickets. ${hostile}`,
+        }),
+      });
+
+      const description = wrapper.find('.event-description');
+      const anchors = description.findAll('a');
+      expect(anchors).toHaveLength(1);
+      expect(anchors[0].attributes('href')).toBe('https://example.org/tickets');
+      expect(anchors[0].attributes('target')).toBe('_blank');
+      expect(anchors[0].attributes('rel')).toBe('noopener noreferrer nofollow ugc');
+      expect(description.find('script').exists()).toBe(false);
+      expect(description.find('img').exists()).toBe(false);
+      expect(description.text()).toContain(hostile);
+      wrapper.unmount();
+    });
   });
 
   describe('happy-path rendering', () => {
