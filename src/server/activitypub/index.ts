@@ -74,7 +74,7 @@ export default class ActivityPubDomain {
 
   /**
    * Start draining unprocessed inbox rows in this process: once now, taking
-   * every row, then every `activitypub.inboxDrain.intervalMs`, leaving rows
+   * only rows written before the drain began, then every `activitypub.inboxDrain.intervalMs`, leaving rows
    * written within {@link INBOX_DRAIN_SKIP_NEWER_THAN_MS} to live dispatch.
    * This is what dispatches rows the worker's backfill writes, and rows a
    * restart left behind. The interval is a latency choice; the skip window
@@ -107,7 +107,9 @@ export default class ActivityPubDomain {
     };
 
     const intervalMs = config.get<number>('activitypub.inboxDrain.intervalMs');
-    drain({});
+    // A zero window fixes the cutoff once: rows a restart stranded, none that
+    // arrive while this pass runs (those belong to their live handler).
+    drain({ skipNewerThanMs: 0 });
     const interval = setInterval(
       () => drain({ skipNewerThanMs: INBOX_DRAIN_SKIP_NEWER_THAN_MS }),
       intervalMs,

@@ -76,12 +76,13 @@ describe('ActivityPubDomain inbox drain', () => {
     vi.useRealTimers();
   });
 
-  it('drains once at startup with no skip window', async () => {
+  it('drains once at startup, cut off at the moment the drain starts', async () => {
     stopDrain = domain.startInboxDrain();
     await settleDrain(domain);
 
     expect(drainStub.calledOnce).toBe(true);
-    expect(drainStub.firstCall.args[0]?.skipNewerThanMs).toBeUndefined();
+    // A zero window: rows written before the drain starts, none after.
+    expect(drainStub.firstCall.args[0]).toEqual({ skipNewerThanMs: 0 });
   });
 
   it('does not tick before the configured interval elapses', async () => {

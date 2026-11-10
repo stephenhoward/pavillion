@@ -182,4 +182,43 @@ describe('ActivityPubDomain startup inbox drain (integration)', () => {
     expect((await waitForProcessed(rowId)).processed_status).toBe('rejected');
     expect(createSpy.called).toBe(false);
   });
+
+  it('leaves a row written after the boot drain began to its live handler', async () => {
+    const calendarId = await createCalendar('drainbootcutoff');
+    const strandedId = await leaveUnprocessedRow(calendarId, {
+      id: 'https://remote.example/activities/stranded-ignore',
+      type: 'Ignore',
+      actor: 'https://remote.example/calendars/remote',
+      object: 'https://pavillion.dev/activities/some-join',
+    });
+    const laterId = 'https://remote.example/activities/written-during-drain';
+
+    const { domain, inboxService } = wireDomain();
+    const original = inboxService.processInboxMessage.bind(inboxService);
+    const processStub = sandbox.stub(inboxService, 'processInboxMessage').callsFake(async (message) => {
+      // A live request writes a new row moments after boot, mid-drain.
+      if (!(await ActivityPubInboxMessageEntity.findByPk(laterId))) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        await leaveUnprocessedRow(calendarId, {
+          id: laterId,
+          type: 'Ignore',
+          actor: 'https://remote.example/calendars/remote',
+          object: 'https://pavillion.dev/activities/some-join',
+        });
+      }
+      return original(message);
+    });
+
+    stopDrain = domain.startInboxDrain();
+    await waitForProcessed(strandedId);
+    await waitFor(
+      async () => ((domain as unknown as { inboxDrain: unknown }).inboxDrain === null ? true : null),
+      { label: 'boot drain finished' },
+    );
+
+    const later = await ActivityPubInboxMessageEntity.findByPk(laterId);
+    expect(later?.processed_time, 'a row written after the boot drain began is not its to take').toBeNull();
+    expect(processStub.callCount).toBe(1);
+    expect(processStub.firstCall.args[0].id).toBe(strandedId);
+  });
 });

@@ -236,6 +236,8 @@ class ProcessInboxService {
    * the call starts, so rows inside the window are excluded by the query and
    * the loop ends once only they remain. `message_time` cannot serve here:
    * for live deliveries it is the sender's published time, not the write.
+   * A zero window still fixes a cutoff, and a row written in the same
+   * millisecond qualifies.
    *
    * Rows are taken by `message_time`, then by `createdAt`: `clampMessageTime`
    * floors every activity older than two years to the same instant, so an
@@ -250,7 +252,7 @@ class ProcessInboxService {
 
     const where: Record<string, unknown> = { processed_time: null };
     if ( options.skipNewerThanMs !== undefined ) {
-      where.createdAt = { [Op.lt]: new Date(Date.now() - options.skipNewerThanMs) };
+      where.createdAt = { [Op.lte]: new Date(Date.now() - options.skipNewerThanMs) };
     }
 
     let messages: ActivityPubInboxMessageEntity[] = [];
