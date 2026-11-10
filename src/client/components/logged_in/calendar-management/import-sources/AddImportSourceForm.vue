@@ -46,6 +46,12 @@
         </button>
       </div>
 
+      <div class="add-import-source-form__guide">
+        <DocLink :guide="{ slug: 'guides/calendar-owners/ics-import', key: 'ics_import' }">
+          {{ t('guide_link') }}
+        </DocLink>
+      </div>
+
       <div v-if="errorMessage" class="alert alert--error" role="alert">
         {{ errorMessage }}
       </div>
@@ -170,6 +176,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 
+import DocLink from '@/client/components/common/doc-link.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import { formatBytes } from '@/common/utils/format-bytes';
@@ -198,6 +205,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'submit', payload: SubmitPayload): void;
   (event: 'cancel'): void;
+  (event: 'tab-change'): void;
 }>();
 
 const { t } = useTranslation('calendars', { keyPrefix: 'import' });
@@ -253,6 +261,11 @@ const canSubmit = computed(() => {
 });
 
 const selectTab = (tab: TabKey): void => {
+  if (tab !== activeTab.value) {
+    // The error banner sits outside both panels; an error from one tab's
+    // submit is stale once the owner moves to the other.
+    emit('tab-change');
+  }
   activeTab.value = tab;
 };
 
@@ -376,6 +389,11 @@ onMounted(async () => {
 
   &__tab {
     @include tab-button;
+  }
+
+  &__guide {
+    display: flex;
+    justify-content: flex-end;
   }
 
   &__panel {

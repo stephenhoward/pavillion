@@ -311,9 +311,11 @@
     },
     "sync_success": "Sync complete: {{created}} added, {{updated}} updated.",
     "sync_success_no_changes": "Sync complete: no changes.",
-    "sync_skipped_sync_managed": "{{skipped}} skipped (managed by sync).",
-    "sync_preserved_local_edits": "{{preserved}} preserved (edited locally).",
+    "sync_skipped_sync_managed": "Events already imported from a feed on this calendar were left as they are ({{skipped}}).",
+    "sync_preserved_local_edits": "Events you changed in Pavillion were not overwritten by this import ({{preserved}}).",
     "import_success": "Import complete: {{created}} added, {{updated}} updated.",
+    "import_success_no_changes": "Import complete: nothing new or changed in this file.",
+    "guide_link": "How importing calendars works",
     "verify_aria": "Verify ownership for import source {{url}}"
   },
   "places": {
