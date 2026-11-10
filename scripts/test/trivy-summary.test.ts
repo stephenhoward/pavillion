@@ -120,6 +120,42 @@ describe('trivy-summary: summarize', () => {
   });
 });
 
+const mixedMediumReport = {
+  Results: [{
+    Target: 'image',
+    Vulnerabilities: [
+      { VulnerabilityID: 'CVE-1', Severity: 'MEDIUM' },
+      { VulnerabilityID: 'CVE-2', Severity: 'MEDIUM' },
+    ],
+    Misconfigurations: [
+      { ID: 'DS-1', Severity: 'MEDIUM' },
+      { ID: 'DS-2', Severity: 'MEDIUM' },
+      { ID: 'DS-3', Severity: 'MEDIUM' },
+    ],
+  }],
+};
+
+describe('trivy-summary: per-kind counts', () => {
+  it('counts each kind separately and keeps the all-kinds total', () => {
+    const summary = summarize([{ label: 'image', json: mixedMediumReport }]);
+
+    expect(summary.scans[0].kindCounts.vulnerability.MEDIUM).toBe(2);
+    expect(summary.scans[0].kindCounts.misconfiguration.MEDIUM).toBe(3);
+    expect(summary.scans[0].kindCounts.secret.MEDIUM).toBe(0);
+    expect(summary.scans[0].counts.MEDIUM).toBe(5);
+    expect(summary.total).toBe(5);
+  });
+
+  it('renders the per-kind counts for each scan', () => {
+    const markdown = renderMarkdown(summarize([{ label: 'image', json: mixedMediumReport }]));
+
+    expect(markdown).toContain('| Scan | Kind | Critical | High | Medium | Low | Unknown |');
+    expect(markdown).toContain('| image | Vulnerabilities | 0 | 0 | 2 | 0 | 0 |');
+    expect(markdown).toContain('| image | Misconfigurations | 0 | 0 | 3 | 0 | 0 |');
+    expect(markdown).toContain('| image | Secrets | 0 | 0 | 0 | 0 | 0 |');
+  });
+});
+
 describe('trivy-summary: renderMarkdown', () => {
   it('states plainly that a clean scan found nothing', () => {
     const markdown = renderMarkdown(summarize([{ label: 'fs', json: { Results: [] } }]));
