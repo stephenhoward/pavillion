@@ -233,7 +233,6 @@
     },
     "status": {
       "submitted": "Submitted",
-      "under_review": "Under Review",
       "resolved": "Resolved",
       "dismissed": "Dismissed",
       "escalated": "Escalated"
@@ -306,8 +305,7 @@
       "success": "Report has been forwarded to the remote calendar owner.",
       "error": "Failed to forward report. Please try again.",
       "status_pending": "Forwarded (Pending)",
-      "status_acknowledged": "Forwarded (Acknowledged)",
-      "status_no_response": "Forwarded (No Response)"
+      "status_acknowledged": "Forwarded (Acknowledged)"
     },
     "patterns": {
       "source_flooding": "Source Flooding Pattern",

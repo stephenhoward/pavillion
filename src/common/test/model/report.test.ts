@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { Report, ReportCategory, ReportStatus, ForwardStatus } from '@/common/model/report';
 
 describe('ReportCategory enum', () => {
 
@@ -22,15 +22,19 @@ describe('ReportStatus enum', () => {
   it('should define all expected status values', () => {
     expect(ReportStatus.PENDING_VERIFICATION).toBe('pending_verification');
     expect(ReportStatus.SUBMITTED).toBe('submitted');
-    expect(ReportStatus.UNDER_REVIEW).toBe('under_review');
     expect(ReportStatus.RESOLVED).toBe('resolved');
     expect(ReportStatus.DISMISSED).toBe('dismissed');
     expect(ReportStatus.ESCALATED).toBe('escalated');
   });
 
-  it('should have exactly 6 statuses', () => {
-    const values = Object.values(ReportStatus);
-    expect(values).toHaveLength(6);
+  it('should define exactly the five lifecycle statuses', () => {
+    expect(Object.values(ReportStatus).sort()).toEqual(
+      ['dismissed', 'escalated', 'pending_verification', 'resolved', 'submitted'],
+    );
+  });
+
+  it('should define exactly the two forward statuses', () => {
+    expect(Object.values(ForwardStatus).sort()).toEqual(['acknowledged', 'pending']);
   });
 });
 
@@ -87,7 +91,7 @@ describe('Report Model', () => {
     report.reviewerTimestamp = sampleDate2;
     report.escalationType = 'manual';
     report.reporterType = 'authenticated';
-    report.status = ReportStatus.UNDER_REVIEW;
+    report.status = ReportStatus.ESCALATED;
     report.updatedAt = sampleDate2;
     return report;
   }
@@ -444,7 +448,7 @@ describe('Report Model', () => {
         adminPriority: 'high',
         adminDeadline: sampleDate2.toISOString(),
         adminNotes: 'Needs urgent review',
-        status: 'under_review',
+        status: 'escalated',
         ownerNotes: 'Owner reviewed this',
         reviewerId: 'reviewer-id-1',
         reviewerNotes: 'Confirmed issue',
@@ -587,7 +591,7 @@ describe('Report Model', () => {
         adminPriority: 'high',
         adminDeadline: sampleDate2.toISOString(),
         adminNotes: 'Urgent',
-        status: 'under_review',
+        status: 'escalated',
         ownerNotes: 'Reviewing',
         reviewerId: 'reviewer-id-1',
         reviewerNotes: 'In progress',
@@ -717,7 +721,7 @@ describe('Report Model', () => {
       original.adminPriority = 'medium';
       original.adminDeadline = sampleDate2;
       original.adminNotes = 'Review by Friday';
-      original.status = ReportStatus.UNDER_REVIEW;
+      original.status = ReportStatus.ESCALATED;
       original.ownerNotes = 'Owner says valid';
       original.reviewerId = 'reviewer-7';
       original.reviewerNotes = 'Confirmed issue';
@@ -798,12 +802,6 @@ describe('Report Model', () => {
         expect(report.isVerified).toBe(true);
       });
 
-      it('should return true when status is under_review', () => {
-        const report = new Report('r1');
-        report.status = ReportStatus.UNDER_REVIEW;
-        expect(report.isVerified).toBe(true);
-      });
-
       it('should return true when status is resolved', () => {
         const report = new Report('r1');
         report.status = ReportStatus.RESOLVED;
@@ -837,12 +835,6 @@ describe('Report Model', () => {
         expect(report.isPending).toBe(true);
       });
 
-      it('should return false when status is under_review', () => {
-        const report = new Report('r1');
-        report.status = ReportStatus.UNDER_REVIEW;
-        expect(report.isPending).toBe(false);
-      });
-
       it('should return false when status is resolved', () => {
         const report = new Report('r1');
         report.status = ReportStatus.RESOLVED;
@@ -874,7 +866,6 @@ describe('Report Model', () => {
         const statuses = [
           ReportStatus.PENDING_VERIFICATION,
           ReportStatus.SUBMITTED,
-          ReportStatus.UNDER_REVIEW,
           ReportStatus.RESOLVED,
           ReportStatus.DISMISSED,
         ];
@@ -905,7 +896,6 @@ describe('Report Model', () => {
         const statuses = [
           ReportStatus.PENDING_VERIFICATION,
           ReportStatus.SUBMITTED,
-          ReportStatus.UNDER_REVIEW,
           ReportStatus.ESCALATED,
         ];
 

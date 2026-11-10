@@ -62,15 +62,4 @@ describe('ModerationService.checkForwardStatus', () => {
 
     expect(status).toBe(ForwardStatus.ACKNOWLEDGED);
   });
-
-  it('should return "no_response" status', async () => {
-    const mockEntity = {
-      forward_status: ForwardStatus.NO_RESPONSE,
-    };
-    sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
-
-    const status = await service.checkForwardStatus('report-id');
-
-    expect(status).toBe(ForwardStatus.NO_RESPONSE);
-  });
 });

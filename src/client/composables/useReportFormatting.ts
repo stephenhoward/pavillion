@@ -23,7 +23,6 @@ export function useReportFormatting() {
   const statusBadgeClass = (status: string): string => {
     const classMap: Record<string, string> = {
       [ReportStatus.SUBMITTED]: 'status-badge--submitted',
-      [ReportStatus.UNDER_REVIEW]: 'status-badge--under-review',
       [ReportStatus.RESOLVED]: 'status-badge--resolved',
       [ReportStatus.DISMISSED]: 'status-badge--dismissed',
       [ReportStatus.ESCALATED]: 'status-badge--escalated',
@@ -40,7 +39,6 @@ export function useReportFormatting() {
   const statusLabel = (status: string): string => {
     const labelMap: Record<string, string> = {
       [ReportStatus.SUBMITTED]: t('status.submitted'),
-      [ReportStatus.UNDER_REVIEW]: t('status.under_review'),
       [ReportStatus.RESOLVED]: t('status.resolved'),
       [ReportStatus.DISMISSED]: t('status.dismissed'),
       [ReportStatus.ESCALATED]: t('status.escalated'),

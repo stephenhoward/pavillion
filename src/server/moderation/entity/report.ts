@@ -122,6 +122,7 @@ class ReportEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare forwarded_to_actor_uri: string | null;
 
+  // 'no_response' stays: it is in the migrated Postgres enum (0001) though no code writes it.
   @Column({
     type: DataType.ENUM('pending', 'acknowledged', 'no_response'),
     allowNull: true,

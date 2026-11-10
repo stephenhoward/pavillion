@@ -90,20 +90,19 @@ describe('ModerationService - Auto-Escalation', () => {
       expect(mockReports[2].update.calledOnce).toBe(true);
     });
 
-    it('should only escalate reports in pending or owner_review status', async () => {
+    it('should only escalate reports in submitted status', async () => {
       // Mock configuration to return threshold of 3
       sandbox.stub(configInterface, 'getSetting').resolves('3');
 
-      // Mock 5 reports with mixed statuses
+      // Mock 4 reports with mixed statuses
       const mockReports = [
         { id: '1', event_id: VALID_UUID, status: ReportStatus.SUBMITTED, update: sandbox.stub().resolves(), toModel: () => new Report('1') },
-        { id: '2', event_id: VALID_UUID, status: ReportStatus.UNDER_REVIEW, update: sandbox.stub().resolves(), toModel: () => new Report('2') },
         { id: '3', event_id: VALID_UUID, status: ReportStatus.ESCALATED, update: sandbox.stub().resolves(), toModel: () => new Report('3') },
         { id: '4', event_id: VALID_UUID, status: ReportStatus.RESOLVED, update: sandbox.stub().resolves(), toModel: () => new Report('4') },
         { id: '5', event_id: VALID_UUID, status: ReportStatus.DISMISSED, update: sandbox.stub().resolves(), toModel: () => new Report('5') },
       ];
-      sandbox.stub(ReportEntity, 'findAll').resolves(mockReports.slice(0, 2) as any); // Only pending/owner_review
-      sandbox.stub(ReportEntity, 'count').resolves(5); // Total count
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll').resolves(mockReports.slice(0, 1) as any); // Only submitted
+      sandbox.stub(ReportEntity, 'count').resolves(4); // Total count
 
       // Mock escalation record creation
       const mockFromModel = sandbox.stub().returns({ save: sandbox.stub().resolves() });
@@ -113,12 +112,12 @@ describe('ModerationService - Auto-Escalation', () => {
 
       const result = await service.checkAutoEscalation(VALID_UUID);
 
-      expect(result).toBe(2);
+      expect(result).toBe(1);
+      expect((findAllStub.firstCall.args[0] as any).where.status).toBe(ReportStatus.SUBMITTED);
       expect(mockReports[0].update.calledOnce).toBe(true);
-      expect(mockReports[1].update.calledOnce).toBe(true);
+      expect(mockReports[1].update.called).toBe(false);
       expect(mockReports[2].update.called).toBe(false);
       expect(mockReports[3].update.called).toBe(false);
-      expect(mockReports[4].update.called).toBe(false);
     });
 
     it('should not re-escalate already escalated reports', async () => {

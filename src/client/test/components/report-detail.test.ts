@@ -131,7 +131,7 @@ describe('ReportDetail', () => {
           id: 'esc-1',
           reportId: 'report-123',
           fromStatus: 'submitted',
-          toStatus: 'under_review',
+          toStatus: 'escalated',
           reviewerId: null,
           reviewerRole: 'owner',
           decision: 'escalated',

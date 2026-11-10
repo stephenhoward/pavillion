@@ -76,7 +76,6 @@ const VALID_ESCALATION_TYPES: EscalationType[] = ['manual', 'automatic'];
  */
 const OPEN_REPORT_STATUSES: ReportStatus[] = [
   ReportStatus.SUBMITTED,
-  ReportStatus.UNDER_REVIEW,
   ReportStatus.ESCALATED,
 ];
 
@@ -901,7 +900,7 @@ class ModerationService {
    * actually have one or more open reports appear in the returned map;
    * callers should default missing IDs to zero.
    *
-   * Open reports are those in SUBMITTED, UNDER_REVIEW, or ESCALATED status
+   * Open reports are those in SUBMITTED or ESCALATED status
    * (verified but not yet resolved/dismissed).
    *
    * Executes a single aggregated query (WHERE calendar_id IN (...) GROUP BY
@@ -1648,7 +1647,7 @@ class ModerationService {
    * The auto-escalation threshold is configurable via the Configuration domain
    * ('moderation.autoEscalationThreshold'). A threshold of 0 disables auto-escalation.
    *
-   * Only reports in 'submitted' or 'under_review' status are eligible for auto-escalation.
+   * Only reports in 'submitted' status are eligible for auto-escalation.
    * Already escalated, resolved, or dismissed reports are not affected.
    *
    * @param eventId - Event UUID to check
@@ -1680,13 +1679,11 @@ class ModerationService {
       return 0;
     }
 
-    // Get all reports in pending or owner_review status that can be escalated
+    // Get all submitted reports, the only status that can be escalated
     const reportsToEscalate = await ReportEntity.findAll({
       where: {
         event_id: eventId,
-        status: {
-          [Op.in]: [ReportStatus.SUBMITTED, ReportStatus.UNDER_REVIEW],
-        },
+        status: ReportStatus.SUBMITTED,
       },
     });
 
