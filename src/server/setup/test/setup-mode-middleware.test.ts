@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import sinon from 'sinon';
 import express, { Request, Response } from 'express';
 import request from 'supertest';
@@ -23,6 +23,12 @@ function buildMockConfigInterface(): ConfigurationInterface {
     setInstancePolicy: sinon.stub().resolves(true),
   } as unknown as ConfigurationInterface;
 }
+
+vi.mock('@/server/app_routes', () => ({
+  renderClientShell: vi.fn(async (res: Response) => {
+    res.send('<html>client shell</html>');
+  }),
+}));
 
 describe('Setup Mode Middleware', () => {
   let sandbox = sinon.createSandbox();
@@ -182,6 +188,35 @@ describe('Setup Mode Middleware', () => {
     it('should return 404 for /setup when admin exists', async () => {
       const response = await request(app)
         .get('/setup')
+        .set('Accept', 'application/json')
+        .expect(404);
+
+      expect(response.body.error).toBe('Not found');
+    });
+
+    it('should answer a browser at /setup with 404 and the client shell', async () => {
+      const response = await request(app)
+        .get('/setup')
+        .set('Accept', 'text/html')
+        .expect(404);
+
+      expect(response.headers['content-type']).toMatch(/text\/html/);
+      expect(response.text).toContain('client shell');
+    });
+
+    it('should answer a browser under /setup/ with 404 and the client shell', async () => {
+      const response = await request(app)
+        .get('/setup/anything')
+        .set('Accept', 'text/html')
+        .expect(404);
+
+      expect(response.text).toContain('client shell');
+    });
+
+    it('should keep the JSON body when the client prefers JSON', async () => {
+      const response = await request(app)
+        .get('/setup')
+        .set('Accept', 'application/json')
         .expect(404);
 
       expect(response.body.error).toBe('Not found');

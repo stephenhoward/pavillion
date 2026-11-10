@@ -218,6 +218,24 @@ export const collectEntryCSS = (manifest: Record<string, any>, entryKey: string)
 };
 
 /**
+ * Renders the client app's HTML shell. The client router decides what the
+ * path shows, so a response with a 404 status carries the client's not-found view.
+ *
+ * @param res - Express response object
+ * @returns {Promise<void>}
+ */
+export async function renderClientShell(res: Response): Promise<void> {
+  const manifest = await parseManifest();
+  const data = {
+    environment,
+    manifest,
+    cssFiles: collectEntryCSS(manifest, 'src/client/app.ts'),
+  };
+
+  res.render("client.index.html.ejs", data);
+}
+
+/**
  * Resolves the instance default language from the configuration service.
  *
  * Falls back to DEFAULT_LANGUAGE_CODE if the configuration interface is unavailable
@@ -369,15 +387,8 @@ export function createRouter(
      * @param {Response} res - Express response object
      * @returns {Promise<void>}
      */
-    client_index: async (req: Request, res: Response) => {
-      const manifest = await parseManifest();
-      const data = {
-        environment,
-        manifest,
-        cssFiles: collectEntryCSS(manifest, 'src/client/app.ts'),
-      };
-
-      res.render("client.index.html.ejs", data);
+    client_index: async (_req: Request, res: Response) => {
+      await renderClientShell(res);
     },
 
     /**
