@@ -6,7 +6,7 @@
     "stephenhoward/pavillion",
     "stephenhoward/pavillion-site"
   ],
-  "extends": ["config:recommended"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
   "major": {
