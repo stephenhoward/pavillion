@@ -53,7 +53,7 @@
 
       <ErrorAlert
         id="setup-error"
-        :error="state.passwordError ? translateError(state.passwordError) : (state.formError ? translateError(state.formError) : '')"
+        :error="displayedError ? translateError(displayedError) : ''"
       />
 
       <div class="form-stack">
@@ -62,9 +62,11 @@
           <input
             type="text"
             id="setup-token"
+            class="auth-field"
+            :class="{ 'form-control--error': invalidField === 'token' }"
             v-model="state.setupToken"
-            :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
-            :aria-describedby="(state.passwordError || state.formError) ? 'setup-token-description setup-error' : 'setup-token-description'"
+            :aria-invalid="invalidField === 'token' ? 'true' : 'false'"
+            :aria-describedby="invalidField === 'token' ? 'setup-token-description setup-error' : 'setup-token-description'"
             autocomplete="off"
             spellcheck="false"
             required
@@ -76,10 +78,12 @@
         <input
           type="email"
           id="setup-email"
+          class="auth-field"
+          :class="{ 'form-control--error': invalidField === 'email' }"
           :placeholder="t('email_placeholder')"
           v-model="state.email"
-          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
-          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+          :aria-invalid="invalidField === 'email' ? 'true' : 'false'"
+          :aria-describedby="invalidField === 'email' ? 'setup-error' : undefined"
           autocomplete="email"
           required
         />
@@ -88,11 +92,13 @@
         <input
           type="password"
           id="setup-password"
+          class="auth-field"
+          :class="{ 'form-control--error': invalidField === 'password' }"
           :placeholder="t('password_placeholder')"
           v-model="state.password"
           @blur="validatePasswordField"
-          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
-          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+          :aria-invalid="invalidField === 'password' ? 'true' : 'false'"
+          :aria-describedby="invalidField === 'password' ? 'setup-error' : undefined"
           autocomplete="new-password"
           required
         />
@@ -101,10 +107,12 @@
         <input
           type="password"
           id="setup-password-confirm"
+          class="auth-field"
+          :class="{ 'form-control--error': invalidField === 'password' }"
           :placeholder="t('password_confirm_placeholder')"
           v-model="state.passwordConfirm"
-          :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
-          :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+          :aria-invalid="invalidField === 'password' ? 'true' : 'false'"
+          :aria-describedby="invalidField === 'password' ? 'setup-error' : undefined"
           autocomplete="new-password"
           required
         />
@@ -114,10 +122,12 @@
           <input
             type="text"
             id="setup-site-title"
+            class="auth-field"
+            :class="{ 'form-control--error': invalidField === 'siteTitle' }"
             :placeholder="t('site_title_placeholder')"
             v-model="state.siteTitle"
-            :aria-invalid="(state.passwordError || state.formError) ? 'true' : 'false'"
-            :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+            :aria-invalid="invalidField === 'siteTitle' ? 'true' : 'false'"
+            :aria-describedby="invalidField === 'siteTitle' ? 'setup-error' : undefined"
             required
           />
           <div class="field-description">{{ t('site_title_description') }}</div>
@@ -142,7 +152,7 @@
             class="btn btn--primary"
             type="submit"
             :disabled="state.submitting"
-            :aria-describedby="(state.passwordError || state.formError) ? 'setup-error' : undefined"
+            :aria-describedby="displayedError ? 'setup-error' : undefined"
           >
             {{ state.submitting ? t('submitting_button') : t('submit_button') }}
           </button>
@@ -153,7 +163,7 @@
 </template>
 
 <script setup>
-import { inject, reactive, onMounted } from 'vue';
+import { inject, reactive, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { validatePassword } from '@/common/validation/password';
@@ -185,6 +195,24 @@ const state = reactive({
   submitting: false,
   setupComplete: false,
 });
+
+// The error key currently shown in the alert; a blur-time password error wins.
+const displayedError = computed(() => state.passwordError || state.formError);
+
+// Which input the displayed error is about. Errors tied to no single field
+// (e.g. setup_already_completed, unknown server errors) map to none.
+const ERROR_FIELDS = {
+  error_missing_setup_token: 'token',
+  setup_token_invalid: 'token',
+  error_missing_email: 'email',
+  error_missing_password: 'password',
+  error_missing_password_confirm: 'password',
+  error_passwords_mismatch: 'password',
+  password_too_short: 'password',
+  password_needs_variety: 'password',
+  error_missing_site_title: 'siteTitle',
+};
+const invalidField = computed(() => ERROR_FIELDS[displayedError.value] || '');
 
 // Set UI language to browser language on mount
 onMounted(() => {
