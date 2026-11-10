@@ -253,6 +253,53 @@ describe('Setup Component', () => {
     });
   });
 
+  describe('Per-field invalid marking', () => {
+    const ids = ['setup-token', 'setup-email', 'setup-password', 'setup-password-confirm', 'setup-site-title'];
+
+    const invalidMap = (wrapper: VueWrapper) =>
+      Object.fromEntries(ids.map(id => [id, wrapper.find(`#${id}`).attributes('aria-invalid')]));
+
+    it('marks only the token field invalid after a rejected token', async () => {
+      const mockSetupService = {
+        completeSetup: vi.fn().mockRejectedValue(new Error('setup_token_invalid')),
+        checkSetupStatus: vi.fn().mockResolvedValue({ setupRequired: true }),
+      };
+      const { wrapper } = await mountSetup(mockSetupService);
+
+      await fillValidForm(wrapper);
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(invalidMap(wrapper)).toEqual({
+        'setup-token': 'true',
+        'setup-email': 'false',
+        'setup-password': 'false',
+        'setup-password-confirm': 'false',
+        'setup-site-title': 'false',
+      });
+      expect(wrapper.find('#setup-token').attributes('aria-describedby')).toContain('setup-error');
+      expect(wrapper.find('#setup-email').attributes('aria-describedby')).toBeUndefined();
+    });
+
+    it('marks only the two password fields invalid on a password mismatch', async () => {
+      const { wrapper } = await mountSetup();
+
+      await fillValidForm(wrapper);
+      await wrapper.find('input#setup-password-confirm').setValue('different456');
+      await wrapper.find('form').trigger('submit.prevent');
+      await flushPromises();
+
+      expect(invalidMap(wrapper)).toEqual({
+        'setup-token': 'false',
+        'setup-email': 'false',
+        'setup-password': 'true',
+        'setup-password-confirm': 'true',
+        'setup-site-title': 'false',
+      });
+      expect(wrapper.find('#setup-token').attributes('aria-describedby')).toBe('setup-token-description');
+    });
+  });
+
   describe('API Error Handling', () => {
     it('should display error when validation fails', async () => {
       const mockSetupService = {
