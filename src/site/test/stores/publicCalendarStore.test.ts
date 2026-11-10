@@ -7,6 +7,7 @@ import { EventCategory } from '@/common/model/event_category';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { Media } from '@/common/model/media';
+import { getDefaultDateRange, LONGEST_DEFAULT_DATE_RANGE_MONTHS } from '@/common/utils/datePresets';
 import ModelService from '@/client/service/models';
 import CalendarService from '@/site/service/calendar';
 
@@ -550,6 +551,110 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       await reload;
 
       expect(store.allEvents).toEqual([]);
+    });
+  });
+
+  describe('loadNextEventDate action', () => {
+    const instanceData = (id: string, start: string) => ({
+      id,
+      start,
+      end: DateTime.fromISO(start).plus({ hours: 1 }).toISO(),
+      event: { id: `event-${id}`, calendarId: 'calendar-1', content: {} },
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-10T20:00:00Z'));
+      store.currentCalendarUrlName = 'test-calendar';
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('queries from the day after the default window to the longest horizon, without filters', async () => {
+      vi.mocked(ModelService.listModels).mockResolvedValue({ items: [] } as any);
+
+      await store.loadNextEventDate();
+
+      const url = vi.mocked(ModelService.listModels).mock.calls[0][0] as string;
+      const params = new URL(url, 'http://localhost').searchParams;
+      const defaultEnd = getDefaultDateRange('2weeks').endDate;
+      expect(params.get('startDate')).toBe(DateTime.fromISO(defaultEnd).plus({ days: 1 }).toISODate());
+      expect(params.get('endDate')).toBe(
+        DateTime.now().startOf('day').plus({ months: LONGEST_DEFAULT_DATE_RANGE_MONTHS }).toISODate(),
+      );
+      expect(params.has('search')).toBe(false);
+      expect(params.has('categories')).toBe(false);
+    });
+
+    it('takes the earliest instance date and leaves allEvents alone', async () => {
+      const later = DateTime.now().plus({ days: 60 });
+      const sooner = DateTime.now().plus({ days: 30 });
+      vi.mocked(ModelService.listModels).mockResolvedValue({
+        items: [instanceData('b', later.toISO()!), instanceData('a', sooner.toISO()!)],
+      } as any);
+
+      await store.loadNextEventDate();
+
+      expect(store.nextEventDate).toBe(sooner.toISODate());
+      expect(store.allEvents).toEqual([]);
+    });
+
+    it('stays null when nothing follows the default window', async () => {
+      vi.mocked(ModelService.listModels).mockResolvedValue({ items: [] } as any);
+
+      await store.loadNextEventDate();
+
+      expect(store.nextEventDate).toBeNull();
+    });
+
+    it('makes no request when the default window already reaches the horizon', async () => {
+      store.calendarDefaultDateRange = '12months';
+
+      await store.loadNextEventDate();
+
+      expect(ModelService.listModels).not.toHaveBeenCalled();
+      expect(store.nextEventDate).toBeNull();
+    });
+
+    it('records no date and logs when the lookup fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(ModelService.listModels).mockRejectedValue(new Error('Network error'));
+
+      await store.loadNextEventDate();
+
+      expect(store.nextEventDate).toBeNull();
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('clears the date when events reload and when the calendar changes', async () => {
+      store.nextEventDate = '2026-12-25';
+      vi.mocked(ModelService.listModels).mockResolvedValue({ items: [] } as any);
+
+      await store.loadEvents('test-calendar');
+      expect(store.nextEventDate).toBeNull();
+
+      store.nextEventDate = '2026-12-25';
+      store.setCurrentCalendar('other-calendar');
+      expect(store.nextEventDate).toBeNull();
+    });
+
+    it('drops a lookup response that a later reload has superseded', async () => {
+      let resolveLookup: (value: any) => void = () => {};
+      vi.mocked(ModelService.listModels).mockImplementationOnce(() => new Promise(resolve => {
+        resolveLookup = resolve;
+      }));
+
+      const lookup = store.loadNextEventDate();
+      vi.mocked(ModelService.listModels).mockResolvedValue({ items: [] } as any);
+      await store.loadEvents('test-calendar');
+
+      resolveLookup({ items: [instanceData('late', DateTime.now().plus({ days: 30 }).toISO()!)] });
+      await lookup;
+
+      expect(store.nextEventDate).toBeNull();
     });
   });
 

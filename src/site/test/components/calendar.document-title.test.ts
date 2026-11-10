@@ -71,6 +71,9 @@ function createMockStore(): Record<string, any> {
     loadCategories: vi.fn().mockResolvedValue(undefined),
     clearAllFilters: vi.fn(),
     reloadWithFilters: vi.fn(),
+    loadNextEventDate: vi.fn().mockResolvedValue(undefined),
+    nextEventDate: null,
+    calendarDefaultDateRange: '2weeks',
     setViewWindow: vi.fn(),
   };
 }
