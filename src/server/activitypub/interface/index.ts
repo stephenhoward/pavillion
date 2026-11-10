@@ -413,7 +413,8 @@ export default class ActivityPubInterface {
    * Drains the inbox by processing all unprocessed messages in chronological
    * order (`message_time`, then `createdAt`, over `processed_time: null`).
    * Called by the web process's inbox drain (`ActivityPubDomain.startInboxDrain`):
-   * once at startup with no options, taking every row, and on each interval
+   * once at startup with `skipNewerThanMs: 0`, taking only rows written before
+   * the drain began, and on each interval
    * tick with `skipNewerThanMs`, leaving fresh rows to live dispatch.
    *
    * `skipNewerThanMs` leaves rows written within that many milliseconds
