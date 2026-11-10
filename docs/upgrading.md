@@ -40,7 +40,14 @@ container image changes nothing in the application; see
 
 ### 2. Back up your database
 
-Backups are not automated. Run a `pg_dump` before any major upgrade:
+Pavillion takes a database backup every night at 02:00 server time by
+default. It keeps the last 7 daily backups, 4 weekly and 6 monthly, and
+writes them as `pavillion_<timestamp>_<type>.dump` files to the
+`pavillion-backups` volume, which `docker-compose.yml` binds to
+`/opt/pavillion/backups` on the host.
+
+The nightly backup could be many hours old when you upgrade, so take a
+fresh copy with `pg_dump` right before any major upgrade:
 
 ```bash
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > \
@@ -118,13 +125,18 @@ upgrades that touch existing secrets get the right behavior.
 
 2. Restore your database backup (see step 2 of the pre-upgrade checklist).
 
-3. Pin the previous image version in `docker-compose.yml`:
+3. Pin the previous image version by setting `PAVILLION_IMAGE_TAG` in
+   `.env`:
 
-   ```yaml
-   services:
-     app:
-       image: ghcr.io/stephenhoward/pavillion:v1.1.0  # previous version
+   ```bash
+   PAVILLION_IMAGE_TAG=v1.1.0  # previous version
    ```
+
+   Leave `docker-compose.yml` as it is: `bin/deploy.sh` refuses to run
+   when the repository has local changes. The variable is described in
+   the [environment variable reference](deployment.md#environment-variable-reference).
+   Before your next upgrade, remove the line (or set it to the version
+   you are upgrading to) if you want to follow `latest` again.
 
 4. Start with the previous version:
 
