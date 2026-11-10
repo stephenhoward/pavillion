@@ -489,7 +489,48 @@ describe('useDialog', () => {
       expect(focusB).toHaveBeenCalledTimes(1);
     });
 
-    it('cleanup() clears the captured reference', () => {
+    it('cleanup() restores focus to the trigger when the dialog is unmounted while open', () => {
+      const trigger = document.createElement('button');
+      const triggerFocus = vi.fn();
+      trigger.focus = triggerFocus;
+      document.body.appendChild(trigger);
+      Object.defineProperty(document, 'activeElement', {
+        configurable: true,
+        get: () => trigger,
+      });
+
+      const { el } = makeDialogStub();
+      dialogRef.value = el;
+      const { open, cleanup } = useDialog(dialogRef, emit);
+
+      open();
+      cleanup();
+
+      expect(triggerFocus).toHaveBeenCalledTimes(1);
+    });
+
+    it('cleanup() skips restoration when the trigger left the document', () => {
+      const trigger = document.createElement('button');
+      const triggerFocus = vi.fn();
+      trigger.focus = triggerFocus;
+      document.body.appendChild(trigger);
+      Object.defineProperty(document, 'activeElement', {
+        configurable: true,
+        get: () => trigger,
+      });
+
+      const { el } = makeDialogStub();
+      dialogRef.value = el;
+      const { open, cleanup } = useDialog(dialogRef, emit);
+
+      open();
+      trigger.remove();
+      cleanup();
+
+      expect(triggerFocus).not.toHaveBeenCalled();
+    });
+
+    it('cleanup() after close() does not restore focus a second time', () => {
       const trigger = document.createElement('button');
       const triggerFocus = vi.fn();
       trigger.focus = triggerFocus;
@@ -504,20 +545,10 @@ describe('useDialog', () => {
       const { open, close, cleanup } = useDialog(dialogRef, emit);
 
       open();
-      // cleanup() clears the captured reference; a subsequent close() should
-      // not restore focus to the trigger (it was nulled).
-      cleanup();
-      // Re-open and close to prove the reference was nulled (open captures
-      // the current activeElement, but if we point activeElement at body,
-      // capture is null and no restoration happens).
-      Object.defineProperty(document, 'activeElement', {
-        configurable: true,
-        get: () => document.body,
-      });
-      open();
       close();
+      cleanup();
 
-      expect(triggerFocus).not.toHaveBeenCalled();
+      expect(triggerFocus).toHaveBeenCalledTimes(1);
     });
   });
 });

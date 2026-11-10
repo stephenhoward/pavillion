@@ -205,6 +205,12 @@ export function useDialog(
     if (typeof document !== 'undefined') {
       document.body.classList.remove('modal-open');
     }
+    // A parent that unmounts the dialog (v-if) never calls close(); restore
+    // focus here so it does not fall to the body. close() nulls the reference,
+    // so a dialog closed normally is not restored twice.
+    if (previouslyFocused && document.body.contains(previouslyFocused)) {
+      previouslyFocused.focus();
+    }
     previouslyFocused = null;
   };
 
