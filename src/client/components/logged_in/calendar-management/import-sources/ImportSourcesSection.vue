@@ -57,6 +57,7 @@
         :autofocus="true"
         @submit="onAddSubmit"
         @cancel="closeAddForm"
+        @tab-change="state.addError = null"
       />
     </ModalLayout>
 
@@ -281,10 +282,12 @@ const buildDedupClauses = (summary: ImportRunSummary): string[] => {
  */
 const buildImportSummary = (run: ImportRunSummary): string =>
   [
-    t('import_success', {
-      created: run.eventsCreated,
-      updated: run.eventsUpdated,
-    }),
+    run.eventsCreated === 0 && run.eventsUpdated === 0
+      ? t('import_success_no_changes')
+      : t('import_success', {
+        created: run.eventsCreated,
+        updated: run.eventsUpdated,
+      }),
     ...buildDedupClauses(run),
   ].join(' ');
 

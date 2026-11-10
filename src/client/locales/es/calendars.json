@@ -311,9 +311,11 @@
     },
     "sync_success": "Sincronización completa: {{created}} añadidos, {{updated}} actualizados.",
     "sync_success_no_changes": "Sincronización completa: sin cambios.",
-    "sync_skipped_sync_managed": "{{skipped}} omitidos (gestionados por la sincronización).",
-    "sync_preserved_local_edits": "{{preserved}} conservados (editados localmente).",
+    "sync_skipped_sync_managed": "Los eventos que ya provienen de una importación de feed de este calendario se dejaron como están ({{skipped}}).",
+    "sync_preserved_local_edits": "Los eventos que modificaste en Pavillion no fueron sobrescritos por esta importación ({{preserved}}).",
     "import_success": "Importación completa: {{created}} añadidos, {{updated}} actualizados.",
+    "import_success_no_changes": "Importación completa: nada nuevo ni modificado en este archivo.",
+    "guide_link": "Cómo funciona la importación de calendarios",
     "verify_aria": "Verificar propiedad de la fuente de importación {{url}}"
   },
   "places": {

@@ -312,8 +312,57 @@ describe('ImportSourcesSection', () => {
 
       const { toasts } = useToast();
       const message = toasts.value.filter((t: Toast) => t.type === 'success')[0]?.message ?? '';
-      expect(message).toMatch(/2 skipped \(managed by sync\)/);
-      expect(message).toMatch(/1 preserved \(edited locally\)/);
+      expect(message).toMatch(/Events already imported from a feed on this calendar were left as they are \(2\)\./);
+      expect(message).toMatch(/Events you changed in Pavillion were not overwritten by this import \(1\)\./);
+    });
+
+    it('says nothing new or changed when a file import creates and updates nothing', async () => {
+      listSourcesMock.mockResolvedValue([]);
+      const fileSource = buildSource('file-id', null, {
+        sourceType: 'file',
+        originalFilename: 'events.ics',
+        verificationState: 'verified',
+      });
+      createSourceFromFileMock.mockResolvedValue({
+        source: fileSource,
+        run: buildFileRun({ eventsCreated: 0, eventsUpdated: 0 }),
+      });
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['x'], 'events.ics', { type: 'text/calendar' });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+
+      const { toasts } = useToast();
+      const message = toasts.value.filter((t: Toast) => t.type === 'success')[0]?.message ?? '';
+      expect(message).toBe('Import complete: nothing new or changed in this file.');
+    });
+
+    it('clears a stale add error when the form reports a tab change', async () => {
+      listSourcesMock.mockResolvedValue([]);
+      createSourceFromFileMock.mockRejectedValue(new Error('bad file'));
+
+      const { wrapper } = mountSection();
+      await flushPromises();
+
+      await wrapper.find('.empty-state .btn--cta').trigger('click');
+      await flushPromises();
+
+      const form = wrapper.findComponent(AddImportSourceForm);
+      const file = new File(['x'], 'events.ics', { type: 'text/calendar' });
+      form.vm.$emit('submit', { type: 'file', file });
+      await flushPromises();
+      expect((wrapper.vm as any).state.addError).toBeTruthy();
+
+      form.vm.$emit('tab-change');
+      await flushPromises();
+      expect((wrapper.vm as any).state.addError).toBeNull();
     });
 
     it('surfaces an add error without crashing when the file import fails', async () => {
@@ -671,8 +720,8 @@ describe('ImportSourcesSection', () => {
 
       const { toasts } = useToast();
       const message = toasts.value.filter(t => t.type === 'success')[0]?.message ?? '';
-      expect(message).toMatch(/2 skipped \(managed by sync\)/);
-      expect(message).toMatch(/1 preserved \(edited locally\)/);
+      expect(message).toMatch(/Events already imported from a feed on this calendar were left as they are \(2\)\./);
+      expect(message).toMatch(/Events you changed in Pavillion were not overwritten by this import \(1\)\./);
     });
 
     it('omits the dedup clauses when both counters are zero', async () => {

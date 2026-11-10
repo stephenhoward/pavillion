@@ -52,6 +52,20 @@ describe('AddImportSourceForm', () => {
       expect(wrapper.findAll('[role="tabpanel"]')).toHaveLength(2);
     });
 
+    it('emits tab-change when the owner switches tabs, so the parent can clear a stale error', async () => {
+      const wrapper = mountForm({ errorMessage: 'Something failed' });
+
+      await wrapper.findAll('[role="tab"]')[1].trigger('click');
+
+      expect(wrapper.emitted('tab-change')).toHaveLength(1);
+    });
+
+    it('offers the ICS import guide beside the tabs', () => {
+      const wrapper = mountForm();
+
+      expect(wrapper.find('.doc-link').exists()).toBe(true);
+    });
+
     it('switches to the file tab when clicked', async () => {
       const wrapper = mountForm();
 
