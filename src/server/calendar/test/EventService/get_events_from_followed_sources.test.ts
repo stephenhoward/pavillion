@@ -187,16 +187,14 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(queryOptions.offset).toBe(20); // page 2 * pageSize 10
   });
 
-  it('orders results by createdAt DESC', async () => {
+  it('orders results by createdAt DESC, breaking ties by id so pages never overlap', async () => {
     const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
 
     const calendar = new Calendar('test-id', 'testcal');
     await service.getEventsFromFollowedSources(calendar);
 
     const queryOptions = findAllStub.firstCall.args[0] as any;
-    expect(queryOptions.order).toBeDefined();
-    expect(queryOptions.order[0][0]).toBe('createdAt');
-    expect(queryOptions.order[0][1]).toBe('DESC');
+    expect(queryOptions.order).toEqual([['createdAt', 'DESC'], ['id', 'DESC']]);
   });
 
   it('populates schedules from entity association', async () => {

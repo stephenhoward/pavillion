@@ -96,7 +96,7 @@ export const useFeedStore = defineStore('feed', {
     },
 
     /**
-     * Append events to the list for infinite scroll pagination.
+     * Append the next page of events to the list.
      *
      * @param events - New events to append
      * @param page - The page number these events correspond to

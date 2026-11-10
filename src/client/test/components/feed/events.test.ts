@@ -98,6 +98,12 @@ describe('FollowedEventsView', () => {
               untitled_event: 'Untitled Event',
               report_button: 'Report',
               report_aria_label: 'Report event: {{eventTitle}}',
+              loading_more: 'Loading more events...',
+              load_more_button: 'Load more events',
+              loaded_more_one: '{{count}} more event loaded.',
+              loaded_more_other: '{{count}} more events loaded.',
+              end_of_feed: 'That\'s every event from the calendars you follow.',
+              load_more_error: 'Failed to load more events',
             },
           },
         },
@@ -386,52 +392,108 @@ describe('FollowedEventsView', () => {
     expect(wrapper.find('dialog').exists()).toBe(false);
   });
 
-  it('loads more events on scroll when intersection observer triggers', async () => {
-    const feedStore = useFeedStore();
-    feedStore.eventsHasMore = true;
+  describe('load more', () => {
+    const feedEvent = (id: string, name: string) => Object.assign(
+      CalendarEvent.fromObject({
+        id,
+        calendarId: 'remote-cal',
+        date: '2025-12-27',
+        content: { en: { language: 'en', name, description: '' } },
+      }),
+      { repostStatus: 'none' as const },
+    );
 
-    const event = CalendarEvent.fromObject({
-      id: 'event-1',
-      calendarId: 'remote-cal',
-      date: '2025-12-27',
-      content: {
-        en: {
-          language: 'en',
-          name: 'Test Event',
-          description: 'Description',
-        },
-      },
-    });
-
-    feedStore.events = [Object.assign(event, { repostStatus: 'none' as const })];
-
-    // Mock IntersectionObserver
-    const observeStub = sandbox.stub();
-    const unobserveStub = sandbox.stub();
-    const disconnectStub = sandbox.stub();
-
-    global.IntersectionObserver = class IntersectionObserver {
-      observe = observeStub;
-      unobserve = unobserveStub;
-      disconnect = disconnectStub;
-
-      constructor(callback: IntersectionObserverCallback) {
-        // Simulate intersection after mount
-        setTimeout(() => {
-          callback([{ isIntersecting: true }] as any, this as any);
-        }, 10);
-      }
-    } as any;
-
-    mount(FollowedEventsView, {
+    const mountView = () => mount(FollowedEventsView, {
+      attachTo: document.body,
       global: {
         plugins: [pinia, [I18NextVue, { i18next }]],
       },
     });
 
-    // Wait for intersection observer callback
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    it('shows a Load more button while more events exist, and no end message', () => {
+      const feedStore = useFeedStore();
+      feedStore.events = [feedEvent('event-1', 'First')];
+      feedStore.eventsHasMore = true;
 
-    expect(mockLoadMore).toHaveBeenCalledOnce();
+      const wrapper = mountView();
+
+      const button = wrapper.find('[data-testid="load-more-button"]');
+      expect(button.exists()).toBe(true);
+      expect(button.element.tagName).toBe('BUTTON');
+      expect(button.text()).toBe('Load more events');
+      expect(wrapper.find('[data-testid="end-of-feed"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('shows the end of the feed instead of the button when nothing more exists', () => {
+      const feedStore = useFeedStore();
+      feedStore.events = [feedEvent('event-1', 'First')];
+      feedStore.eventsHasMore = false;
+
+      const wrapper = mountView();
+
+      expect(wrapper.find('[data-testid="load-more-button"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="end-of-feed"]').text())
+        .toBe('That\'s every event from the calendars you follow.');
+      wrapper.unmount();
+    });
+
+    it('loads the next page, moves focus to the first new event and announces the count', async () => {
+      const feedStore = useFeedStore();
+      feedStore.events = [feedEvent('event-1', 'First'), feedEvent('event-2', 'Second')];
+      feedStore.eventsHasMore = true;
+      mockLoadMore.mockImplementation(async () => {
+        feedStore.appendEvents([feedEvent('event-3', 'Third'), feedEvent('event-4', 'Fourth')], 1);
+      });
+
+      const wrapper = mountView();
+      await wrapper.find('[data-testid="load-more-button"]').trigger('click');
+      await flushPromises();
+
+      expect(mockLoadMore).toHaveBeenCalledOnce();
+      const items = wrapper.findAll('[data-testid="event-item"]');
+      expect(items).toHaveLength(4);
+      expect(document.activeElement).toBe(items[2].element);
+      expect(wrapper.find('[role="status"]').text()).toBe('2 more events loaded.');
+      expect(wrapper.find('[data-testid="load-more-button"]').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('announces the end of the feed when the last page arrives', async () => {
+      const feedStore = useFeedStore();
+      feedStore.events = [feedEvent('event-1', 'First')];
+      feedStore.eventsHasMore = true;
+      mockLoadMore.mockImplementation(async () => {
+        feedStore.appendEvents([feedEvent('event-2', 'Second')], 1);
+        feedStore.setEventsHasMore(false);
+      });
+
+      const wrapper = mountView();
+      await wrapper.find('[data-testid="load-more-button"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('[role="status"]').text())
+        .toBe('1 more event loaded. That\'s every event from the calendars you follow.');
+      expect(wrapper.find('[data-testid="load-more-button"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="end-of-feed"]').exists()).toBe(true);
+      expect(document.activeElement).toBe(wrapper.findAll('[data-testid="event-item"]')[1].element);
+      wrapper.unmount();
+    });
+
+    it('does not request another page while one is loading', async () => {
+      const feedStore = useFeedStore();
+      feedStore.events = [feedEvent('event-1', 'First')];
+      feedStore.eventsHasMore = true;
+      mockEventsIsLoading.value = true;
+
+      const wrapper = mountView();
+      const button = wrapper.find('[data-testid="load-more-button"]');
+      expect(button.attributes('aria-disabled')).toBe('true');
+      expect(button.text()).toBe('Loading more events...');
+
+      await button.trigger('click');
+      expect(mockLoadMore).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
   });
 });

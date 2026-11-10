@@ -449,6 +449,73 @@ describe('Event Feed Integration Tests', () => {
       }
     });
 
+    it('reaches every event past the first page, oldest last, and reposts the oldest', async () => {
+      const curatorInfo = await accountService._setupAccount('accountg@pavillion.dev', 'testpassword');
+      const authKeyG = await env.login('accountg@pavillion.dev', 'testpassword');
+      const calendarG = await calendarInterface.createCalendar(curatorInfo.account, 'calendarg');
+
+      const organizerInfo = await accountService._setupAccount('accounth@pavillion.dev', 'testpassword');
+      const calendarH = await calendarInterface.createCalendar(organizerInfo.account, 'calendarh');
+
+      // More than one default page (20) of events in the followed set,
+      // created oldest first.
+      const eventCount = 25;
+      const createdIds: string[] = [];
+      for (let i = 0; i < eventCount; i++) {
+        const event = await calendarInterface.createEvent(organizerInfo.account, {
+          calendarId: calendarH.id,
+          content: { en: { name: `Paged Event ${i}`, description: '' } },
+          start_date: '2026-05-01',
+          start_time: '10:00',
+          end_date: '2026-05-01',
+          end_time: '11:00',
+        });
+        createdIds.push(event.id);
+      }
+      const oldestId = createdIds[0];
+
+      await followLocalCalendar(authKeyG, calendarG.id, calendarH);
+
+      // Page through the feed with the client's default page size until the
+      // server says nothing more exists.
+      const seen: any[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const response = await env.authGet(
+          authKeyG,
+          `/api/v1/social/feed?calendarId=${calendarG.id}&page=${page}&pageSize=20`,
+        );
+        expect(response.status).toBe(200);
+        seen.push(...response.body.events);
+        hasMore = response.body.hasMore;
+        page++;
+        expect(page).toBeLessThan(10);
+      }
+
+      const seenIds = seen.map((e: any) => e.id);
+      expect(page).toBe(2);
+      expect(new Set(seenIds).size).toBe(seenIds.length);
+      expect(seenIds).toEqual([...createdIds].reverse());
+
+      const oldest = seen[seen.length - 1];
+      expect(oldest.id).toBe(oldestId);
+      expect(oldest.repostStatus).toBe('none');
+
+      const shareResponse = await env.authPost(authKeyG, '/api/v1/social/shares', {
+        calendarId: calendarG.id,
+        eventId: oldest.eventSourceUrl,
+      });
+      expect(shareResponse.status).toBe(200);
+
+      const lastPage = await env.authGet(
+        authKeyG,
+        `/api/v1/social/feed?calendarId=${calendarG.id}&page=1&pageSize=20`,
+      );
+      const oldestAfter = lastPage.body.events.find((e: any) => e.id === oldestId);
+      expect(oldestAfter.repostStatus).toBe('manual');
+    });
+
     it('should handle empty feed gracefully', async () => {
       // Create a new account with no follows
       const accountFInfo = await accountService._setupAccount('accountf@pavillion.dev', 'testpassword');

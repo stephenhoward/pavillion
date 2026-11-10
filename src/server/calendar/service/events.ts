@@ -2475,7 +2475,9 @@ class EventService {
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
-      order: [['createdAt', 'DESC']],
+      // id breaks ties between events created in the same instant (imports,
+      // seeds), so offset pages never overlap or skip an event.
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       replacements: { calendarId: calendar.id },
     });
 

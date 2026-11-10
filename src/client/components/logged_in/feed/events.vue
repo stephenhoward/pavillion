@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { DateTime } from 'luxon';
@@ -24,14 +24,14 @@ const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
 const pendingRepost = ref<PendingRepost | null>(null);
 const hasFollows = computed(() => feedStore.follows.length > 0);
-const sentinelRef = ref(null);
+const eventsListRef = ref<HTMLElement | null>(null);
+const loadMoreAnnouncement = ref('');
 const repostTriggerElement = ref(null);
 const reportingEventId = ref<string | null>(null);
 const reportingEventTitle = ref<string | null>(null);
 const reportTriggerElement = ref<HTMLElement | null>(null);
 const detailEvent = ref<FeedEvent | null>(null);
 const detailTriggerElement = ref<HTMLElement | null>(null);
-let observer = null;
 
 /**
  * Format event date and time for display.
@@ -249,58 +249,59 @@ const handleFollowCalendar = (event: MouseEvent) => {
 };
 
 /**
- * Load more events when scroll sentinel becomes visible
+ * Load the next page of events. Focus moves to the first event the page
+ * added so a keyboard user carries on reading where the new events begin,
+ * and the status region says how many arrived and whether the feed has
+ * ended.
  */
-const loadMore = () => {
-  if (!isLoading.value && hasMore.value) {
-    loadMoreFeed();
-  }
-};
-
-/**
- * Setup Intersection Observer for infinite scroll
- */
-onMounted(() => {
-  if (!sentinelRef.value) {
+const handleLoadMore = async () => {
+  if (isLoading.value || !hasMore.value) {
     return;
   }
 
-  observer = new IntersectionObserver(
-    (entries) => {
-      const sentinel = entries[0];
-      if (sentinel.isIntersecting) {
-        loadMore();
-      }
-    },
-    {
-      root: null,
-      rootMargin: '100px',
-      threshold: 0.1,
-    },
-  );
+  const previousCount = events.value.length;
+  loadMoreAnnouncement.value = '';
 
-  observer.observe(sentinelRef.value);
-});
-
-/**
- * Cleanup Intersection Observer
- */
-onUnmounted(() => {
-  if (observer && sentinelRef.value) {
-    observer.unobserve(sentinelRef.value);
-    observer.disconnect();
+  try {
+    await loadMoreFeed();
   }
-});
+  catch (error) {
+    console.error('Error loading more feed events:', error);
+    toast.error(t('load_more_error'));
+    return;
+  }
+
+  const added = events.value.length - previousCount;
+  const announcements: string[] = [];
+  if (added > 0) {
+    announcements.push(t('loaded_more', { count: added }));
+  }
+  if (!hasMore.value) {
+    announcements.push(t('end_of_feed'));
+  }
+  loadMoreAnnouncement.value = announcements.join(' ');
+
+  if (added > 0) {
+    await nextTick();
+    const items = eventsListRef.value?.querySelectorAll<HTMLElement>('[data-testid="event-item"]');
+    items?.[previousCount]?.focus();
+  }
+};
 </script>
 
 <template>
   <div class="events-container">
-    <div v-if="events.length" class="events-list">
+    <div
+      v-if="events.length"
+      ref="eventsListRef"
+      class="events-list"
+    >
       <div
         v-for="event in events"
         :key="event.id"
         class="event-item"
         data-testid="event-item"
+        tabindex="-1"
       >
         <div class="event-content">
           <h3 class="event-title">{{ getEventTitle(event) }}</h3>
@@ -375,20 +376,31 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Scroll sentinel for infinite scroll -->
-      <div
-        ref="sentinelRef"
-        class="scroll-sentinel"
-      />
-
-      <!-- Loading indicator -->
-      <div
-        v-if="isLoading"
-        class="loading-indicator"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <p>{{ t('loading_more') }}</p>
+      <div class="feed-pagination">
+        <button
+          v-if="hasMore"
+          type="button"
+          class="btn btn--secondary load-more-button"
+          data-testid="load-more-button"
+          :aria-disabled="isLoading ? 'true' : undefined"
+          @click="handleLoadMore"
+        >
+          {{ isLoading ? t('loading_more') : t('load_more_button') }}
+        </button>
+        <p
+          v-else
+          class="end-of-feed"
+          data-testid="end-of-feed"
+        >
+          {{ t('end_of_feed') }}
+        </p>
+        <p
+          class="sr-only"
+          role="status"
+          data-testid="load-more-status"
+        >
+          {{ loadMoreAnnouncement }}
+        </p>
       </div>
     </div>
 
@@ -478,6 +490,11 @@ div.events-container {
 
       &:hover {
         box-shadow: var(--pav-shadow-sm);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--pav-color-interactive-primary);
+        outline-offset: 2px;
       }
 
       div.event-content {
@@ -650,18 +667,26 @@ div.events-container {
       }
     }
 
-    div.scroll-sentinel {
-      height: 1px;
-      width: 100%;
-    }
+    div.feed-pagination {
+      display: flex;
+      justify-content: center;
+      padding: var(--pav-space-4) 0 var(--pav-space-6);
 
-    div.loading-indicator {
-      padding: var(--pav-space-6);
-      text-align: center;
+      button.load-more-button[aria-disabled='true'] {
+        cursor: progress;
+      }
 
-      p {
+      @include pav-media-down(md) {
+        button.load-more-button {
+          width: 100%;
+        }
+      }
+
+      p.end-of-feed {
+        margin: 0;
         color: var(--pav-color-text-secondary);
         font-size: var(--pav-font-size-xs);
+        text-align: center;
       }
     }
   }
