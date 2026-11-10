@@ -32,6 +32,7 @@ import {
   ActivityPubInboxMessageEntity,
   ActivityPubOutboxMessageEntity,
   FollowerCalendarEntity,
+  EventActivityEntity,
 } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -513,6 +514,39 @@ describe('Outbox drain', () => {
     expect(dispatchByType.called, 'the recipient is not dispatched to a second time').toBe(false);
     expect(await ActivityPubInboxMessageEntity.count({ where: { calendar_id: recipient.id, id: create.id } })).toBe(1);
     expect((await storedRow(row.id)).processed_status).toBe('ok');
+  });
+
+  it('does not dispatch a redelivered Announce back to the announcing calendar', async () => {
+    // A local follower taking the Announce records the announcing calendar as
+    // a share observer of the event; a redelivery would then list the
+    // announcing calendar among its own recipients.
+    const source = await createFollowedCalendar('drainselfannounce');
+    const recipient = await createFollowedCalendar('drainselfannouncelocal');
+    await addLocalFollower(source, recipient);
+    const announce = (await localAnnounce(source, 'self')).addressPublic(`${calendarActorUri(source)}/followers`);
+    const row = await writeOutboxRow(source, announce);
+
+    const eventBus = new EventEmitter();
+    const inboxService = new ProcessInboxService(eventBus, new CalendarInterface(eventBus));
+    await inboxService.handleLocalActivityDispatch(recipient, announce);
+    const inboxRow = await ActivityPubInboxMessageEntity.findOne({ where: { calendar_id: recipient.id, id: announce.id } });
+    expect(inboxRow?.processed_status, 'fixture: the first dispatch completed').toBe('ok');
+    const sourceActor = await CalendarActorEntity.findOne({ where: { calendar_id: source.id } });
+    expect(
+      await EventActivityEntity.count({ where: { event_id: announce.object as string, calendar_actor_id: sourceActor!.id, type: 'share' } }),
+      'fixture: the announcing calendar is recorded as a share observer',
+    ).toBe(1);
+    expect((await storedRow(row.id)).processed_time, 'fixture: the outbox row is stranded').toBeNull();
+
+    const dispatch = sandbox.spy(inboxService, 'handleLocalActivityDispatch');
+    await new ProcessOutboxService(eventBus, inboxService).processOutboxMessages();
+
+    expect(
+      dispatch.getCalls().filter(call => (call.args[0] as Calendar).id === source.id),
+      'the announcing calendar is not dispatched its own Announce',
+    ).toEqual([]);
+    expect((await storedRow(row.id)).processed_status).toBe('ok');
+    expect(postedInboxes(axiosPost)).toEqual([`${FOLLOWER}/inbox`]);
   });
 
   it('serves and counts a drained public row whose delivery to one follower failed', async () => {

@@ -333,6 +333,19 @@ describe('getRecipients', () => {
     const result = await service.getRecipients(calendar, { id: 'testobject' });
     expect(result).toStrictEqual([REMOTE_CALENDAR_HANDLE, OBSERVER_CALENDAR_HANDLE]);
   });
+
+  it('should omit the calendar\'s own actor among the observers', async () => {
+    sandbox.stub(FollowerCalendarEntity, 'findAll').resolves([]);
+    const observersStub = sandbox.stub(EventActivityEntity, 'findAll');
+    observersStub.resolves([
+      { calendarActor: { id: 'own-actor', calendar_id: TEST_CALENDAR_ID, actor_uri: 'https://local.example/calendars/own' } } as any,
+      { calendarActor: { id: 'other-actor', calendar_id: null, actor_uri: OBSERVER_CALENDAR_HANDLE } } as any,
+    ]);
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+    const result = await service.getRecipients(calendar, { id: 'testobject' });
+    expect(result).toStrictEqual([OBSERVER_CALENDAR_HANDLE]);
+  });
 });
 
 

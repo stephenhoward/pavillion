@@ -707,6 +707,7 @@ class ProcessOutboxService {
   /**
    * Gets a list of recipient actor URIs for a given calendar and object.
    * Includes followers of the calendar and calendars that have shared the specific object.
+   * The anchoring calendar's own actor is never returned.
    *
    * @param {Calendar} calendar - The source calendar
    * @param {ActivityPubObject|string} object - The ActivityPub object or its ID
@@ -714,6 +715,7 @@ class ProcessOutboxService {
    */
   async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
     let recipients: string[] = [];
+    const isOwnActor = (actor?: CalendarActorEntity | null) => actor?.calendar_id === calendar.id;
 
     // Get followers with their CalendarActorEntity to get the actor_uri
     const followers = await FollowerCalendarEntity.findAll({
@@ -721,7 +723,7 @@ class ProcessOutboxService {
       include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     for (const follower of followers) {
-      if (follower.calendarActor?.actor_uri) {
+      if (follower.calendarActor?.actor_uri && !isOwnActor(follower.calendarActor)) {
         recipients.push(follower.calendarActor.actor_uri);
       }
     }
@@ -736,7 +738,7 @@ class ProcessOutboxService {
         where: { id: object_id },
         include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
       });
-      if (followEntity?.calendarActor?.actor_uri) {
+      if (followEntity?.calendarActor?.actor_uri && !isOwnActor(followEntity.calendarActor)) {
         logger.info({ actorUri: followEntity.calendarActor.actor_uri }, 'Found follow relationship, adding recipient');
         recipients.push(followEntity.calendarActor.actor_uri);
       }
@@ -751,7 +753,7 @@ class ProcessOutboxService {
       include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     for (const observer of observers) {
-      if (observer.calendarActor?.actor_uri) {
+      if (observer.calendarActor?.actor_uri && !isOwnActor(observer.calendarActor)) {
         recipients.push(observer.calendarActor.actor_uri);
       }
     }
