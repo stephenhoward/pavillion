@@ -55,9 +55,14 @@ export interface Finding {
   url?: string;
 }
 
+export type FindingKind = Finding['kind'];
+
 export interface ScanSummary {
   scan: string;
+  /** All kinds combined, per severity. */
   counts: Record<Severity, number>;
+  /** The same counts split by kind. */
+  kindCounts: Record<FindingKind, Record<Severity, number>>;
   error?: string;
 }
 
@@ -78,6 +83,10 @@ export interface ReportInput {
 
 function emptyCounts(): Record<Severity, number> {
   return { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
+}
+
+function emptyKindCounts(): Record<FindingKind, Record<Severity, number>> {
+  return { vulnerability: emptyCounts(), misconfiguration: emptyCounts(), secret: emptyCounts() };
 }
 
 function asSeverity(value: unknown): Severity {
@@ -105,10 +114,11 @@ export function summarize(inputs: ReportInput[]): Summary {
 
   for (const input of inputs) {
     const counts = emptyCounts();
+    const kindCounts = emptyKindCounts();
 
     if (input.error) {
       errors.push(`${input.label}: ${input.error}`);
-      scans.push({ scan: input.label, counts, error: input.error });
+      scans.push({ scan: input.label, counts, kindCounts, error: input.error });
       continue;
     }
 
@@ -119,6 +129,7 @@ export function summarize(inputs: ReportInput[]): Summary {
       for (const v of asArray(result.Vulnerabilities)) {
         const severity = asSeverity(v.Severity);
         counts[severity]++;
+        kindCounts['vulnerability'][severity]++;
         total++;
         if (ACTIONABLE.includes(severity)) {
           findings.push({
@@ -139,6 +150,7 @@ export function summarize(inputs: ReportInput[]): Summary {
       for (const m of asArray(result.Misconfigurations)) {
         const severity = asSeverity(m.Severity);
         counts[severity]++;
+        kindCounts['misconfiguration'][severity]++;
         total++;
         if (ACTIONABLE.includes(severity)) {
           findings.push({
@@ -158,6 +170,7 @@ export function summarize(inputs: ReportInput[]): Summary {
       for (const s of asArray(result.Secrets)) {
         const severity = asSeverity(s.Severity);
         counts[severity]++;
+        kindCounts['secret'][severity]++;
         total++;
         findings.push({
           scan: input.label,
@@ -170,7 +183,7 @@ export function summarize(inputs: ReportInput[]): Summary {
       }
     }
 
-    scans.push({ scan: input.label, counts });
+    scans.push({ scan: input.label, counts, kindCounts });
   }
 
   const order = (f: Finding) => SEVERITIES.indexOf(f.severity);
@@ -249,6 +262,22 @@ export function renderMarkdown(summary: Summary, meta: ReportMeta = {}): string 
       s.error ? `${s.scan} (failed)` : s.scan,
       ...SEVERITIES.map(sev => String(s.counts[sev])),
     ]),
+  ]), '');
+
+  const kindLabels: [FindingKind, string][] = [
+    ['vulnerability', 'Vulnerabilities'],
+    ['misconfiguration', 'Misconfigurations'],
+    ['secret', 'Secrets'],
+  ];
+  lines.push(table([
+    ['Scan', 'Kind', ...SEVERITIES.map(s => s[0] + s.slice(1).toLowerCase())],
+    ...summary.scans
+      .filter(s => !s.error)
+      .flatMap(s => kindLabels.map(([kind, label]) => [
+        s.scan,
+        label,
+        ...SEVERITIES.map(sev => String(s.kindCounts[kind][sev])),
+      ])),
   ]), '');
 
   if (summary.actionable === 0) {
