@@ -13,7 +13,7 @@ export interface UseFeedEventsReturn {
 }
 
 /**
- * Composable for managing feed event loading and infinite scroll.
+ * Composable for managing feed event loading and pagination.
  * Guards against duplicate loadFeed() calls while loading.
  *
  * @returns Feed events loading state and methods
@@ -49,7 +49,7 @@ export function useFeedEvents(): UseFeedEventsReturn {
   };
 
   /**
-   * Load the next page of feed events for infinite scroll.
+   * Load the next page of feed events (the feed's "Load more" control).
    * Guarded: skips if already loading, no more pages, or no calendar selected.
    */
   const loadMore = async () => {
