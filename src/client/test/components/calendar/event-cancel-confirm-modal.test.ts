@@ -48,7 +48,7 @@ describe('EventCancelConfirmModal', () => {
       await flushPromises();
 
       expect(wrapper.find('.sheet-stub').exists()).toBe(true);
-      expect(wrapper.find('h2').text()).toBe('Cancel this instance?');
+      expect(wrapper.find('h2').text()).toBe('Cancel this date?');
     });
 
     it('renders the confirm_message body copy', async () => {
@@ -57,7 +57,7 @@ describe('EventCancelConfirmModal', () => {
       await flushPromises();
 
       expect(wrapper.text()).toContain(
-        'This will mark the selected occurrence as cancelled. You can restore it later.',
+        'This date will be marked as cancelled. It takes effect right away, even if you leave the editor without saving. You can restore it later.',
       );
     });
 
@@ -78,8 +78,35 @@ describe('EventCancelConfirmModal', () => {
 
       expect(wrapper.text()).toContain('Hide from public');
       expect(wrapper.text()).toContain(
-        'When enabled, this cancelled instance will not be shown on public calendars or federated out.',
+        'When on, this cancelled date will not appear on public calendars or be shared with other calendars.',
       );
+    });
+  });
+
+  describe('organizer wording', () => {
+    it('names the date in the heading when a date is given', async () => {
+      const wrapper = await mountModal({ date: 'Jan 1, 2030, 12:00 PM' });
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect(wrapper.find('h2').text()).toBe('Cancel Jan 1, 2030, 12:00 PM?');
+    });
+
+    it('labels the buttons "Keep it" and "Cancel this date"', async () => {
+      const wrapper = await mountModal();
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="confirm-cancel"]').text()).toBe('Keep it');
+      expect(wrapper.find('[data-testid="confirm-submit"]').text()).toBe('Cancel this date');
+    });
+
+    it('avoids developer jargon in the visible copy', async () => {
+      const wrapper = await mountModal();
+      currentWrapper = wrapper;
+      await flushPromises();
+
+      expect(wrapper.text()).not.toMatch(/instance|occurrence|federat/i);
     });
   });
 

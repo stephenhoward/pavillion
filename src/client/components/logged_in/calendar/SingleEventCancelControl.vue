@@ -21,6 +21,7 @@ import { useTranslation } from 'i18next-vue';
 
 import PillButton from '@/client/components/common/pill-button.vue';
 import EventCancelConfirmModal from '@/client/components/logged_in/calendar/EventCancelConfirmModal.vue';
+import { useToast } from '@/client/composables/useToast';
 import EventService, {
   type UpcomingOccurrence,
 } from '@/client/service/event';
@@ -35,6 +36,11 @@ const { t } = useTranslation('event_editor', {
 });
 
 const eventService = new EventService();
+const toast = useToast();
+
+function formatStart(start: DateTime): string {
+  return start.toLocaleString(DateTime.DATETIME_MED);
+}
 
 const state = ref<UpcomingOccurrence['state'] | null>(null);
 const showConfirm = ref(false);
@@ -95,6 +101,7 @@ async function onConfirmCancel() {
     // Show-as-cancelled only: hideFromPublic is always false here.
     await eventService.cancelOccurrence(props.event.id, start.toISO()!, false);
     state.value = 'cancelled-shown';
+    toast.success(t('cancelled_toast', { date: formatStart(start) }));
     // The cancel trigger has just been unmounted; return focus to the Restore
     // button that replaced it so focus doesn't drop to <body> (WCAG 2.4.3).
     await nextTick();
@@ -171,6 +178,7 @@ onMounted(() => {
 
     <EventCancelConfirmModal
       v-if="showConfirm"
+      :date="occurrenceStart ? formatStart(occurrenceStart) : ''"
       :allow-hide="false"
       @confirm="onConfirmCancel"
       @close="onCloseConfirm"

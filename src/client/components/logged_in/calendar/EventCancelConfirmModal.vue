@@ -19,6 +19,8 @@ import Sheet from '@/client/components/common/sheet.vue';
  *   suppressed and confirm always emits hideFromPublic:false. Used by the
  *   single-event cancel control where cancellation is show-as-cancelled only.
  *   Defaults to true so the recurring-instance flow is unchanged.
+ * @prop {string} date - Formatted date being cancelled; named in the heading
+ *   so the owner sees exactly which date the choice applies to.
  *
  * Emits:
  * @emits confirm - Fired when the user submits the confirmation
@@ -29,9 +31,11 @@ import Sheet from '@/client/components/common/sheet.vue';
 const props = withDefaults(
   defineProps<{
     allowHide?: boolean;
+    date?: string;
   }>(),
   {
     allowHide: true,
+    date: '',
   },
 );
 
@@ -65,7 +69,7 @@ function onSheetClose() {
 
 <template>
   <Sheet
-    :title="t('confirm_title')"
+    :title="props.date ? t('confirm_title_dated', { date: props.date }) : t('confirm_title')"
     @close="onSheetClose"
   >
     <div class="cancel-confirm-body">
@@ -92,7 +96,7 @@ function onSheetClose() {
           data-testid="confirm-cancel"
           @click="onCancel"
         >
-          {{ t('cancel_button') }}
+          {{ t('keep_button') }}
         </PillButton>
         <PillButton
           variant="primary"

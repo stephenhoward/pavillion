@@ -6,6 +6,7 @@ import { CalendarEvent } from '@/common/model/events';
 import EventCancellationsPanel from '@/client/components/logged_in/calendar/EventCancellationsPanel.vue';
 import EventCancelConfirmModal from '@/client/components/logged_in/calendar/EventCancelConfirmModal.vue';
 import { mountComponent } from '@/client/test/lib/vue';
+import { useToast, resetToastState } from '@/client/composables/useToast';
 
 const { listUpcomingOccurrencesMock, cancelOccurrenceMock, restoreOccurrenceMock } = vi.hoisted(() => ({
   listUpcomingOccurrencesMock: vi.fn(),
@@ -206,6 +207,34 @@ describe('EventCancellationsPanel (horizontal scroller)', () => {
 
     // State flip must NOT re-fetch — single-call assertion (advisor binding).
     expect(listUpcomingOccurrencesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the date in the confirmation and tells the owner it took effect immediately', async () => {
+    resetToastState();
+    const occ = makeOccurrences(1)[0];
+    listUpcomingOccurrencesMock.mockResolvedValue({ occurrences: [occ], hasMore: false });
+
+    const wrapper = await mountPanel({ event: makeRecurringEvent() });
+    currentWrapper = wrapper;
+    await flushPromises();
+
+    await wrapper.find('[data-testid="occurrence-card-cancel"]').trigger('click');
+    await flushPromises();
+
+    const modal = wrapper.findComponent(EventCancelConfirmModal);
+    expect(modal.props('date')).toBeTruthy();
+    expect(wrapper.find('h2').text()).toBe(`Cancel ${modal.props('date')}?`);
+
+    modal.vm.$emit('confirm', { hideFromPublic: false });
+    await flushPromises();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0].type).toBe('success');
+    expect(toasts.value[0].message).toContain('is cancelled');
+    expect(toasts.value[0].message).toContain('took effect immediately');
+    expect(toasts.value[0].message).toContain('do not need to save');
+    resetToastState();
   });
 
   it('restores via restoreOccurrence and flips state to active in place', async () => {
