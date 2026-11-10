@@ -32,7 +32,7 @@ human-in-loop work. Do not force them through this command.
   questions and never waits on a human (anything that would have been a
   confirmation or a "needs your decision" prompt goes into the report
   instead); runs the **queue gate** before dispatching anything, ships at most
-  **5 Tier-A PRs**, and writes the per-run **report file** as it goes — see
+  **8 Tier-A PRs**, and writes the per-run **report file** as it goes — see
   "Scheduled mode" below. Mutually exclusive
   with `--confirm`. The queue gate runs ONLY in this mode: a manual
   invocation (any other argument combination) never checks the queue.
@@ -210,7 +210,7 @@ on Sonnet (Agent tool `model: "sonnet"`; see "Model rule" below).
   conflict at merge time. Serial is safer; if parallelizing, group only
   disjoint-file beads in a batch and note any same-file pair so the user knows
   the merge order is non-trivial.
-- **`--scheduled` only — hard cap: 5 Tier-A PRs per run.** Tier-A beads
+- **`--scheduled` only — hard cap: 8 Tier-A PRs per run.** Tier-A beads
   beyond the cap are not dispatched; list them in the report as *deferred
   (Tier-A cap)* with the reason each was a Tier-A candidate, so a future run or
   a human can pick them up. Manual runs have no Tier-A cap.
@@ -346,7 +346,7 @@ PRs that are passing CI and have no unresolved change request. If that count
 is **10 or more**, or the **oldest** such PR is **older than 7 days**, stand
 down: dispatch nothing and write a short report recording the gate reading.
 
-**Tier-A cap.** At most **5 Tier-A PRs** per scheduled run (Phase 3); the
+**Tier-A cap.** At most **8 Tier-A PRs** per scheduled run (Phase 3); the
 3-PR Tier-B cap applies as in every `--include-b` run.
 
 The queue-gate values and the Tier-A cap are fixed constants sized to the
