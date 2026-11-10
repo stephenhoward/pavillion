@@ -198,6 +198,12 @@ class WallClockFrame {
  */
 const FLOATING_WINDOW_SLACK_MS = 2 * 24 * 60 * 60 * 1000;
 
+/** How far ahead `hasEnded` looks for an occurrence still to come: two years. */
+const HAS_ENDED_LOOKAHEAD_MS = 2 * 366 * 24 * 60 * 60 * 1000;
+
+/** How far back `hasEnded` looks for an occurrence still in progress: a year. */
+const HAS_ENDED_LOOKBACK_MS = 366 * 24 * 60 * 60 * 1000;
+
 /** The upper bound of an open-ended rule walk: rrule's own last year. */
 const END_OF_RRULE_TIME = new Date(Date.UTC(9999, 11, 31));
 
@@ -924,14 +930,28 @@ export default class EventInstanceService {
    * cancellations are not occurrences; shown ones still are.
    *
    * An event with no dated schedule cannot be placed in time and is treated
-   * as not ended.
+   * as not ended, as is one whose schedule starts after `now`.
+   *
+   * Federated schedules reach this through auto-repost, so every walk is
+   * bounded: occurrences are looked for only in a window from
+   * {@link HAS_ENDED_LOOKBACK_MS} (or the occurrence length, if shorter)
+   * before `now` to {@link HAS_ENDED_LOOKAHEAD_MS} after it, the same kind of
+   * bounded expansion that materializing instances does. Never the
+   * open-ended `after()`, which a rule cancelled by an identical hidden rule
+   * would walk to year 9999. So an event whose next occurrence is more than
+   * the lookahead away, or whose current one began more than the lookback
+   * ago, counts as ended.
    *
    * @param event - The event; its schedules must be loaded
    * @param now - The instant to compare against
    */
   hasEnded(event: CalendarEvent, now: DateTime = DateTime.now()): boolean {
-    const dated = (event.schedules ?? []).some(s => !s.isExclusion && s.startDate);
-    if (!dated) {
+    const dated = (event.schedules ?? []).filter(s => !s.isExclusion && s.startDate);
+    if (dated.length === 0) {
+      return false;
+    }
+    const nowMs = now.toMillis();
+    if (dated.some(s => s.startDate!.toMillis() > nowMs)) {
       return false;
     }
 
@@ -942,18 +962,17 @@ export default class EventInstanceService {
     const durationMs = base?.startDate && base.eventEndTime
       ? Math.max(0, base.eventEndTime.toMillis() - base.startDate.toMillis())
       : 0;
-    const occurrences = this.rrules(event);
-    const nowMs = now.toMillis();
-    let start = occurrences.after(new Date(nowMs - durationMs - FLOATING_WINDOW_SLACK_MS));
-    while (start && start.getTime() <= nowMs) {
-      const startTime = DateTime.fromJSDate(start).setZone(base?.startDate?.zone ?? 'utc');
-      const end = this.computeOccurrenceEndTime(event, startTime) ?? startTime;
-      if (end.toMillis() > nowMs) {
-        return false;
+    const from = new Date(nowMs - Math.min(durationMs, HAS_ENDED_LOOKBACK_MS) - FLOATING_WINDOW_SLACK_MS);
+    const to = new Date(nowMs + HAS_ENDED_LOOKAHEAD_MS);
+    const zone = base?.startDate?.zone ?? 'utc';
+    return !this.rrules(event).between(from, to).some(start => {
+      if (start.getTime() > nowMs) {
+        return true;
       }
-      start = occurrences.after(start);
-    }
-    return start === null;
+      const startTime = DateTime.fromJSDate(start).setZone(zone);
+      const end = this.computeOccurrenceEndTime(event, startTime) ?? startTime;
+      return end.toMillis() > nowMs;
+    });
   }
 
   /**

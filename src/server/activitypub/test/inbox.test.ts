@@ -524,6 +524,35 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(emittedEvents[0].reposterDisplayName).toBeUndefined();
     });
 
+    it('should not emit activitypub:event:reposted again for a share already recorded', async () => {
+      // Arrange: the same Announce reaching a second local follower, or a
+      // same-instance follow replaying the sharer's past Announces, finds the
+      // share already recorded and is not a new repost.
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+      sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(localEventId, testCalendar.id));
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      sandbox.stub(EventActivityEntity, 'findOne').resolves({ id: uuidv4() } as any);
+      const createStub = sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, new AnnounceActivity(remoteActorUrl, apObjectId));
+
+      // Assert
+      expect(createStub.called).toBe(false);
+      expect(emittedEvents).toHaveLength(0);
+    });
+
     it('should not emit activitypub:event:reposted when a remote (non-local) event is announced', async () => {
       // Arrange: actor and object must be on the same domain (domain-match security check)
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';

@@ -108,6 +108,8 @@ class ProcessOutboxService {
   calendarActorService: CalendarActorService;
   private userActorService: UserActorService;
   private inboxService: ProcessInboxService;
+  /** Tail of the one-at-a-time chain of local follow catch-ups. */
+  private catchUpQueue: Promise<void> = Promise.resolve();
 
   /**
    * @param eventBus - Shared event bus
@@ -635,10 +637,24 @@ class ProcessOutboxService {
    * replayed (the served set holds none and drops an undone Announce), so a
    * skipped row cannot leave a later row without its target.
    *
+   * Catch-ups run one at a time in this process, so a burst of follows queues
+   * rather than running thousands of dispatches at once.
+   *
    * @param followerCalendarId - The local calendar that sent the Follow
    * @param followedCalendarId - The local calendar it followed
    */
   async catchUpLocalFollower(followerCalendarId: string, followedCalendarId: string): Promise<void> {
+    const run = this.catchUpQueue.then(() => this.runLocalCatchUp(followerCalendarId, followedCalendarId));
+    this.catchUpQueue = run.catch(() => {});
+    return run;
+  }
+
+  /** One catch-up; see {@link catchUpLocalFollower}. */
+  private async runLocalCatchUp(followerCalendarId: string, followedCalendarId: string): Promise<void> {
+    if (followerCalendarId === followedCalendarId) {
+      logger.warn({ followerCalendarId }, 'Local follow catch-up skipped: a calendar cannot follow itself');
+      return;
+    }
     const follower = await this.calendarService.getCalendar(followerCalendarId);
     if (!follower) {
       logger.warn({ followerCalendarId }, 'Local follow catch-up skipped: follower calendar not found');

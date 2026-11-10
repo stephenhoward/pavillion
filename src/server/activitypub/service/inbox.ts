@@ -2853,8 +2853,12 @@ class ProcessInboxService {
       });
     }
 
-    // Emit domain event for notification system if the reposted event is local
-    if (apObject) {
+    // Emit domain event for notification system if the reposted event is
+    // local, once per (event, sharer): only when this share is first
+    // recorded. The same Announce reaches every local follower of the sharer,
+    // and a same-instance follow replays the sharer's past Announces to the
+    // new follower; neither is a new repost to tell the event's editors about.
+    if (apObject && !existingShare) {
       try {
         const localEvent = await this.calendarInterface.getEventById(apObject.event_id);
         if (localEvent && localEvent.calendarId !== null) {

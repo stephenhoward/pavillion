@@ -1307,6 +1307,27 @@ describe('EventInstanceService.hasEnded', () => {
   it('has not ended when it has no dated schedule to place it in time', () => {
     expect(service.hasEnded(eventWith(), NOW)).toBe(false);
   });
+
+  it('answers within a bound when a hidden rule cancels every date of an open-ended series', () => {
+    // A peer can send a daily rule with no end and a hidden cancellation with
+    // the same rule; an unbounded walk for the next date would reach 9999.
+    const event = eventWith(
+      schedule('2020-01-01T18:00:00', { durationHours: 2, frequency: EventFrequency.DAILY }),
+      schedule('2020-01-01T18:00:00', { frequency: EventFrequency.DAILY, isExclusion: true, hideFromPublic: true }),
+    );
+
+    const started = Date.now();
+    expect(service.hasEnded(event, NOW)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('has ended when its next date is beyond the two-year lookahead', () => {
+    // Every five years: the next date after 2025 is in 2030.
+    const event = eventWith(schedule('2025-06-01T18:00:00', { durationHours: 2, frequency: EventFrequency.YEARLY }));
+    event.schedules[0].interval = 5;
+
+    expect(service.hasEnded(event, NOW)).toBe(true);
+  });
 });
 
 /**
