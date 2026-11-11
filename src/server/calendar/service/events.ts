@@ -166,6 +166,39 @@ export type EventOriginatorContext = {
   source: 'user' | 'import';
 };
 
+/**
+ * Settles the zone of an edited schedule row (DEC-023 rule 1: recurrence
+ * expands in the schedule's own zone).
+ *
+ * A payload that carries a valid IANA zone sets it. One that carries none (a
+ * bare offset ISO string with no `timezone`) must not rewrite the stored
+ * zone to a fixed offset, so the stored zone is kept and the parsed dates are
+ * re-expressed in it (same instants) before they are stored or expanded.
+ *
+ * @param schedule - the wire schedule from the payload
+ * @param parsed - the schedule parsed from it; its dates are updated in place
+ * @param storedZone - the zone already stored on the row
+ * @returns the zone to store
+ */
+function applyScheduleZone(
+  schedule: Record<string, any>,
+  parsed: CalendarEventSchedule,
+  storedZone: string,
+): string {
+  const payloadZone = CalendarEventSchedule.parseZone(schedule.timezone);
+  if (payloadZone) {
+    return payloadZone;
+  }
+  const inStored = (dt: DateTime | null): DateTime | null => {
+    const moved = dt?.setZone(storedZone);
+    return moved?.isValid ? moved : dt;
+  };
+  parsed.startDate = inStored(parsed.startDate);
+  parsed.endDate = inStored(parsed.endDate);
+  parsed.eventEndTime = inStored(parsed.eventEndTime);
+  return storedZone;
+}
+
 const DEFAULT_ORIGINATOR_CONTEXT: EventOriginatorContext = { source: 'user' };
 
 /**
@@ -1419,11 +1452,12 @@ class EventService {
         // is_exclusion is intentionally NOT written from the payload: this
         // helper is positive-only, and the partition above guarantees we
         // never see isException=true here.
+        const zone = applyScheduleZone(schedule, parsed, scheduleEntity.timezone);
         const toStorage = EventScheduleEntity.toStorageDate;
         const newStartDate = toStorage(parsed.startDate) ?? scheduleEntity.start_date;
         const newFrequency = 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency;
         await scheduleEntity.update({
-          timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
+          timezone: zone,
           start_date: newStartDate,
           end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
           event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
@@ -1712,9 +1746,10 @@ class EventService {
           // end and eventEndTime are clearable: toObject() always emits them
           // (null when unset), so presence of the key, not its value, decides
           // whether to overwrite.
+          const zone = applyScheduleZone(schedule, parsed, scheduleEntity.timezone);
           const toStorage = EventScheduleEntity.toStorageDate;
           await scheduleEntity.update({
-            timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
+            timezone: zone,
             start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
             end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
             event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,

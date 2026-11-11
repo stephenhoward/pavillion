@@ -20,6 +20,8 @@ import FollowActivity from '@/server/activitypub/model/action/follow';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
+import EventService from '@/server/calendar/service/events';
+import { expandScheduleOccurrences } from '@/server/calendar/service/event_instance';
 
 describe('Event API', () => {
   let account: Account;
@@ -238,6 +240,55 @@ describe('Event API', () => {
       expect(stored?.id, 'same schedule row').toBe(existing!.id);
       expect(stored?.timezone, 'zone stored on the schedule row').toBe('America/Los_Angeles');
       expect(stored?.toModel().startDate?.toUTC().toISO(), '17:15Z').toBe('2026-10-27T17:15:00.000Z');
+    });
+
+    // The same edit with the zone left off: a bare offset start, as a client or
+    // peer that does not know the zone would send it.
+    const offsetScheduleWithoutZone = (id: string): Record<string, any> => {
+      const { timezone: _dropped, ...rest } = zonedSchedule('America/Los_Angeles', id);
+      return { ...rest, start: '2026-10-27T17:15:00.000Z', eventEndTime: '2026-10-27T18:15:00.000Z' };
+    };
+
+    // Occurrences read back from the stored row, across the 2026-11-01 DST change.
+    const storedOccurrences = async (eventId: string): Promise<string[]> => {
+      const stored = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+      expect(stored?.timezone, 'zone kept on the schedule row').toBe('America/Los_Angeles');
+      const model = stored!.toModel();
+      return expandScheduleOccurrences(model, model, null, 3).map(d => d.toISOString());
+    };
+
+    const KEPT_OCCURRENCES = [
+      '2026-10-27T17:15:00.000Z',
+      '2026-11-03T18:15:00.000Z',
+      '2026-11-10T18:15:00.000Z',
+    ];
+
+    it('updateEvent: should keep the stored zone when the schedule carries none', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+      const eventId = await createWithSchedule(authKey, zonedSchedule('America/Los_Angeles'));
+      const existing = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+
+      const updated = await env.authPut(authKey, `/api/v1/events/${eventId}`, {
+        calendarId: calendar.id,
+        content: { en: { name: 'Zoned Event', description: 'Weekly event' } },
+        schedules: [offsetScheduleWithoutZone(existing!.id)],
+      });
+      expect(updated.status, 'event updated').toBe(200);
+
+      expect(await storedOccurrences(eventId), 'local time held across the DST change').toEqual(KEPT_OCCURRENCES);
+    });
+
+    it('updateRemoteEvent: should keep the stored zone when the schedule carries none', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+      const eventId = await createWithSchedule(authKey, zonedSchedule('America/Los_Angeles'));
+      const existing = await EventScheduleEntity.findOne({ where: { event_id: eventId } });
+
+      await new EventService(new EventEmitter()).updateRemoteEvent(calendar, {
+        id: eventId,
+        schedules: [offsetScheduleWithoutZone(existing!.id)],
+      });
+
+      expect(await storedOccurrences(eventId), 'local time held across the DST change').toEqual(KEPT_OCCURRENCES);
     });
   });
 });
