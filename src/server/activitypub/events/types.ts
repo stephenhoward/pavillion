@@ -37,22 +37,26 @@ export interface RemoteEditorRevokedPayload {
 }
 
 /**
- * Emitted when a remote instance's Accept(Follow) confirms a follow we
- * initiated on a remote-type target. Consumers (the in-domain handler)
- * publish an `activitypub:follow:backfill` pg-boss job so the worker
- * can pull the remote calendar's event history into Pavillion.
+ * Emitted when an Accept(Follow) confirms a follow we initiated. The
+ * in-domain handler catches the follower up on the followed calendar's
+ * history: for a remote target it publishes an `activitypub:follow:backfill`
+ * pg-boss job so the worker pulls the remote outbox; for a calendar on this
+ * instance it replays that calendar's outbox to the follower in process.
  *
  * - `followingCalendarId`: id of the local Calendar that initiated the follow
  *   (FollowingCalendarEntity.calendar_id).
- * - `calendarActorId`: id of the remote CalendarActorEntity being followed
+ * - `calendarActorId`: id of the CalendarActorEntity being followed
  *   (FollowingCalendarEntity.calendar_actor_id).
- * - `sourceActorUri`: actor URI of the remote calendar whose outbox the
- *   backfill worker will read.
+ * - `sourceActorUri`: actor URI of the followed calendar, whose outbox the
+ *   catch-up reads.
+ * - `followedCalendarId`: set only when the followed calendar is on this
+ *   instance; its Calendar id.
  */
 export interface ActivityPubFollowAcceptedPayload {
   followingCalendarId: string;
   calendarActorId: string;
   sourceActorUri: string;
+  followedCalendarId?: string;
 }
 
 /**

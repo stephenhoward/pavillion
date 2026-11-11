@@ -181,6 +181,7 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
   let router: express.Router;
   let calendarInterface: CalendarInterface;
   let sandbox: sinon.SinonSandbox;
+  let applyToAutoRepostsStub: sinon.SinonStub;
 
   const calendarId = '11111111-1111-4111-8111-111111111111';
   const actorId = '22222222-2222-4222-8222-222222222222';
@@ -208,6 +209,10 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
       (calendarInterface as any).categoryMappingService,
       'getActorInFollowing',
     ).resolves(mockActorModel);
+    applyToAutoRepostsStub = sandbox.stub(
+      (calendarInterface as any).categoryMappingService,
+      'applyMappingsToAutoReposts',
+    ).resolves();
   });
 
   afterEach(() => {
@@ -377,6 +382,37 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
   });
 
   describe('successful updates', () => {
+    it('applies the saved mappings to the calendar\'s existing auto-reposts from the source', async () => {
+      sandbox.stub(EventCategoryEntity, 'findAll').resolves([EventCategoryEntity.build({ id: localCategoryId, calendar_id: calendarId })]);
+      sandbox.stub(CalendarCategoryMappingEntity, 'destroy').resolves(0 as any);
+      sandbox.stub(CalendarCategoryMappingEntity, 'create').resolves({} as any);
+      sandbox.stub(CalendarCategoryMappingEntity, 'findAll').resolves([]);
+      setupPutHandler();
+
+      const response = await request(testApp(router))
+        .put('/handler')
+        .send({ mappings: [{ sourceCategoryId, sourceCategoryName: 'Music', localCategoryId }] });
+
+      expect(response.status).toBe(200);
+      expect(applyToAutoRepostsStub.calledOnceWithExactly(calendarId, actorId)).toBe(true);
+    });
+
+    it('still saves the mappings when applying them to existing auto-reposts fails', async () => {
+      sandbox.stub(EventCategoryEntity, 'findAll').resolves([EventCategoryEntity.build({ id: localCategoryId, calendar_id: calendarId })]);
+      sandbox.stub(CalendarCategoryMappingEntity, 'destroy').resolves(0 as any);
+      const createStub = sandbox.stub(CalendarCategoryMappingEntity, 'create').resolves({} as any);
+      sandbox.stub(CalendarCategoryMappingEntity, 'findAll').resolves([]);
+      applyToAutoRepostsStub.rejects(new Error('database unavailable'));
+      setupPutHandler();
+
+      const response = await request(testApp(router))
+        .put('/handler')
+        .send({ mappings: [{ sourceCategoryId, sourceCategoryName: 'Music', localCategoryId }] });
+
+      expect(response.status).toBe(200);
+      expect(createStub.calledOnce).toBe(true);
+    });
+
     it('should accept exactly 100 entries without rejecting', async () => {
       const localCategoryEntityId = localCategoryId;
       const localCat = EventCategoryEntity.build({

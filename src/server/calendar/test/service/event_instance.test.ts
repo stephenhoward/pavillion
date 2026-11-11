@@ -1223,6 +1223,114 @@ describe('EventInstanceService.findSameDayOccurrence', () => {
 });
 
 /**
+ * Tests for EventInstanceService.hasEnded: whether every occurrence of an
+ * event is over, which keeps auto-repost from reposting history. Pure over
+ * the event's in-memory schedules.
+ */
+describe('EventInstanceService.hasEnded', () => {
+  const CHICAGO = 'America/Chicago';
+  const NOW = DateTime.fromISO('2026-11-10T12:00:00', { zone: CHICAGO });
+  let service: EventInstanceService;
+
+  function schedule(startIso: string, opts: {
+    durationHours?: number;
+    frequency?: EventFrequency;
+    seriesEndIso?: string;
+    isExclusion?: boolean;
+    hideFromPublic?: boolean;
+  } = {}): CalendarEventSchedule {
+    const start = DateTime.fromISO(startIso, { zone: CHICAGO });
+    const s = new CalendarEventSchedule(uuidv4(), start);
+    s.eventEndTime = opts.durationHours ? start.plus({ hours: opts.durationHours }) : null;
+    s.endDate = opts.seriesEndIso ? DateTime.fromISO(opts.seriesEndIso, { zone: CHICAGO }) : null;
+    s.frequency = opts.frequency ?? null;
+    s.interval = opts.frequency ? 1 : 0;
+    s.count = 0;
+    s.byDay = [];
+    s.isExclusion = opts.isExclusion ?? false;
+    s.hideFromPublic = opts.hideFromPublic ?? true;
+    return s;
+  }
+
+  function eventWith(...schedules: CalendarEventSchedule[]): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = schedules;
+    return event;
+  }
+
+  beforeEach(() => {
+    service = new EventInstanceService(new EventEmitter());
+  });
+
+  it('has ended when its only date is past', () => {
+    expect(service.hasEnded(eventWith(schedule('2026-09-10T18:00:00', { durationHours: 2 })), NOW)).toBe(true);
+  });
+
+  it('has not ended when its only date is ahead', () => {
+    expect(service.hasEnded(eventWith(schedule('2027-01-10T18:00:00', { durationHours: 2 })), NOW)).toBe(false);
+  });
+
+  it('has not ended while its occurrence is in progress', () => {
+    expect(service.hasEnded(eventWith(schedule('2026-11-10T11:00:00', { durationHours: 2 })), NOW)).toBe(false);
+  });
+
+  it('has ended once an occurrence with no end time has started', () => {
+    expect(service.hasEnded(eventWith(schedule('2026-11-10T11:59:00')), NOW)).toBe(true);
+  });
+
+  it('has not ended when a series that began in the past has dates ahead', () => {
+    const event = eventWith(schedule('2026-10-01T18:00:00', { durationHours: 2, frequency: EventFrequency.WEEKLY }));
+
+    expect(service.hasEnded(event, NOW)).toBe(false);
+  });
+
+  it('has ended when a series\' last date is past', () => {
+    const event = eventWith(schedule('2026-09-01T18:00:00', {
+      durationHours: 2,
+      frequency: EventFrequency.WEEKLY,
+      seriesEndIso: '2026-10-01T23:59:00',
+    }));
+
+    expect(service.hasEnded(event, NOW)).toBe(true);
+  });
+
+  it('has ended when its only future date is a hidden cancellation', () => {
+    const event = eventWith(
+      // Mondays 2, 9 and 16 November; NOW is Tuesday 10 November.
+      schedule('2026-11-02T18:00:00', { durationHours: 2, frequency: EventFrequency.WEEKLY, seriesEndIso: '2026-11-16T23:59:00' }),
+      schedule('2026-11-16T18:00:00', { isExclusion: true, hideFromPublic: true }),
+    );
+
+    expect(service.hasEnded(event, NOW)).toBe(true);
+  });
+
+  it('has not ended when it has no dated schedule to place it in time', () => {
+    expect(service.hasEnded(eventWith(), NOW)).toBe(false);
+  });
+
+  it('answers within a bound when a hidden rule cancels every date of an open-ended series', () => {
+    // A peer can send a daily rule with no end and a hidden cancellation with
+    // the same rule; an unbounded walk for the next date would reach 9999.
+    const event = eventWith(
+      schedule('2020-01-01T18:00:00', { durationHours: 2, frequency: EventFrequency.DAILY }),
+      schedule('2020-01-01T18:00:00', { frequency: EventFrequency.DAILY, isExclusion: true, hideFromPublic: true }),
+    );
+
+    const started = Date.now();
+    expect(service.hasEnded(event, NOW)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('has ended when its next date is beyond the two-year lookahead', () => {
+    // Every five years: the next date after 2025 is in 2030.
+    const event = eventWith(schedule('2025-06-01T18:00:00', { durationHours: 2, frequency: EventFrequency.YEARLY }));
+    event.schedules[0].interval = 5;
+
+    expect(service.hasEnded(event, NOW)).toBe(true);
+  });
+});
+
+/**
  * Tests for EventInstanceService.cancelOccurrenceByDate and
  * .restoreOccurrenceByDate.
  *

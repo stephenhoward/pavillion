@@ -44,6 +44,7 @@ import {
   getFollows,
   updateFollowPolicy,
   unshareEvent,
+  eventTimes,
 } from './helpers/api';
 
 test.describe('Sticky Unpost of Auto-Reposted Events', () => {
@@ -107,6 +108,7 @@ test.describe('Sticky Unpost of Auto-Reposted Events', () => {
 
     // --- Alpha publishes event X ------------------------------------------
     const originalTitle = `Sticky Unpost Event ${Date.now()}`;
+    const originalTimes = eventTimes(30, 18);
     await createEvent(INSTANCE_ALPHA, aliceToken, {
       calendarId: aliceCalendar.id,
       content: {
@@ -115,8 +117,7 @@ test.describe('Sticky Unpost of Auto-Reposted Events', () => {
           description: 'This event should auto-repost to Bob, then be unposted.',
         },
       },
-      startTime: '2026-05-01T18:00:00Z',
-      endTime: '2026-05-01T20:00:00Z',
+      ...originalTimes,
     });
 
     // Wait for federation propagation
@@ -194,8 +195,7 @@ test.describe('Sticky Unpost of Auto-Reposted Events', () => {
           description: 'Re-broadcast after unpost',
         },
       },
-      startTime: '2026-05-01T18:00:00Z',
-      endTime: '2026-05-01T20:00:00Z',
+      ...originalTimes,
     });
 
     // Wait for Update(Event) to federate to Beta

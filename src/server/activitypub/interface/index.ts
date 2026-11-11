@@ -405,6 +405,19 @@ export default class ActivityPubInterface {
     return this.outboxService.markOutboxMessageFailed(message, error);
   }
 
+  /**
+   * Catches a local calendar up on a calendar on this instance it just
+   * followed, by replaying the followed calendar's served outbox to it.
+   * Web process only, like the outbox drain: it runs local dispatch.
+   *
+   * @param followerCalendarId - The local calendar that sent the Follow
+   * @param followedCalendarId - The local calendar it followed
+   * @returns {Promise<void>}
+   */
+  async catchUpLocalFollower(followerCalendarId: string, followedCalendarId: string): Promise<void> {
+    return this.outboxService.catchUpLocalFollower(followerCalendarId, followedCalendarId);
+  }
+
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {
     await this.inboxService.processInboxMessage(message);
   }
@@ -573,6 +586,18 @@ export default class ActivityPubInterface {
    */
   async getActorInFollowing(calendarId: string, actorId: string): Promise<CalendarActor> {
     return this.memberService.getActorInFollowing(calendarId, actorId);
+  }
+
+  /**
+   * The events a calendar auto-reposted that the given followed calendar
+   * authored, each with the source categories recorded when it arrived
+   * (empty when none were recorded).
+   *
+   * @param calendarId - The local calendar that auto-reposted
+   * @param sourceActorId - The CalendarActor entity ID of the followed calendar
+   */
+  async listAutoRepostedOriginals(calendarId: string, sourceActorId: string): Promise<{ eventId: string; sourceCategories: { id: string }[] }[]> {
+    return this.memberService.listAutoRepostedOriginals(calendarId, sourceActorId);
   }
 
   /**

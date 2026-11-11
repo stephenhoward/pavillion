@@ -42,7 +42,7 @@ import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
-import { boundProcessedStatus } from "@/server/activitypub/helper/outbox";
+import { OUTBOX_PAGE_SIZE, boundProcessedStatus, servedOutboxWhere } from "@/server/activitypub/helper/outbox";
 import { FederationDeliveryError } from "@/common/exceptions/activitypub";
 import { ActivityIdOriginMismatchError, isActivityIdOnOrigin } from "@/server/activitypub/helper/activity-id-origin";
 
@@ -72,6 +72,34 @@ function objectIdOf(object: unknown): string | null {
 }
 
 /**
+ * The most outbox rows a same-instance follow replays to the new follower:
+ * what a remote follower's backfill walk reads at most, its 50-page cap
+ * (`MAX_OUTBOX_PAGES`) of our outbox's page size. (Importing the cap from the
+ * backfill service would close the import cycle noted at {@link objectIdOf}.)
+ */
+export const LOCAL_CATCH_UP_LIMIT = 50 * OUTBOX_PAGE_SIZE;
+
+/**
+ * Parses a served outbox row (Create, Update, Delete or Announce) back into
+ * its activity, or null when the type is not served or the message does not
+ * parse.
+ */
+function parseServedActivity(row: ActivityPubOutboxMessageEntity): ActivityPubActivity | null {
+  switch (row.type) {
+    case 'Create':
+      return CreateActivity.fromObject(row.message);
+    case 'Update':
+      return UpdateActivity.fromObject(row.message);
+    case 'Delete':
+      return DeleteActivity.fromObject(row.message);
+    case 'Announce':
+      return AnnounceActivity.fromObject(row.message);
+    default:
+      return null;
+  }
+}
+
+/**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
  * Handles delivery of various activity types to followers and other recipients.
  */
@@ -80,6 +108,8 @@ class ProcessOutboxService {
   calendarActorService: CalendarActorService;
   private userActorService: UserActorService;
   private inboxService: ProcessInboxService;
+  /** Tail of the one-at-a-time chain of local follow catch-ups. */
+  private catchUpQueue: Promise<void> = Promise.resolve();
 
   /**
    * @param eventBus - Shared event bus
@@ -584,6 +614,76 @@ class ProcessOutboxService {
         processed_status: 'bad message type',
       });
     }
+  }
+
+  /**
+   * Catches a new local follower up on a calendar on this instance it just
+   * followed: replays the followed calendar's served outbox (DEC-024) to the
+   * follower, oldest first, through local dispatch.
+   *
+   * This is the same-instance counterpart of the follow-backfill worker. A
+   * remote follower's backfill walks the same rows over HTTP; here they are
+   * read from the database and dispatched in process, so each one reaches the
+   * follower as it would have live — auto-repost, category mappings and the
+   * dismissal guard included. Like the walk, it takes at most
+   * {@link LOCAL_CATCH_UP_LIMIT} rows, the newest.
+   *
+   * Local dispatch's trust contract holds: every row is read from `ap_outbox`,
+   * which only local service code writes, and the recipient is a local
+   * calendar. Dispatch is idempotent per recipient, so a repeat run is a
+   * no-op for rows the follower already processed.
+   *
+   * A row that fails to parse or dispatch is logged and skipped. No Undo is
+   * replayed (the served set holds none and drops an undone Announce), so a
+   * skipped row cannot leave a later row without its target.
+   *
+   * Catch-ups run one at a time in this process, so a burst of follows queues
+   * rather than running thousands of dispatches at once.
+   *
+   * @param followerCalendarId - The local calendar that sent the Follow
+   * @param followedCalendarId - The local calendar it followed
+   */
+  async catchUpLocalFollower(followerCalendarId: string, followedCalendarId: string): Promise<void> {
+    const run = this.catchUpQueue.then(() => this.runLocalCatchUp(followerCalendarId, followedCalendarId));
+    this.catchUpQueue = run.catch(() => {});
+    return run;
+  }
+
+  /** One catch-up; see {@link catchUpLocalFollower}. */
+  private async runLocalCatchUp(followerCalendarId: string, followedCalendarId: string): Promise<void> {
+    if (followerCalendarId === followedCalendarId) {
+      logger.warn({ followerCalendarId }, 'Local follow catch-up skipped: a calendar cannot follow itself');
+      return;
+    }
+    const follower = await this.calendarService.getCalendar(followerCalendarId);
+    if (!follower) {
+      logger.warn({ followerCalendarId }, 'Local follow catch-up skipped: follower calendar not found');
+      return;
+    }
+
+    const newestFirst = await ActivityPubOutboxMessageEntity.findAll({
+      where: servedOutboxWhere(followedCalendarId),
+      order: [['message_time', 'DESC'], ['createdAt', 'DESC']],
+      limit: LOCAL_CATCH_UP_LIMIT,
+    });
+
+    let dispatched = 0;
+    for (const row of newestFirst.reverse()) {
+      const activity = parseServedActivity(row);
+      if (!activity) {
+        logger.warn({ activityId: row.id, activityType: row.type }, 'Local follow catch-up skipped an unparseable outbox row');
+        continue;
+      }
+      try {
+        await this.inboxService.handleLocalActivityDispatch(follower, activity);
+        dispatched++;
+      }
+      catch (error) {
+        logError(error, `[OUTBOX-LOCAL] Local follow catch-up failed to dispatch ${row.id} to calendar ${followerCalendarId}`);
+      }
+    }
+
+    logger.info({ followerCalendarId, followedCalendarId, rows: newestFirst.length, dispatched }, 'Local follow catch-up finished');
   }
 
   /**

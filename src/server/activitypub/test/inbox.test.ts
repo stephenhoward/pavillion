@@ -268,7 +268,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       };
 
       // Stub remoteCalendarService to return the mock calendar actor
-      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       // Act
@@ -315,14 +315,14 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       };
 
       // Stub remoteCalendarService to return the mock calendar actor
-      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       // Act
       await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
 
       // Assert - should look up remote calendar by actor URI
-      expect((inboxService.remoteCalendarService.getByActorUri as sinon.SinonStub).calledOnce).toBe(true);
+      expect((inboxService.remoteCalendarService.getFollowedActorByUri as sinon.SinonStub).calledOnce).toBe(true);
       expect(findOneStub.calledOnce).toBe(true);
       expect(findOneStub.firstCall.args[0].where).toMatchObject({
         calendar_actor_id: mockCalendarActor.id,
@@ -353,7 +353,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendar_id: testCalendar.id,
       };
 
-      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       const emittedEvents: any[] = [];
@@ -385,7 +385,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         object: followActivity,
       };
 
-      const getByActorUriStub = sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri')
+      const getFollowedActorStub = sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri')
         .resolves({ id: 'mock-calendar-actor-uuid', actor_uri: remoteCalendarUrl } as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne')
         .resolves({ id: uuidv4(), calendar_actor_id: 'mock-calendar-actor-uuid', calendar_id: testCalendar.id } as any);
@@ -398,7 +398,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       // Assert: no follow lookup and no accepted event, so no backfill is enqueued
       expect(emittedEvents).toHaveLength(0);
-      expect(getByActorUriStub.called).toBe(false);
+      expect(getFollowedActorStub.called).toBe(false);
       expect(findOneStub.called).toBe(false);
     });
 
@@ -423,7 +423,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendar_id: testCalendar.id,
       };
 
-      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       const emittedEvents: any[] = [];
@@ -439,6 +439,45 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendarActorId: mockCalendarActor.id,
         sourceActorUri: remoteCalendarUrl,
       });
+    });
+
+    it('should name the followed calendar when the accepted follow is of a calendar on this instance', async () => {
+      // Arrange: a same-instance follow stores the followed actor as
+      // actor_type 'local'; its Accept arrives by local dispatch.
+      const followedActorUri = 'https://pavillion.dev/calendars/organizer';
+      const followActivity = new FollowActivity(testCalendar.id, followedActorUri);
+      followActivity.id = 'https://pavillion.dev/calendars/test-calendar/follows/791';
+
+      const acceptActivity = {
+        type: 'Accept',
+        actor: followedActorUri,
+        object: followActivity,
+      };
+
+      const followedActor = {
+        id: 'local-calendar-actor-uuid',
+        actorType: 'local',
+        calendarId: 'organizer-calendar-uuid',
+        actorUri: followedActorUri,
+      };
+
+      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(followedActor as any);
+      sandbox.stub(FollowingCalendarEntity, 'findOne')
+        .resolves({ id: uuidv4(), calendar_actor_id: followedActor.id, calendar_id: testCalendar.id } as any);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:follow:accepted', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
+
+      // Assert
+      expect(emittedEvents).toEqual([{
+        followingCalendarId: testCalendar.id,
+        calendarActorId: followedActor.id,
+        sourceActorUri: followedActorUri,
+        followedCalendarId: followedActor.calendarId,
+      }]);
     });
 
   });
@@ -483,6 +522,35 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // With no cached display name the payload omits reposterDisplayName so
       // the notifications handler falls back to its URI resolution.
       expect(emittedEvents[0].reposterDisplayName).toBeUndefined();
+    });
+
+    it('should not emit activitypub:event:reposted again for a share already recorded', async () => {
+      // Arrange: the same Announce reaching a second local follower, or a
+      // same-instance follow replaying the sharer's past Announces, finds the
+      // share already recorded and is not a new repost.
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const localEventId = uuidv4();
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
+
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
+      });
+      sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(localEventId, testCalendar.id));
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      sandbox.stub(EventActivityEntity, 'findOne').resolves({ id: uuidv4() } as any);
+      const createStub = sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, new AnnounceActivity(remoteActorUrl, apObjectId));
+
+      // Assert
+      expect(createStub.called).toBe(false);
+      expect(emittedEvents).toHaveLength(0);
     });
 
     it('should not emit activitypub:event:reposted when a remote (non-local) event is announced', async () => {

@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
+import { Op, WhereOptions, literal } from "sequelize";
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubActivity, ActivityPubActor, AS_PUBLIC } from "@/server/activitypub/model/base";
 import { ActivityPubOutboxMessageEntity } from "@/server/activitypub/entity/activitypub";
@@ -53,6 +54,58 @@ export function isPublicOutboxActivity(calendar: Calendar, message: Record<strin
   }
   const addressed = [...addressList(message.to), ...addressList(message.cc)];
   return addressed.includes(AS_PUBLIC) || addressed.includes(`${actor}/followers`);
+}
+
+/**
+ * The activity types a calendar's public outbox serves (DEC-024).
+ *
+ * 'Create' MUST be served: local originals federate as Create(Event)
+ * (Announce is reserved for reposts), so a follower's backfill walk of the
+ * outbox — and FEP-8a8e event consumers (Mobilizon/Gancio) — only see
+ * originals if Create is in the collection. Inbound Create(Note) is
+ * short-circuited by the receiver (ProcessInboxService.processCreateEvent),
+ * so serving the paired Note cannot create a duplicate feed event.
+ */
+export const SERVED_OUTBOX_TYPES = ['Create', 'Announce', 'Update', 'Delete'];
+
+/** Rows per page of a calendar's public outbox collection. */
+export const OUTBOX_PAGE_SIZE = 20;
+
+/**
+ * The `ap_outbox` rows a calendar's public outbox serves (DEC-024): rows
+ * marked `is_public`, of a {@link SERVED_OUTBOX_TYPES} type, that have been
+ * processed and whose processing did not fail — whatever their delivery
+ * outcome, so a `partial:` row is served — minus any Announce the calendar
+ * has since undone.
+ *
+ * `readOutbox` pages this set to peers; a same-instance follow replays it to
+ * the new follower, so a local follower is caught up on exactly what a remote
+ * follower's backfill walk would read.
+ *
+ * @param calendarId - The calendar whose outbox rows to select
+ * @returns A Sequelize `where` for ActivityPubOutboxMessageEntity
+ */
+export function servedOutboxWhere(calendarId: string): WhereOptions {
+  return {
+    calendar_id: calendarId,
+    type: SERVED_OUTBOX_TYPES,
+    is_public: true,
+    processed_time: { [Op.ne]: null },
+    [Op.and]: [
+      // A partial: delivery outcome does not affect membership; a failure
+      // to process the row at all does, and so does a row the drain
+      // skipped because it was retracted before the drain delivered it.
+      { processed_status: { [Op.notLike]: 'error:%' } },
+      { processed_status: { [Op.notLike]: 'skipped:%' } },
+      { processed_status: { [Op.ne]: 'bad message type' } },
+      // Any recorded Undo withdraws its target, whatever its delivery status.
+      // Every outbox row is our own activity, and UndoActivity always takes
+      // the id `{targetId}/undo`, so the matching Undo is a primary-key probe
+      // per candidate row: the cost follows the page, not the calendar's
+      // Undo history.
+      literal(`NOT EXISTS (SELECT 1 FROM ap_outbox undo_row WHERE undo_row.id = "ActivityPubOutboxMessageEntity"."id" || '/undo' AND undo_row.type = 'Undo')`),
+    ],
+  };
 }
 
 /** A stored `to` or `cc`, which may be one IRI or a list, as a list of IRIs. */

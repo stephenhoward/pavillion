@@ -41,6 +41,7 @@ import {
   getFollows,
   updateFollowPolicy,
   shareEvent,
+  eventTimes,
 } from './helpers/api';
 
 test.describe('Auto-Repost Policy Enforcement', () => {
@@ -115,8 +116,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'This event should be auto-reposted to Bob\'s calendar',
         },
       },
-      startTime: '2025-03-15T18:00:00Z',
-      endTime: '2025-03-15T20:00:00Z',
+      ...eventTimes(30, 18),
     });
 
     // Wait for federation propagation
@@ -215,8 +215,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Event from Charlie',
         },
       },
-      startTime: '2025-03-20T14:00:00Z',
-      endTime: '2025-03-20T16:00:00Z',
+      ...eventTimes(35, 14),
     });
 
     // Wait for Charlie's event to propagate to Alice's feed
@@ -311,8 +310,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'This event should NOT be auto-reposted',
         },
       },
-      startTime: '2025-03-25T10:00:00Z',
-      endTime: '2025-03-25T12:00:00Z',
+      ...eventTimes(40, 10),
     });
 
     // Wait for federation
@@ -363,8 +361,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Created before auto-repost enabled',
         },
       },
-      startTime: '2025-04-01T10:00:00Z',
-      endTime: '2025-04-01T12:00:00Z',
+      ...eventTimes(45, 10),
     });
 
     // Wait for federation
@@ -406,8 +403,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Created after auto-repost enabled',
         },
       },
-      startTime: '2025-04-02T14:00:00Z',
-      endTime: '2025-04-02T16:00:00Z',
+      ...eventTimes(46, 14),
     });
 
     // Wait for federation
@@ -499,8 +495,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Event from Alice',
         },
       },
-      startTime: '2025-04-10T18:00:00Z',
-      endTime: '2025-04-10T20:00:00Z',
+      ...eventTimes(54, 18),
     });
 
     // Wait for federation
@@ -567,6 +562,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
 
     // Alice creates event1
     const event1Title = `Duplicate Prevention Event ${Date.now()}`;
+    const event1Times = eventTimes(59, 10);
     await createEvent(INSTANCE_ALPHA, aliceToken, {
       calendarId: aliceCalendar.id,
       content: {
@@ -575,8 +571,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Event for duplicate prevention test',
         },
       },
-      startTime: '2025-04-15T10:00:00Z',
-      endTime: '2025-04-15T12:00:00Z',
+      ...event1Times,
     });
 
     // Wait for federation
@@ -657,8 +652,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
           description: 'Updated event',
         },
       },
-      startTime: '2025-04-15T10:00:00Z',
-      endTime: '2025-04-15T12:00:00Z',
+      ...event1Times,
     });
 
     // Wait for update to propagate
@@ -673,5 +667,82 @@ test.describe('Auto-Repost Policy Enforcement', () => {
 
     // Should still have exactly 1 copy (the existing SharedEventEntity, not a duplicate)
     expect(updatedEvent1InCalendar.length).toBe(1);
+  });
+
+  test('Scenario 7: An event that has ended is not auto-reposted', async () => {
+    const aliceCalendar = await createCalendar(INSTANCE_ALPHA, aliceToken, {
+      urlName: generateCalendarName('ar7'),
+      content: {
+        en: { name: 'Alice Auto-Repost Test 7' },
+      },
+    });
+
+    const bobCalendar = await createCalendar(INSTANCE_BETA, bobToken, {
+      urlName: generateCalendarName('br7'),
+      content: {
+        en: { name: 'Bob Auto-Repost Test 7' },
+      },
+    });
+
+    const aliceCalendarId = formatRemoteCalendarId(aliceCalendar.urlName, INSTANCE_ALPHA);
+    await followCalendar(INSTANCE_BETA, bobToken, bobCalendar.id, aliceCalendarId);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
+    const aliceFollow = follows.find(
+      f => f.calendarActorId === aliceCalendarId ||
+           f.calendarActorId?.includes(aliceCalendar.urlName),
+    );
+    expect(aliceFollow).toBeDefined();
+
+    await updateFollowPolicy(
+      INSTANCE_BETA,
+      bobToken,
+      aliceFollow!.id,
+      bobCalendar.id,
+      true,  // auto-repost originals
+      false, // don't auto-repost reposts
+    );
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Alice records a past event, then announces an upcoming one. The upcoming
+    // one is the control: it shows auto-repost is on for this follow, so the
+    // past event's absence comes from the ended-event rule.
+    const pastTitle = `Ended Event ${Date.now()}`;
+    await createEvent(INSTANCE_ALPHA, aliceToken, {
+      calendarId: aliceCalendar.id,
+      content: {
+        en: {
+          title: pastTitle,
+          description: 'This event has ended and should not be auto-reposted',
+        },
+      },
+      ...eventTimes(-7, 18),
+    });
+
+    const upcomingTitle = `Upcoming Event ${Date.now()}`;
+    await createEvent(INSTANCE_ALPHA, aliceToken, {
+      calendarId: aliceCalendar.id,
+      content: {
+        en: {
+          title: upcomingTitle,
+          description: 'This event is still to come and should be auto-reposted',
+        },
+      },
+      ...eventTimes(30, 18),
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10000));
+
+    // Both events reach Bob's feed: the follow delivers them.
+    const feed = await getFeed(INSTANCE_BETA, bobToken, bobCalendar.id);
+    expect(feed.events.find(e => e.content?.en?.title === pastTitle)).toBeDefined();
+    expect(feed.events.find(e => e.content?.en?.title === upcomingTitle)).toBeDefined();
+
+    // Only the upcoming event is auto-reposted onto Bob's calendar.
+    const calendarEventsResponse = await getCalendarEvents(INSTANCE_BETA, bobToken, bobCalendar.urlName);
+    const calendarEvents = await calendarEventsResponse.json();
+    expect(calendarEvents.find((e: any) => e.content?.en?.title === upcomingTitle)).toBeDefined();
+    expect(calendarEvents.find((e: any) => e.content?.en?.title === pastTitle)).toBeUndefined();
   });
 });
