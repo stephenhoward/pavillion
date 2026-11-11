@@ -9,6 +9,7 @@ import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useRecurrenceText } from '@/site/composables/useRecurrenceText';
 import EventImage from '@/site/components/event-image.vue';
 import AddToCalendar from '@/site/components/add-to-calendar.vue';
+import LinkifiedText from '@/site/components/LinkifiedText.vue';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import type { EventCategory } from '@/common/model/event_category';
@@ -220,7 +221,7 @@ const safePrompt = computed<UrlPrompt | null>(() => {
     <!-- Left column: description + categories -->
     <div class="detail-main">
       <h2 class="about-heading">{{ t('about_this_event') }}</h2>
-      <p class="event-description">{{ localizedContent(instance.event).description }}</p>
+      <p class="event-description"><LinkifiedText :text="localizedContent(instance.event).description" /></p>
 
       <!-- Categories section -->
       <div v-if="instance.event.categories && instance.event.categories.length" class="categories-section">

@@ -110,7 +110,7 @@ vi.mock('@/site/service/calendar', () => {
         }),
         loadEvent: vi.fn().mockImplementation(() =>
           Promise.resolve({
-            content: (_lang: string) => ({ name: mockEventName, description: 'Description here', accessibilityInfo: mockEventAccessibilityInfo, imageAlt: mockEventImageAlt }),
+            content: (_lang: string) => ({ name: mockEventName, description: 'Description here https://example.org/info.', accessibilityInfo: mockEventAccessibilityInfo, imageAlt: mockEventImageAlt }),
             hasContent: (_lang: string) => true,
             getLanguages: () => ['en'],
             media: mockEventMedia,
@@ -483,6 +483,19 @@ describe('event two-column layout', () => {
     const descriptionEl = wrapper.find('.event-description');
     expect(descriptionEl.exists()).toBe(true);
     expect(descriptionEl.text()).toContain('Description here');
+    wrapper.unmount();
+  });
+
+  it('should render a URL in the description as a link', async () => {
+    const wrapper = await mountEvent(
+      '/test_calendar/events/evt-1',
+      (path) => path,
+    );
+
+    const links = wrapper.find('.event-description').findAll('a');
+    expect(links).toHaveLength(1);
+    expect(links[0].attributes('href')).toBe('https://example.org/info');
+    expect(links[0].attributes('rel')).toBe('noopener noreferrer nofollow ugc');
     wrapper.unmount();
   });
 

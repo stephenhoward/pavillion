@@ -11,6 +11,7 @@ import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
+import LinkifiedText from './LinkifiedText.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import { calendarPath, seriesPath } from '@/common/routing/public-paths';
@@ -276,7 +277,7 @@ function closeReportModal() {
         <!-- Left column: description + categories -->
         <div class="detail-main">
           <h2 class="about-heading">{{ t('about_this_event') }}</h2>
-          <p class="event-description">{{ localizedContent(state.event).description }}</p>
+          <p class="event-description"><LinkifiedText :text="localizedContent(state.event).description" /></p>
 
           <!-- Categories section -->
           <div v-if="state.event.categories && state.event.categories.length" class="categories-section">
