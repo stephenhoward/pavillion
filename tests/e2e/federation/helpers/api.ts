@@ -60,6 +60,32 @@ export interface EventData {
 }
 
 /**
+ * Start and end times for a one-off event a whole number of days from now,
+ * at a fixed UTC hour. A negative `daysFromNow` gives an event that has
+ * already ended.
+ *
+ * Use this instead of a literal date: auto-repost skips an event whose every
+ * occurrence has ended, so a fixed date turns a repost test into a skip test
+ * once the calendar passes it.
+ *
+ * @param daysFromNow - Days from today; negative for the past
+ * @param startHourUtc - Hour of day (UTC) the event starts
+ * @param durationHours - How long the event lasts
+ * @returns The `startTime` / `endTime` pair for {@link EventData}
+ */
+export function eventTimes(
+  daysFromNow: number,
+  startHourUtc: number,
+  durationHours = 2,
+): Pick<EventData, 'startTime' | 'endTime'> {
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() + daysFromNow);
+  start.setUTCHours(startHourUtc, 0, 0, 0);
+  const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  return { startTime: start.toISOString(), endTime: end.toISOString() };
+}
+
+/**
  * Calendar response from the API
  */
 export interface CalendarResponse {
