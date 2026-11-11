@@ -28,6 +28,7 @@ import { useTranslation } from 'i18next-vue';
 
 import PillButton from '@/client/components/common/pill-button.vue';
 import EventCancelConfirmModal from '@/client/components/logged_in/calendar/EventCancelConfirmModal.vue';
+import { useToast } from '@/client/composables/useToast';
 import EventService, {
   type UpcomingOccurrence,
 } from '@/client/service/event';
@@ -42,6 +43,7 @@ const { t } = useTranslation('event_editor', {
 });
 
 const eventService = new EventService();
+const toast = useToast();
 
 const occurrences = ref<UpcomingOccurrence[]>([]);
 const hasMore = ref(true);
@@ -132,6 +134,8 @@ async function onConfirmCancel(payload: { hideFromPublic: boolean }) {
         state: payload.hideFromPublic ? 'hidden' : 'cancelled-shown',
       };
     }
+    // Cancelling is saved immediately, independent of the editor's Save Changes.
+    toast.success(t('cancelled_toast', { date: formatStart(start) }));
   }
   catch (error) {
     console.error('EventCancellationsPanel: cancelOccurrence failed', error);
@@ -330,6 +334,7 @@ onMounted(() => {
 
     <EventCancelConfirmModal
       v-if="pendingCancelStart"
+      :date="formatStart(pendingCancelStart)"
       @confirm="onConfirmCancel"
       @close="onCloseConfirm"
     />
