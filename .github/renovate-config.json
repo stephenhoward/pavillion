@@ -13,7 +13,19 @@
     "dependencyDashboardApproval": true
   },
   "osvVulnerabilityAlerts": true,
+  "lockFileMaintenance": {
+    "description": [
+      "Regenerates package-lock.json weekly so in-range transitive fixes arrive without a manual bead.",
+      "The window is 'on sunday' because the only Renovate run is Sunday 18:00 UTC; a schedule is a window for creating branches, not a trigger.",
+      "Not automerged: the automerge rule matches minor, patch, pin and digest only, so these PRs are reviewed by hand."
+    ],
+    "enabled": true,
+    "schedule": ["on sunday"]
+  },
   "vulnerabilityAlerts": {
+    "description": [
+      "Security fast path: PRs open immediately, skip the minimumReleaseAge wait, ignore concurrency limits, and carry the security label."
+    ],
     "prCreation": "immediate",
     "minimumReleaseAge": null,
     "prConcurrentLimit": 0,
