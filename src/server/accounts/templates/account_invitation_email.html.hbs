@@ -34,6 +34,7 @@
     <div class="container">
         <h1>{{t 'title'}}</h1>
         <p>{{t 'greeting'}}</p>
+        <p>{{#if inviterName}}{{t 'invitation_message' inviterName=inviterName instanceName=instanceName}}{{else}}{{t 'invitation_message_no_inviter' inviterName=inviterName instanceName=instanceName}}{{/if}}</p>
         <p>{{t 'instructions'}}</p>
 
         <p><a href="{{invitationUrl}}?code={{inviteCode}}" class="button">{{t 'button'}}</a></p>
@@ -44,7 +45,7 @@
         <p>{{t 'expiry_notice'}}</p>
 
         <p>{{t 'signature'}}<br>
-        {{t 'team_name'}}</p>
+        {{instanceName}}</p>
 
         <div class="footer">
             <p>{{t 'footer_text'}}</p>

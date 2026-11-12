@@ -1,15 +1,17 @@
-{{t 'title'}}
+{{{t 'title'}}}
 
-{{t 'greeting'}}
+{{{t 'greeting'}}}
 
-{{t 'invitation_message'}}
+{{#if inviterName}}{{{t 'invitation_message' inviterName=inviterName instanceName=instanceName}}}{{else}}{{{t 'invitation_message_no_inviter' inviterName=inviterName instanceName=instanceName}}}{{/if}}
 
-{{invitationUrl}}?code={{inviteCode}}
+{{{t 'instructions_text'}}}
 
-{{t 'expiry_notice'}}
+{{{invitationUrl}}}?code={{{inviteCode}}}
 
-{{t 'signature'}}
-{{t 'team_name'}}
+{{{t 'expiry_notice'}}}
+
+{{{t 'signature'}}}
+{{{instanceName}}}
 
 ----
-{{t 'footer_text'}}
+{{{t 'footer_text'}}}

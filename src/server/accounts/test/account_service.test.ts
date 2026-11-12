@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import { Op } from 'sequelize';
 import { DateTime } from 'luxon';
+import config from 'config';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 
 import { Account } from '@/common/model/account';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
@@ -1838,5 +1840,98 @@ describe('accountIsAdmin', () => {
     const isAdmin = await accountService.accountIsAdmin('regular-id');
 
     expect(isAdmin).toBe(false);
+  });
+});
+
+
+describe('sendNewAccountInvite', () => {
+  const sandbox = sinon.createSandbox();
+  let accountService: AccountService;
+  let emailInterface: EmailInterface;
+  let sendEmail: sinon.SinonStub;
+  let getAllSettings: sinon.SinonStub;
+  let getCalendar: sinon.SinonStub;
+
+  const inviteEntity = (calendarId?: string) => {
+    const inviter = AccountEntity.build({ id: 'inviter-id', username: '', email: 'secret-inviter@example.com' });
+    const entity = AccountInvitationEntity.build({
+      id: 'invite-id',
+      email: 'invitee@example.com',
+      invited_by: 'inviter-id',
+      message: 'hello',
+      invitation_code: 'code-123',
+      calendar_id: calendarId,
+    });
+    entity.inviter = inviter;
+    return entity;
+  };
+
+  const inviterAccount = (username: string, displayName: string | null) => {
+    const account = new Account('inviter-id', username, 'secret-inviter@example.com');
+    account.displayName = displayName;
+    return account;
+  };
+
+  beforeEach(() => {
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(new EventEmitter(), new ConfigurationInterface(), new SetupInterface(), emailInterface);
+    sendEmail = sandbox.stub(emailInterface, 'sendEmail').resolves();
+    getAllSettings = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings').resolves({ siteTitle: 'Riverside Events' });
+    getCalendar = sandbox.stub().resolves(undefined);
+    accountService.setCalendarInterface({ getCalendar } as any);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('names the instance title in the subject', async () => {
+    await accountService.sendNewAccountInvite(inviterAccount('dana', 'Dana'), inviteEntity());
+
+    expect(sendEmail.firstCall.args[0].subject).toContain('Riverside Events');
+  });
+
+  it('falls back to the configured domain when the instance title is empty', async () => {
+    getAllSettings.resolves({ siteTitle: '' });
+    await accountService.sendNewAccountInvite(inviterAccount('dana', 'Dana'), inviteEntity());
+
+    expect(sendEmail.firstCall.args[0].subject).toContain(config.get<string>('domain'));
+  });
+
+  it.each([
+    { username: 'dana_u', displayName: ' Dana Organizer ', expected: 'Dana Organizer' },
+    { username: 'dana_u', displayName: '   ', expected: 'dana_u' },
+    { username: 'dana_u', displayName: null, expected: 'dana_u' },
+  ])('names the inviter by display name, then username ($displayName / $username)', async ({ username, displayName, expected }) => {
+    await accountService.sendNewAccountInvite(inviterAccount(username, displayName), inviteEntity());
+
+    const mail = sendEmail.firstCall.args[0];
+    expect(mail.textMessage).toContain(expected);
+    expect(mail.htmlMessage).toContain(expected);
+  });
+
+  it('uses the no-inviter copy and never the inviter email address', async () => {
+    await accountService.sendNewAccountInvite(inviterAccount('', null), inviteEntity());
+
+    const mail = sendEmail.firstCall.args[0];
+    expect(mail.textMessage).toContain('You have been invited to create an account');
+    for (const part of [mail.subject, mail.textMessage, mail.htmlMessage]) {
+      expect(part).not.toContain('secret-inviter@example.com');
+    }
+  });
+
+  it('resends an editor invitation as the editor email', async () => {
+    const calendar = new Calendar('calendar-id', 'town_hall');
+    calendar.addContent(new CalendarContent('en', 'Town Hall'));
+    getCalendar.resolves(calendar);
+    const entity = inviteEntity('calendar-id');
+    sandbox.stub(AccountInvitationEntity, 'findByPk').resolves(entity);
+    sandbox.stub(accountService, 'getAccountByEmail').resolves(undefined);
+    sandbox.stub(entity, 'save').resolves(entity);
+
+    await accountService.resendInvite('invite-id');
+
+    expect(getCalendar.calledWith('calendar-id')).toBe(true);
+    expect(sendEmail.firstCall.args[0].subject).toContain('Town Hall');
   });
 });

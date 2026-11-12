@@ -152,7 +152,7 @@ export default class AccountService {
     await invitation.save();
 
     // Resend the invitation email
-    await this.sendNewAccountInvite(invitation.inviter.toModel(), invitation);
+    await this.sendNewAccountInvite(invitation.inviter.toModel(), invitation, invitation.calendar_id ?? undefined);
 
     return invitation.toModel();
   }
@@ -694,9 +694,15 @@ export default class AccountService {
       throw new Error('Calendar not found for invitation');
     }
 
+    const settings = await this.configurationInterface.getAllSettings();
+    const context = {
+      instanceName: settings?.siteTitle || config.get<string>('domain'),
+      inviterName: inviter.displayName?.trim() || inviter.username || '',
+    };
+
     const message = calendar
-      ? new EditorInvitationEmail(invitation.toModel(), invitation.invitation_code, calendar)
-      : new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
+      ? new EditorInvitationEmail(invitation.toModel(), invitation.invitation_code, calendar, context)
+      : new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code, context);
 
     await this.emailInterface.sendEmail(message.buildMessage('en'));
     return true;

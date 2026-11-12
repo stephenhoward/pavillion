@@ -1,14 +1,16 @@
 {
-  "subject": "Invitation à rejoindre Pavillion",
+  "subject": "Invitation à rejoindre {{instanceName}}",
   "title": "Vous avez été invité",
   "greeting": "Bonjour,",
-  "instructions": "Vous avez été invité à rejoindre Pavillion. Pour accepter cette invitation et créer votre compte, veuillez cliquer sur le bouton ci-dessous ou copier et coller le lien dans votre navigateur :",
+  "instructions": "Pour accepter cette invitation et créer votre compte, cliquez sur le bouton ci-dessous ou copiez et collez le lien dans votre navigateur :",
   "button": "Accepter l'invitation",
   "copy_link_text": "Ou copiez ce lien :",
   "invitation_code": "Code d'invitation",
   "expiry_notice": "Ce lien d'invitation expirera dans 7 jours.",
   "signature": "Merci,",
-  "team_name": "L'équipe Pavillion",
   "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail.",
-  "inviter_message": "Message personnel de l'invitant : {{message}}"
+  "inviter_message": "Message personnel de l'invitant : {{message}}",
+  "invitation_message": "{{inviterName}} vous a invité à créer un compte sur {{instanceName}}, où vous pourrez publier et gérer votre propre calendrier d'événements.",
+  "invitation_message_no_inviter": "Vous avez reçu une invitation à créer un compte sur {{instanceName}}, où vous pourrez publier et gérer votre propre calendrier d'événements.",
+  "instructions_text": "Pour accepter cette invitation et créer votre compte, ouvrez ce lien dans votre navigateur :"
 }
