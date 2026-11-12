@@ -9,6 +9,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
@@ -49,6 +50,7 @@ const errorMap: Record<string, new (...args: never[]) => Error> = {
   ImportSourceFileEmptyError: ImportSourceFileEmptyError as unknown as new () => Error,
   ImportSourceFileTooLargeError: ImportSourceFileTooLargeError as unknown as new () => Error,
   ImportSourceFileBadFormatError: ImportSourceFileBadFormatError as unknown as new () => Error,
+  ImportSourceFileInternalError: ImportSourceFileInternalError as unknown as new () => Error,
   ImportSourceFileTooManyEventsError: ImportSourceFileTooManyEventsError as unknown as new () => Error,
   ImportSourceCapExceededError: ImportSourceCapExceededError as unknown as new () => Error,
 };
@@ -231,6 +233,7 @@ describe('ICS import exceptions', () => {
       { name: 'ImportSourceFileEmptyError', err: new ImportSourceFileEmptyError() },
       { name: 'ImportSourceFileTooLargeError', err: new ImportSourceFileTooLargeError() },
       { name: 'ImportSourceFileBadFormatError', err: new ImportSourceFileBadFormatError() },
+      { name: 'ImportSourceFileInternalError', err: new ImportSourceFileInternalError() },
       { name: 'ImportSourceFileTooManyEventsError', err: new ImportSourceFileTooManyEventsError() },
       { name: 'ImportSourceCapExceededError', err: new ImportSourceCapExceededError() },
     ];

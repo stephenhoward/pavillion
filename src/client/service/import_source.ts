@@ -12,6 +12,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
 } from '@/common/exceptions/import';
@@ -83,6 +84,7 @@ const errorMap = {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
   // The per-account limiter on every import-source route answers 429 with

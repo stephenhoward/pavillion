@@ -43,6 +43,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
@@ -572,6 +573,16 @@ describe('ImportSourceService', () => {
       ).rejects.toBeInstanceOf(ImportSourceFileBadFormatError);
       // The pipeline was invoked inside the (now rolled-back) transaction.
       expect(processStub.calledOnce).toBe(true);
+    });
+
+    it('rolls back with ImportSourceFileInternalError when the run failed internally, not on the file', async () => {
+      const { wired } = wireFileService({
+        processResult: fileRunResult({ outcome: 'parse_error', eventsCreated: 0, errorMessage: 'IMPORT_INTERNAL_ERROR' }),
+      });
+
+      await expect(
+        wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+      ).rejects.toBeInstanceOf(ImportSourceFileInternalError);
     });
 
     it('rolls back with ImportSourceParseError (422) when no usable VEVENTs are found', async () => {

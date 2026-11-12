@@ -59,6 +59,7 @@ const FILE_UPLOAD_NAME_KEYS: Record<string, string> = {
   ImportSourceFileEmptyError: 'errors.file_empty',
   ImportSourceFileTooLargeError: 'file_too_large',
   ImportSourceFileBadFormatError: 'errors.file_bad_format',
+  ImportSourceFileInternalError: 'errors.file_internal_error',
   ImportSourceFileTooManyEventsError: 'errors.file_too_many_events',
   ImportSourceParseError: 'errors.file_no_events',
   ImportSourceCapExceededError: 'errors.source_cap_exceeded',

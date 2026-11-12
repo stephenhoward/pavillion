@@ -18,6 +18,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceFileTooManyEventsError,
   ImportSourceCapExceededError,
 } from '@/common/exceptions/import';
@@ -616,6 +617,13 @@ class ImportSourceRoutes {
       || error instanceof ImportSourceFileBadFormatError
     ) {
       res.status(400).json({
+        error: error.message,
+        errorName: error.name,
+      });
+      return;
+    }
+    if (error instanceof ImportSourceFileInternalError) {
+      res.status(500).json({
         error: error.message,
         errorName: error.name,
       });
