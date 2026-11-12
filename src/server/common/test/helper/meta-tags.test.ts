@@ -683,6 +683,20 @@ describe('MetaTags Helper', () => {
       });
     }
 
+    it('emits an absolute canonical link equal to og:url', async () => {
+      const url = 'https://example.com/my-calendar/events/event-uuid-1/20261111-1800';
+      const html = await render({ url });
+
+      expect(html).toContain(`<link rel="canonical" href="${url}" />`);
+      expect(html).toContain(`<meta property="og:url" content="${url}" />`);
+    });
+
+    it('HTML-escapes the canonical href', async () => {
+      const html = await render({ url: 'https://example.com/cal/events/x?a=1&b="2"' });
+
+      expect(html).toContain('<link rel="canonical" href="https://example.com/cal/events/x?a=1&amp;b=&#34;2&#34;" />');
+    });
+
     it('emits og:image:alt and twitter:image:alt for a described image', async () => {
       const html = await render({ imageAlt: 'A "packed" hall' });
 
