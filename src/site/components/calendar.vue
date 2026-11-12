@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, computed, inject, watchEffect } from 'vue';
+import { reactive, onBeforeMount, computed, inject, watch, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -10,6 +10,7 @@ import { DATE_QUERY_KEY, VIEW_QUERY_KEY } from '@/common/routing/calendar-view-q
 import { calendarPath, eventPath } from '@/common/routing/public-paths';
 import { CalendarViewToolbar, MonthView, WeekView } from '@/common/ui/calendar-views';
 import { useCalendarViewContainer } from '@/common/ui/calendar-views/useCalendarViewContainer';
+import { getDefaultDateRange } from '@/common/utils/datePresets';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 
 import CalendarService from '../service/calendar';
@@ -45,6 +46,18 @@ const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
 const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
 const defaultEventImage = computed(() => publicCalendarStore.defaultEventImage);
 
+// The end of the window an unfiltered list searched, named in the empty state
+const defaultRangeEndLabel = computed(() => {
+  const { endDate } = getDefaultDateRange(publicCalendarStore.calendarDefaultDateRange);
+  return formatDate(endDate);
+});
+const nextEventLabel = computed(() =>
+  publicCalendarStore.nextEventDate ? formatDate(publicCalendarStore.nextEventDate) : '');
+
+function formatDate(isoDate: string): string {
+  return DateTime.fromISO(isoDate).setLocale(currentLocale.value).toLocaleString(DateTime.DATE_FULL);
+}
+
 // ----------------------------------------------------------------
 // Calendar view (list / week / month)
 // ----------------------------------------------------------------
@@ -77,6 +90,24 @@ const {
     localizedPath(eventPath(calendarUrlName, instance.event.id, formatInstanceSlug(instance.start))),
   calendarRoute: query => ({ path: localizedPath(calendarPath(calendarUrlName)), query }),
 });
+
+// An unfiltered list whose default window is empty may still have a later
+// event; look it up once per such load so the empty state can offer it.
+watch(
+  () => effectiveViewMode.value === 'list'
+    && publicCalendarStore.hasLoadedEvents
+    && !publicCalendarStore.isLoadingEvents
+    && publicCalendarStore.allEvents.length === 0
+    && !publicCalendarStore.hasActiveFilters
+    && !publicCalendarStore.isSearchPending
+    && !publicCalendarStore.eventError,
+  (shouldLookUp) => {
+    if (shouldLookUp) {
+      publicCalendarStore.loadNextEventDate();
+    }
+  },
+  { immediate: true },
+);
 
 /**
  * Clears all active filters and resets the filter query params, keeping the
@@ -324,10 +355,22 @@ onBeforeMount(async () => {
               v-else-if="hasOnlyDateFilters"
               class="empty-state-hint"
             >{{ t('no_events_in_date_range_hint') }}</p>
-            <p
-              v-else
-              class="empty-state-hint"
-            >{{ t('no_events_available_hint') }}</p>
+            <template v-else>
+              <p class="empty-state-hint">
+                {{ t('no_events_in_default_range_hint', { date: defaultRangeEndLabel }) }}
+              </p>
+              <p
+                v-if="publicCalendarStore.nextEventDate"
+                class="empty-state-hint"
+              >
+                <RouterLink
+                  class="next-event-link"
+                  :to="dayRoute(publicCalendarStore.nextEventDate)"
+                >
+                  {{ t('next_event_link', { date: nextEventLabel }) }}
+                </RouterLink>
+              </p>
+            </template>
           </div>
           <button
             v-if="hasActiveFilters"
@@ -491,6 +534,14 @@ onBeforeMount(async () => {
     font-size: $public-font-size-sm;
     color: var(--pav-text-secondary);
     margin-top: $public-space-xs;
+  }
+
+  .next-event-link {
+    color: var(--pav-accent);
+
+    &:focus-visible {
+      @include public-focus-visible;
+    }
   }
 
   .clear-filters-btn {

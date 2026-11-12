@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
+import { DateTime } from 'luxon';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
-import { getDefaultDateRange } from '@/common/utils/datePresets';
+import { getDefaultDateRange, LONGEST_DEFAULT_DATE_RANGE_MONTHS } from '@/common/utils/datePresets';
 import type { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import type { Media } from '@/common/model/media';
 import ModelService from '@/client/service/models';
@@ -28,6 +29,7 @@ export interface ViewWindow {
  */
 let latestEventsRequest = 0;
 let latestCategoriesRequest = 0;
+let latestNextEventRequest = 0;
 
 export interface PublicCalendarState {
   // Calendar data
@@ -69,6 +71,10 @@ export interface PublicCalendarState {
   allEvents: CalendarEventInstance[];
   filteredEvents: CalendarEventInstance[];
 
+  // Local ISO date of the first event after the default window, when the
+  // default window is empty; null until looked up or when there is none
+  nextEventDate: string | null;
+
   // UI state
   isLoadingCategories: boolean;
   hasLoadedCategories: boolean;
@@ -107,6 +113,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     viewWindow: null,
     allEvents: [],
     filteredEvents: [],
+    nextEventDate: null,
     isLoadingCategories: false,
     hasLoadedCategories: false,
     isLoadingEvents: false,
@@ -363,6 +370,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       const requestId = ++latestEventsRequest;
       this.isLoadingEvents = true;
       this.eventError = null;
+      latestNextEventRequest++;
+      this.nextEventDate = null;
 
       try {
         let url = `/api/public/v1/calendar/${calendarUrlName}/events`;
@@ -413,6 +422,55 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           this.isLoadingEvents = false;
           this.hasLoadedEvents = true;
         }
+      }
+    },
+
+    /**
+     * Find the first event after the default date window, for the empty state
+     * of an unfiltered list whose default window holds nothing.
+     *
+     * Reuses the public events endpoint from the day after the default window
+     * to the longest horizon the server materialises, so one query is
+     * exhaustive. It never touches `allEvents`, and its own request counter
+     * stops a late response from a previous calendar or load from writing.
+     */
+    async loadNextEventDate() {
+      const calendarUrlName = this.currentCalendarUrlName;
+      const requestId = ++latestNextEventRequest;
+      this.nextEventDate = null;
+      if (!calendarUrlName) {
+        return;
+      }
+
+      const defaultRange = getDefaultDateRange(this.calendarDefaultDateRange);
+      const startDate = DateTime.fromISO(defaultRange.endDate).plus({ days: 1 }).toISODate() as string;
+      const endDate = DateTime.now().startOf('day')
+        .plus({ months: LONGEST_DEFAULT_DATE_RANGE_MONTHS }).toISODate() as string;
+      if (startDate > endDate) {
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({ startDate, endDate });
+        const data = await ModelService.listModels(
+          `/api/public/v1/calendar/${calendarUrlName}/events?${params.toString()}`,
+        );
+        if (requestId !== latestNextEventRequest) {
+          return;
+        }
+
+        const dates = data.items
+          .map(item => CalendarEventInstance.fromObject(item).start.toLocal().toISODate())
+          .filter((date): date is string => !!date)
+          .sort();
+        this.nextEventDate = dates[0] ?? null;
+      }
+      catch (error) {
+        if (requestId !== latestNextEventRequest) {
+          return;
+        }
+        console.error('Error loading next event date:', error);
+        this.nextEventDate = null;
       }
     },
 
@@ -501,6 +559,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       // response cannot render under this one.
       latestEventsRequest++;
       latestCategoriesRequest++;
+      latestNextEventRequest++;
+      this.nextEventDate = null;
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
       // Nulls the default event image too — it is a getter over this calendar.
       this.currentCalendar = null;

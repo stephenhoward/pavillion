@@ -380,7 +380,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     // Verify empty state is shown with helpful message
     expect(wrapper.find('.empty-state').exists()).toBe(true);
     expect(wrapper.find('.empty-state').text()).toContain('no_events_available');
-    expect(wrapper.find('.empty-state').text()).toContain('no_events_available_hint');
+    expect(wrapper.find('.empty-state').text()).toContain('no_events_in_default_range_hint');
 
     // Verify no clear filters button (no active filters)
     expect(wrapper.find('.clear-filters-btn').exists()).toBe(false);
@@ -881,9 +881,12 @@ describe('calendar.vue - calendar views', () => {
 
     const wrapper = await mountAt({ view: 'month', date: '2026-03-15' });
 
+    // The empty default window triggers one further lookup, for the next event,
+    // that starts after the window; the list itself is fetched once.
     const fetches = eventFetches();
-    expect(fetches).toHaveLength(1);
+    expect(fetches).toHaveLength(2);
     expect(fetches[0].get('startDate')).not.toBe('2026-03-01');
+    expect(fetches[1].get('startDate')! > fetches[0].get('endDate')!).toBe(true);
     expect(wrapper.find('.month-view').exists()).toBe(false);
     expect(wrapper.find('.empty-state').exists()).toBe(true);
     expect(wrapper.find('[role="radiogroup"]').exists()).toBe(false);
