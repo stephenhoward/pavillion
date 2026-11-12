@@ -1,6 +1,9 @@
 import { ChildProcess, spawn } from 'child_process';
 import getPort, { portNumbers } from 'get-port';
 import axios from 'axios';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 /**
  * Test environment configuration returned by startTestServer
@@ -145,7 +148,7 @@ async function waitForServerReady(baseURL: string, timeout: number = 30000): Pro
  * Start an isolated test server with its own database and port
  *
  * This function creates a completely isolated test environment:
- * - Fresh in-memory SQLite database
+ * - Fresh file-backed SQLite database in a temp directory removed on cleanup
  * - Unique port allocation
  * - Independent configuration
  * - Seeded with test data
@@ -191,6 +194,11 @@ export async function startTestServer(
 
   console.log(`[Test Server] Starting server on port ${port}...`);
 
+  // One file-backed SQLite database per server process. ':memory:' shares a
+  // single connection, so background transactions swallow concurrent writes.
+  const dbDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pavillion-e2e-'));
+  const removeDbDir = () => fs.rm(dbDir, { recursive: true, force: true });
+
   // Spawn server process with tsx (TypeScript executor)
   // Set NODE_ENV=e2e for proper seeding and built frontend asset serving.
   //
@@ -212,6 +220,7 @@ export async function startTestServer(
       NODE_ENV: 'e2e',
       HOST_PORT: port.toString(),
       DB_RESET: 'true', // Ensure database reset on startup
+      DB_STORAGE: path.join(dbDir, 'db.sqlite'),
       NODE_OPTIONS: nodeOptions,
       ...extraEnv,
     },
@@ -261,6 +270,15 @@ export async function startTestServer(
   catch (error) {
     // Kill process if startup failed
     serverProcess.kill();
+    await new Promise<void>(resolve => {
+      if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+        resolve();
+        return;
+      }
+      serverProcess.once('exit', () => resolve());
+      setTimeout(resolve, 5000);
+    });
+    await removeDbDir();
     throw error;
   }
 
@@ -284,6 +302,8 @@ export async function startTestServer(
         resolve();
       });
     });
+
+    await removeDbDir();
 
     console.log(`[Test Server] Cleanup complete for port ${port}`);
   };
