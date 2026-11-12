@@ -27,6 +27,7 @@ const mountApp = async (sessionExpiredValue: boolean) => {
   const authn = {
     sessionExpired: ref(sessionExpiredValue),
     lastKnownEmail: null,
+    lastKnownAccountId: () => null,
     drainPendingRequests: async () => {},
     abortPendingRequests: () => {},
     login: async () => false,
