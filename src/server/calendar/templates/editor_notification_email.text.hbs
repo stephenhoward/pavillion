@@ -1,22 +1,22 @@
-{{t 'title'}}
+{{{t 'title'}}}
 
-{{t 'greeting'}}
+{{{t 'greeting'}}}
 
-{{t 'notification_message' calendarName=calendarName inviterName=inviterName}}
+{{#if inviterName}}{{{t 'notification_message' calendarName=calendarName inviterName=inviterName}}}{{else}}{{{t 'notification_message_no_inviter' calendarName=calendarName}}}{{/if}}
 
 {{#if message}}
-{{t 'custom_message_label'}}
-{{message}}
+{{#if inviterName}}{{{t 'custom_message_label' inviterName=inviterName}}}{{else}}{{{t 'custom_message_label_no_inviter'}}}{{/if}}
+{{{message}}}
 
 {{/if}}
-{{t 'access_granted'}}
+{{{t 'access_granted'}}}
 
-{{t 'view_calendar_instructions'}}
+{{{t 'view_calendar_instructions'}}}
 
-{{calendarUrl}}
+{{{calendarUrl}}}
 
-{{t 'signature'}}
-{{inviterName}}
-
+{{{t 'signature'}}}
+{{#if inviterName}}{{{inviterName}}}
+{{/if}}
 ----
-{{t 'footer_text'}}
+{{{t 'footer_text'}}}

@@ -34,6 +34,8 @@ class EditorNotificationEmail extends EmailMessage {
   buildMessage(language: string): MailData {
     const calendarUrl = publicUrl(calendarPath(this.calendar.urlName));
     const calendarName = this.calendar.content(language).name;
+    // Collaborator display name, never the email address; empty selects the no-inviter wording.
+    const inviterName = this.inviter.displayName?.trim() || this.inviter.username || '';
 
     return {
       emailAddress: this.recipient.email,
@@ -42,13 +44,13 @@ class EditorNotificationEmail extends EmailMessage {
       }),
       textMessage: this.renderPlaintext(language, {
         calendarName,
-        inviterName: this.inviter.email,
+        inviterName,
         message: this.message,
         calendarUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         calendarName,
-        inviterName: this.inviter.email,
+        inviterName,
         message: this.message,
         calendarUrl,
       }),
