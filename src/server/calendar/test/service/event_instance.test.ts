@@ -2168,8 +2168,9 @@ describe('EventInstanceService.listEventInstancesWithFilters — search predicat
  * DB-backed coverage for EventInstanceService.buildEventInstances.
  *
  * A rebuild upserts the generated rows, then prunes this event's rows at
- * or after `now` that it did not generate: materialised past occurrences
- * are the event's history in listings and must survive an edit, and a
+ * or after `now` that it did not generate (a one-off event's stale past
+ * rows too): a recurring event's materialised past occurrences are its
+ * history in listings and must survive an edit, and a
  * failed upsert leaves the previous rows in place.
  */
 describe('EventInstanceService.buildEventInstances', () => {
@@ -2262,9 +2263,8 @@ describe('EventInstanceService.buildEventInstances', () => {
   });
 
   it('does not duplicate a past row that the rebuild generates again', async () => {
-    // A one-off event whose date has passed: the prune keeps its row, and
-    // generateInstances emits it again as a past rdate. The upsert must
-    // update it in place rather than violate the (event_id, start_time)
+    // A one-off event whose date has passed: generateInstances emits it
+    // again as a past rdate. The upsert must update it in place rather than violate the (event_id, start_time)
     // index.
     const eventId = await createEventRow();
     const event = oneOffEvent(eventId, SERIES_START);
@@ -2276,6 +2276,19 @@ describe('EventInstanceService.buildEventInstances', () => {
     const after = await rowsFor(eventId);
     expect(after).toHaveLength(1);
     expect(after[0].id).toBe(original.id);
+  });
+
+  it('removes the old past row when a past one-off event moves to a new date', async () => {
+    const eventId = await createEventRow();
+    await service.buildEventInstances(oneOffEvent(eventId, SERIES_START), FIRST_BUILD_AT);
+    expect(await rowsFor(eventId)).toHaveLength(1);
+
+    // Moved to another date that is also already past at REBUILD_AT.
+    const movedStart = DateTime.fromISO('2026-01-20T10:00:00.000Z', { zone: 'utc' });
+    await service.buildEventInstances(oneOffEvent(eventId, movedStart), REBUILD_AT);
+
+    const after = await rowsFor(eventId);
+    expect(after.map(r => r.start_time.toISOString())).toEqual([movedStart.toISO()]);
   });
 
   it('updates a surviving row in place when an edit keeps its start time but changes its end time', async () => {

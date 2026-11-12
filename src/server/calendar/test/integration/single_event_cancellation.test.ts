@@ -155,10 +155,8 @@ describe('Single-event cancellation (service integration, real DB)', () => {
   });
 
   it('cancellation follows the event when its date is edited (exclusion re-keyed)', async () => {
-    // Both dates must be upcoming. buildEventInstances never deletes a row that
-    // starts before now: past rows are the event's history in listings. If
-    // oldStart has already passed, its row legitimately survives the move and
-    // this test would be asserting the history rule, not the re-key.
+    // Both dates are upcoming so the test asserts the exclusion re-key, with
+    // the old row pruned by the ordinary upcoming-row rule.
     const oldStart = upcomingStart(7);
     const newStart = upcomingStart(45);
 
