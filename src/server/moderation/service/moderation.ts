@@ -32,6 +32,7 @@ import { validateActorUriProtocol } from '@/server/common/helper/uri-validation'
 import { MODERATION_BUS_EVENTS } from '@/server/moderation/events/types';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
+import UnverifiedReportCleanupService from '@/server/moderation/service/unverified-report-cleanup';
 import { hashIp } from '@/server/moderation/service/ip-utils';
 import { createLogger } from '@/server/common/helper/logger';
 import { withKeyedLock } from '@/server/common/helper/keyed-lock';
@@ -256,6 +257,7 @@ class ModerationService {
   private calendarInterface?: CalendarInterface;
   private accountsInterface?: AccountsInterface;
   private emailBlockingService: EmailBlockingService;
+  private unverifiedReportCleanup: UnverifiedReportCleanupService;
   private configurationInterface?: ConfigurationInterface;
   private activityPubInterface?: ActivityPubInterface;
 
@@ -272,6 +274,7 @@ class ModerationService {
     this.accountsInterface = accountsInterface;
     this.configurationInterface = configurationInterface;
     this.emailBlockingService = new EmailBlockingService();
+    this.unverifiedReportCleanup = new UnverifiedReportCleanupService();
     this.activityPubInterface = activityPubInterface;
   }
 
@@ -656,7 +659,17 @@ class ModerationService {
     // Check for duplicate reports
     const alreadyReported = await this.hasReporterAlreadyReported(data.eventId, reporterIdentifier);
     if (alreadyReported) {
-      throw new DuplicateReportError();
+      // An expired unverified report can never be completed, so it must not
+      // block a fresh attempt. Purge it; refuse only if nothing was purged.
+      const purged = data.reporterType === 'anonymous'
+        ? await this.unverifiedReportCleanup.cleanupExpiredUnverifiedReports({
+          eventId: data.eventId,
+          reporterIdentifier,
+        })
+        : { reportsDeleted: 0, reporterRowsDeleted: 0 };
+      if (purged.reportsDeleted === 0) {
+        throw new DuplicateReportError();
+      }
     }
 
     // Persist the report

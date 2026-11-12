@@ -5,6 +5,7 @@ import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
+import UnverifiedReportCleanupService from '@/server/moderation/service/unverified-report-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import CalendarInterface from '@/server/calendar/interface';
@@ -55,6 +56,7 @@ describe('Worker backup-job retry-storm alerting', () => {
 
     // Stub other handlers so registerJobHandlers can run without side effects
     sandbox.stub(IpCleanupService.prototype, 'cleanupExpiredIpData').resolves({ hashCleared: 0, subnetCleared: 0 });
+    sandbox.stub(UnverifiedReportCleanupService.prototype, 'cleanupExpiredUnverifiedReports').resolves({ reportsDeleted: 0, reporterRowsDeleted: 0 });
     // The worker's notifications:cleanup handler calls
     // NotificationRetentionCleanupService.cleanupExpiredNotifications — stub
     // it so registerJobHandlers can register handlers without hitting the DB.
@@ -212,6 +214,23 @@ describe('Worker backup-job retry-storm alerting', () => {
       sandbox.stub(CalendarInterface.prototype, 'refreshAllEventInstances').rejects(failure);
 
       await expect(queue.handlers['instances:refresh']({})).rejects.toBe(failure);
+    });
+  });
+
+  describe('moderation:unverified-report-cleanup', () => {
+    it('is scheduled daily at 3:30 AM and runs the cleanup', async () => {
+      expect(queue.schedules['moderation:unverified-report-cleanup']).toBe('30 3 * * *');
+
+      await queue.handlers['moderation:unverified-report-cleanup']({});
+
+      expect(UnverifiedReportCleanupService.prototype.cleanupExpiredUnverifiedReports.callCount).toBe(1);
+    });
+
+    it('re-throws a failure of the run so pg-boss records it', async () => {
+      const failure = new Error('database unavailable');
+      (UnverifiedReportCleanupService.prototype.cleanupExpiredUnverifiedReports as sinon.SinonStub).rejects(failure);
+
+      await expect(queue.handlers['moderation:unverified-report-cleanup']({})).rejects.toBe(failure);
     });
   });
 
