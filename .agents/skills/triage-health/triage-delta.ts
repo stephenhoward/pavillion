@@ -68,14 +68,22 @@ import { run, type SpawnFn } from './run.js';
  */
 export type TargetClass = 'node' | 'image' | 'repo';
 
-/** One finding, collapsed across the per-package rows Trivy emits for it. */
+/**
+ * One finding, collapsed across the per-package rows Trivy emits for it — and,
+ * for an image vulnerability, across every image scan that reported it.
+ */
 export interface DeltaFinding {
   id: string;
   severity: Severity;
   kind: Finding['kind'];
   title: string;
-  /** Scan label the finding came from (`repository`, `image:main`, `image:latest`). */
+  /**
+   * Scan label(s) the finding came from (`repository`, `image:main`,
+   * `image:latest`), sorted and comma-joined when an image vulnerability was
+   * reported by more than one image scan.
+   */
   scan: string;
+  /** Scan target(s), sorted and comma-joined on the same terms as `scan`. */
   target: string;
   targetClass: TargetClass;
   /** Every package the CVE was reported against on this target, sorted. */
@@ -468,16 +476,44 @@ function hasFix(value: string | undefined): boolean {
 }
 
 /**
- * Collapse the per-package rows Trivy emits into one entry per finding id per
- * scan target: a base-image CVE listed against perl, perl-base, libperl5.40 and
- * perl-modules-5.40 is one upgrade decision, not four.
+ * Which findings are one upgrade decision. Normally that is one finding id on
+ * one scan target.
+ *
+ * Image vulnerabilities are keyed on the id alone. Every image scan (`image:main`,
+ * `image:latest`) reads an image built from the same Dockerfile, so a CVE they
+ * both report is closed by one base-image rebuild — not one per tag. The
+ * targets differ only by image reference (and by distro point release when the
+ * tags were built on different days), which says nothing about the fix.
+ *
+ * Secrets and misconfigurations keep the target in the key: their target is the
+ * location (file and line), and two leaks of one rule in two files are two
+ * things to remove.
+ */
+function collapseKey(finding: Finding, targetClass: TargetClass): string {
+  const id = normalizeId(finding.id);
+  if (targetClass === 'image' && finding.kind === 'vulnerability') {
+    return `image\u0000${id}`;
+  }
+  return `${finding.scan}\u0000${finding.target}\u0000${id}`;
+}
+
+/**
+ * Collapse the per-package rows Trivy emits into one entry per upgrade decision
+ * (see `collapseKey`): a base-image CVE listed against perl, perl-base,
+ * libperl5.40 and perl-modules-5.40, on both image tags, is one decision, not
+ * eight.
  */
 function collapse(findings: Finding[]): DeltaFinding[] {
   // `_fixed` is keyed by package rather than flattened, so that a later coverage
   // check compares a PR's target against the fix for the package that PR
   // actually upgrades. Flattening loses that binding, and two packages on one
   // CVE do not share a version space.
-  const byKey = new Map<string, DeltaFinding & { _installed: string[]; _fixed: Map<string, string[]> }>();
+  const byKey = new Map<string, DeltaFinding & {
+    _installed: string[];
+    _fixed: Map<string, string[]>;
+    _scans: string[];
+    _targets: string[];
+  }>();
 
   // The collapse key is NUL-separated, written as a `\u0000` escape so the
   // separator is visible in the source. Trivy targets carry spaces
@@ -492,7 +528,8 @@ function collapse(findings: Finding[]): DeltaFinding[] {
   // stable without shouting a lower-case secret rule id back at the reader.
 
   for (const finding of findings) {
-    const key = `${finding.scan}\u0000${finding.target}\u0000${normalizeId(finding.id)}`;
+    const targetClass = targetClassFor(finding);
+    const key = collapseKey(finding, targetClass);
     let entry = byKey.get(key);
 
     if (!entry) {
@@ -503,15 +540,20 @@ function collapse(findings: Finding[]): DeltaFinding[] {
         title: finding.title,
         scan: finding.scan,
         target: finding.target,
-        targetClass: targetClassFor(finding),
+        targetClass,
         packages: [],
         fixable: false,
         url: finding.url,
         _installed: [],
         _fixed: new Map(),
+        _scans: [],
+        _targets: [],
       };
       byKey.set(key, entry);
     }
+
+    if (!entry._scans.includes(finding.scan)) entry._scans.push(finding.scan);
+    if (!entry._targets.includes(finding.target)) entry._targets.push(finding.target);
 
     const pkg = finding.pkg && finding.pkg !== 'unknown' ? finding.pkg : undefined;
     if (pkg && !entry.packages.includes(pkg)) {
@@ -533,15 +575,17 @@ function collapse(findings: Finding[]): DeltaFinding[] {
     entry.url ??= finding.url;
   }
 
-  return [...byKey.values()].map(({ _installed, _fixed, ...entry }) => {
+  return [...byKey.values()].map(({ _installed, _fixed, _scans, _targets, ...entry }) => {
     const fixedVersions: Record<string, string> = {};
     for (const [pkg, versions] of _fixed) fixedVersions[pkg] = versions.join(', ');
     const allFixed = dedupe([..._fixed.values()].flat());
 
     return {
       ...entry,
+      scan: [..._scans].sort().join(', '),
+      target: [..._targets].sort().join(', '),
       packages: [...entry.packages].sort(),
-      installed: _installed.length > 0 ? _installed.join(', ') : undefined,
+      installed: _installed.length > 0 ? [..._installed].sort().join(', ') : undefined,
       fixedVersion: allFixed.length > 0 ? allFixed.join(', ') : undefined,
       fixedVersions: allFixed.length > 0 ? fixedVersions : undefined,
       fixable: allFixed.length > 0,

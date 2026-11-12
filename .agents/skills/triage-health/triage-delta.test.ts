@@ -1042,10 +1042,12 @@ describe('computeDelta: scope and normalization', () => {
   });
 
   it('keeps one CVE separate across two space-containing targets of the same scan', () => {
+    // The repository scan, because its key carries the target; image
+    // vulnerabilities are keyed on the id alone and would merge regardless.
     const delta = computeDelta(inputs({
-      reports: [imageReport([
-        { Target: 'debian 12.5', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
-        { Target: 'debian 12.5 (bookworm)', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
+      reports: [repoReport([
+        { Target: 'tools/a b', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
+        { Target: 'tools/a b (vendored)', Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-4444', FixedVersion: '' })] },
       ])],
     }));
 
@@ -1096,6 +1098,95 @@ describe('computeDelta: scope and normalization', () => {
 
     expect(delta.new_actionable).toHaveLength(2);
     expect(delta.new_actionable.map(f => f.targetClass).sort()).toEqual(['image', 'node']);
+  });
+
+  it('collapses one CVE reported by two image scans into a single finding', () => {
+    const delta = computeDelta(inputs({
+      reports: [
+        { ...imageReport([{
+          Target: 'ghcr.io/example/app:main (debian 13.7)',
+          Vulnerabilities: [
+            vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'perl', InstalledVersion: '5.40.1-6', FixedVersion: '' }),
+            vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'perl-base', InstalledVersion: '5.40.1-6', FixedVersion: '' }),
+          ],
+        }]), label: 'image:main' },
+        { ...imageReport([{
+          Target: 'ghcr.io/example/app:latest (debian 13.6)',
+          Vulnerabilities: [
+            vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'perl', InstalledVersion: '5.40.1-5', FixedVersion: '', Severity: 'CRITICAL' }),
+          ],
+        }]), label: 'image:latest' },
+      ],
+    }));
+
+    expect(delta.new_no_fix).toHaveLength(1);
+    expect(delta.new_no_fix[0]).toMatchObject({
+      id: 'CVE-2026-7777',
+      severity: 'CRITICAL',
+      scan: 'image:latest, image:main',
+      target: 'ghcr.io/example/app:latest (debian 13.6), ghcr.io/example/app:main (debian 13.7)',
+      targetClass: 'image',
+      packages: ['perl', 'perl-base'],
+      installed: '5.40.1-5, 5.40.1-6',
+    });
+  });
+
+  it('counts a CVE tracked on the watch list once, however many image scans report it', () => {
+    const report = (label: string) => ({
+      ...imageReport([{
+        Target: `ghcr.io/example/app:${label.split(':')[1]} (debian 13.7)`,
+        Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'perl', FixedVersion: '' })],
+      }]),
+      label,
+    });
+    const delta = computeDelta(inputs({
+      reports: [report('image:main'), report('image:latest')],
+      watchBeads: [{ id: 'pv-watch', design: '| CVE | Severity |\n| --- | --- |\n| CVE-2026-7777 | HIGH |' }],
+    }));
+
+    expect(delta.new_no_fix).toHaveLength(0);
+    expect(delta.already_tracked).toMatchObject({ count: 1, onWatchList: ['CVE-2026-7777'] });
+  });
+
+  it('keeps a fix published on only one image scan, so the merged finding is fixable', () => {
+    const delta = computeDelta(inputs({
+      reports: [
+        { ...imageReport([{
+          Target: 'ghcr.io/example/app:main (debian 13.7)',
+          Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'zlib1g', FixedVersion: '1:1.3.1-2' })],
+        }]), label: 'image:main' },
+        { ...imageReport([{
+          Target: 'ghcr.io/example/app:latest (debian 13.6)',
+          Vulnerabilities: [vuln({ VulnerabilityID: 'CVE-2026-7777', PkgName: 'zlib1g', FixedVersion: '' })],
+        }]), label: 'image:latest' },
+      ],
+    }));
+
+    expect(delta.new_no_fix).toHaveLength(0);
+    expect(delta.new_actionable).toHaveLength(1);
+    expect(delta.new_actionable[0]).toMatchObject({
+      fixable: true,
+      fixedVersions: { zlib1g: '1:1.3.1-2' },
+      scan: 'image:latest, image:main',
+    });
+  });
+
+  it('keeps secrets found by two image scans separate, one per location', () => {
+    const secretAt = (label: string, target: string) => ({
+      ...imageReport([{
+        Target: target,
+        Secrets: [{ RuleID: 'aws-access-key-id', Severity: 'CRITICAL', Title: 'AWS Access Key ID', StartLine: 3 }],
+      }]),
+      label,
+    });
+    const delta = computeDelta(inputs({
+      reports: [
+        secretAt('image:main', '/app/config/a.yaml'),
+        secretAt('image:latest', '/app/config/b.yaml'),
+      ],
+    }));
+
+    expect(delta.new_actionable.filter(f => f.kind === 'secret')).toHaveLength(2);
   });
 
   it('propagates scan errors instead of reporting a clean delta', () => {
