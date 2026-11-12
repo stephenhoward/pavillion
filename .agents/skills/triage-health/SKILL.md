@@ -212,6 +212,11 @@ action — take the highest version required, which clears the lower ones too. F
 different `targetClass` never share a bead — a Node dependency bump and a base-image rebuild are
 different actions performed by different people.
 
+An image vulnerability arrives once, however many image scans reported it: the script merges
+`image:main` and `image:latest` because one rebuild of the same `Dockerfile` fixes both. Its `scan`,
+`target` and `installed` then list every value, comma-joined. File one bead and write one watch row
+for it — never one per image tag.
+
 `newly_fixable` findings are watch-list entries that have gained a fix. They get an ordinary
 actionable bead like any other, **and step 4 drops their watch row** — the script lists them in
 `watch_prune[]`.
@@ -554,7 +559,8 @@ Do not render the summary a second time.
 
 Finding fields: `id`, `severity`, `kind` (`vulnerability`/`secret`/`misconfiguration`), `title`,
 `scan`, `target`, `targetClass` (`node`/`image`/`repo`), `packages[]`, `installed`, `fixedVersion`,
-`fixedVersions{}`, `fixable`, `url`, `renovateHints[]`.
+`fixedVersions{}`, `fixable`, `url`, `renovateHints[]`. `scan`, `target` and `installed` are
+comma-joined when an image vulnerability was merged across image scans.
 
 ## Stop signs
 
