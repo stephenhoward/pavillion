@@ -50,6 +50,9 @@ jobs:
 
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          # Explicit so a scanner upgrade is a reviewed change, not a silent one.
+          version: v0.76.2
 
       # Every scan keeps going on failure: a scan that produced no report is
       # reported as a scan error by trivy-summary.ts, never as a clean result.
