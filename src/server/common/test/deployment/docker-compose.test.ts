@@ -129,6 +129,13 @@ describe('Docker Compose Configuration', () => {
       expect(content).toMatch(/autoheal=true/);
     });
 
+    it.each(['app', 'worker'])('should set no-new-privileges on the %s service', (service) => {
+      const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
+      const compose = parseYaml(fs.readFileSync(composePath, 'utf8'));
+
+      expect(compose.services[service].security_opt).toContain('no-new-privileges:true');
+    });
+
     it('should configure worker healthcheck targeting port 3001', () => {
       const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
       const content = fs.readFileSync(composePath, 'utf8');

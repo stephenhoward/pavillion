@@ -88,6 +88,10 @@ services:
       - encryption_key
     labels:
       - "autoheal=true"
+    # Block setuid/setgid privilege gain inside the container (the image ships
+    # setuid-root binaries from the base distro; Pavillion needs none of them).
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -152,6 +156,10 @@ services:
       - encryption_key
     labels:
       - "autoheal=true"
+    # Block setuid/setgid privilege gain inside the container (the image ships
+    # setuid-root binaries from the base distro; Pavillion needs none of them).
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     logging:
       driver: "json-file"

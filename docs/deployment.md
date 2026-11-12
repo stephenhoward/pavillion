@@ -407,6 +407,10 @@ This is an accepted trade-off for automated recovery. To limit exposure:
 
 If your security policy does not permit Docker socket access from containers, you can remove the `autoheal` service from `docker-compose.yml` and rely on Docker's built-in `restart: unless-stopped` policy for basic recovery. This provides restart-on-crash but not restart-on-unhealthy behavior.
 
+### Container Privilege Hardening
+
+The bundled `docker-compose.yml` sets `security_opt: [no-new-privileges:true]` on the `app` and `worker` services. The Pavillion image runs as an unprivileged user but ships setuid-root binaries from its base distribution; this option stops a process in the container from gaining privileges through them. Pavillion does not need setuid, so nothing changes in normal operation. If you run the image with your own Compose file, `docker run`, or an orchestrator, set the equivalent (`--security-opt no-new-privileges:true`, or `allowPrivilegeEscalation: false` in Kubernetes).
+
 ## Podman Compatibility
 
 Pavillion is fully compatible with Podman as a Docker alternative. Use `podman-compose` as a drop-in replacement:
