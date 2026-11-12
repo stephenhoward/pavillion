@@ -8,7 +8,7 @@ import {
   WebhookEvent,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
-import { Client as PayPalClient } from '@paypal/paypal-server-sdk';
+import { Client as PayPalClient, Environment as PayPalEnvironment } from '@paypal/paypal-server-sdk';
 
 /**
  * PayPal payment provider adapter
@@ -43,7 +43,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
         oAuthClientId: clientId,
         oAuthClientSecret: secret,
       },
-      environment: mode === 'live' ? 'production' : 'sandbox',
+      environment: mode === 'live' ? PayPalEnvironment.Production : PayPalEnvironment.Sandbox,
     });
 
     this.webhookSecret = webhookSecret;
