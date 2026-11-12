@@ -2,10 +2,33 @@
 # Multi-stage build for production deployment
 #
 # Stages:
+#   - pgdg-keyring: Takes the PostgreSQL apt signing key from Debian's
+#     postgresql-common and verifies its fingerprint
 #   - development: For docker-compose.dev.yml with hot-reload
 #   - builder: Builds frontend assets for production
-#   - pgdg-keyring: Fetches the PostgreSQL apt signing key for production
 #   - production: Final production image
+
+# ==============================================================================
+# Stage: PostgreSQL apt keyring
+# ==============================================================================
+# The pgdg signing key comes from the copy Debian ships in postgresql-common, so
+# the build needs no download from www.postgresql.org. gnupg is used only to
+# check the fingerprint, in this throwaway stage, and stays out of the shipped
+# images; development and production copy only the keyring. (Installing
+# postgresql-common itself in the final image would also bring pg_wrapper and
+# the cluster tools, which the client-only images do not need.)
+FROM node:24-trixie-slim AS pgdg-keyring
+
+ARG PGDG_KEY_FINGERPRINT=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gnupg \
+    postgresql-common \
+    && actual="$(gpg --show-keys --with-colons /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg | awk -F: '/^fpr:/ {print $10; exit}')" \
+    && if [ "$actual" != "$PGDG_KEY_FINGERPRINT" ]; then \
+        echo "pgdg keyring fingerprint mismatch: expected $PGDG_KEY_FINGERPRINT, got ${actual:-none}" >&2; exit 1; \
+    fi \
+    && install -D -m 0644 /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg /usr/share/keyrings/postgresql-archive-keyring.gpg
 
 # ==============================================================================
 # Stage: Development (for docker-compose.dev.yml)
@@ -16,11 +39,9 @@ WORKDIR /app
 
 # Install dumb-init for proper signal handling and postgresql-client for backups
 # Add PostgreSQL APT repository to get version 17 client tools
+COPY --from=pgdg-keyring /usr/share/keyrings/postgresql-archive-keyring.gpg /usr/share/keyrings/
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    gnupg \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     dumb-init \
@@ -72,19 +93,6 @@ ARG BUILD_SHA
 RUN npm run build
 
 # ==============================================================================
-# Stage: PostgreSQL apt keyring
-# ==============================================================================
-# Fetches and dearmors the pgdg signing key in a throwaway stage so that curl
-# and gnupg stay out of the shipped image; production copies only the keyring.
-FROM node:24-trixie-slim AS pgdg-keyring
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    gnupg \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg
-
-# ==============================================================================
 # Stage 2: Production runtime
 # ==============================================================================
 FROM node:24-trixie-slim AS production
@@ -94,7 +102,8 @@ FROM node:24-trixie-slim AS production
 # - dumb-init: proper signal handling for Node.js in containers
 # - postgresql-client-17: provides pg_dump/pg_restore for the worker's backup job
 #   (must match the postgres:17 server version; pulled from the pgdg apt repo,
-#   whose signing key comes from the pgdg-keyring stage)
+#   whose signing key comes from the pgdg-keyring stage, taken from
+#   Debian's postgresql-common and fingerprint-checked there)
 COPY --from=pgdg-keyring /usr/share/keyrings/postgresql-archive-keyring.gpg /usr/share/keyrings/
 #
 # Security updates. Two separate defects kept fixed Debian packages out of the
