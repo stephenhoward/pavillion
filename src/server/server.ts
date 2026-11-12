@@ -35,6 +35,7 @@ import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-a
 import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 import { createI18nConfig } from '@/common/i18n/config';
+import { getSupportedLanguageCodes } from '@/common/i18n/languages';
 import type { ReservedUrlNameCollision } from '@/server/calendar/interface';
 import logger from '@/server/common/helper/logger';
 import { installUnhandledRejectionHandler } from '@/server/common/helper/unhandled-rejection';
@@ -350,6 +351,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // Initialize i18next with shared base config plus server-specific backend plugin
   i18next.use(Backend).init(createI18nConfig({
     initAsync: false,
+    // Load every shipped language up front: loadNamespaces only loads for already-loaded
+    // languages, so without this es/fr email copy silently renders as the English fallback.
+    preload: getSupportedLanguageCodes(),
     backend: {
       loadPath: path.join(path.resolve(), "src/server/locales/{{lng}}/{{ns}}.json"),
     },
