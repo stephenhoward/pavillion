@@ -9,7 +9,54 @@ import logger from '@/server/common/helper/logger';
 // connection setting — dialect, credentials, pool, dialectOptions — is declared
 // in config/*.yaml rather than here. See the `database` block in
 // config/default.yaml for the pool sizing and PostgreSQL session limits.
-const db = new Sequelize( config.get('database') );
+const databaseConfig: any = config.get('database');
+
+// A file-backed SQLite database (the e2e lane gives each server process its own
+// file) has one writer at a time, unlike ':memory:' where every query shares a
+// single handle and silently joins whichever transaction is open. Opt in only
+// for that case so dev, integration and production keep their current behavior.
+const isFileBackedSqlite = databaseConfig.dialect === 'sqlite'
+  && !!databaseConfig.storage
+  && databaseConfig.storage !== ':memory:';
+
+// How long a connection waits for another writer's lock before erroring.
+const SQLITE_BUSY_TIMEOUT_MS = 10000;
+
+const db = new Sequelize(
+  isFileBackedSqlite
+    // IMMEDIATE takes the write lock at BEGIN, so two transactions cannot
+    // deadlock on a lock upgrade (SQLite fails that case without waiting).
+    ? { ...databaseConfig, transactionType: 'IMMEDIATE' }
+    : databaseConfig,
+);
+
+if (isFileBackedSqlite) {
+  // Sequelize's SQLite path bypasses the afterConnect hook and opens a new
+  // connection per transaction, so per-connection settings wrap getConnection.
+  const connectionManager: any = db.connectionManager;
+  const originalGetConnection = connectionManager.getConnection.bind(connectionManager);
+  const configured = new WeakSet<object>();
+  let journalModeSet = false;
+
+  const exec = (connection: any, sql: string) => new Promise<void>((resolve, reject) => {
+    connection.exec(sql, (err: Error | null) => err ? reject(err) : resolve());
+  });
+
+  connectionManager.getConnection = async (options?: object) => {
+    const connection = await originalGetConnection(options);
+    if (!configured.has(connection)) {
+      configured.add(connection);
+      connection.configure('busyTimeout', SQLITE_BUSY_TIMEOUT_MS);
+      await exec(connection, 'PRAGMA synchronous=OFF');
+      if (!journalModeSet) {
+        // WAL is persisted in the database file, so once is enough.
+        journalModeSet = true;
+        await exec(connection, 'PRAGMA journal_mode=WAL');
+      }
+    }
+    return connection;
+  };
+}
 
 // ISO date pattern for seed data (without timezone suffix)
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/;

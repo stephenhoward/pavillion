@@ -29,6 +29,8 @@ domain: LOCAL_DOMAIN
 # Database configuration overrides
 database:
   dialect: DB_DIALECT
+  # SQLite database file path. Set by the e2e test server (one file per process).
+  storage: DB_STORAGE
   host: DB_HOST
   port: DB_PORT
   database: DB_NAME
