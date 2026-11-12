@@ -14,6 +14,48 @@ import { limitPublicEventInstanceByIp, limitPublicCalendarListByIp } from '@/ser
 import ExpressHelper from '@/server/common/helper/express';
 
 /**
+ * Per-language content fields each projection serves to anonymous callers.
+ *
+ * Content maps are allow-listed field by field, the same as root fields, so a
+ * field added to a `*Content` model reaches the public API only by being named
+ * here. `imageAlt` is public on purpose. `language` is carried on every row.
+ * The projection test compares each list to the model's `toObject()` keys, so a
+ * new content field fails that test until it is classified here.
+ */
+export const PUBLIC_CONTENT_FIELDS = {
+  calendar: ['language', 'name', 'description', 'imageAlt'],
+  series: ['language', 'name', 'description', 'imageAlt'],
+  category: ['language', 'name'],
+  event: ['language', 'title', 'name', 'description', 'accessibilityInfo', 'imageAlt'],
+  location: ['language', 'accessibilityInfo'],
+  space: ['language', 'name', 'accessibilityInfo'],
+} as const;
+
+/**
+ * Projects a `{ [language]: contentRow }` map through a field allow-list.
+ * Fields outside the list are dropped; a row that is not an object (a
+ * dropped-language tombstone) is omitted; an absent map stays absent.
+ */
+function projectContent(
+  content: Record<string, any> | null | undefined,
+  fields: readonly string[],
+): Record<string, any> | null | undefined {
+  if (!content || typeof content !== 'object') {
+    return content;
+  }
+  const projected: Record<string, any> = {};
+  for (const [language, row] of Object.entries(content)) {
+    if (!row || typeof row !== 'object') {
+      continue;
+    }
+    projected[language] = Object.fromEntries(
+      fields.filter(field => field in row).map(field => [field, row[field]]),
+    );
+  }
+  return projected;
+}
+
+/**
  * Shapes a raw Calendar object for public consumption via an explicit
  * allow-list. Accepts either a model instance (and calls `.toObject()`
  * internally) or an already-serialized plain object — same shape contract
@@ -39,9 +81,12 @@ import ExpressHelper from '@/server/common/helper/express';
  * (Tier 1 anonymous public).
  *
  * Why allow-list (not delete-by-name): future additions to
- * `Calendar.toObject()` must fail loudly here, not silently leak.
+ * `Calendar.toObject()` must not reach anonymous callers without a change
+ * here. That holds for `content` too: its per-language fields are
+ * allow-listed through `PUBLIC_CONTENT_FIELDS`, and the projection test fails
+ * when a content model gains a field that list does not classify.
  */
-function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Record<string, any> {
+export function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Record<string, any> {
   const obj = calendar instanceof Calendar ? calendar.toObject() : calendar;
   const defaultEventImage = obj.defaultEventImage
     ? { id: obj.defaultEventImage.id, mimeType: obj.defaultEventImage.mimeType }
@@ -54,7 +99,7 @@ function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Recor
     languages: obj.languages,
     defaultDateRange: obj.defaultDateRange,
     defaultEventImage,
-    content: obj.content,
+    content: projectContent(obj.content, PUBLIC_CONTENT_FIELDS.calendar),
   };
 }
 
@@ -74,7 +119,7 @@ function toPublicCalendarObject(calendar: Calendar | Record<string, any>): Recor
  * the privacy boundary is a property of the audience, not the data
  * (authenticated APIs need the full shape for cross-resource navigation).
  */
-function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record<string, any> {
+export function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record<string, any> {
   const obj = series instanceof EventSeries ? series.toObject() : series;
   return {
     id: obj.id,
@@ -83,7 +128,7 @@ function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record
     mediaFocalPointX: obj.mediaFocalPointX,
     mediaFocalPointY: obj.mediaFocalPointY,
     mediaZoom: obj.mediaZoom,
-    content: obj.content,
+    content: projectContent(obj.content, PUBLIC_CONTENT_FIELDS.series),
   };
 }
 
@@ -103,11 +148,11 @@ function toPublicSeriesObject(series: EventSeries | Record<string, any>): Record
  *
  * Per DEC-003 the canonical `EventCategory.toObject()` shape is unchanged.
  */
-function toPublicCategoryObject(category: EventCategory | Record<string, any>): Record<string, any> {
+export function toPublicCategoryObject(category: EventCategory | Record<string, any>): Record<string, any> {
   const obj = category instanceof EventCategory ? category.toObject() : category;
   return {
     id: obj.id,
-    content: obj.content,
+    content: projectContent(obj.content, PUBLIC_CONTENT_FIELDS.category),
   };
 }
 
@@ -117,7 +162,8 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
  *
  * Why allow-list (not delete-by-name): future additions to
  * `CalendarEvent.toObject()` (and the nested `*.toObject()` shapes it
- * composes) must fail loudly, not silently leak.
+ * composes) must not reach anonymous callers without a change here, including
+ * the per-language fields of every nested content map (`PUBLIC_CONTENT_FIELDS`).
  *
  * Why in the public domain (not on the model): authenticated calendar/owner
  * APIs legitimately need the full shape — `calendarId`, `locationId`,
@@ -155,7 +201,7 @@ function toPublicCategoryObject(category: EventCategory | Record<string, any>): 
  * current date. That start is already public through the calendar listing,
  * and exclusion rows never contribute to it, so it reveals no cancellation.
  */
-function toPublicEventObject(eventObj: Record<string, any>): Record<string, any> {
+export function toPublicEventObject(eventObj: Record<string, any>): Record<string, any> {
   const rawSchedules = Array.isArray(eventObj.schedules) ? eventObj.schedules : [];
 
   // Rehydrate schedules into model instances so getRecurrenceSummary can read
@@ -176,7 +222,7 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
 
   // Project space to { content } only. Drops id, placeId, and originUri.
   // Absent / null space collapses to `null` so the public contract stays stable.
-  const space = eventObj.space ? { content: eventObj.space.content } : null;
+  const space = eventObj.space ? { content: projectContent(eventObj.space.content, PUBLIC_CONTENT_FIELDS.space) } : null;
 
   // Project location to address-display fields + content only. Drops
   // `originUri` (AP-dedup identity hint), `id` (parallels the space projection),
@@ -192,7 +238,7 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
       state: loc.state,
       postalCode: loc.postalCode,
       country: loc.country,
-      content: loc.content,
+      content: projectContent(loc.content, PUBLIC_CONTENT_FIELDS.location),
     };
   }
 
@@ -222,7 +268,7 @@ function toPublicEventObject(eventObj: Record<string, any>): Record<string, any>
     isRecurring,
     recurrenceSummary: summary,
     singleOccurrenceStart,
-    content: eventObj.content,
+    content: projectContent(eventObj.content, PUBLIC_CONTENT_FIELDS.event),
     location,
     space,
     media,
