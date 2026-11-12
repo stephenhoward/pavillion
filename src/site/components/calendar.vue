@@ -18,6 +18,7 @@ import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import NotFound from './not-found.vue';
 import SearchFilterPublic from './search-filter-public.vue';
 import EventCard from './event-card.vue';
+import LinkifiedText from './LinkifiedText.vue';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 
@@ -205,7 +206,7 @@ onBeforeMount(async () => {
           v-if="localizedContent(state.calendar).description"
           class="calendar-description"
         >
-          {{ localizedContent(state.calendar).description }}
+          <LinkifiedText :text="localizedContent(state.calendar).description" />
         </p>
       </div>
 
