@@ -170,9 +170,9 @@ export class ProviderConnectionService {
       connectionVerified = await adapter.validateCredentials({});
     }
     catch (err) {
-      logger.warn('Stripe connection test failed after save', {
+      logger.warn({
         errorType: err instanceof Error ? err.constructor.name : 'unknown',
-      });
+      }, 'Stripe connection test failed after save');
     }
 
     // Only verified credentials may become the checkout provider
@@ -235,15 +235,15 @@ export class ProviderConnectionService {
    */
   async configurePayPal(credentials: ProviderCredentials, _adminUser: AdminUser): Promise<boolean> {
     // Validate required fields (check for both undefined and empty string)
-    if (!credentials.client_id || credentials.client_id.trim() === '') {
+    if (typeof credentials.client_id !== 'string' || credentials.client_id.trim() === '') {
       throw new MissingRequiredFieldError('client_id');
     }
 
-    if (!credentials.client_secret || credentials.client_secret.trim() === '') {
+    if (typeof credentials.client_secret !== 'string' || credentials.client_secret.trim() === '') {
       throw new MissingRequiredFieldError('client_secret');
     }
 
-    if (!credentials.environment || credentials.environment.trim() === '') {
+    if (typeof credentials.environment !== 'string' || credentials.environment.trim() === '') {
       throw new MissingRequiredFieldError('environment');
     }
 

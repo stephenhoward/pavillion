@@ -21,14 +21,11 @@ import {
 } from '@/common/exceptions/funding';
 
 // Mock Stripe module
-vi.mock('stripe', () => {
-  const mockConstructEvent = vi.fn();
+const { mockConstructEvent } = vi.hoisted(() => ({ mockConstructEvent: vi.fn() }));
 
+vi.mock('stripe', () => {
   return {
     default: class Stripe {
-      static Webhook = {
-        constructEvent: mockConstructEvent,
-      };
       webhooks = {
         constructEvent: mockConstructEvent,
       };
@@ -36,7 +33,6 @@ vi.mock('stripe', () => {
   };
 });
 
-import Stripe from 'stripe';
 import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stripe';
 
 /**
@@ -287,14 +283,14 @@ describe('Webhook Handling', () => {
       const adapter = new StripeAdapter({ apiKey: 'sk_test_empty_secret' }, '');
 
       expect(adapter.verifyWebhookSignature('{"id":"evt_x"}', 'any_signature')).toBe(false);
-      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+      expect(mockConstructEvent).not.toHaveBeenCalled();
     });
 
     it('refuses to verify against a whitespace-only secret', () => {
       const adapter = new StripeAdapter({ apiKey: 'sk_test_blank_secret' }, '   ');
 
       expect(adapter.verifyWebhookSignature('{"id":"evt_x"}', 'any_signature')).toBe(false);
-      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+      expect(mockConstructEvent).not.toHaveBeenCalled();
     });
 
     it('rejects a webhook with 400 when the stored signing secret is empty', async () => {
@@ -331,7 +327,7 @@ describe('Webhook Handling', () => {
       expect(response.body.error).toBe('Webhook signature verification failed');
 
       // The payload must never reach Stripe's verifier with an empty key...
-      expect(vi.mocked(Stripe.Webhook.constructEvent)).not.toHaveBeenCalled();
+      expect(mockConstructEvent).not.toHaveBeenCalled();
       // ...and the forged event must leave no trace in the event log.
       const logged = await FundingEventEntity.findOne({
         where: { provider_event_id: 'evt_forged_no_secret' },
@@ -399,7 +395,7 @@ describe('Webhook Handling', () => {
           customerId: 'cus_test_123',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -436,7 +432,7 @@ describe('Webhook Handling', () => {
           customerId: 'cus_fk_test_456',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -461,7 +457,7 @@ describe('Webhook Handling', () => {
           customerId: 'cus_nonexistent_999',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -482,7 +478,7 @@ describe('Webhook Handling', () => {
           customerId: 'cus_nonexistent_redelivered',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         for (let delivery = 0; delivery < 2; delivery++) {
           const response = await request(app)
@@ -556,7 +552,7 @@ describe('Webhook Handling', () => {
         eventId: string,
       ) {
         const webhookPayload = capturedStripeEventPayload(type, { eventId });
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -636,7 +632,7 @@ describe('Webhook Handling', () => {
           customerId: 'cus_test_dup',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response1 = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -713,7 +709,7 @@ describe('Webhook Handling', () => {
           calendarIds: [testCalendarId1],
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -757,7 +753,7 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -808,7 +804,7 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -852,7 +848,7 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response1 = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -903,7 +899,7 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -948,7 +944,7 @@ describe('Webhook Handling', () => {
           currency: 'USD',
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -976,7 +972,7 @@ describe('Webhook Handling', () => {
         unattributedEvent.data.object.metadata = {};
         const webhookPayload = JSON.stringify(unattributedEvent);
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -1008,7 +1004,7 @@ describe('Webhook Handling', () => {
           accountId: testAccountId,
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -1060,7 +1056,7 @@ describe('Webhook Handling', () => {
           });
 
         const brokenPayload = buildPayload('evt_checkout_broken', 'sub_checkout_broken');
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(brokenPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(brokenPayload) as any);
         const brokenResponse = await request(app)
           .post('/api/funding/webhooks/stripe')
           .set('stripe-signature', 'valid_signature')
@@ -1069,7 +1065,7 @@ describe('Webhook Handling', () => {
         expect(brokenResponse.status).toBe(500);
 
         const healthyPayload = buildPayload('evt_checkout_healthy', 'sub_checkout_healthy');
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(healthyPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(healthyPayload) as any);
         const healthyResponse = await request(app)
           .post('/api/funding/webhooks/stripe')
           .set('stripe-signature', 'valid_signature')
@@ -1115,7 +1111,7 @@ describe('Webhook Handling', () => {
         expect(hostedInvoiceUrl).toBeTruthy();
         const webhookPayload = JSON.stringify(failedInvoice);
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -1158,7 +1154,7 @@ describe('Webhook Handling', () => {
           },
         });
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
@@ -1207,7 +1203,7 @@ describe('Webhook Handling', () => {
         expect(customerDetails.name).toBe('Capture Test');
         const webhookPayload = JSON.stringify(checkoutEvent);
 
-        vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+        mockConstructEvent.mockReturnValue(JSON.parse(webhookPayload) as any);
 
         const response = await request(app)
           .post('/api/funding/webhooks/stripe')
