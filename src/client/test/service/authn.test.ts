@@ -657,3 +657,86 @@ describe('currentAccountId', () => {
     expect(currentAccountId(numeric)).toBeNull();
   });
 });
+
+describe('lastKnownAccountId', () => {
+  const claims = (id: string, exp = Math.floor(Date.now() / 1000) - 60) =>
+    JSON.stringify({ id, email: `${id}@example.com`, isAdmin: false, exp });
+
+  it('returns the stored claim id for an expired token', () => {
+    const authentication = makeAuth();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+
+    expect(authentication.lastKnownAccountId()).toBe('account-a');
+  });
+
+  it('still returns it after _unset_token, and a second _unset_token with empty storage keeps it', () => {
+    const authentication = makeAuth();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+
+    authentication._unset_token();
+    expect(authentication.lastKnownAccountId()).toBe('account-a');
+
+    authentication._unset_token();
+    expect(authentication.lastKnownAccountId()).toBe('account-a');
+  });
+
+  it('is cleared by logout', () => {
+    const authentication = makeAuth();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+
+    authentication.logout();
+
+    expect(authentication.lastKnownAccountId()).toBeNull();
+  });
+
+  it('follows the next stored token and does not resurrect the old id', () => {
+    const authentication = makeAuth();
+    sandbox.stub(authentication, '_refresh_login').resolves();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+    authentication._unset_token();
+
+    const payload = btoa(claims('account-b', Math.floor(Date.now() / 1000) + 3600));
+    authentication._set_token(`h.${payload}.s`);
+    expect(authentication.lastKnownAccountId()).toBe('account-b');
+
+    authentication.localStore.removeItem('jw_token');
+    expect(authentication.lastKnownAccountId()).toBeNull();
+  });
+
+  it('survives a failed silent refresh that expires the session', async () => {
+    const authentication = makeAuth();
+    sandbox.useFakeTimers();
+    authentication.localStore.setItem('jwt', fake_jwt);
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+    sandbox.stub(authentication, '_fetch_and_store_token').rejects(new Error('network down'));
+
+    const promise = authentication._refresh_login(Date.now() + 500).then(
+      () => { throw new Error('should have rejected'); },
+      () => {
+        expect(authentication.sessionExpired.value).toBe(true);
+        expect(authentication.lastKnownAccountId()).toBe('account-a');
+      },
+    );
+    sandbox.clock.runAll();
+    return promise;
+  });
+
+  it('is never written to browser storage by _unset_token', () => {
+    const authentication = makeAuth();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+
+    authentication._unset_token();
+
+    expect(Object.values((authentication.localStore as any).store)).toEqual([]);
+  });
+
+  it('returns the fallback and does not throw for malformed jw_token', () => {
+    const authentication = makeAuth();
+    authentication.localStore.setItem('jw_token', claims('account-a'));
+    authentication._unset_token();
+    authentication.localStore.setItem('jw_token', '{not json');
+
+    expect(() => authentication.lastKnownAccountId()).not.toThrow();
+    expect(authentication.lastKnownAccountId()).toBe('account-a');
+  });
+});

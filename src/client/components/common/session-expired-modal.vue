@@ -17,19 +17,26 @@ const { t } = useTranslation('authentication', {
   keyPrefix: 'session_expired',
 });
 
+// Captured at setup: by the time `success` fires, login() has already
+// overwritten the stored token.
+const previousAccountId: string | null = authn.lastKnownAccountId();
+
 /**
  * After re-authentication, carry on where the account left off, unless a
- * different account signed in. The "before" account is the one the calendar
- * store was loaded for: the expired token can no longer answer, because
- * `currentAccountId()` returns null once its `exp` has passed.
+ * different or unknown account signed in. The "before" identity comes from
+ * authn (the expired token can no longer answer via `currentAccountId()`) and
+ * from the calendar store; every known id must match the new account, so a
+ * store loaded for another account vetoes a replay.
  *
- * On an account change the previous account's state is cleared and its queued
- * requests are aborted, never replayed: replaying them under the new token
- * would attribute the previous account's mutations to the new one.
+ * When neither source knows the previous account, or the ids differ, the
+ * previous account's state is cleared and its queued requests are aborted,
+ * never replayed: replaying them under the new token would attribute the
+ * previous account's mutations to the new one.
  */
 async function handleSuccess() {
-  const previousAccountId = calendarStore.accountId;
-  if (previousAccountId === currentAccountId()) {
+  const current = currentAccountId();
+  const known = [previousAccountId, calendarStore.accountId].filter((id) => id != null);
+  if (current !== null && known.length > 0 && known.every((id) => id === current)) {
     await authn.drainPendingRequests();
     return;
   }

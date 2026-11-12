@@ -35,6 +35,24 @@ export function currentAccountId(storage?: Storage): string | null {
   }
 }
 
+/**
+ * The account ID in the stored JWT claims, ignoring `exp`, or null. Unlike
+ * `currentAccountId` this still answers for an expired token; never throws.
+ */
+function storedAccountId(storage: Storage): string | null {
+  try {
+    const token = storage.getItem('jw_token');
+    if (!token) {
+      return null;
+    }
+    const claims: JWTClaims = JSON.parse(token);
+    return typeof claims?.id === 'string' ? claims.id : null;
+  }
+  catch {
+    return null;
+  }
+}
+
 interface PendingRequest {
   config: AxiosRequestConfig;
   resolve: (value: AxiosResponse) => void;
@@ -46,6 +64,8 @@ export default class AuthenticationService {
   _refresh_timer: NodeJS.Timeout | null;
   sessionExpired: Ref<boolean>;
   lastKnownEmail: string | null;
+  // Memory-only: never written to any browser storage.
+  private _lastAccountId: string | null = null;
   _pendingRequests: PendingRequest[];
   _requestInterceptorId: number;
   _responseInterceptorId: number;
@@ -363,6 +383,17 @@ export default class AuthenticationService {
    */
   logout() {
     this._unset_token();
+    this._lastAccountId = null;
+  }
+
+  /**
+   * The account the most recent session belonged to, even if its token has
+   * expired or been removed. Reads the stored claims first (shared across tabs,
+   * identifies the token queued requests were sent with), then falls back to
+   * the in-memory copy captured by `_unset_token`. Null when unknown.
+   */
+  lastKnownAccountId(): string | null {
+    return storedAccountId(this.localStore) ?? this._lastAccountId;
   }
 
   /**
@@ -712,6 +743,7 @@ export default class AuthenticationService {
    * @private
    */
   _set_token(data: string) {
+    this._lastAccountId = null;
     this.localStore.setItem('jwt',data);
 
     let jw_token: JWTClaims = JSON.parse(
@@ -726,10 +758,16 @@ export default class AuthenticationService {
   /**
    * Removes authentication tokens and the persisted current calendar, and
    * clears the refresh timer. Every token-removal path funnels through here.
+   * The last-known account id is kept in memory (never persisted) until logout
+   * or the next stored token.
    *
    * @private
    */
   _unset_token() {
+    const accountId = storedAccountId(this.localStore);
+    if ( accountId !== null ) {
+      this._lastAccountId = accountId;
+    }
     this.localStore.removeItem('jwt');
     this.localStore.removeItem('jw_token');
     this.localStore.removeItem(CURRENT_CALENDAR_STORAGE_KEY);

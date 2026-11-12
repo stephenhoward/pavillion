@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
 
 interface MountedOptions {
   lastKnownEmail?: string | null;
+  lastKnownAccountId?: string | null;
   sandbox?: sinon.SinonSandbox;
   pinia?: Pinia;
 }
@@ -61,6 +62,7 @@ const mountedSessionExpiredModal = (options: MountedOptions = {}) => {
   const authn = {
     sessionExpired,
     lastKnownEmail: options.lastKnownEmail ?? null,
+    lastKnownAccountId: sandbox.stub().returns(options.lastKnownAccountId ?? null),
     drainPendingRequests: sandbox.stub().callsFake(async () => {
       sessionExpired.value = false;
     }),
@@ -145,7 +147,8 @@ describe('SessionExpiredModal Behavior', () => {
   });
 
   it('drains pending requests and clears sessionExpired when LoginForm emits success', async () => {
-    const { wrapper, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox, pinia });
+    const { wrapper, authn, sessionExpired } = mountedSessionExpiredModal({ sandbox, pinia, lastKnownAccountId: 'account-a' });
+    signInAs('account-a');
 
     const loginForm = wrapper.findComponent(LoginForm);
     await loginForm.vm.$emit('success');
@@ -155,6 +158,62 @@ describe('SessionExpiredModal Behavior', () => {
     expect(authn.abortPendingRequests.called).toBe(false);
     // The modal is dismissed because sessionExpired is now false
     expect(sessionExpired.value).toBe(false);
+  });
+
+  describe('when the calendar store never loaded', () => {
+    async function succeedAs(lastKnownAccountId: string | null, signedInAs: string) {
+      const eventReset = sandbox.spy(useEventStore(), '$reset');
+      const calendarStore = useCalendarStore();
+      const mounted = mountedSessionExpiredModal({ sandbox, pinia, lastKnownAccountId });
+      const replaceSpy = sandbox.spy(mounted.router, 'replace');
+      signInAs(signedInAs);
+      await mounted.wrapper.findComponent(LoginForm).vm.$emit('success');
+      await mounted.wrapper.vm.$nextTick();
+      return { ...mounted, eventReset, replaceSpy, calendarStore };
+    }
+
+    it('replays queued requests when authn knows the same account signed back in', async () => {
+      const { authn, replaceSpy, eventReset } = await succeedAs('account-a', 'account-a');
+
+      expect(authn.drainPendingRequests.calledOnce).toBe(true);
+      expect(authn.abortPendingRequests.called).toBe(false);
+      expect(replaceSpy.called).toBe(false);
+      expect(eventReset.called).toBe(false);
+    });
+
+    it('aborts and resets when a different account than authn knew signs in', async () => {
+      const { authn, replaceSpy, eventReset } = await succeedAs('account-a', 'account-b');
+
+      expect(authn.abortPendingRequests.calledOnce).toBe(true);
+      expect(authn.drainPendingRequests.called).toBe(false);
+      expect(eventReset.calledOnce).toBe(true);
+      expect(replaceSpy.calledOnceWith('/')).toBe(true);
+    });
+
+    it('treats an unknown previous account as a switch', async () => {
+      const { authn, replaceSpy, eventReset } = await succeedAs(null, 'account-a');
+
+      expect(authn.abortPendingRequests.calledOnce).toBe(true);
+      expect(authn.drainPendingRequests.called).toBe(false);
+      expect(eventReset.calledOnce).toBe(true);
+      expect(replaceSpy.calledOnceWith('/')).toBe(true);
+    });
+  });
+
+  it('lets a calendar store loaded for another account veto a replay', async () => {
+    loadCalendarsFor('account-a');
+    const eventReset = sandbox.spy(useEventStore(), '$reset');
+    const { wrapper, router, authn } = mountedSessionExpiredModal({ sandbox, pinia, lastKnownAccountId: 'account-b' });
+    const replaceSpy = sandbox.spy(router, 'replace');
+    signInAs('account-b');
+
+    await wrapper.findComponent(LoginForm).vm.$emit('success');
+    await wrapper.vm.$nextTick();
+
+    expect(authn.abortPendingRequests.calledOnce).toBe(true);
+    expect(authn.drainPendingRequests.called).toBe(false);
+    expect(eventReset.calledOnce).toBe(true);
+    expect(replaceSpy.calledOnceWith('/')).toBe(true);
   });
 
   it('aborts pending requests, clears sessionExpired, and routes to /auth/login on Modal close', async () => {
