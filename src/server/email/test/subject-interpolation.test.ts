@@ -43,8 +43,8 @@ describe('EmailMessage.renderSubject interpolation', () => {
   it('fills a subject placeholder from the data argument', () => {
     const email = new SubjectOnlyEmail('editor_invitation_email');
 
-    expect(email.renderSubject('en', { calendarName: 'Town Hall' }))
-      .toBe('You\'ve been invited to edit Town Hall');
+    expect(email.renderSubject('en', { calendarName: 'Town Hall', instanceName: 'Riverside Events' }))
+      .toBe('You\'ve been invited to edit Town Hall on Riverside Events');
   });
 
   it('does not HTML-escape interpolated values in the plain-text subject', () => {
@@ -61,9 +61,9 @@ describe('email subjects with placeholders', () => {
 
   it('editor invitation subject names the calendar', () => {
     const invitation = new AccountInvitation('inv-1', 'new@example.com', inviter);
-    const email = new EditorInvitationEmail(invitation, 'code-123', calendarNamed('Rock & Roll'));
+    const email = new EditorInvitationEmail(invitation, 'code-123', calendarNamed('Rock & Roll'), { instanceName: 'Riverside Events', inviterName: 'Dana' });
 
-    expect(email.buildMessage('en').subject).toBe('You\'ve been invited to edit Rock & Roll');
+    expect(email.buildMessage('en').subject).toBe('You\'ve been invited to edit Rock & Roll on Riverside Events');
   });
 
   it('editor notification subject names the calendar', () => {
