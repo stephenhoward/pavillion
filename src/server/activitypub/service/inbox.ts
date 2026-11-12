@@ -2128,7 +2128,8 @@ class ProcessInboxService {
     // non-null by the `if (!existingEvent || !eventIdToDelete) return` guard
     // above). Gate on current sharing state, NOT RepostDismissalEntity — see
     // the rationale in processUpdateEvent. A source-initiated delete is not an
-    // owner unpost, so no RepostDismissalEntity is written.
+    // owner unpost, so no RepostDismissalEntity is written; the share row is
+    // the only link to the Announce's id, which the Undo below retracts.
     const share = await SharedEventEntity.findOne({
       where: { event_id: eventIdToDelete, calendar_id: calendar.id },
     });
@@ -2144,9 +2145,18 @@ class ProcessInboxService {
     // event THIS calendar has re-shared. Mirrors handleEventDeleted's Note IRI
     // string form so the Delete(Note) IRI byte-matches the Create(Note) the
     // cascade originally minted — a mismatch makes Mastodon silently no-op.
+    // Also retract the Announce itself: share.id is the Announce activity id,
+    // so Undo({share.id}) ({share.id}/undo) hides it from the public outbox.
+    // Unaddressed, as unshareEvent sends it; written directly rather than via
+    // unshareEvent so no RepostDismissalEntity is recorded (DEC-008).
     if (share) {
       const actorUrl = ActivityPubActor.actorUrl(calendar);
       try {
+        await addToOutbox(
+          this.eventBus,
+          calendar,
+          new UndoActivity(actorUrl, share.id),
+        );
         await addToOutbox(
           this.eventBus,
           calendar,
