@@ -1240,8 +1240,9 @@ export default class EventInstanceService {
    *    A surviving start time keeps its row id and takes the new end time.
    *    If this fails nothing has changed.
    * 2. Prune this event's rows at or after `now` that were not generated.
-   *    Rows before `now` are the event's history in listings and are never
-   *    deleted. If this fails, occurrences the edit removed linger until the
+   *    For a recurring event, rows before `now` are its history in listings
+   *    and are never deleted; a one-off event has no history to keep, so its
+   *    stale past rows are pruned too. If this fails, occurrences the edit removed linger until the
    *    next rebuild; the event is never left without its future rows.
    */
   async buildEventInstances(event: CalendarEvent, now: Date = new Date()): Promise<void> {
@@ -1267,7 +1268,15 @@ export default class EventInstanceService {
       });
     }
 
-    const startTimeFilter: Record<symbol, unknown> = { [Op.gte]: now };
+    // A one-off event has no recurrence to keep history for: when it moves,
+    // its old past row is stale, so the prune covers past rows too. A
+    // recurring event keeps its past occurrences as history.
+    const isRecurring = event.schedules.some(schedule =>
+      !schedule.isExclusion
+      && schedule.frequency !== null
+      && FREQUENCY_MAP[schedule.frequency] !== undefined,
+    );
+    const startTimeFilter: Record<symbol, unknown> = isRecurring ? { [Op.gte]: now } : {};
     if ( rows.length ) {
       startTimeFilter[Op.notIn] = rows.map(row => row.start_time);
     }
