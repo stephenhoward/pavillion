@@ -8,8 +8,11 @@ import { PrimaryModel } from '@/common/model/model';
  * - 'pending'    — DNS challenge token issued; waiting for the owner to
  *                  publish a TXT record.
  * - 'verified'   — DNS challenge observed and validated.
- * - 'expired'    — a previously-verified source has aged out of the
- *                  verification TTL and must be re-verified before use.
+ * - 'expired'    — DERIVED, never written to the database. A stored
+ *                  'verified' source whose verification_expires_at has
+ *                  passed reads as 'expired' via effectiveVerificationState.
+ *                  The stored column records what happened, not whether it
+ *                  is still valid.
  */
 export type ImportSourceVerificationState =
   | 'unverified'
@@ -19,6 +22,54 @@ export type ImportSourceVerificationState =
 
 export const IMPORT_SOURCE_VERIFICATION_STATES: readonly ImportSourceVerificationState[] =
   ['unverified', 'pending', 'verified', 'expired'];
+
+/** Post-expiry grace window (days) during which a lapsed source may still sync. */
+export const VERIFICATION_GRACE_DAYS = 14;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+interface VerificationFields {
+  verificationState: ImportSourceVerificationState;
+  verificationExpiresAt: Date | null;
+}
+
+/**
+ * The verification state as it stands at `now`. A stored 'verified' source
+ * past its expiry reads as 'expired'; a null expiry (file-sourced and
+ * CLI-created rows) never lapses. Every other state is returned unchanged.
+ */
+export function effectiveVerificationState(
+  source: VerificationFields,
+  now: Date,
+): ImportSourceVerificationState {
+  if (
+    source.verificationState === 'verified'
+    && source.verificationExpiresAt
+    && now.getTime() >= source.verificationExpiresAt.getTime()
+  ) {
+    return 'expired';
+  }
+  return source.verificationState;
+}
+
+/**
+ * Whether sync is allowed at `now`: the source is effectively verified, or
+ * lapsed but still inside [expiry, expiry + VERIFICATION_GRACE_DAYS).
+ */
+export function verificationAllowsSync(
+  source: VerificationFields,
+  now: Date,
+): boolean {
+  const state = effectiveVerificationState(source, now);
+  if (state === 'verified') {
+    return true;
+  }
+  if (state === 'expired' && source.verificationExpiresAt) {
+    const graceEnd = source.verificationExpiresAt.getTime() + VERIFICATION_GRACE_DAYS * MS_PER_DAY;
+    return now.getTime() < graceEnd;
+  }
+  return false;
+}
 
 /**
  * Allowed values for the `verification_type` column on import_source.
@@ -120,6 +171,11 @@ export class ImportSource extends PrimaryModel {
   verificationState: ImportSourceVerificationState;
   verifiedAt: Date | null;
   verificationExpiresAt: Date | null;
+  /**
+   * Server-computed: whether sync is currently allowed, including the grace
+   * window after expiry. Clients read this instead of doing clock maths.
+   */
+  canSync: boolean;
   etag: string | null;
   contentHash: string | null;
   lastFetchedAt: Date | null;
@@ -145,6 +201,7 @@ export class ImportSource extends PrimaryModel {
     this.verificationState = 'unverified';
     this.verifiedAt = null;
     this.verificationExpiresAt = null;
+    this.canSync = false;
     this.etag = null;
     this.contentHash = null;
     this.lastFetchedAt = null;
@@ -175,6 +232,7 @@ export class ImportSource extends PrimaryModel {
       verificationExpiresAt: this.verificationExpiresAt
         ? this.verificationExpiresAt.toISOString()
         : null,
+      canSync: this.canSync,
       etag: this.etag,
       contentHash: this.contentHash,
       lastFetchedAt: this.lastFetchedAt ? this.lastFetchedAt.toISOString() : null,
@@ -204,6 +262,7 @@ export class ImportSource extends PrimaryModel {
       (obj.verificationState as ImportSourceVerificationState) ?? 'unverified';
     model.verifiedAt = parseDate(obj.verifiedAt);
     model.verificationExpiresAt = parseDate(obj.verificationExpiresAt);
+    model.canSync = obj.canSync ?? false;
     model.etag = obj.etag ?? null;
     model.contentHash = obj.contentHash ?? null;
     model.lastFetchedAt = parseDate(obj.lastFetchedAt);

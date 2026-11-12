@@ -43,10 +43,8 @@ const logger = createLogger('calendar.import.dns-verifier');
 /** Validity window for a successful DNS verification. */
 export const VERIFICATION_VALIDITY_DAYS = 90;
 
-/** Post-expiry grace window before sync is blocked. */
-export const VERIFICATION_GRACE_DAYS = 14;
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 
 export interface DnsVerifyInput {
   sourceId: string;
@@ -91,31 +89,6 @@ interface DohAnswer {
 interface DohJsonResponse {
   Status: number;
   Answer?: DohAnswer[];
-}
-
-/**
- * Returns true iff a previously-recorded verification is still inside its
- * 90-day validity window.
- */
-export function isVerificationCurrentlyValid(
-  expiresAt: Date,
-  now: Date = new Date(),
-): boolean {
-  return now.getTime() < expiresAt.getTime();
-}
-
-/**
- * Returns true iff now is inside the post-expiry grace window
- * [expiresAt, expiresAt + 14d). Callers typically still allow read-only
- * access during grace but block new syncs after it ends.
- */
-export function isWithinGracePeriod(
-  expiresAt: Date,
-  now: Date = new Date(),
-): boolean {
-  const graceEnd = expiresAt.getTime() + VERIFICATION_GRACE_DAYS * MS_PER_DAY;
-  const n = now.getTime();
-  return n >= expiresAt.getTime() && n < graceEnd;
 }
 
 /**

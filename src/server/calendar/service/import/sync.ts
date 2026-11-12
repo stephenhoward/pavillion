@@ -66,10 +66,7 @@ import { ImportRunEntity, type ImportRunOutcome } from '@/server/calendar/entity
 import type CalendarService from '@/server/calendar/service/calendar';
 import EventService from '@/server/calendar/service/events';
 import { Fetcher, type FetcherResult } from '@/server/calendar/service/import/fetcher';
-import {
-  isVerificationCurrentlyValid,
-  isWithinGracePeriod,
-} from '@/server/calendar/service/import/dns-verifier';
+import { verificationAllowsSync } from '@/common/model/import_source';
 import { mapVEvent, type MapperOutput } from '@/server/calendar/service/import/mapper';
 import db from '@/server/common/entity/db';
 import { createLogger } from '@/server/common/helper/logger';
@@ -706,25 +703,16 @@ class SyncService {
   // -------------------------------------------------------------------------
 
   private assertVerifiedForSync(source: ImportSourceEntity): void {
-    if (source.verification_state === 'verified') {
-      // Additional expiry + grace check: if verification_expires_at has
-      // passed AND we are outside the grace window, block.
-      if (source.verification_expires_at) {
-        const expiresAt = source.verification_expires_at;
-        const now = this.nowFn();
-        if (!isVerificationCurrentlyValid(expiresAt, now) && !isWithinGracePeriod(expiresAt, now)) {
-          throw new ImportSourceNotVerifiedError();
-        }
-      }
-      return;
+    const allowed = verificationAllowsSync(
+      {
+        verificationState: source.verification_state,
+        verificationExpiresAt: source.verification_expires_at,
+      },
+      this.nowFn(),
+    );
+    if (!allowed) {
+      throw new ImportSourceNotVerifiedError();
     }
-    if (source.verification_state === 'expired' && source.verification_expires_at) {
-      const now = this.nowFn();
-      if (isWithinGracePeriod(source.verification_expires_at, now)) {
-        return;
-      }
-    }
-    throw new ImportSourceNotVerifiedError();
   }
 
   /**

@@ -102,6 +102,54 @@ describe('ImportSourceEntity', () => {
     });
   });
 
+  describe('derived verification state (toModel(now))', () => {
+    const expiresAt = new Date('2026-06-01T00:00:00Z');
+    const build = (overrides: Record<string, unknown> = {}) => ImportSourceEntity.build({
+      id: uuidv4(),
+      calendar_id: uuidv4(),
+      url: 'https://example.com/cal.ics',
+      source_type: 'url',
+      verification_state: 'verified',
+      verification_expires_at: expiresAt,
+      ...overrides,
+    });
+
+    it('reads verified with canSync before expiry', () => {
+      const model = build().toModel(new Date('2026-05-31T23:59:59Z'));
+      expect(model.verificationState).toBe('verified');
+      expect(model.canSync).toBe(true);
+    });
+
+    it('reads expired with canSync inside the grace window', () => {
+      const model = build().toModel(new Date('2026-06-05T00:00:00Z'));
+      expect(model.verificationState).toBe('expired');
+      expect(model.canSync).toBe(true);
+    });
+
+    it('reads expired without canSync past the grace window', () => {
+      const model = build().toModel(new Date('2026-06-15T00:00:00Z'));
+      expect(model.verificationState).toBe('expired');
+      expect(model.canSync).toBe(false);
+    });
+
+    it('never allows sync on a file source', () => {
+      const model = build({ source_type: 'file', url: null, verification_expires_at: null })
+        .toModel(new Date('2026-05-01T00:00:00Z'));
+      expect(model.canSync).toBe(false);
+    });
+
+    it('serializes the effective state and canSync', () => {
+      const obj = build().toModel(new Date('2026-06-05T00:00:00Z')).toObject();
+      expect(obj.verificationState).toBe('expired');
+      expect(obj.canSync).toBe(true);
+    });
+
+    it('fromModel maps the derived expired state back to stored verified', () => {
+      const model = build().toModel(new Date('2026-06-05T00:00:00Z'));
+      expect(ImportSourceEntity.fromModel(model).verification_state).toBe('verified');
+    });
+  });
+
   describe('round-trip conversion', () => {
     it('preserves data integrity through fromModel -> toModel', () => {
       const id = uuidv4();

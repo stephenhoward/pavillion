@@ -18,6 +18,8 @@ import {
   ImportSourceType,
   ImportSourceVerificationState,
   ImportSourceVerificationType,
+  effectiveVerificationState,
+  verificationAllowsSync,
 } from '@/common/model/import_source';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
@@ -125,8 +127,12 @@ class ImportSourceEntity extends Model {
    * model — it is an owner-only secret surfaced through a dedicated API
    * surface (see ImportSourceService) and must not leak via generic
    * list/read responses.
+   *
+   * The model carries the EFFECTIVE verification state (a stored 'verified'
+   * past its expiry reads 'expired') and a server-computed `canSync`, both
+   * derived at `now`. The stored column is never rewritten.
    */
-  toModel(): ImportSource {
+  toModel(now: Date = new Date()): ImportSource {
     const model = new ImportSource(this.id, this.calendar_id, this.url);
     model.sourceType = this.source_type;
     model.originalFilename = this.original_filename;
@@ -135,6 +141,8 @@ class ImportSourceEntity extends Model {
     model.verificationState = this.verification_state;
     model.verifiedAt = this.verified_at;
     model.verificationExpiresAt = this.verification_expires_at;
+    model.verificationState = effectiveVerificationState(model, now);
+    model.canSync = this.source_type === 'url' && verificationAllowsSync(model, now);
     model.etag = this.etag;
     model.contentHash = this.content_hash;
     model.lastFetchedAt = this.last_fetched_at;
@@ -151,6 +159,9 @@ class ImportSourceEntity extends Model {
    * (see toModel comment). Callers that need to persist a newly-issued
    * token must set it directly on the entity after building, or use the
    * service's verification-issue flow which handles token storage.
+   *
+   * The derived 'expired' state is mapped back to the stored 'verified', and
+   * `canSync` is ignored, so a round-trip never persists a derived value.
    */
   static fromModel(model: ImportSource): ImportSourceEntity {
     return ImportSourceEntity.build({
@@ -161,7 +172,7 @@ class ImportSourceEntity extends Model {
       original_filename: model.originalFilename,
       enabled: model.enabled,
       verification_type: model.verificationType,
-      verification_state: model.verificationState,
+      verification_state: model.verificationState === 'expired' ? 'verified' : model.verificationState,
       verified_at: model.verifiedAt,
       verification_expires_at: model.verificationExpiresAt,
       etag: model.etag,

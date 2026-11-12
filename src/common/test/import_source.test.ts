@@ -6,6 +6,9 @@ import {
   IMPORT_SOURCE_VERIFICATION_TYPES,
   IMPORT_SOURCE_LAST_STATUSES,
   IMPORT_SOURCE_TYPES,
+  VERIFICATION_GRACE_DAYS,
+  effectiveVerificationState,
+  verificationAllowsSync,
 } from '@/common/model/import_source';
 
 describe('ImportSource', () => {
@@ -100,6 +103,7 @@ describe('ImportSource', () => {
         verificationState: 'verified',
         verifiedAt: '2026-04-22T10:00:00.000Z',
         verificationExpiresAt: '2026-10-22T10:00:00.000Z',
+        canSync: false,
         etag: 'W/"abc123"',
         contentHash: 'deadbeef',
         lastFetchedAt: '2026-04-22T12:00:00.000Z',
@@ -263,5 +267,59 @@ describe('ImportSource', () => {
       expect(roundTripped.originalFilename).toBe('exported-events.ics');
       expect(roundTripped.url).toBeNull();
     });
+  });
+});
+
+describe('verification lifecycle windows', () => {
+  const expiresAt = new Date('2026-03-01T00:00:00Z');
+  const day = 24 * 60 * 60 * 1000;
+  const verified = { verificationState: 'verified' as const, verificationExpiresAt: expiresAt };
+
+  it('exposes a 14-day grace window', () => {
+    expect(VERIFICATION_GRACE_DAYS).toBe(14);
+  });
+
+  it('is verified and syncable before expiry', () => {
+    const now = new Date(expiresAt.getTime() - 1);
+    expect(effectiveVerificationState(verified, now)).toBe('verified');
+    expect(verificationAllowsSync(verified, now)).toBe(true);
+  });
+
+  it('is expired at the expiry instant but still syncable', () => {
+    expect(effectiveVerificationState(verified, expiresAt)).toBe('expired');
+    expect(verificationAllowsSync(verified, expiresAt)).toBe(true);
+  });
+
+  it('is syncable 13 days after expiry', () => {
+    expect(verificationAllowsSync(verified, new Date(expiresAt.getTime() + 13 * day))).toBe(true);
+  });
+
+  it('is not syncable at the grace-end boundary', () => {
+    const now = new Date(expiresAt.getTime() + 14 * day);
+    expect(effectiveVerificationState(verified, now)).toBe('expired');
+    expect(verificationAllowsSync(verified, now)).toBe(false);
+  });
+
+  it('never lapses with a null expiry', () => {
+    const source = { verificationState: 'verified' as const, verificationExpiresAt: null };
+    const now = new Date('2099-01-01T00:00:00Z');
+    expect(effectiveVerificationState(source, now)).toBe('verified');
+    expect(verificationAllowsSync(source, now)).toBe(true);
+  });
+
+  it('leaves non-verified states unchanged and unsyncable', () => {
+    for (const state of ['unverified', 'pending'] as const) {
+      const source = { verificationState: state, verificationExpiresAt: expiresAt };
+      const now = new Date(expiresAt.getTime() + day);
+      expect(effectiveVerificationState(source, now)).toBe(state);
+      expect(verificationAllowsSync(source, now)).toBe(false);
+    }
+  });
+
+  it('round-trips canSync through toObject and fromObject, defaulting to false', () => {
+    const model = new ImportSource('id', 'cal', 'https://example.com/a.ics');
+    expect(model.canSync).toBe(false);
+    model.canSync = true;
+    expect(ImportSource.fromObject(model.toObject()).canSync).toBe(true);
   });
 });

@@ -236,6 +236,7 @@ describe('ImportSourcesSection', () => {
         sourceType: 'file',
         originalFilename: 'events.ics',
         verificationState: 'verified',
+        canSync: true,
       });
       createSourceFromFileMock.mockResolvedValue({
         source: fileSource,
@@ -290,6 +291,7 @@ describe('ImportSourcesSection', () => {
         sourceType: 'file',
         originalFilename: 'events.ics',
         verificationState: 'verified',
+        canSync: true,
       });
       createSourceFromFileMock.mockResolvedValue({
         source: fileSource,
@@ -435,6 +437,7 @@ describe('ImportSourcesSection', () => {
         sourceType: 'file',
         originalFilename: 'my-events.ics',
         verificationState: 'verified',
+        canSync: true,
       });
       listSourcesMock.mockResolvedValue([fileSource]);
 
@@ -463,6 +466,7 @@ describe('ImportSourcesSection', () => {
         sourceType: 'file',
         originalFilename: 'my-events.ics',
         verificationState: 'verified',
+        canSync: true,
         lastFetchedAt: new Date('2026-07-10T12:00:00Z'),
       });
       listSourcesMock.mockResolvedValue([fileSource]);
@@ -481,6 +485,7 @@ describe('ImportSourcesSection', () => {
         sourceType: 'file',
         originalFilename: '<img src=x onerror=alert(1)>.ics',
         verificationState: 'verified',
+        canSync: true,
       });
       listSourcesMock.mockResolvedValue([fileSource]);
 
@@ -565,6 +570,7 @@ describe('ImportSourcesSection', () => {
     it('enables Sync Now for verified sources', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
@@ -580,6 +586,7 @@ describe('ImportSourcesSection', () => {
     it('emits sync-requested when Sync Now clicked on verified source', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
       syncSourceMock.mockResolvedValue({
         id: 'run-1',
@@ -614,6 +621,7 @@ describe('ImportSourcesSection', () => {
     it('calls syncSource and refreshes the row on success', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       syncSourceMock.mockResolvedValue({
@@ -631,6 +639,7 @@ describe('ImportSourcesSection', () => {
 
       const refreshed = buildSource('id-1', 'https://example.com/a.ics');
       refreshed.verificationState = 'verified';
+      refreshed.canSync = true;
       refreshed.lastFetchedAt = new Date('2026-01-01T12:00:00Z');
       getSourceMock.mockResolvedValue(refreshed);
 
@@ -657,6 +666,7 @@ describe('ImportSourcesSection', () => {
     it('shows a distinct success toast when sync run reports no_changes', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       syncSourceMock.mockResolvedValue({
@@ -693,6 +703,7 @@ describe('ImportSourcesSection', () => {
     it('reports skipped sync-managed and preserved locally-edited counts', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       syncSourceMock.mockResolvedValue({
@@ -727,6 +738,7 @@ describe('ImportSourcesSection', () => {
     it('omits the dedup clauses when both counters are zero', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       syncSourceMock.mockResolvedValue({
@@ -761,6 +773,7 @@ describe('ImportSourcesSection', () => {
     it('surfaces error without crashing when syncSource fails', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       syncSourceMock.mockRejectedValue(Object.assign(new Error('fail'), {
@@ -810,6 +823,7 @@ describe('ImportSourcesSection', () => {
     it('does not render Verify button when source is already verified', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
@@ -870,6 +884,7 @@ describe('ImportSourcesSection', () => {
       // handler replaces the stale row and calls closeChallengeModal.
       const updatedSource = buildSource('id-1', 'https://example.com/a.ics', {
         verificationState: 'verified',
+        canSync: true,
       });
       wizard.vm.$emit('verified', updatedSource);
       await flushPromises();
@@ -939,6 +954,7 @@ describe('ImportSourcesSection', () => {
       // our trigger button on the next tick.
       const updated = buildSource('id-1', 'https://example.com/a.ics', {
         verificationState: 'verified',
+        canSync: true,
       });
       wrapper.findComponent(VerifyOwnershipWizard).vm.$emit('verified', updated);
       await flushPromises();
@@ -969,6 +985,7 @@ describe('ImportSourcesSection', () => {
     it('keeps aria-disabled=false on the Sync Now button when verified and idle', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
@@ -983,6 +1000,7 @@ describe('ImportSourcesSection', () => {
     it('adds a URL-scoped aria-label to the Sync Now button', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
@@ -1029,6 +1047,7 @@ describe('ImportSourcesSection', () => {
     it('does not mark the verification badge with role="status"', async () => {
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
@@ -1047,6 +1066,7 @@ describe('ImportSourcesSection', () => {
       // contain the verification state's localized label.
       const s1 = buildSource('id-1', 'https://example.com/a.ics');
       s1.verificationState = 'verified';
+      s1.canSync = true;
       listSourcesMock.mockResolvedValue([s1]);
 
       const { wrapper } = mountSection();
