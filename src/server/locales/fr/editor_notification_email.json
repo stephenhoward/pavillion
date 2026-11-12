@@ -8,5 +8,7 @@
   "view_calendar_instructions": "Vous pouvez commencer à modifier ce calendrier immédiatement. Cliquez sur le bouton ci-dessous pour le voir :",
   "view_calendar_button": "Voir le calendrier",
   "signature": "Cordialement,",
-  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail.",
+  "notification_message_no_inviter": "Vous avez reçu l'accès éditeur au calendrier « {{calendarName}} ».",
+  "custom_message_label_no_inviter": "Message personnel :"
 }
