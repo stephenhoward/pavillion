@@ -24,6 +24,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooLargeError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceCapExceededError,
   IMPORT_DNS_MISMATCH,
   IMPORT_RELME_HOSTNAME_MISMATCH,
@@ -278,7 +279,9 @@ class ImportSourceService {
    * captures parse failures as a run outcome rather than throwing, so we
    * inspect the returned {@link SyncResult} and throw the mapping exception
    * ourselves to trigger the rollback:
-   *   - `outcome === 'parse_error'`  → {@link ImportSourceFileBadFormatError} (400)
+   *   - `outcome === 'parse_error'`  → {@link ImportSourceFileBadFormatError} (400),
+   *     or {@link ImportSourceFileInternalError} (500) when the run's error is
+   *     the internal-error sentinel
    *   - parsed but zero usable events → {@link ImportSourceParseError} (422)
    *
    * @param account - The requesting account (must own or edit the calendar)
@@ -368,6 +371,11 @@ class ImportSourceService {
       );
 
       if (run.outcome === 'parse_error') {
+        // A run that recorded the internal-error sentinel failed on a write,
+        // not on the file: report it as a server failure (500), not a bad file.
+        if (run.errorMessage === 'IMPORT_INTERNAL_ERROR') {
+          throw new ImportSourceFileInternalError();
+        }
         // The parser could not read the payload at all — treat as a bad file
         // (400) and roll the source row back.
         throw new ImportSourceFileBadFormatError({ reason: 'parse_error' });

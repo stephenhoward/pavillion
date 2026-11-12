@@ -34,6 +34,7 @@ export const IMPORT_SOURCE_NOT_VERIFIED = 'IMPORT_SOURCE_NOT_VERIFIED';
 export const IMPORT_FILE_EMPTY = 'IMPORT_FILE_EMPTY';
 export const IMPORT_FILE_TOO_LARGE = 'IMPORT_FILE_TOO_LARGE';
 export const IMPORT_FILE_BAD_FORMAT = 'IMPORT_FILE_BAD_FORMAT';
+export const IMPORT_FILE_INTERNAL_ERROR = 'IMPORT_FILE_INTERNAL_ERROR';
 export const IMPORT_FILE_TOO_MANY_EVENTS = 'IMPORT_FILE_TOO_MANY_EVENTS';
 export const IMPORT_SOURCE_CAP_EXCEEDED = 'IMPORT_SOURCE_CAP_EXCEEDED';
 
@@ -254,6 +255,20 @@ export class ImportSourceFileBadFormatError extends Error {
     this.name = 'ImportSourceFileBadFormatError';
     this.details = details;
     Object.setPrototypeOf(this, ImportSourceFileBadFormatError.prototype);
+  }
+}
+
+/**
+ * Thrown when a file import fails on the server's side after the file passed
+ * intake: the run recorded the internal-error sentinel (a write failure, not
+ * a parse failure). The file may be perfectly fine, so this is distinct from
+ * {@link ImportSourceFileBadFormatError}. Maps to HTTP 500 in the API handler.
+ */
+export class ImportSourceFileInternalError extends Error {
+  constructor() {
+    super(IMPORT_FILE_INTERNAL_ERROR);
+    this.name = 'ImportSourceFileInternalError';
+    Object.setPrototypeOf(this, ImportSourceFileInternalError.prototype);
   }
 }
 

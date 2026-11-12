@@ -271,6 +271,7 @@
       "source_cap_exceeded": "This calendar has reached the maximum number of import sources. Remove a feed before importing a file.",
       "file_empty": "That file is empty. Choose an .ics calendar file that contains events.",
       "file_bad_format": "That file could not be read as a calendar. Export your calendar as an .ics file and try again.",
+      "file_internal_error": "The server couldn't read or save that file because of an internal problem, not because of the file. Try again in a moment; if it keeps happening, contact your instance administrator.",
       "file_no_events": "That calendar file contains no events to import.",
       "file_too_many_events": "That file has more events than can be imported at once. Split it into smaller files and import each one.",
       "no_edit_permission": "You don't have permission to import events into this calendar.",

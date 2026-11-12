@@ -21,6 +21,7 @@ import {
   ImportSourceFileEmptyError,
   ImportSourceFileTooManyEventsError,
   ImportSourceFileBadFormatError,
+  ImportSourceFileInternalError,
   ImportSourceCapExceededError,
   IMPORT_DNS_NOT_FOUND,
   IMPORT_RELME_LINK_NOT_FOUND,
@@ -487,6 +488,22 @@ describe('ImportSourceRoutes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('ImportSourceFileBadFormatError');
+    });
+
+    it('maps an internal import failure to 500 (ImportSourceFileInternalError)', async () => {
+      const stub = mockInterface.createImportSourceFromFile as sinon.SinonStub;
+      stub.rejects(new ImportSourceFileInternalError());
+      registerFileRoute();
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .attach('file', Buffer.from(VALID_ICS), {
+          filename: 'calendar.ics',
+          contentType: 'text/calendar',
+        });
+
+      expect(response.status).toBe(500);
+      expect(response.body.errorName).toBe('ImportSourceFileInternalError');
     });
 
     it('maps missing editor access to 403', async () => {
