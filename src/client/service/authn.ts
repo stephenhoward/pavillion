@@ -384,6 +384,7 @@ export default class AuthenticationService {
   logout() {
     this._unset_token();
     this._lastAccountId = null;
+    this.lastKnownEmail = null;
   }
 
   /**
@@ -758,8 +759,9 @@ export default class AuthenticationService {
   /**
    * Removes authentication tokens and the persisted current calendar, and
    * clears the refresh timer. Every token-removal path funnels through here.
-   * The last-known account id is kept in memory (never persisted) until logout
-   * or the next stored token.
+   * The last-known account id and email are kept in memory (never persisted)
+   * until logout so the session-expired modal can prefill the email after a
+   * silent-refresh failure; `logout()` clears both.
    *
    * @private
    */
@@ -771,7 +773,6 @@ export default class AuthenticationService {
     this.localStore.removeItem('jwt');
     this.localStore.removeItem('jw_token');
     this.localStore.removeItem(CURRENT_CALENDAR_STORAGE_KEY);
-    this.lastKnownEmail = null;
     if ( this._refresh_timer ) {
       clearTimeout(this._refresh_timer);
       this._refresh_timer = null;
