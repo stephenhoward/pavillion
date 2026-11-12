@@ -33,7 +33,7 @@
     },
     {
       "description": "Automerge minor/patch/pin/digest past 1.0 once required checks pass",
-      "matchRepositories": ["stephenhoward/pavillion"],
+      "matchRepositories": ["stephenhoward/pavillion", "stephenhoward/pavillion-site"],
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "matchCurrentVersion": "!/^v?0\\./",
       "automerge": true
