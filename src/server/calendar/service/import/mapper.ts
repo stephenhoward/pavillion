@@ -343,8 +343,10 @@ export function mapVEvent(input: MapperInput): MapperOutput {
     // thrown Error that the sync orchestrator maps to ImportSourceParseError.
     throw new Error('VEVENT is missing DTSTART; cannot map.');
   }
+  // No schedule id: it is a database row id, not the feed UID (which travels
+  // as `external_uid`). The event service assigns the id on write.
   const schedule = new CalendarEventSchedule(
-    externalUid || undefined,
+    undefined,
     toDateTime(vevent.start, zone),
     // endDate is reserved for the recurrence end boundary (RRULE UNTIL); do
     // NOT populate it from DTEND — that's a per-instance end time which maps

@@ -367,6 +367,15 @@ describe('ICS mapper: mapVEvent', () => {
     });
   });
 
+  describe('schedule id', () => {
+    it('leaves the schedule id unset while keeping the feed UID as external_uid', () => {
+      const vevent = makeVEvent({ uid: 'feed-uid-1@example.test' });
+      const out = mapVEvent({ vevent, calendarPrimaryLanguage: 'en' });
+      expect(out.schedule.id).toBeFalsy();
+      expect(out.external_uid).toBe('feed-uid-1@example.test');
+    });
+  });
+
   describe('RRULE', () => {
     it('maps FREQ=DAILY;INTERVAL=2;COUNT=5 correctly', () => {
       const vevent = makeVEvent({

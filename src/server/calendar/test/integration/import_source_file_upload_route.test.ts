@@ -4,8 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import request from 'supertest';
 
+import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { EventEntity } from '@/server/calendar/entity/event';
+import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventImportOriginEntity } from '@/server/calendar/entity/event_import_origin';
 import { ImportRunEntity } from '@/server/calendar/entity/import_run';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
@@ -33,6 +34,8 @@ describe('POST /import-sources/file', () => {
   let env: TestEnvironment;
   let eventBus: EventEmitter;
   let calendar: Calendar;
+  let calendarInterface: CalendarInterface;
+  let account: Account;
   let token: string;
 
   beforeAll(async () => {
@@ -43,12 +46,12 @@ describe('POST /import-sources/file', () => {
     await createImportRun.up({ context: db });
 
     eventBus = new EventEmitter();
-    const calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface = new CalendarInterface(eventBus);
     const accountService = new AccountService(eventBus, new ConfigurationInterface(), new SetupInterface());
 
     const email = 'fileroute@pavillion.dev';
     const password = 'testpassword';
-    const { account } = await accountService._setupAccount(email, password);
+    ({ account } = await accountService._setupAccount(email, password));
     calendar = await calendarInterface.createCalendar(account, 'fileroutecal');
     token = await env.login(email, password);
   });
@@ -90,5 +93,38 @@ describe('POST /import-sources/file', () => {
     const event = await EventEntity.findByPk(origin!.event_id);
     expect(event).not.toBeNull();
     expect(event!.calendar_id).toBe(calendar.id);
+  });
+
+  it('accepts the same file a second time and updates the existing event', async () => {
+    const secondCalendar = await calendarInterface.createCalendar(account, 'filereuploadcal');
+    const upload = () => request(env.app)
+      .post(`/api/v1/calendars/${secondCalendar.id}/import-sources/file`)
+      .set('Authorization', 'Bearer ' + token)
+      .attach('file', fs.readFileSync(FIXTURE_PATH), {
+        filename: 'with-rrule.ics',
+        contentType: 'text/calendar',
+      });
+
+    const first = await upload();
+    expect(first.status).toBe(201);
+    expect(first.body.run).toMatchObject({ outcome: 'success', eventsCreated: 1 });
+
+    const second = await upload();
+    expect(second.status).toBe(201);
+    expect(second.body.run).toMatchObject({ outcome: 'success', eventsCreated: 0, eventsUpdated: 1 });
+
+    expect(await EventEntity.count({ where: { calendar_id: secondCalendar.id } })).toBe(1);
+
+    const origin = await EventImportOriginEntity.findOne({
+      where: { external_uid: 'e2e-rrule-daily@import-sources.test', import_source_id: second.body.source.id },
+    });
+    expect(origin).not.toBeNull();
+    const event = await EventEntity.findByPk(origin!.event_id);
+    expect(event!.calendar_id).toBe(secondCalendar.id);
+
+    const schedules = await EventScheduleEntity.findAll({
+      where: { event_id: origin!.event_id, is_exclusion: false },
+    });
+    expect(schedules).toHaveLength(1);
   });
 });
