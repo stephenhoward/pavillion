@@ -18,6 +18,7 @@ import { ImportRunEntity } from '@/server/calendar/entity/import_run';
 import { ImportSourceEntity } from '@/server/calendar/entity/import_source';
 import CalendarService from '@/server/calendar/service/calendar';
 import EventService from '@/server/calendar/service/events';
+import { mapVEvent } from '@/server/calendar/service/import/mapper';
 import { Fetcher } from '@/server/calendar/service/import/fetcher';
 import SyncService, {
   SYNC_PER_SOURCE_HOURLY_LIMIT,
@@ -239,6 +240,17 @@ describe('SyncService', () => {
       expect(params).not.toHaveProperty('externalRecurrenceId');
       expect(params).not.toHaveProperty('sourceLastModified');
       expect(params).not.toHaveProperty('xProps');
+    });
+
+    it('buildEventParamsForUpdate sends the mapped positive schedule with no id', () => {
+      const src = makeSourceEntity();
+      const mapped = mapVEvent({
+        vevent: makeVEvent({ uid: 'feed-uid-2@example.test' }),
+        calendarPrimaryLanguage: 'en',
+      });
+      const params = buildEventParamsForUpdate(src, mapped) as { schedules: Array<{ id?: string }> };
+
+      expect(params.schedules[0].id).toBeFalsy();
     });
   });
 
