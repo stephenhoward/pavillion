@@ -192,11 +192,20 @@ describe('Token Setting', () => {
 
   });
 
-  it('_unset_token clears lastKnownEmail', () => {
+  it('_unset_token keeps lastKnownEmail for the session-expired modal', () => {
     let authentication = makeAuth();
     authentication.lastKnownEmail = 'user@example.com';
 
     authentication._unset_token();
+
+    expect(authentication.lastKnownEmail).toBe('user@example.com');
+  });
+
+  it('logout clears lastKnownEmail', () => {
+    let authentication = makeAuth();
+    authentication.lastKnownEmail = 'user@example.com';
+
+    authentication.logout();
 
     expect(authentication.lastKnownEmail).toBeNull();
   });
@@ -279,6 +288,33 @@ describe('Token Refresh', () => {
         () => { throw new Error('should have rejected'); },
         () => {
           expect(authentication.sessionExpired.value).toBe(true);
+        },
+      );
+    sandbox.clock.runAll();
+    return promise;
+  });
+
+  it('_refresh_login failure keeps lastKnownEmail in memory only', async () => {
+    let authentication = makeAuth();
+    sandbox.useFakeTimers();
+    authentication.localStore.setItem('jwt', fake_jwt);
+    authentication.lastKnownEmail = 'user@example.com';
+    const storeBefore = { ...(authentication.localStore as any).store };
+    const setItem = sandbox.spy(authentication.localStore, 'setItem');
+
+    sandbox.stub(axios, 'get').rejects(new Error('network down'));
+
+    let promise = authentication._refresh_login( Date.now() + 500 )
+      .then(
+        () => { throw new Error('should have rejected'); },
+        () => {
+          expect(authentication.sessionExpired.value).toBe(true);
+          expect(authentication.lastKnownEmail).toBe('user@example.com');
+          expect(setItem.called).toBe(false);
+          const values = Object.values((authentication.localStore as any).store);
+          expect(values.some((v) => String(v).includes('user@example.com'))).toBe(false);
+          expect(Object.keys((authentication.localStore as any).store).length)
+            .toBeLessThan(Object.keys(storeBefore).length);
         },
       );
     sandbox.clock.runAll();
