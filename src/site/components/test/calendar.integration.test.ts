@@ -518,6 +518,29 @@ describe('calendar.vue - Calendar title display', () => {
     expect(h1.text()).not.toBe('test_calendar');
   });
 
+  it('links a URL in the calendar description', async () => {
+    const mockCalendar = new Calendar('calendar-123', 'test_calendar');
+    const content = new CalendarContent('en');
+    content.name = 'My Community Calendar';
+    content.description = 'Find us at https://example.org/about today';
+    mockCalendar.addContent(content);
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+    await router.push('/test_calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { SearchFilterPublic: true, NotFound: true, EventImage: true },
+      },
+    });
+    await flushPromises();
+
+    const link = wrapper.find('.calendar-description a');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe('https://example.org/about');
+  });
+
   it('falls back to URL slug when no content is configured', async () => {
     // Calendar with no content added
     const mockCalendar = new Calendar('calendar-456', 'bare_calendar');

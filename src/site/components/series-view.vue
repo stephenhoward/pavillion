@@ -7,6 +7,7 @@ import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
+import LinkifiedText from './LinkifiedText.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import { calendarPath, eventPath } from '@/common/routing/public-paths';
 
@@ -182,7 +183,7 @@ onBeforeMount(async () => {
         v-if="localizedContent(state.series).description"
         class="series-description"
       >
-        {{ localizedContent(state.series).description }}
+        <LinkifiedText :text="localizedContent(state.series).description" />
       </p>
 
       <section

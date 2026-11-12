@@ -434,6 +434,25 @@ describe('discovery.vue - five behavioral states', () => {
     expect(desc.text()).toBe('Welcome to the local instance');
   });
 
+  it('links a URL in the instance description', async () => {
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+    await router.push('/discover');
+
+    const wrapper = mount(Discovery, {
+      global: {
+        plugins: [pinia, router, [I18NextVue, { i18next }]],
+        provide: {
+          site_config: makeSiteConfig({ instanceDescription: { en: 'See https://example.org/rules' } }),
+        },
+      },
+    });
+    await flushPromises();
+
+    const link = wrapper.find('.discovery-instance-description a');
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href')).toBe('https://example.org/rules');
+  });
+
   it('renders the configured siteTitle as the <h1> at the top of the page', async () => {
     vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
     await router.push('/discover');

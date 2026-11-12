@@ -246,6 +246,17 @@ describe('SeriesView', () => {
       wrapper.unmount();
     });
 
+    it('links a URL in the series description', async () => {
+      mockSeriesResult.series = makeSeries('yoga-classes', 'Yoga Classes', 'Details at https://example.org/yoga');
+
+      const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
+
+      const link = wrapper.find('.series-description a');
+      expect(link.exists()).toBe(true);
+      expect(link.attributes('href')).toBe('https://example.org/yoga');
+      wrapper.unmount();
+    });
+
     it('sets document.title to "Series Name | Pavillion" after loading', async () => {
       const wrapper = await mountSeriesView('/test_calendar/series/yoga-classes');
 

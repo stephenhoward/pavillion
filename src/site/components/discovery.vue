@@ -11,6 +11,7 @@ import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { calendarPath } from '@/common/routing/public-paths';
 import EmptyState from '@/common/ui/components/EmptyState.vue';
 import { holdScrollUntil } from '@/site/routing/scroll-hold';
+import LinkifiedText from './LinkifiedText.vue';
 
 const { t } = useTranslation('system');
 const { currentLocale, localizedPath } = useLocale();
@@ -163,7 +164,7 @@ onBeforeMount(async () => {
           v-if="instanceDescription"
           class="discovery-instance-description"
         >
-          {{ instanceDescription }}
+          <LinkifiedText :text="instanceDescription" />
         </p>
         <p class="discovery-learn-more">
           <a
