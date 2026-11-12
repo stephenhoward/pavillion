@@ -1,19 +1,27 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { DateTime } from 'luxon';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import EventCard from '@/site/components/event-card.vue';
 import { formatInstanceSlug } from '@/common/utils/instance-slug';
 import type CalendarEventInstance from '@/common/model/event_instance';
 import EmptyState from '@/common/ui/components/EmptyState.vue';
+import { useLocale } from '@/common/ui/composables/useLocale';
+import { getDefaultDateRange } from '@/common/utils/datePresets';
 import { stickyQuery } from '../sticky-query';
+
+const props = defineProps<{
+  /** Widget-router location for a single day's list, supplied by the container. */
+  dayRoute: (isoDate: string) => RouteLocationRaw;
+}>();
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
+const { currentLocale } = useLocale();
 
 // Events are loaded by WidgetContainer/SearchFilterPublic; this component
 // just displays them via the day-grouped EventCard list pattern shared
@@ -25,6 +33,35 @@ const defaultEventImage = computed(() => publicStore.defaultEventImage);
 // widget store: the router guard switches the store's calendar before a
 // cross-calendar navigation resolves, while this list still shows the old one.
 const calendarUrlName = computed(() => route.params.urlName as string);
+
+// The end of the window an unfiltered list searched, named in the empty state
+const defaultRangeEndLabel = computed(() => {
+  const { endDate } = getDefaultDateRange(publicStore.calendarDefaultDateRange);
+  return formatDate(endDate);
+});
+const nextEventLabel = computed(() =>
+  publicStore.nextEventDate ? formatDate(publicStore.nextEventDate) : '');
+
+function formatDate(isoDate: string): string {
+  return DateTime.fromISO(isoDate).setLocale(currentLocale.value).toLocaleString(DateTime.DATE_FULL);
+}
+
+// An unfiltered list whose default window is empty may still have a later
+// event; look it up once per such load so the empty state can offer it.
+watch(
+  () => publicStore.hasLoadedEvents
+    && !publicStore.isLoadingEvents
+    && publicStore.allEvents.length === 0
+    && !publicStore.hasActiveFilters
+    && !publicStore.isSearchPending
+    && !publicStore.eventError,
+  (shouldLookUp) => {
+    if (shouldLookUp) {
+      publicStore.loadNextEventDate();
+    }
+  },
+  { immediate: true },
+);
 
 /**
  * Builds the widget-router-resolved href for an event instance.
@@ -92,9 +129,18 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
       <p v-if="publicStore.hasActiveFilters">
         {{ t('no_events_with_filters') }}
       </p>
-      <p v-else>
-        {{ t('no_events_available') }}
-      </p>
+      <template v-else>
+        <p>{{ t('no_events_available') }}</p>
+        <p>{{ t('no_events_in_default_range_hint', { date: defaultRangeEndLabel }) }}</p>
+        <p v-if="publicStore.nextEventDate">
+          <RouterLink
+            class="next-event-link"
+            :to="props.dayRoute(publicStore.nextEventDate)"
+          >
+            {{ t('next_event_link', { date: nextEventLabel }) }}
+          </RouterLink>
+        </p>
+      </template>
     </EmptyState>
 
     <!-- Loading State: always in the DOM so assistive tech has a live region
@@ -158,6 +204,14 @@ const buildDetailHref = (instance: CalendarEventInstance): string => {
 
 .day-event-item {
   // No extra styles needed; EventCard handles its own layout
+}
+
+.next-event-link {
+  color: var(--pav-accent);
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
 }
 
 // Loading and error states

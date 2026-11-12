@@ -254,7 +254,10 @@ onUnmounted(() => {
         :day-route="dayRoute"
       />
       <!-- ListView renders its own role="status" loading region. -->
-      <ListView v-else />
+      <ListView
+        v-else
+        :day-route="dayRoute"
+      />
     </main>
   </div>
 </template>
