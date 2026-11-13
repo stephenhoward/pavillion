@@ -1,6 +1,6 @@
 ---
 name: plan-scheduled
-description: Use when running `/plan --scheduled` (the unattended spec pipeline), when reading or writing a `spec:*` label, a `Decisions made for you`, `Advisory Review` or `Planned hierarchy` notes block, or the `reports/spec-plan/` run report, or when another command needs to know which roots the scheduled planner owns.
+description: Use when running `/plan --scheduled` (the unattended spec pipeline), when reading or writing a `spec:*` label, a `Decisions made for you`, `Advisory Review` or `Planned hierarchy` notes block, or the `reports/spec-plan/` run report, or when another command needs to know which `spec:*` labels the scheduled planner owns (the build labels `spec:building`, `spec:built` and `spec:stalled` belong to build-scheduled).
 ---
 
 # Plan, scheduled

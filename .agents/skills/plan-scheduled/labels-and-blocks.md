@@ -6,9 +6,15 @@ or parsing a `Decisions made for you` or `Advisory Review` block.
 
 ## Labels
 
-A root carries at most one of these after any write this mode makes; every
-state write (`spec.ts state-write <label>`) enforces it, clearing a label the
-maintainer left behind.
+A root carries at most one `spec:*` label after any write this mode makes;
+every state write enforces it, clearing a label the maintainer left behind.
+The planner writes through `spec.ts state-write <label>`. The build labels
+are written only through `build.ts write`, which also checks the run's lock,
+the kill switch and the notes block; `build.ts state-write` only prints the
+flags for inspection and is never a write path. The table is shared: `/plan --scheduled` owns the first six rows,
+`/spawn-bead-workers --scheduled` (the
+[`build-scheduled`](../build-scheduled/SKILL.md) skill) owns the three build
+rows, and each script accepts only its own labels as a write target.
 
 | Label | Meaning | Set by |
 |---|---|---|
@@ -18,6 +24,18 @@ maintainer left behind.
 | `spec:approved` | The maintainer approved the spec. The next run decomposes it. | maintainer only |
 | `spec:decomposing` | Decomposition or analysis is in progress, or was interrupted. The next run completes it rather than starting over. | this mode |
 | `spec:ready` | Every leaf except `decision`-type `Decide:` leaves has an Implementation Context block; for a single-bead root, the root's own notes hold it. An open `Decide:` leaf awaits the maintainer and blocks its dependents. This mode is finished with the root. | this mode |
+| `spec:building` | A scheduled build is under way or was cut between firings; the next scheduled build resumes it. | build-scheduled |
+| `spec:built` | Every chain's levels are submitted and the sweep passed. Waiting for the maintainer to merge, then close the root. | build-scheduled |
+| `spec:stalled` | The build hit a failure its retries could not clear. Waiting for the maintainer, who resumes it by setting `spec:building`. | build-scheduled |
+
+`build:hold` is not a state label and no state write removes it: the
+maintainer sets it to keep a root out of scheduled builds, and only the
+maintainer removes it. The `## Build state` and `## Build stall` note blocks
+the build labels travel with are written and parsed only by
+[`build-scheduled`](../build-scheduled/SKILL.md)'s script
+(`formatBuildState`, `formatStallBlock` and `parseBuildState` in
+`scripts/lib/build.ts`); `build.ts build-state <root>` prints a root's last
+block as JSON.
 
 ## Outcome labels
 

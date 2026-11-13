@@ -10,6 +10,8 @@ import type { SpawnSyncReturns } from 'node:child_process';
 import {
   type Bead,
   STATE_LABELS,
+  STATE_LABEL_OWNERS,
+  labelsOwnedBy,
   hasHeading,
   lastBlock,
   stateWriteArgs,
@@ -117,17 +119,39 @@ describe('stateWriteArgs', () => {
       '--remove-label', 'spec:approved',
       '--remove-label', 'spec:decomposing',
       '--remove-label', 'spec:ready',
+      '--remove-label', 'spec:building',
+      '--remove-label', 'spec:built',
+      '--remove-label', 'spec:stalled',
       '--add-label', 'spec:drafted',
     ]);
   });
 
-  it('covers all six labels', () => {
-    expect(STATE_LABELS).toHaveLength(6);
+  it('covers all nine labels', () => {
+    expect(STATE_LABELS).toHaveLength(9);
     for (const label of STATE_LABELS) {
       const args = stateWriteArgs(label);
-      expect(args.filter(a => a === '--remove-label')).toHaveLength(5);
+      expect(args.filter(a => a === '--remove-label')).toHaveLength(8);
       expect(args.slice(-2)).toEqual(['--add-label', label]);
     }
+  });
+
+  it('never removes a label outside the state table', () => {
+    for (const label of STATE_LABELS) {
+      const args = stateWriteArgs(label);
+      expect(args).not.toContain('needs-human');
+      expect(args).not.toContain('build:hold');
+    }
+  });
+
+  it('gives every label one owner: the planner six, the builder three', () => {
+    expect(Object.keys(STATE_LABEL_OWNERS).sort()).toEqual([...STATE_LABELS].sort());
+    expect(labelsOwnedBy('plan-scheduled')).toEqual([
+      'spec:drafted', 'spec:blocked', 'spec:revise',
+      'spec:approved', 'spec:decomposing', 'spec:ready',
+    ]);
+    expect(labelsOwnedBy('build-scheduled')).toEqual([
+      'spec:building', 'spec:built', 'spec:stalled',
+    ]);
   });
 
   it('rejects an unknown label', () => {

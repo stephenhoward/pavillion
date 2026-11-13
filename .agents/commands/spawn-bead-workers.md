@@ -37,7 +37,7 @@ This command orchestrates around the skills below, which hold the authoritative 
 ### PHASE 1: Load the Epic
 
 IF an epic ID is provided:
-1. Load the epic: `bd show <epic-id>`.
+1. Load the epic: `bd show <epic-id>`. If it carries `spec:building`, refuse and stop: say that the root carries `spec:building`, so the scheduled build (`--scheduled`) holds it and resumes it itself. The maintainer releases it by moving the label, not by running it attended.
 2. Check that notes contain a "Bead Analysis" section (the `# Bead Analysis` heading `/analyze-bead` writes).
 3. If missing, offer to run `/analyze-bead` first.
 4. If the epic carries the `spec:ready` label (set by `/plan --scheduled` when it finishes a root), release it before any implementer is dispatched:
@@ -112,7 +112,7 @@ For each stack level, once it is ready for its build gate (Phase 4):
 
 1. **`build-guardian`** — exactly one, on that level's branch at its stack position. **NEVER more than one build-guardian at a time** — test suites must not run concurrently.
 2. **Red** — follow the skill's "Build-guardian failure (per-level gate)": the level is not submitted while red, and exhausted retries truncate the chain at that level.
-3. **Green** — submit the level with `stack.ts submit`, then set its title and body with `gh pr edit` per "PR shape". The chain's next level starts on top of it.
+3. **Green** — submit the level with `stack.ts submit`, then set its title and body with `gh pr edit` per "PR shape". The chain's next level starts on top of it. `stack.ts submit` runs `gh stack submit --auto --open`: per `gh stack submit --help` (gh-stack 0.0.8), `--auto` only skips the interactive editor and takes auto-generated titles, and `--open` marks the PRs ready for review. Neither merges a PR or turns on auto-merge.
 
 When a chain's levels are complete, run the chain-end verification pass from the skill, in order: `cross-bead-integration-verifier` only if the chain has more than one bead, then `architecture-auditor`. The pass is **advisory** — its levels are already submitted, so findings go to a follow-up implementer or the wave summary rather than holding anything back. The blocking check is the Phase 7 sweep.
 
@@ -130,7 +130,7 @@ When every wave has closed and every bead is complete:
    npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor
    npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier
    ```
-3. Filter matches against the epic's full changed file set (union across waves: `git diff --name-only main...HEAD`).
+3. Changed files and where the agents run: the skill's "Filter matches", "Make the integration checkout" and "Remove the integration checkout".
 4. Always include `implementation-verifier` if present (full spec verification: lint, full suite, e2e, acceptance criteria). If absent, log the absence; do not substitute a different agent.
 5. Spawn matched agents in parallel (read-only; unbounded by the 3-chain cap). Pass `Spec: {spec_path}` when an agent's description accepts one.
 6. Collect verdicts. PASS / PASS WITH WARNINGS surface in the final report; FAIL blocks closing the epic and routes through build-guardian-style failure handling (investigator → implementer → rerun the affected level's build gate → redo the sweep).
@@ -176,9 +176,29 @@ If a prior run was interrupted:
 4. Re-run the Phase 2 enrichment gate on the remaining ready beads.
 5. Resume from the current wave state, reusing the standard Phase 3-6 flow.
 
+An interrupted scheduled run needs no `--resume`: the next `--scheduled` firing resumes its `spec:building` root from the root's last Build state block ([`build-scheduled`](../skills/build-scheduled/SKILL.md) "Resume and stop points"), and Phase 1 refuses that root attended.
+
+### Scheduled
+
+```
+/spawn-bead-workers --scheduled
+/spawn-bead-workers --scheduled --dry-run
+```
+
+See "Scheduled mode" below.
+
+## Scheduled mode (`--scheduled`)
+
+Unattended run: no questions, at most one root per run, a report file per
+run. The whole mode is the
+[`build-scheduled`](../skills/build-scheduled/SKILL.md) skill. Load it and
+follow it; the phases above apply only as its Overrides list says.
+`--scheduled --dry-run` prints what a run would read and write, and changes
+nothing.
+
 ## Acceptance / Manual Verification
 
-This command has no automated tests. After any edit to it:
+This command's prose has no behavioural tests; `build-scheduled`'s test suite only scans it for merge, force-push and slot-denied commands. After any edit to it:
 
 1. Read the command end-to-end and confirm these behavior-preservation invariants are explicitly stated (or referenced via the skills above):
    - Max 3 chains in flight (HARD LIMIT); a chain holds one slot for its whole run.

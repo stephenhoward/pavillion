@@ -194,9 +194,11 @@ Everything pulled goes into the **"needs your decision"** list for the final
 report (with the reason). Do not silently skip — surface it.
 
 **Spec in flight.** Separately, drop any candidate that carries a `spec:*`
-label, or whose parent does. Those labels mean `/plan --scheduled` owns the
-root — drafting, awaiting approval, or decomposing it — and shipping a leaf
-now would bypass the reviewed design. The parent's labels are embedded in the
+label, or whose parent does. Those labels mean the spec pipeline owns the
+root: `/plan --scheduled` is drafting, awaiting approval or decomposing it,
+or `/spawn-bead-workers --scheduled` is building it (`spec:building`), has
+built it (`spec:built`) or stalled on it (`spec:stalled`). Shipping a leaf
+now would bypass the reviewed design or race the epic build. The parent's labels are embedded in the
 child's JSON, so one call per candidate prints any hit:
 
 ```bash
@@ -304,7 +306,8 @@ those two:
   `needs-human`-class blockers, tag the bead so a future run skips it:
   `bd update <id> --labels needs-human` (and a `--notes` explaining why).
 - **Spec in flight** list: every bead Phase 2 dropped for a `spec:*` label on
-  itself or its parent, with the matching label. No tagging — `/plan` owns them.
+  itself or its parent, with the matching label. No tagging — the spec
+  pipeline owns them.
 - **Tally**: open beads before → after; PRs opened this run; beads closed by
   merge in Phase 0b, counted separately from PRs opened.
 - **Suggested next**: what's left and why it's not for this command.
@@ -378,6 +381,10 @@ Unattended weekly run. Everything above applies, plus:
 PRs that are passing CI and have no unresolved change request. If that count
 is **10 or more**, or the **oldest** such PR is **older than 7 days**, stand
 down: dispatch nothing and write a short report recording the gate reading.
+
+<!-- queue-gate: open=10 age-days=7 -->
+<!-- The marker above pins these thresholds to QUEUE_GATE in
+     .agents/skills/build-scheduled/scripts/lib/build.ts; change both together. -->
 
 **Tier-A cap.** At most **8 Tier-A PRs** per scheduled run (Phase 3); the
 3-PR Tier-B cap applies as in every `--include-b` run.

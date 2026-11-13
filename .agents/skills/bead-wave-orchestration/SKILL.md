@@ -15,7 +15,8 @@ This is a prose-only skill. There are no scripts. Orchestration logic lives
 in the consuming commands; this skill is what those commands reference so the
 invariants below stay in exactly one place.
 
-Consumers: `/spawn-bead-workers` (core mechanics), plus any future command
+Consumers: `/spawn-bead-workers` (core mechanics), its unattended mode
+[`build-scheduled`](../build-scheduled/SKILL.md), plus any future command
 that executes an epic or multi-bead run (the single-leaf reduction of the
 same pattern applies to lone leaf beads).
 
@@ -363,23 +364,59 @@ a final comprehensive sweep before declaring the epic done.
      final-pass scope.
    - `npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier` — all
      `*-verifier` agents.
-2. **Filter matches** against the epic's full changed file set (union of
-   all waves' changes: `git diff --name-only main...HEAD`).
-3. **Always include `implementation-verifier`** if present, regardless
+2. **Filter matches** against the epic's full changed file set: the
+   union of every chain's diff against `origin/main`, fetched first
+   because local `main` can be stale. A bare `main...HEAD` sees only the
+   chain checked out. With one chain the union is that chain's diff.
+   ```bash
+   git fetch origin main
+   git diff --name-only origin/main...<top>   # once per chain's top submitted branch; union the lists
+   ```
+3. **Make the integration checkout.** The sweep's agents run in one
+   local checkout that merges every chain's top level: a detached
+   worktree named `integration-check` under the session scratchpad, so
+   there is no branch to push. It is never pushed and no PR is opened
+   for it. `SCRATCHPAD` is the session scratchpad's real path; shell
+   variables do not survive between Bash calls, so set it in every
+   command that uses it.
+   ```bash
+   SCRATCHPAD=$(realpath <session scratchpad>); : "${SCRATCHPAD:?}"
+   git worktree add --detach "$SCRATCHPAD/integration-check" origin/main
+   cd "$SCRATCHPAD/integration-check" && git merge --no-edit <chain-1-top>   # once per chain, in chain order
+   ```
+   A merge that conflicts is a sweep FAIL that no level owns, so the
+   failure-handling flow cannot route it: `git merge --abort` in the
+   checkout, remove it, and name the conflicting chains and files. An
+   attended run surfaces it to the user; a scheduled run follows
+   [`build-scheduled`](../build-scheduled/SKILL.md).
+4. **Always include `implementation-verifier`** if present, regardless
    of match. It performs the full spec verification pass (lint, full
    test suite, e2e, acceptance criteria check against the spec). If it
    is absent, log the absence in the wave summary — do not substitute a
    different agent.
-4. **Spawn matched agents in parallel** (they are read-only, so
-   concurrency is unbounded by the 3-slot rule). When an agent's
-   description accepts a spec path, pass `Spec: {spec_path}` in the
-   spawning prompt.
-5. **Collect verdicts.** PASS / PASS WITH WARNINGS surface in the final
+5. **Spawn matched agents in parallel** in the integration checkout,
+   naming `origin/main` as their base so an agent's own diff against it
+   sees every chain (they are read-only, so concurrency is unbounded by
+   the 3-slot rule).
+   When an agent's description accepts a spec path, pass
+   `Spec: {spec_path}` in the spawning prompt.
+6. **Collect verdicts.** PASS / PASS WITH WARNINGS surface in the final
    report; FAIL blocks closing the epic. For a FAIL at this stage, route
    through the same failure-handling flow as build-guardian failure
    (investigator → implementer → rerun the affected level's build gate,
-   then redo the sweep).
-6. **Close the epic** via `bd close <epic-id>` once all comprehensive
+   then redo the sweep on a fresh integration checkout).
+7. **Remove the integration checkout** on every exit — pass, fail or
+   stop. Remove only the path that is exactly the scratchpad's
+   `integration-check` and that git lists as a detached worktree:
+   ```bash
+   SCRATCHPAD=$(realpath <session scratchpad>); : "${SCRATCHPAD:?}"
+   base=$(realpath "$SCRATCHPAD") && dir=$(realpath "$SCRATCHPAD/integration-check") \
+     && [ "$dir" = "$base/integration-check" ] \
+     && git worktree list --porcelain | awk -v d="$dir" '$1 == "worktree" { w = substr($0, 10) } $1 == "detached" && w == d { f = 1 } END { exit !f }' \
+     && git worktree remove --force "$dir" \
+     || echo "refusing to remove: not the scratchpad's detached integration checkout"
+   ```
+8. **Close the epic** via `bd close <epic-id>` once all comprehensive
    agents report resolved verdicts.
 
 ## Single-leaf reduction

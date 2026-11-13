@@ -299,9 +299,11 @@ Wait for completion. Capture the execution waves summary.
 ## Scheduled mode (`--scheduled`)
 
 Unattended run: no questions, no scratchpad, a report file per run. The
-whole mode — its `spec:*` label state machine (`spec:drafted`,
+whole mode — its share of the `spec:*` label state machine (`spec:drafted`,
 `spec:blocked`, `spec:revise`, `spec:approved`, `spec:decomposing`,
-`spec:ready`), its approved, revise and drafting passes, the notes-block
+`spec:ready`; the build labels `spec:building`, `spec:built` and
+`spec:stalled` belong to `/spawn-bead-workers --scheduled`), its approved,
+revise and drafting passes, the notes-block
 contract and the refuse-rather-than-guess list — is the
 [`plan-scheduled`](../skills/plan-scheduled/SKILL.md) skill. Load it and
 follow it; the phases above apply only as that skill says. Its selections
