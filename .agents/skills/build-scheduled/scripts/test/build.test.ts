@@ -1930,7 +1930,7 @@ describe('validatePublishTarget', () => {
   });
 
   it.each([
-    ['another number', view({ number: 7 }), /returned 7/],
+    ['another number', view({ number: 7 }), /returned #7/],
     ['a merged PR', view({ state: 'MERGED' }), /MERGED/],
     ['another author', view({ author: { login: 'mallory' } }), /author/],
     ['a fork', view({ isCrossRepository: true }), /repository/],
@@ -1939,6 +1939,7 @@ describe('validatePublishTarget', () => {
     ['a head that is not a branch name', view({ headRefName: '--upload-pack=x' }), /head/],
     ['a base that is not a branch name', view({ baseRefName: 'feat/x' }), /base/],
     ['no reading', null, /not an object/],
+    ['no fork reading', (({ isCrossRepository: _c, ...rest }) => rest)(view()), /repository/],
   ])('rejects %s', (_name, pr, reason) => {
     const r = validatePublishTarget(pr, 102, 'maint');
     expect(r.ok).toBe(false);
