@@ -6,6 +6,7 @@ import ModerationInterface from '../interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 import ReportVerificationEmail from '../model/report_verification_email';
 import NewReportNotificationEmail from '../model/new_report_notification_email';
 import AdminReportNotificationEmail from '../model/admin_report_notification_email';
@@ -35,17 +36,20 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
   private calendarInterface: CalendarInterface;
   private accountsInterface: AccountsInterface;
   private emailInterface: EmailInterface;
+  private configurationInterface: ConfigurationInterface;
 
   constructor(
     service: ModerationInterface,
     calendarInterface: CalendarInterface,
     accountsInterface: AccountsInterface,
     emailInterface: EmailInterface,
+    configurationInterface: ConfigurationInterface,
   ) {
     this.service = service;
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
     this.emailInterface = emailInterface;
+    this.configurationInterface = configurationInterface;
   }
 
   install(eventBus: EventEmitter): void {
@@ -102,7 +106,9 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         report.verificationToken,
       );
 
-      const mailData = email.buildMessage('en');
+      // The anonymous reporter has no account and so no stored language:
+      // use the instance default language.
+      const mailData = email.buildMessage(await this.configurationInterface.getDefaultLanguage());
       await this.emailInterface.sendEmail(mailData);
       return;
     }

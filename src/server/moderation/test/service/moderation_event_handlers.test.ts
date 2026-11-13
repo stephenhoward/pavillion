@@ -12,6 +12,8 @@ import ModerationInterface from '@/server/moderation/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+import ReportVerificationEmail from '@/server/moderation/model/report_verification_email';
 import { MailData } from '@/server/common/email/types';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
@@ -23,6 +25,10 @@ vi.mock('@/server/common/helper/error-logger', () => ({
 }));
 
 initI18Next();
+
+const configurationInterface = {
+  getDefaultLanguage: async () => 'en',
+} as unknown as ConfigurationInterface;
 
 /**
  * Targeted coverage for `ModerationEventHandlers.getCalendarName`. This
@@ -94,6 +100,7 @@ describe('ModerationEventHandlers getCalendarName urlName precedence', () => {
       calendarInterface,
       accountsInterface,
       emailInterface,
+      configurationInterface,
     );
 
     await (handlers as any).handleEscalated({
@@ -159,6 +166,7 @@ describe('ModerationEventHandlers getCalendarName urlName precedence', () => {
       calendarInterface,
       accountsInterface,
       emailInterface,
+      configurationInterface,
     );
 
     await (handlers as any).handleEscalated({
@@ -221,6 +229,7 @@ describe('ModerationEventHandlers owner review link', () => {
       calendarInterface,
       accountsInterface,
       emailInterface,
+      configurationInterface,
     );
   });
 
@@ -305,6 +314,7 @@ describe('ModerationEventHandlers failure isolation', () => {
       calendarInterface,
       {} as AccountsInterface,
       emailInterface,
+      configurationInterface,
     ).install(eventBus);
 
     const unhandled: unknown[] = [];
@@ -321,5 +331,35 @@ describe('ModerationEventHandlers failure isolation', () => {
 
     expect(unhandled).toEqual([]);
     expect(mockLogError).toHaveBeenCalledWith(smtpFailure, expect.stringContaining('[MODERATION]'));
+  });
+});
+
+describe('ModerationEventHandlers anonymous verification email language', () => {
+  it('sends the verification email in the instance default language', async () => {
+    const report = Report.fromObject({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      eventId: 'event-id',
+      calendarId: 'cal-id',
+      category: ReportCategory.SPAM,
+      description: 'Test report',
+      reporterType: 'anonymous',
+      status: ReportStatus.PENDING_VERIFICATION,
+      verificationToken: 'token-123',
+      createdAt: new Date('2026-05-14T12:00:00Z'),
+    });
+    const sentEmails: MailData[] = [];
+    const handlers = new ModerationEventHandlers(
+      {} as ModerationInterface,
+      { getEventById: async () => new CalendarEvent('event-id', 'cal-id') } as unknown as CalendarInterface,
+      {} as AccountsInterface,
+      { sendEmail: async (d: MailData) => { sentEmails.push(d); return null; } } as unknown as EmailInterface,
+      { getDefaultLanguage: async () => 'es' } as unknown as ConfigurationInterface,
+    );
+
+    await (handlers as any).handleReportCreated({ report, reporterEmail: 'reporter@example.test' });
+
+    const english = new ReportVerificationEmail('reporter@example.test', '', report.category, 'token-123').buildMessage('en');
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].subject).not.toBe(english.subject);
   });
 });

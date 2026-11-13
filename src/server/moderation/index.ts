@@ -71,6 +71,7 @@ export default class ModerationDomain {
       this.calendarInterface,
       this.accountsInterface,
       this.emailInterface,
+      this.configurationInterface,
     ).install(this.eventBus);
   }
 

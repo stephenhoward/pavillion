@@ -1,4 +1,8 @@
 import http from 'http';
+import path from 'path';
+import i18next from 'i18next';
+import Backend from 'i18next-fs-backend';
+import handlebars from 'handlebars';
 import config from 'config';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
@@ -19,6 +23,8 @@ import NotificationRetentionCleanupService from '@/server/notifications/service/
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { FollowBackfillService, BackfillRateLimitError } from '@/server/activitypub/service/backfill';
 import { ActivityPubFollowAcceptedPayload } from '@/server/activitypub/events/types';
+import { createI18nConfig } from '@/common/i18n/config';
+import { getSupportedLanguageCodes } from '@/common/i18n/languages';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { createLogger } from '@/server/common/helper/logger';
 import { installUnhandledRejectionHandler } from '@/server/common/helper/unhandled-rejection';
@@ -436,6 +442,20 @@ async function startWorker(): Promise<void> {
   installUnhandledRejectionHandler();
 
   try {
+    // Alert emails (disk, backup) are rendered in the worker, so it needs the
+    // same i18next setup and Handlebars `t` helper as the web process.
+    i18next.use(Backend).init(createI18nConfig({
+      initAsync: false,
+      preload: getSupportedLanguageCodes(),
+      backend: {
+        loadPath: path.join(path.resolve(), 'src/server/locales/{{lng}}/{{ns}}.json'),
+      },
+    }));
+    handlebars.registerHelper('t', function(key: string, options: any) {
+      const lng = options.data.root.language || 'en';
+      return i18next.t(key, { lng, ...options.hash });
+    });
+
     // Initialize database connection
     logger.info('Connecting to database...');
     await db.authenticate();
