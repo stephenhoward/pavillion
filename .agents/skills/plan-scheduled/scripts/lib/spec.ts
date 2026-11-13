@@ -3,6 +3,7 @@
  * heading test, note-block extraction and the state-label write.
  *
  * Exports:
+ *   State table: STATE_LABELS, STATE_LABEL_OWNERS, labelsOwnedBy
  *   Pure helpers: hasHeading, lastBlock, stateWriteArgs, selectDrafting,
  *     selectApproved, selectRevise, unanalysedLeaves, reviseNote,
  *     revisionNumber, gateMisses, inspect
@@ -45,6 +46,11 @@ export interface ApprovedRow extends Row {
   also_revise: boolean;
 }
 
+/**
+ * The one `spec:*` state table, shared with build-scheduled's `build.ts`:
+ * a root carries at most one of these, and every state write — by either
+ * skill — clears the other eight.
+ */
 export const STATE_LABELS = [
   'spec:drafted',
   'spec:blocked',
@@ -52,9 +58,36 @@ export const STATE_LABELS = [
   'spec:approved',
   'spec:decomposing',
   'spec:ready',
+  'spec:building',
+  'spec:built',
+  'spec:stalled',
 ] as const;
 
 export type StateLabel = (typeof STATE_LABELS)[number];
+
+export type StateLabelOwner = 'plan-scheduled' | 'build-scheduled';
+
+/**
+ * Which skill's script may write each label. `spec:revise` and
+ * `spec:approved` are set only by the maintainer; plan-scheduled owns them
+ * because its passes consume them.
+ */
+export const STATE_LABEL_OWNERS: Record<StateLabel, StateLabelOwner> = {
+  'spec:drafted': 'plan-scheduled',
+  'spec:blocked': 'plan-scheduled',
+  'spec:revise': 'plan-scheduled',
+  'spec:approved': 'plan-scheduled',
+  'spec:decomposing': 'plan-scheduled',
+  'spec:ready': 'plan-scheduled',
+  'spec:building': 'build-scheduled',
+  'spec:built': 'build-scheduled',
+  'spec:stalled': 'build-scheduled',
+};
+
+/** The state labels one skill's CLI accepts as a state-write target. */
+export function labelsOwnedBy(owner: StateLabelOwner): StateLabel[] {
+  return STATE_LABELS.filter(l => STATE_LABEL_OWNERS[l] === owner);
+}
 
 const NEEDS_HUMAN = 'needs-human';
 

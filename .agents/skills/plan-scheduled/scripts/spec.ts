@@ -19,7 +19,7 @@
 import {
   type Selection,
   type StateLabel,
-  STATE_LABELS,
+  labelsOwnedBy,
   bdSelect,
   bdInspect,
   bdLeaves,
@@ -103,8 +103,9 @@ try {
       break;
     }
     case 'state-write': {
+      // Only this skill's own labels; build.ts writes spec:building/built/stalled.
       const [label] = args;
-      if (!(STATE_LABELS as readonly string[]).includes(label)) fail(USAGE);
+      if (!(labelsOwnedBy('plan-scheduled') as string[]).includes(label)) fail(USAGE);
       console.log(stateWriteArgs(label as StateLabel).join(' '));
       break;
     }
