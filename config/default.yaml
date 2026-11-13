@@ -199,6 +199,14 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 cancel/resume requests per account per 15 minutes
+  # POST and DELETE /api/v1/social/follows share this one bucket. A same-instance
+  # follow replays up to 1,000 of the followed calendar's outbox rows through
+  # local dispatch (catchUpLocalFollower), so follow/unfollow churn is bounded
+  # per account rather than per request.
+  calendarFollow:
+    byAccount:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 30  # 30 follow or unfollow requests per account per 15 minutes
   fundingWebhook:
     byIp:
       windowMs: 60000  # 1 minute in milliseconds

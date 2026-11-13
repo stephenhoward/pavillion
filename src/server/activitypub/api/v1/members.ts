@@ -5,6 +5,7 @@ import { ValidationError } from '@/common/exceptions/base';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { limitCalendarFollowByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 import {
   InvalidRemoteCalendarIdentifierError,
@@ -32,10 +33,10 @@ export default class ActivityPubMemberRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.get('/social/lookup', ExpressHelper.loggedInOnly, this.lookupRemoteCalendar.bind(this));
-    router.post('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.followCalendar.bind(this));
+    router.post('/social/follows', ExpressHelper.loggedInOnly, limitCalendarFollowByAccount, this.requireCalendarId.bind(this), this.followCalendar.bind(this));
     router.get('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFollows.bind(this));
     router.patch('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.updateFollowPolicy.bind(this));
-    router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.unfollowCalendar.bind(this));
+    router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, limitCalendarFollowByAccount, this.requireCalendarIdQuery.bind(this), this.unfollowCalendar.bind(this));
     router.get('/social/followers', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFollowers.bind(this));
     router.get('/social/feed', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFeed.bind(this));
     router.post('/social/shares', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.shareEvent.bind(this));

@@ -144,6 +144,10 @@ const HIGH_ABUSE_RISK_ROUTES: { method: string; path: string }[] = [
   // materializes event rows in one transaction (amplifiable side effect);
   // per-account limited (limitWidgetConfigByAccount).
   { method: 'POST', path: '/api/v1/calendars/:calendarId/import-sources/file' },
+  // Follow / unfollow — a same-instance follow replays up to 1,000 outbox rows
+  // through local dispatch; one shared per-account limiter (limitCalendarFollowByAccount).
+  { method: 'POST', path: '/api/v1/social/follows' },
+  { method: 'DELETE', path: '/api/v1/social/follows/:id' },
 ];
 
 // -----------------------------------------------------------------------------
@@ -248,9 +252,7 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
   { method: 'PATCH', path: '/api/v1/notification/:id', reason: 'authenticated CRUD (own notification)' },
 
   // --- ActivityPub social (authenticated) ---
-  { method: 'POST', path: '/api/v1/social/follows', reason: 'authenticated CRUD' },
   { method: 'PATCH', path: '/api/v1/social/follows/:id', reason: 'authenticated CRUD' },
-  { method: 'DELETE', path: '/api/v1/social/follows/:id', reason: 'authenticated CRUD' },
   { method: 'POST', path: '/api/v1/social/shares', reason: 'authenticated CRUD' },
   { method: 'DELETE', path: '/api/v1/social/shares/:id', reason: 'authenticated CRUD' },
 
