@@ -20,6 +20,7 @@ import {
   limitCalendarFundingPlanByAccount,
   limitCheckoutSessionByAccount,
   limitFundingPlanChangeByAccount,
+  limitCalendarFollowByAccount,
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
   limitImportSourceCreateByAccount,
@@ -138,6 +139,14 @@ describe('rate-limiters', () => {
     it('should use correct config values for calendar funding plan by account', () => {
       const maxRequests = config.get<number>('rateLimit.calendarFundingPlan.byAccount.max');
       const windowMs = config.get<number>('rateLimit.calendarFundingPlan.byAccount.windowMs');
+
+      expect(maxRequests).toBe(30);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for calendar follow by account', () => {
+      const maxRequests = config.get<number>('rateLimit.calendarFollow.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.calendarFollow.byAccount.windowMs');
 
       expect(maxRequests).toBe(30);
       expect(windowMs).toBe(900000); // 15 minutes
@@ -347,6 +356,11 @@ describe('rate-limiters', () => {
     it('should export limitCheckoutSessionByAccount limiter', () => {
       expect(limitCheckoutSessionByAccount).toBeDefined();
       expect(typeof limitCheckoutSessionByAccount).toBe('function');
+    });
+
+    it('should export limitCalendarFollowByAccount limiter', () => {
+      expect(limitCalendarFollowByAccount).toBeDefined();
+      expect(typeof limitCalendarFollowByAccount).toBe('function');
     });
 
     it('should export limitFundingPlanChangeByAccount limiter', () => {

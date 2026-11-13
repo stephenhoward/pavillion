@@ -4,6 +4,13 @@ import express from 'express';
 import request from 'supertest';
 import config from 'config';
 
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import AccountService from '@/server/accounts/service/account';
+import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
+import ExpressHelper from '@/server/common/helper/express';
+import { EventEmitter } from 'events';
+
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
 import {
@@ -440,5 +447,50 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
       expect(blocked.status).toBe(429);
       expect(blocked.body.error).toBe('Too many requests from this actor, please try again later.');
     });
+  });
+});
+
+describeOrSkip('Calendar follow rate limiting (real routes)', () => {
+  let env: TestEnvironment;
+  let accountService: AccountService;
+  const followMax = config.get<number>('rateLimit.calendarFollow.byAccount.max');
+
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+    accountService = new AccountService(new EventEmitter(), new ConfigurationInterface(), new SetupInterface());
+  });
+
+  afterAll(async () => {
+    await env.cleanup();
+  });
+
+  // Requests carry no calendarId, so requireCalendarId answers 400 and no real
+  // follow or catch-up runs; the limiter sits ahead of it and still counts them.
+  it('shares one per-account bucket across follow and unfollow, keyed per account', async () => {
+    const stamp = Date.now();
+    const { account: accountA } = await accountService._setupAccount(`follow-a-${stamp}@pavillion.dev`, 'testpassword123');
+    const { account: accountB } = await accountService._setupAccount(`follow-b-${stamp}@pavillion.dev`, 'testpassword123');
+    const tokenA = ExpressHelper.generateJWT(accountA);
+    const tokenB = ExpressHelper.generateJWT(accountB);
+
+    for (let i = 0; i < followMax; i++) {
+      const response = await env.authPost(tokenA, '/api/v1/social/follows', {});
+      expect(response.status).toBe(400);
+    }
+
+    const limited = await env.authPost(tokenA, '/api/v1/social/follows', {});
+    expect(limited.status).toBe(429);
+    expect(limited.body.errorName).toBe('RateLimitError');
+    expect(limited.headers['ratelimit-limit']).toBe(String(followMax));
+    expect(limited.headers['ratelimit-remaining']).toBe('0');
+
+    // Unfollow draws on the same exhausted bucket.
+    const unfollow = await env.authDelete(tokenA, '/api/v1/social/follows/x');
+    expect(unfollow.status).toBe(429);
+
+    // Account B is a distinct key.
+    const other = await env.authPost(tokenB, '/api/v1/social/follows', {});
+    expect(other.status).not.toBe(429);
   });
 });

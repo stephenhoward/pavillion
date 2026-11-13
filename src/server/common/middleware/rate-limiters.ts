@@ -214,6 +214,21 @@ export const limitCheckoutSessionByAccount: RequestHandler = isRateLimitEnabled(
   : noOpMiddleware;
 
 /**
+ * Calendar follow rate limiter for authenticated users.
+ * Limits: 30 requests per account per 15 minutes (default config).
+ * POST and DELETE /social/follows share this one bucket. A same-instance
+ * follow replays up to 1,000 outbox rows through local dispatch, so both
+ * directions draw on one per-account budget.
+ */
+export const limitCalendarFollowByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.calendarFollow.byAccount.max'),
+    config.get<number>('rateLimit.calendarFollow.byAccount.windowMs'),
+    'calendar-follow',
+  )
+  : noOpMiddleware;
+
+/**
  * Funding plan change rate limiter for authenticated users.
  * Limits: 10 requests per account per 15 minutes (default config).
  * Bounds POST /cancel and POST /resume, each of which makes a provider call
