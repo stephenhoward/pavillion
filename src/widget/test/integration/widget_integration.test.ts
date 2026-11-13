@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import sinon from 'sinon';
+import axios from 'axios';
 import express, { Application } from 'express';
 import supertest from 'supertest';
 import { createPinia, setActivePinia } from 'pinia';
@@ -112,7 +113,9 @@ describe('Widget Integration Tests', () => {
 
   describe('End-to-end widget embedding workflow', () => {
     it('should complete full workflow: configure → generate code → validate embedding', async () => {
-      // Step 1: Configure widget in admin UI
+      // Step 1: Configure widget in admin UI. The form's inputs stay disabled
+      // until the initial config load resolves, so let it settle first.
+      sandbox.stub(axios, 'get').resolves({ data: { view: 'list', accentColor: '#ff9131', colorMode: 'auto' } });
       const configWrapper = mount(WidgetConfig, {
         props: {
           calendarId: 'test-id',
@@ -121,6 +124,10 @@ describe('Widget Integration Tests', () => {
         global: {
           plugins: [[I18NextVue, { i18next }]],
         },
+      });
+
+      await vi.waitFor(() => {
+        expect(configWrapper.find('button.view-mode-card').attributes('disabled')).toBeUndefined();
       });
 
       // Select week view by clicking the week card button
