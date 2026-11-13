@@ -473,6 +473,15 @@ describe('selectRoot', () => {
     expect(s.skipped.map(k => k.id)).toEqual(['pv-h', 'pv-n']);
   });
 
+  it.each(['spec:building', 'spec:ready'])('skips a %s root whose notes end inside an open fence', label => {
+    const s = selectRoot([
+      bead({ id: 'pv-f', updated_at: '2026-10-01T00:00:00Z', labels: [label], notes: `${ANALYSED}\n\n\`\`\`\nunclosed` }),
+      ready('pv-ok', '2026-11-09T00:00:00Z'),
+    ]);
+    expect(s).toMatchObject({ root: 'pv-ok', kind: 'ready' });
+    expect(s.skipped).toEqual([{ id: 'pv-f', reason: 'notes end inside an open fence' }]);
+  });
+
   it('resumes the lowest id of two spec:building roots and names the other', () => {
     const s = selectRoot([
       bead({ id: 'pv-y', labels: ['spec:building'] }),
@@ -1134,6 +1143,8 @@ describe('scanNotes', () => {
 
 describe('writeGuard', () => {
   const root = (labels: string[], status = 'open') => bead({ id: 'pv-r', labels, status });
+  const withBlock = (block: string) => bead({ id: 'pv-r', labels: ['spec:building'], notes: `${ANALYSED}\n\n${block}` });
+  const STALLED_BLOCK = BUILDING_BLOCK.replace('firings: 2', 'firings: 3').replace('stopped: budget', 'stopped: stalled');
   const state = (overrides: Partial<typeof INPUT> = {}) => formatBuildState({ ...INPUT, ...overrides }, AT).state;
   const first = state({ firings: 0, chains: [{ levels: [], next: 'feat.alpha-one' }], stopped: 'none' });
   const built = state({ chains: [{ levels: [{ branch: 'feat.alpha-one', pr: 101 }], next: 'done' }], stopped: 'built' });
@@ -1151,6 +1162,14 @@ describe('writeGuard', () => {
   });
 
   it.each([
+    ['a block that keeps the last firing count', BUILDING_BLOCK, state({ firings: 2 })],
+    ['a block that raises it', BUILDING_BLOCK, state({ firings: 3 })],
+    ['a restart with firings reset after stopped: stalled', STALLED_BLOCK, state({ firings: 1, restart: 'resume' })],
+  ] as const)('allows %s', (_name, last, s) => {
+    expect(writeGuard(withBlock(last), null, s, false)).toBeNull();
+  });
+
+  it.each([
     ['a closed root', root(['spec:building'], 'closed'), null, state(), false, /closed/],
     ['build:hold', root(['spec:building', 'build:hold']), null, state(), false, /build:hold/],
     ['needs-human on a start', root(['spec:ready', 'needs-human']), 'spec:building', first, false, /needs-human/],
@@ -1164,6 +1183,10 @@ describe('writeGuard', () => {
     ['no block on a write that is not a stall', root(['spec:building']), null, null, false, /Build state block/],
     ['a stall with no Build stall block and no state', root(['spec:building']), 'spec:stalled', null, false, /Build stall/],
     ['spec:building over a spec:ready root that has a block', bead({ id: 'pv-r', labels: ['spec:ready'], notes: GOOD_BLOCK }), 'spec:building', first, false, /never start over/],
+    ['a firing count lowered below the last block\'s', withBlock(BUILDING_BLOCK), null, state({ firings: 1 }), false, /below the last block's 2/],
+    ['a restart that does not follow stopped: stalled', withBlock(BUILDING_BLOCK), null, state({ firings: 0, restart: 'resume' }), false, /only follows/],
+    ['a block after stopped: stalled that is not a restart', withBlock(STALLED_BLOCK), null, state({ firings: 3 }), false, /carries restart: resume/],
+    ['a block over a malformed last block', withBlock('## Build state\nfirings: x'), null, state(), false, /malformed/],
     ['notes that end inside an open fence', bead({ id: 'pv-r', labels: ['spec:building'], notes: '```\nopen' }), null, state(), false, /open ``` fence/],
   ] as const)('refuses %s', (_name, b, label, s, hasStall, reason) => {
     expect(writeGuard(b, label, s, hasStall)).toMatch(reason);

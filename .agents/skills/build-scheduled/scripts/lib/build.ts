@@ -441,6 +441,8 @@ function holdReason(b: BuildBead): string | null {
   if (labelsOf(b).includes(HOLD)) return HOLD;
   if (labelsOf(b).includes(NEEDS_HUMAN)) return NEEDS_HUMAN;
   if (!ROOT_ID.test(b.id)) return 'id fails the root-id pattern';
+  // writeGuard refuses every write to such notes; selecting the root would stop every firing on it.
+  if (scanNotes(b.notes ?? '').openFence !== null) return 'notes end inside an open fence';
   return null;
 }
 
@@ -810,6 +812,24 @@ export function writeGuard(root: BuildBead, label: string | null, state: BuildSt
   }
   if (label === 'spec:built' && state.chains.some(c => c.next !== 'done')) return 'spec:built needs every chain at next: done';
   if (stalling !== (state.stopped === 'stalled')) return 'stopped: stalled goes with spec:stalled, and only with it';
+  return label === 'spec:building' ? null : continuityGuard(root.notes, state);
+}
+
+/**
+ * A block continues the last one. `restart: resume` (and with it a reset
+ * firing count) only follows a block that reads `stopped: stalled`;
+ * otherwise `firings` never goes down. A malformed last block is stalled
+ * with no Build state block, never written over.
+ */
+function continuityGuard(notes: string | undefined, state: BuildState): string | null {
+  const last = parseBuildState(notes);
+  if (!last.ok) return `${last.stall}: stall with no Build state block`;
+  const restarting = last.state?.stopped === 'stalled';
+  if (state.restart === 'resume' && !restarting) return 'restart: resume only follows a block that reads stopped: stalled';
+  if (restarting && state.restart !== 'resume') return 'the first block after stopped: stalled carries restart: resume';
+  if (!restarting && last.state && state.firings < last.state.firings) {
+    return `firings ${state.firings} is below the last block's ${last.state.firings}`;
+  }
   return null;
 }
 
