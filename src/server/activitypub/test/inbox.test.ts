@@ -1526,6 +1526,61 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     expect(noteDelete.cc[0]).toContain('/calendars/test-calendar/followers');
   });
 
+  describe('origin delete of a re-shared event retracts the Announce', () => {
+    async function runDelete(eventId: string, eventApId: string) {
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
+      sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
+      const enqueued: any[] = [];
+      eventBus.on('outboxMessageAdded', (activity) => enqueued.push(activity));
+      const deleteMessage = DeleteActivity.fromObject({
+        type: 'Delete',
+        actor: sourceActorUri,
+        object: eventApId,
+      });
+      await inboxService.processDeleteEvent(testCalendar, deleteMessage!);
+      return enqueued;
+    }
+
+    it('emits Undo of the share id and writes no dismissal', async () => {
+      const eventId = uuidv4();
+      const eventApId = `https://remote.instance/events/${eventId}`;
+      await seedEventObject(eventId, eventApId);
+      await seedShare(eventId);
+      const share = await SharedEventEntity.findOne({ where: { event_id: eventId, calendar_id: testCalendar.id } });
+
+      const enqueued = await runDelete(eventId, eventApId);
+
+      const undos = enqueued.filter(a => a.type === 'Undo');
+      expect(undos.length).toBe(1);
+      expect(undos[0].id).toBe(`${share!.id}/undo`);
+      expect(undos[0].object).toBe(share!.id);
+      expect(await RepostDismissalEntity.count({ where: { event_id: eventId } })).toBe(0);
+    });
+
+    it('emits no Undo when the event is not re-shared', async () => {
+      const eventId = uuidv4();
+      const eventApId = `https://remote.instance/events/${eventId}`;
+      await seedEventObject(eventId, eventApId);
+
+      const enqueued = await runDelete(eventId, eventApId);
+
+      expect(enqueued.filter(a => a.type === 'Undo').length).toBe(0);
+    });
+
+    it('destroys the share row even when addToOutbox throws', async () => {
+      const eventId = uuidv4();
+      const eventApId = `https://remote.instance/events/${eventId}`;
+      await seedEventObject(eventId, eventApId);
+      await seedShare(eventId);
+      eventBus.on('outboxMessageAdded', () => { throw new Error('outbox down'); });
+
+      await expect(runDelete(eventId, eventApId)).rejects.toThrow();
+
+      expect(await SharedEventEntity.count({ where: { event_id: eventId, calendar_id: testCalendar.id } })).toBe(0);
+    });
+  });
+
   // AC4: Delete(Note) IRI equals the IRI the Create(Note) cascade minted for the
   // same (calendar, event) pair — executable cross-path parity (not a tautology).
   it('Delete(Note) IRI byte-matches the Create(Note) cascade IRI for the same (calendar, event)', async () => {
