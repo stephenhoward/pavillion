@@ -17,6 +17,8 @@
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts pr-text-check <file|->
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts submit-check <root-id> --leaf <id> --base <branch>
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts publish-pr <root-id> <pr> --leaf <id> --title-file <f> --body-file <f>
  *
  * Exit codes: 0 ok, 1 a refused flag set / failed check / malformed block /
  * refused write, 2 usage or an unexpected error.
@@ -45,6 +47,8 @@ import {
   selectRoot,
   validateFlags,
   prTextCheck,
+  runPublishPr,
+  runSubmitCheck,
 } from './lib/build.js';
 
 const USAGE = `usage: build.ts <command> [args]
@@ -76,6 +80,16 @@ commands:
   dry-run                       preflight, gates, selection, chain plan, label write; writes nothing (JSON)
   pr-text-check <file|->        a candidate PR title, body, branch name or commit log (- reads
                                 stdin) against the publication patterns (JSON); exit 1 = publish nothing
+  submit-check <root-id> --leaf <id> --base <branch>
+                                before stack.ts submit, in the level's checkout: security
+                                hold, text check over the branch name and base..HEAD
+                                commits, kill switch (JSON); exit 1 = submit nothing,
+                                "hold": true = stall the level unsubmitted
+  publish-pr <root-id> <pr> --leaf <id> --title-file <f> --body-file <f>
+                                the one way to set a PR's title and body: security hold,
+                                PR checks, text check over title, body, branch and commits,
+                                kill switch, then gh pr edit (JSON); exit 1 = nothing edited,
+                                "hold": true = stall the level unsubmitted
 `;
 
 function fail(message: string): never {
@@ -263,6 +277,34 @@ try {
     case 'dry-run': {
       if (args.length) fail(USAGE);
       json(runDryRun(execRunner, now));
+      break;
+    }
+    case 'submit-check': {
+      const [root, ...rest] = args;
+      if (!root) fail(USAGE);
+      const flags = flagPairs(rest, ['--leaf', '--base']);
+      if (flags.size !== 2) fail(USAGE);
+      const result = runSubmitCheck(execRunner, { root, leaf: flags.get('--leaf') as string, base: flags.get('--base') as string });
+      json(result);
+      process.exit(result.ok ? 0 : 1);
+      break;
+    }
+    case 'publish-pr': {
+      const [root, pr, ...rest] = args;
+      if (!root || !pr || !/^[1-9][0-9]*$/.test(pr)) fail(USAGE);
+      const flags = flagPairs(rest, ['--leaf', '--title-file', '--body-file']);
+      if (flags.size !== 3) fail(USAGE);
+      const bodyFile = resolve(callerCwd, flags.get('--body-file') as string);
+      const result = runPublishPr(execRunner, {
+        root,
+        pr: Number(pr),
+        leaf: flags.get('--leaf') as string,
+        title: readInput(flags.get('--title-file') as string),
+        body: readFileSync(bodyFile, 'utf-8'),
+        bodyFile,
+      });
+      json(result);
+      process.exit(result.ok ? 0 : 1);
       break;
     }
     case 'pr-text-check': {

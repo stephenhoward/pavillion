@@ -4,7 +4,21 @@
       "Bash(gh pr merge:*)",
       "Bash(gh api:*)",
       "Bash(gh repo edit:*)",
-      "Bash(git push:*)"
+      "Bash(gh repo delete:*)",
+      "Bash(gh repo rename:*)",
+      "Bash(gh repo archive:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh variable:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh release:*)",
+      "Bash(gh alias:*)",
+      "Bash(git push:*)",
+      "Bash(git -C:*)",
+      "Bash(sh -c:*)",
+      "Bash(bash -c:*)",
+      "Bash(zsh -c:*)",
+      "Bash(env:*)",
+      "mcp__github__merge_pull_request"
     ]
   }
 }

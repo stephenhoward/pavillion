@@ -13,11 +13,12 @@
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
  *     formatBuildState, formatStallBlock, writeGuard, applyFiring,
- *     recordedPrExpectations, validateRecordedPr, prTextCheck
+ *     recordedPrExpectations, validateRecordedPr, prTextCheck, securityHold,
+ *     validatePublishTarget
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
  *     readBead, readChildren, runPreflight, releaseLock, runGates,
  *     runQueueGate, runDryRun, runStillOurs, runWrite, runValidatePrs,
- *     runBuildState
+ *     runBuildState, runPublishPr, runSubmitCheck
  *
  * Every external command goes through a Runner: execFileSync with an argv
  * array, never a shell. Any non-zero exit, unparsable JSON or missing field
@@ -890,8 +891,9 @@ export function recordedPrExpectations(state: BuildState): PrExpectation[] {
 
 /**
  * A recorded PR before any checkout, push or edit of it, over `gh pr view
- * --json number,state,author,isCrossRepository,headRefName,baseRefName`:
- * open, or merged for a lower level (then `stack.ts sync` runs first);
+ * --json number,state,author,isCrossRepository,headRefName,baseRefName,
+ * autoMergeRequest`: open, or merged for a lower level (then `stack.ts sync`
+ * runs first); auto-merge not set;
  * authored by the authenticated gh login; not from a fork; head on the
  * recorded branch; base on the trunk or the recorded predecessor.
  */
@@ -911,9 +913,11 @@ export function validateRecordedPr(
     typeof p.isCrossRepository === 'boolean' ? null : 'isCrossRepository',
     typeof p.headRefName === 'string' ? null : 'headRefName',
     typeof p.baseRefName === 'string' ? null : 'baseRefName',
+    'autoMergeRequest' in p ? null : 'autoMergeRequest',
   ].filter(Boolean);
   if (missing.length) return no(`gh pr view missing or malformed ${missing.join(', ')}`);
   if (p.number !== expected.pr) return no(`gh pr view returned #${p.number}`);
+  if (p.autoMergeRequest !== null) return no('auto-merge is set: the maintainer merges by hand');
   if (ghLogin === '') return no('no authenticated gh login to compare the author with');
   const merged = p.state === 'MERGED';
   if (!(p.state === 'OPEN' || (merged && expected.lowerLevel))) {
@@ -931,7 +935,7 @@ export function validateRecordedPr(
 // Publication text check
 // =============================================================================
 
-export type TextRule = 'bead-id' | 'home-path' | 'session-trailer' | 'office-label' | 'token';
+export type TextRule = 'bead-id' | 'home-path' | 'session-trailer' | 'office-label' | 'email' | 'token';
 
 export interface TextMatch {
   rule: TextRule;
@@ -950,13 +954,36 @@ export interface TextMatch {
  * only: naming any private organisation's vocabulary here would publish it.
  */
 const TEXT_RULES: { rule: TextRule; pattern: RegExp }[] = [
-  { rule: 'bead-id', pattern: /\bpv-[a-z0-9]+(?:\.[0-9]+)*\b/gi },
-  { rule: 'home-path', pattern: /(?<![\w.])(?:\/(?:Users|home)\/[^\s/]+|\/root(?=[/\s]|$)|[A-Za-z]:\\Users\\[^\s\\]+|~\/\S*)/g },
+  // Not after a letter, so `npv-1234` passes; `_` or a digit before still matches.
+  { rule: 'bead-id', pattern: /(?<![a-z])pv-[a-z0-9]+(?:\.[0-9]+)*/gi },
+  {
+    rule: 'home-path',
+    pattern: new RegExp([
+      String.raw`(?<![\w.])(?:\/(?:users|home)\/[^\s/]+`,
+      String.raw`\/root(?=[/\s]|$)`,
+      String.raw`[a-z]:[\\/]users[\\/][^\s\\/]+`,
+      String.raw`~[\w.-]*\/\S*`,
+      String.raw`\/volumes\/[^\s/]+`,
+      String.raw`\/private\/(?:tmp|var)\/\S*`,
+      String.raw`\/var\/folders\/\S*`,
+      String.raw`\/tmp\/claude-\d+\/\S*)`,
+    ].join('|'), 'gi'),
+  },
+  // A home directory encoded into a path segment, as agent tooling names its project folders.
+  { rule: 'home-path', pattern: /(?<![\w-])-(?:Users|home)-[A-Za-z0-9._]+-/g },
   {
     rule: 'session-trailer',
-    pattern: /^[ \t]*[A-Za-z][\w-]*-Session:|^[ \t]*Co-authored-by:[^\n]*\b(?:claude|anthropic)\b[^\n]*|^[ \t]*Generated-by:[^\n]*|Generated with \[?Claude Code/gim,
+    pattern: new RegExp([
+      String.raw`^[ \t]*(?:[-*>][ \t]+)*(?:[A-Za-z][\w-]*-Session:`,
+      String.raw`Co-authored-by:[^\n]*\b(?:claude|anthropic)\b[^\n]*`,
+      String.raw`Generated-by:[^\n]*)`,
+      String.raw`Generated with \[?Claude`,
+      String.raw`claude\.ai\/code\/session\S*`,
+    ].join('|'), 'gim'),
   },
   { rule: 'office-label', pattern: /\boffice:[a-z][\w-]*/gi },
+  // GitHub's noreply addresses are how a commit names its author publicly.
+  { rule: 'email', pattern: /[\w.+-]+@(?!users\.noreply\.github\.com\b)[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b/g },
   {
     rule: 'token',
     pattern: new RegExp([
@@ -965,13 +992,19 @@ const TEXT_RULES: { rule: TextRule; pattern: RegExp }[] = [
       String.raw`\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{10,}`,
       String.raw`\bwhsec_[A-Za-z0-9]{10,}`,
       String.raw`\bsk-(?:ant-)?[\w-]{20,}`,
-      String.raw`\bAKIA[0-9A-Z]{16}\b`,
+      String.raw`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`,
+      String.raw`\bnpm_[A-Za-z0-9]{36}\b`,
+      String.raw`\bAIza[\w-]{35}`,
       String.raw`\bxox[abposr]-[A-Za-z0-9-]{10,}`,
+      String.raw`hooks\.slack\.com\/services\/\S+`,
       String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----`,
       String.raw`\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}`,
-      // A long run mixing upper case, lower case and digits. Commit SHAs
-      // (lower-case hex) and kebab-case names never mix all three.
-      String.raw`(?<![\w+=-])(?=[\w+=-]*[A-Z])(?=[\w+=-]*[a-z])(?=[\w+=-]*[0-9])[\w+=-]{32,}`,
+      // Longer than a commit SHA's 40 hex digits.
+      String.raw`(?<![0-9A-Fa-f])[0-9A-Fa-f]{41,}(?![0-9A-Fa-f])`,
+      // A long run mixing upper case, lower case and digits, unless it is a
+      // file name. Commit SHAs (lower-case hex) and kebab-case names never
+      // mix all three.
+      String.raw`(?<![\w+=-])(?=[\w+=-]*[A-Z])(?=[\w+=-]*[a-z])(?=[\w+=-]*[0-9])(?![\w+=-]*\.[A-Za-z]{1,5}\b)[\w+=-]{32,}`,
     ].join('|'), 'g'),
   },
 ];
@@ -1322,7 +1355,7 @@ export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; read
   return { ok: true, reading: `wrote ${input.label ?? 'a Build state block'} on ${input.root}` };
 }
 
-const PR_VIEW_FIELDS = 'number,state,author,isCrossRepository,headRefName,baseRefName';
+const PR_VIEW_FIELDS = 'number,state,author,isCrossRepository,headRefName,baseRefName,autoMergeRequest';
 
 export interface PrsValidation {
   ok: boolean;
@@ -1395,6 +1428,161 @@ export function runValidatePrs(runner: Runner, root: string, opts: { text?: bool
     prs,
     next,
   };
+}
+
+// =============================================================================
+// Publishing a PR's title and body
+// =============================================================================
+
+/** Labels whose leaf is never published unattended: the maintainer decides how. */
+export const SECURITY_LABELS = ['security', 'cve-watch'];
+
+/** The deterministic security hold over a leaf's labels; the reason, or null. */
+export function securityHold(labels: string[]): string | null {
+  const hit = SECURITY_LABELS.find(l => labels.includes(l));
+  return hit ? `leaf carries ${hit}: held for the maintainer` : null;
+}
+
+const PUBLISH_FIELDS = 'number,state,author,isCrossRepository,headRefName,baseRefName,autoMergeRequest';
+const TITLE_MAX = 256;
+
+/**
+ * A PR the run is about to edit: the one asked for, open, authored by the
+ * authenticated gh login, not from a fork, auto-merge not set, and with a
+ * head and base that are safe to name in a git argv.
+ */
+export function validatePublishTarget(
+  view: unknown,
+  pr: number,
+  ghLogin: string,
+): { ok: true; head: string; base: string } | { ok: false; reason: string } {
+  const no = (reason: string) => ({ ok: false as const, reason: `#${pr}: ${reason}` });
+  if (typeof view !== 'object' || view === null || Array.isArray(view)) return no('gh pr view reading is not an object');
+  const p = view as Record<string, unknown>;
+  const author = (p.author as { login?: unknown } | null)?.login;
+  if (p.number !== pr) return no(`gh pr view returned ${JSON.stringify(p.number)}`);
+  if (p.state !== 'OPEN') return no(`state ${JSON.stringify(p.state)}, not OPEN`);
+  if (ghLogin === '' || typeof author !== 'string' || author.toLowerCase() !== ghLogin.toLowerCase()) {
+    return no(`author ${JSON.stringify(author)} is not the authenticated gh login`);
+  }
+  if (p.isCrossRepository !== false) return no('not known to be from this repository');
+  if (!('autoMergeRequest' in p) || p.autoMergeRequest !== null) return no('auto-merge is set or unreadable');
+  if (typeof p.headRefName !== 'string' || !validBranch(p.headRefName)) return no(`head ${JSON.stringify(p.headRefName)} is not <type>.<kebab>`);
+  const base = p.baseRefName;
+  if (typeof base !== 'string' || (base !== TRUNK && !validBranch(base))) return no(`base ${JSON.stringify(base)} is not the trunk or <type>.<kebab>`);
+  return { ok: true, head: p.headRefName, base };
+}
+
+export interface PublishInput {
+  root: string;
+  pr: number;
+  /** The leaf the PR's level implements; its labels decide the security hold. */
+  leaf: string;
+  title: string;
+  body: string;
+  /** The absolute path `body` was read from, handed to `gh pr edit --body-file`. */
+  bodyFile: string;
+}
+
+export interface PublishResult {
+  ok: boolean;
+  reading: string;
+  /** A security hold: stall the level unsubmitted rather than retry. */
+  hold: boolean;
+  matches: (TextMatch & { source: string })[];
+}
+
+/**
+ * The one way the run edits a PR: security hold, target validation, the
+ * text check over the title, body, head branch and the published commits
+ * (`origin/<base>..origin/<head>`, fetched first), the kill switch, then
+ * `gh pr edit --title --body-file` through argv. Any refusal edits nothing.
+ */
+export function runPublishPr(runner: Runner, input: PublishInput): PublishResult {
+  const refuse = (reading: string, extra: Partial<PublishResult> = {}): PublishResult => ({ ok: false, reading, hold: false, matches: [], ...extra });
+  try {
+    assertRootId(input.root);
+    assertRootId(input.leaf);
+  }
+  catch (err) {
+    return refuse((err as Error).message);
+  }
+  if (!Number.isSafeInteger(input.pr) || input.pr < 1 || input.pr > 9_999_999) return refuse(`bad PR number ${input.pr}`);
+  const title = input.title.replace(/\r?\n$/, '');
+  if (!title.trim() || title.includes('\n') || title.length > TITLE_MAX) return refuse(`title must be one line of 1-${TITLE_MAX} characters`);
+
+  const leaf = attempt(() => readBead(runner, input.leaf));
+  if (isFailure(leaf)) return refuse(leaf.error);
+  const hold = securityHold(labelsOf(leaf));
+  if (hold) return refuse(hold, { hold: true });
+
+  const login = runner('gh', ['api', 'user', '--jq', '.login']);
+  if (login.exitCode !== 0 || login.stdout === '') return refuse(`cannot read the authenticated gh login: ${login.stderr}`);
+  const view = attempt(() => readJson(runner, 'gh', ['pr', 'view', String(input.pr), '--json', PUBLISH_FIELDS]));
+  if (isFailure(view)) return refuse(view.error);
+  const target = validatePublishTarget(view, input.pr, login.stdout);
+  if (!target.ok) return refuse(target.reason);
+
+  const fetch = runner('git', ['fetch', '--quiet', 'origin', target.base, target.head]);
+  if (fetch.exitCode !== 0) return refuse(`git fetch failed (${fetch.exitCode}): ${fetch.stderr}`);
+  const log = runner('git', ['log', '--format=%B', `origin/${target.base}..origin/${target.head}`]);
+  if (log.exitCode !== 0) return refuse(`git log failed (${log.exitCode}): ${log.stderr}`);
+
+  const sources: [string, string][] = [['title', title], ['body', input.body], ['branch', target.head], ['commits', log.stdout]];
+  const matches = sources.flatMap(([source, text]) => prTextCheck(text).map(m => ({ source, ...m })));
+  if (matches.length) return refuse(`text check rejected: ${matches.map(m => `${m.source} ${describeMatches([m])}`).join('; ')}`, { matches });
+
+  const ours = runStillOurs(runner, input.root);
+  if (!ours.ok) return refuse(`kill switch: ${ours.reason}`);
+
+  const edit = runner('gh', ['pr', 'edit', String(input.pr), '--title', title, '--body-file', input.bodyFile]);
+  if (edit.exitCode !== 0) return refuse(`gh pr edit failed (${edit.exitCode}): ${edit.stderr}`);
+  return { ok: true, reading: `published title and body on #${input.pr}`, hold: false, matches: [] };
+}
+
+/**
+ * Before `stack.ts submit`: the security hold, then the text check over the
+ * checked-out level's branch name and its commits since `base` (the trunk
+ * as freshly fetched `origin/main`), then the
+ * kill switch. Exit 1 means submit nothing; `hold` means stall the level
+ * unsubmitted for the maintainer.
+ */
+export function runSubmitCheck(runner: Runner, input: { root: string; leaf: string; base: string }): PublishResult {
+  const refuse = (reading: string, extra: Partial<PublishResult> = {}): PublishResult => ({ ok: false, reading, hold: false, matches: [], ...extra });
+  try {
+    assertRootId(input.root);
+    assertRootId(input.leaf);
+  }
+  catch (err) {
+    return refuse((err as Error).message);
+  }
+  if (input.base !== TRUNK && !validBranch(input.base)) return refuse(`base ${JSON.stringify(input.base)} is not the trunk or <type>.<kebab>`);
+
+  const leaf = attempt(() => readBead(runner, input.leaf));
+  if (isFailure(leaf)) return refuse(leaf.error);
+  const hold = securityHold(labelsOf(leaf));
+  if (hold) return refuse(hold, { hold: true });
+
+  const head = runner('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (head.exitCode !== 0) return refuse(`git rev-parse failed (${head.exitCode}): ${head.stderr}`);
+  if (!validBranch(head.stdout)) return refuse(`checked-out branch ${JSON.stringify(head.stdout)} is not <type>.<kebab>`);
+  // Local main can be stale and would pull merged history into the range.
+  let base = input.base;
+  if (base === TRUNK) {
+    const fetch = runner('git', ['fetch', '--quiet', 'origin', TRUNK]);
+    if (fetch.exitCode !== 0) return refuse(`git fetch failed (${fetch.exitCode}): ${fetch.stderr}`);
+    base = `origin/${TRUNK}`;
+  }
+  const log = runner('git', ['log', '--format=%B', `${base}..HEAD`]);
+  if (log.exitCode !== 0) return refuse(`git log failed (${log.exitCode}): ${log.stderr}`);
+
+  const sources: [string, string][] = [['branch', head.stdout], ['commits', log.stdout]];
+  const matches = sources.flatMap(([source, text]) => prTextCheck(text).map(m => ({ source, ...m })));
+  if (matches.length) return refuse(`text check rejected: ${matches.map(m => `${m.source} ${describeMatches([m])}`).join('; ')}`, { matches });
+
+  const ours = runStillOurs(runner, input.root);
+  if (!ours.ok) return refuse(`kill switch: ${ours.reason}`);
+  return { ok: true, reading: `${head.stdout} may be submitted`, hold: false, matches: [] };
 }
 
 export interface BuildStateResult {

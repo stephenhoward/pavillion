@@ -102,7 +102,7 @@ Things that look wrong but are not:
 | `bead-branch-and-pr` | `.agents/skills/bead-branch-and-pr/scripts/stack.ts` | `safe-to-start`, `plan`, `create`, `submit`, `sync` |
 | `git-cleanup` | `.agents/skills/git-cleanup/scripts/git-cleanup.ts` | `classify`, `execute` |
 | `plan-scheduled` | `.agents/skills/plan-scheduled/scripts/spec.ts` | `select`, `inspect`, `leaves`, `last-block`, `revise-note`, `revision-number`, `gate-misses`, `state-write` |
-| `build-scheduled` | `.agents/skills/build-scheduled/scripts/build.ts` | `validate-flags`, `preflight`, `release`, `gates`, `select`, `build-state`, `still-ours`, `validate-prs`, `write`, `state-write`, `dry-run`, `pr-text-check` |
+| `build-scheduled` | `.agents/skills/build-scheduled/scripts/build.ts` | `validate-flags`, `preflight`, `release`, `gates`, `select`, `build-state`, `still-ours`, `validate-prs`, `write`, `state-write`, `dry-run`, `pr-text-check`, `submit-check`, `publish-pr` |
 
 Each of those directories is self-contained: the CLI, its `lib/`, its
 `test/`, and a local copy of the `run()` helper in `lib/shared.ts` here.
