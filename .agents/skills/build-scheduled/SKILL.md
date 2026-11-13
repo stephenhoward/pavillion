@@ -36,13 +36,11 @@ The attended phases apply as written, except:
 
 ## Preflight, gates and selection
 
-`validate-flags` first: `--scheduled` refuses an epic id, `--only`,
-`--sequential`, `--resume` and unknown flags. Then **preflight**, failing
-closed in order: the report path is gitignored; the lock
-(`reports/spawn-bead-workers/.lock`, `{pid, started}`; live holder stops the
-run, dead holder is replaced, malformed fails) — labels cannot stop two
-overlapping firings, the lock can, one scheduled checkout per host; a clean
-tree at the trunk (`stack.ts safe-to-start`). No repository setting is read.
+`validate-flags` first: `--scheduled` takes no epic id and no other attended
+flag. Then **preflight**, failing closed in order: the report path is
+gitignored; the run lock (`runPreflight` in `scripts/lib/build.ts`) — labels
+cannot stop two overlapping firings, the lock can, one scheduled checkout
+per host; a clean tree at the trunk. No repository setting is read.
 
 **Gates**, in order; a failure ends the run with one report line. Any
 non-zero exit, bad JSON, missing field, or `gh pr list` result as long as
@@ -51,7 +49,7 @@ its `--limit` fails the gate.
 1. **Resume first.** An open `spec:building` root without `build:hold` or
    `needs-human` is taken; skip gates 2 and 4.
 2. **Prior epic in review.** An open PR is recorded in the last Build state
-   block of a `spec:built` root, open or closed.
+   block of a `spec:built` root, open or closed, or that block is missing.
 3. **Queue gate.** `/clear-backlog`'s, thresholds unchanged, the epic's own
    levels counted. Re-read (`gates --queue-only`) before every new level.
 4. **Nothing to build.** Selection finds no root.
@@ -72,16 +70,16 @@ last one outside fenced text, and a malformed last block stalls the root
 with no fallback. Body, these lines only:
 
 ```
-firings: <0-3>
+firings: <0..MAX_FIRINGS>
 restart: none | resume
 chain <k>: <branch> → #<pr>, <branch> → #<pr>; next: <branch | done>
 stopped: <reason | none>
 ```
 
-Chains number from 1; `-` means no submitted level; branches are
-`<type>.<kebab>` per `git-workflow/branches.md`. `## Build stall` holds
-`step: <failing step>` and the investigator's report in a four-backtick
-fence, so no heading in it is ever read.
+`MAX_FIRINGS` lives in `scripts/lib/build.ts`. Chains number from 1; `-`
+means no submitted level; branches follow `git-workflow/branches.md`.
+`## Build stall` holds `step: <failing step>` and the investigator's report
+in a four-backtick fence, so no heading in it is ever read.
 
 ## Report
 
@@ -94,22 +92,10 @@ the run stopping and why. Bead ids are allowed here, never in GitHub text.
 
 ## Tooling
 
-`build.ts <command>` means
-`npx tsx .agents/skills/build-scheduled/scripts/build.ts <command>`:
-
-```
-validate-flags <argv…>       exit 1 + message on a refused combination
-preflight --owner-pid $PPID  JSON readings; takes the lock ($PPID: the agent session)
-gates [--queue-only]         JSON: each gate's reading and verdict, in order
-select                       JSON: root, ordering source, skipped roots
-build-state <root>           JSON: the parsed last Build state block; exit 1 if malformed
-state-write <spec:label>     bd update flags: spec:building | spec:built | spec:stalled
-dry-run                      JSON: preflight, gates, selection, chain plan, label write
-```
-
-A state write's flags go in the same `bd update` as its notes block. The
-**dry run** evaluates every check (a real run stops at the first failure),
-then still selects, plans chains and prints the label write; it writes no
-label, note, report, lock or branch. Every command shells out with an argv
-array, never a shell, and validates root ids first. Tests:
-`npx vitest run --config .agents/tools/vitest.config.ts`.
+`build.ts` means `npx tsx .agents/skills/build-scheduled/scripts/build.ts`;
+run it with no command for its usage. Pass `preflight --owner-pid $PPID`:
+under the Bash tool `$PPID` is the agent session, which outlives each
+short-lived CLI call, so the lock stays held for the whole run. A state
+write's flags go in the same `bd update` as its notes block. The dry run
+evaluates every check where a real run stops at the first failure, then
+still selects, plans chains and prints the label write; it writes nothing.

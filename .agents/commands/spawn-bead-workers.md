@@ -183,24 +183,16 @@ If a prior run was interrupted:
 /spawn-bead-workers --scheduled --dry-run
 ```
 
-See "Scheduled mode" below. `--scheduled` refuses an epic id, `--only`,
-`--sequential` and `--resume`.
+See "Scheduled mode" below.
 
 ## Scheduled mode (`--scheduled`)
 
 Unattended run: no questions, at most one root per run, a report file per
-run. The whole mode — its preflight and lock, the gates (resume first,
-prior epic in review, `/clear-backlog`'s queue gate, nothing to build),
-root selection, its share of the `spec:*` label state machine
-(`spec:building`, `spec:built`, `spec:stalled`, and the maintainer-only
-`build:hold`), the `## Build state` and `## Build stall` notes blocks, the
-report and the dry run — is the
+run. The whole mode is the
 [`build-scheduled`](../skills/build-scheduled/SKILL.md) skill. Load it and
-follow it; the phases above apply only as its Overrides list says. Its
-flag check, gates, selection and state writes are
-`.agents/skills/build-scheduled/scripts/build.ts`. `--scheduled --dry-run`
-prints the preflight and gate readings, the selected root, its chain plan
-and the labels the run would set, and changes nothing.
+follow it; the phases above apply only as its Overrides list says.
+`--scheduled --dry-run` prints what a run would read and write, and changes
+nothing.
 
 ## Acceptance / Manual Verification
 
