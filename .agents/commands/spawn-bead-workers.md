@@ -37,7 +37,7 @@ This command orchestrates around the skills below, which hold the authoritative 
 ### PHASE 1: Load the Epic
 
 IF an epic ID is provided:
-1. Load the epic: `bd show <epic-id>`.
+1. Load the epic: `bd show <epic-id>`. If it carries `spec:building`, refuse and stop: say that the root carries `spec:building`, so the scheduled build (`--scheduled`) holds it and resumes it itself. The maintainer releases it by moving the label, not by running it attended.
 2. Check that notes contain a "Bead Analysis" section (the `# Bead Analysis` heading `/analyze-bead` writes).
 3. If missing, offer to run `/analyze-bead` first.
 4. If the epic carries the `spec:ready` label (set by `/plan --scheduled` when it finishes a root), release it before any implementer is dispatched:
@@ -175,6 +175,8 @@ If a prior run was interrupted:
 3. Recover each chain's levels per [`bead-wave-orchestration`](../skills/bead-wave-orchestration/SKILL.md) "Resuming an interrupted run": a submitted level comes back with `gh stack checkout <pr-number>` (catching up with `stack.ts sync` first if a lower level merged); a level with no submitted PR is redone from its bead.
 4. Re-run the Phase 2 enrichment gate on the remaining ready beads.
 5. Resume from the current wave state, reusing the standard Phase 3-6 flow.
+
+An interrupted scheduled run needs no `--resume`: the next `--scheduled` firing resumes its `spec:building` root from the root's last Build state block ([`build-scheduled`](../skills/build-scheduled/SKILL.md) "Resume"), and Phase 1 refuses that root attended.
 
 ### Scheduled
 

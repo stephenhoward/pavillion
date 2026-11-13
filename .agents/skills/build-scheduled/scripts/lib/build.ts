@@ -1,15 +1,21 @@
 /**
  * Deterministic half of `/spawn-bead-workers --scheduled`: flag validation,
- * preflight, the four gates, root selection, the `## Build state` parser,
- * the state write and the dry run.
+ * preflight, the four gates, root selection, the `## Build state` parser
+ * and formatter, the kill switch, start/restart/resume, counted firings,
+ * recorded-PR validation, the guarded write and the dry run.
  *
  * Exports:
- *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH
+ *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH, TRUNK
  *   Pure: validateFlags, assertRootId, lockDecision, passingCi, queueGate,
  *     priorEpicGate, selectRoot, evaluateGates, parseBuildState,
- *     buildStateWriteArgs, stateWriteCommand, chainPlanInput
+ *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
+ *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
+ *     formatBuildState, formatStallBlock, writeGuard,
+ *     recordedPrExpectations, validateRecordedPr
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
- *     readBead, readChildren, runPreflight, runGates, runQueueGate, runDryRun
+ *     readBead, readChildren, runPreflight, releaseLock, runGates,
+ *     runQueueGate, runDryRun, runStillOurs, runWrite, runValidatePrs,
+ *     runBuildState
  *
  * Every external command goes through a Runner: execFileSync with an argv
  * array, never a shell. Any non-zero exit, unparsable JSON or missing field
@@ -541,6 +547,296 @@ export function stateWriteCommand(rootId: string, label: string): string[] {
 }
 
 // =============================================================================
+// Counted firings and the kill switch
+// =============================================================================
+
+/**
+ * How a firing on the root ended. `building`: it started or resumed a level
+ * and left the root spec:building. `ended`: it started or resumed a level
+ * and set spec:built or spec:stalled itself. The other four never count.
+ */
+export type FiringKind = 'building' | 'ended' | 'gate-skipped' | 'dry-run' | 'decision-blocked' | 'kill-switch';
+
+/**
+ * The firing count the stop block records. Only a firing that started or
+ * resumed a level counts; the MAX_FIRINGS-th counted firing that still
+ * leaves the root spec:building stalls it. The count never passes the
+ * parser's bound.
+ */
+export function nextFiringCount(prev: number, kind: FiringKind): { count: number; stall: boolean } {
+  if (kind !== 'building' && kind !== 'ended') return { count: prev, stall: false };
+  return { count: Math.min(prev + 1, MAX_FIRINGS), stall: kind === 'building' && prev + 1 >= MAX_FIRINGS };
+}
+
+export type Check = { ok: true } | { ok: false; reason: string };
+
+function specLabels(labels: string[]): string[] {
+  return labels.filter(l => l.startsWith('spec:'));
+}
+
+/**
+ * The kill switch: the root is still this run's to write while it carries
+ * spec:building as its only spec label and neither build:hold nor
+ * needs-human.
+ */
+export function rootStillOurs(labels: string[]): Check {
+  if (labels.includes(HOLD)) return { ok: false, reason: `${HOLD} is set` };
+  if (labels.includes(NEEDS_HUMAN)) return { ok: false, reason: `${NEEDS_HUMAN} is set` };
+  const spec = specLabels(labels);
+  if (spec.length !== 1 || spec[0] !== 'spec:building') {
+    return { ok: false, reason: `spec label is ${spec.join(', ') || 'absent'}, not spec:building` };
+  }
+  return { ok: true };
+}
+
+// =============================================================================
+// Start, restart and resume
+// =============================================================================
+
+export type StartDecision =
+  | { action: 'start'; firings: 0; restart: 'none' }
+  | { action: 'continue'; firings: number; restart: 'none'; state: BuildState }
+  | { action: 'restart'; firings: 0; restart: 'resume'; state: BuildState }
+  | { action: 'stall'; reason: string };
+
+/**
+ * What a run does with the root it holds. spec:ready with no block starts;
+ * spec:building continues from its last block, or restarts (firings reset,
+ * submitted levels carried) when that block records `stopped: stalled`,
+ * which means the maintainer moved it back from spec:stalled. Everything
+ * else stalls: there is no start-over.
+ */
+export function startDecision(labels: string[], parsed: BuildStateParse): StartDecision {
+  const spec = specLabels(labels);
+  if (spec.length === 1 && spec[0] === 'spec:ready') {
+    if (parsed.ok && parsed.state === null) return { action: 'start', firings: 0, restart: 'none' };
+    return { action: 'stall', reason: 'spec:ready root already has a Build state block: a rebuild is reset by hand' };
+  }
+  if (spec.length !== 1 || spec[0] !== 'spec:building') {
+    return { action: 'stall', reason: `root carries ${spec.join(', ') || 'no spec label'}, not spec:ready or spec:building` };
+  }
+  if (!parsed.ok) return { action: 'stall', reason: parsed.stall };
+  if (parsed.state === null) return { action: 'stall', reason: 'spec:building root has no Build state block' };
+  if (parsed.state.stopped === 'stalled') return { action: 'restart', firings: 0, restart: 'resume', state: parsed.state };
+  return { action: 'continue', firings: parsed.state.firings, restart: 'none', state: parsed.state };
+}
+
+export interface ChainResume {
+  index: number;
+  submitted: number;
+  /** The chain's top submitted level, restored with `gh stack checkout <pr>`. */
+  top: BuildLevel | null;
+  next: string;
+  /** The leaf behind `next`, or null when the chain is done. */
+  nextBead: string | null;
+}
+
+export type ResumePoint = { ok: true; chains: ChainResume[]; redo: string[] } | { ok: false; stall: string };
+
+/**
+ * Where each chain continues. Block chain k is the chain plan's chain k and
+ * its submitted levels are that chain's first leaves. The redo set is every
+ * leaf of an unfinished chain with no submitted level that is in progress
+ * or closed — its work is never trusted — except an escalated
+ * (needs-human) leaf, which stays with the maintainer.
+ */
+export function resumePoint(state: BuildState, planChains: string[][], children: BuildBead[]): ResumePoint {
+  if (state.chains.length !== planChains.length) {
+    return { ok: false, stall: `Build state records ${state.chains.length} chains, the chain plan has ${planChains.length}` };
+  }
+  const byId = new Map(children.map(c => [c.id, c]));
+  const chains: ChainResume[] = [];
+  const redo: string[] = [];
+  for (const chain of state.chains) {
+    const leaves = planChains[chain.index - 1];
+    const submitted = chain.levels.length;
+    if (submitted > leaves.length) {
+      return { ok: false, stall: `chain ${chain.index} records ${submitted} submitted levels, its plan holds ${leaves.length}` };
+    }
+    const done = chain.next === 'done';
+    const nextBead = done ? null : leaves[submitted] ?? null;
+    if (!done && nextBead === null) {
+      return { ok: false, stall: `chain ${chain.index} records next ${chain.next} past the end of its plan` };
+    }
+    chains.push({ index: chain.index, submitted, top: chain.levels[submitted - 1] ?? null, next: chain.next, nextBead });
+    if (done) continue;
+    for (const id of leaves.slice(submitted)) {
+      const leaf = byId.get(id);
+      if (leaf && leaf.status !== 'open' && !labelsOf(leaf).includes(NEEDS_HUMAN)) redo.push(id);
+    }
+  }
+  return { ok: true, chains, redo };
+}
+
+// =============================================================================
+// Block formatting and the write guard
+// =============================================================================
+
+const STOPPED = /^[\x20-\x7e]{1,160}$/;
+const STALL_STEP = /^[\x20-\x7e]{1,160}$/;
+
+function stamp(at: Date): string {
+  return `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
+/**
+ * The `## Build state` block for a state (the shape `build-state` prints;
+ * extra fields are ignored), under a dated heading. Throws on anything the
+ * parser would refuse, and returns the block with the state it parses back
+ * to.
+ */
+export function formatBuildState(input: unknown, at: Date): { text: string; state: BuildState } {
+  const s = input as { firings?: unknown; restart?: unknown; chains?: unknown; stopped?: unknown } | null;
+  if (typeof s !== 'object' || s === null || Array.isArray(s)) throw new Error('Build state input must be an object');
+  if (!Number.isSafeInteger(s.firings) || (s.firings as number) < 0 || (s.firings as number) > MAX_FIRINGS) {
+    throw new Error(`firings must be an integer 0-${MAX_FIRINGS}`);
+  }
+  if (s.restart !== 'none' && s.restart !== 'resume') throw new Error('restart must be none or resume');
+  if (typeof s.stopped !== 'string' || !STOPPED.test(s.stopped)) {
+    throw new Error('stopped must be one line of 1-160 printable characters');
+  }
+  if (!Array.isArray(s.chains) || s.chains.length === 0) throw new Error('chains must be a non-empty array');
+  const chainLines = s.chains.map((raw, i) => {
+    const c = raw as { levels?: unknown; next?: unknown };
+    if (!Array.isArray(c?.levels)) throw new Error(`chain ${i + 1}: levels must be an array`);
+    const levels = c.levels.map(l => {
+      const level = l as { branch?: unknown; pr?: unknown };
+      if (typeof level?.branch !== 'string' || !validBranch(level.branch)) throw new Error(`chain ${i + 1}: bad branch`);
+      if (!Number.isSafeInteger(level.pr) || (level.pr as number) < 1 || (level.pr as number) > 9_999_999) {
+        throw new Error(`chain ${i + 1}: pr must be an integer 1-9999999`);
+      }
+      return `${level.branch} → #${level.pr}`;
+    });
+    if (typeof c.next !== 'string' || (c.next !== 'done' && !validBranch(c.next))) {
+      throw new Error(`chain ${i + 1}: next must be done or a <type>.<kebab> branch`);
+    }
+    return `chain ${i + 1}: ${levels.length ? levels.join(', ') : '-'}; next: ${c.next}`;
+  });
+  const text = [
+    `## Build state (${stamp(at)})`,
+    `firings: ${s.firings}`,
+    `restart: ${s.restart}`,
+    ...chainLines,
+    `stopped: ${s.stopped}`,
+  ].join('\n');
+  const parsed = parseBuildState(text);
+  if (!parsed.ok || parsed.state === null) throw new Error(parsed.ok ? 'formatted block did not parse' : parsed.stall);
+  return { text, state: parsed.state };
+}
+
+/**
+ * The `## Build stall` block: the failing step on one line, then the
+ * investigator's report in a backtick fence longer than any backtick run
+ * inside it (four at least), so no line of the report can close the fence
+ * and no heading in it is ever read.
+ */
+export function formatStallBlock(step: string, report: string): string {
+  if (!STALL_STEP.test(step)) throw new Error('stall step must be one line of 1-160 printable characters');
+  const longest = Math.max(0, ...(report.match(/`+/g) ?? []).map(run => run.length));
+  const fence = '`'.repeat(Math.max(4, longest + 1));
+  return ['## Build stall', `step: ${step}`, `${fence}text`, report, fence].join('\n');
+}
+
+const WRITABLE_STATUSES = new Set(['open', 'in_progress']);
+
+/**
+ * Whether a write may land on `root`, read just before it. `label` is the
+ * state write, or null for a block append. `state` is the Build state block
+ * being written (null only on a stall over an unreadable block), `hasStall`
+ * whether a Build stall block rides with it. Returns the refusal, or null.
+ */
+export function writeGuard(root: BuildBead, label: string | null, state: BuildState | null, hasStall: boolean): string | null {
+  if (!WRITABLE_STATUSES.has(root.status)) return `root is ${root.status}`;
+  const labels = labelsOf(root);
+  const spec = specLabels(labels);
+  const fromReady = spec.length === 1 && spec[0] === 'spec:ready';
+
+  if (label === 'spec:building' || (label === 'spec:stalled' && fromReady)) {
+    if (labels.includes(HOLD)) return `${HOLD} is set`;
+    if (labels.includes(NEEDS_HUMAN)) return `${NEEDS_HUMAN} is set`;
+    if (!fromReady) return `spec:building is written over spec:ready only; root carries ${spec.join(', ') || 'no spec label'}`;
+  }
+  else {
+    const ours = rootStillOurs(labels);
+    if (!ours.ok) return ours.reason;
+  }
+
+  const stalling = label === 'spec:stalled';
+  if (state === null) return stalling ? null : 'every write but a stall carries a Build state block';
+  if (label === 'spec:building' && (state.firings !== 0 || state.restart !== 'none' || state.prs.length || state.stopped !== 'none')) {
+    return 'the first Build state block records firings 0, restart none, no submitted level, stopped none';
+  }
+  if (label === 'spec:built' && state.chains.some(c => c.next !== 'done')) return 'spec:built needs every chain at next: done';
+  if (stalling !== (state.stopped === 'stalled')) return 'stopped: stalled goes with spec:stalled, and only with it';
+  if (stalling !== hasStall) return 'a Build stall block goes with spec:stalled, and only with it';
+  return null;
+}
+
+// =============================================================================
+// Recorded-PR validation
+// =============================================================================
+
+export const TRUNK = 'main';
+
+export interface PrExpectation {
+  pr: number;
+  branch: string;
+  /** The level below in the same chain, or null for a chain's first level. */
+  predecessor: string | null;
+  /** Below the chain's top submitted level: the maintainer may have merged it. */
+  lowerLevel: boolean;
+}
+
+/** What every PR the block records must look like on GitHub. */
+export function recordedPrExpectations(state: BuildState): PrExpectation[] {
+  return state.chains.flatMap(c => c.levels.map((level, i) => ({
+    pr: level.pr,
+    branch: level.branch,
+    predecessor: i === 0 ? null : c.levels[i - 1].branch,
+    lowerLevel: i < c.levels.length - 1,
+  })));
+}
+
+/**
+ * A recorded PR before any checkout, push or edit of it, over `gh pr view
+ * --json number,state,author,isCrossRepository,headRefName,baseRefName`:
+ * open, or merged for a lower level (then `stack.ts sync` runs first);
+ * authored by the authenticated gh login; not from a fork; head on the
+ * recorded branch; base on the trunk or the recorded predecessor.
+ */
+export function validateRecordedPr(
+  pr: unknown,
+  expected: PrExpectation,
+  ghLogin: string,
+): { ok: true; merged: boolean } | { ok: false; reason: string } {
+  const no = (reason: string) => ({ ok: false as const, reason: `#${expected.pr}: ${reason}` });
+  if (typeof pr !== 'object' || pr === null || Array.isArray(pr)) return no('gh pr view reading is not an object');
+  const p = pr as Record<string, unknown>;
+  const author = (p.author as { login?: unknown } | null)?.login;
+  const missing = [
+    Number.isSafeInteger(p.number) ? null : 'number',
+    typeof p.state === 'string' ? null : 'state',
+    typeof author === 'string' && author !== '' ? null : 'author',
+    typeof p.isCrossRepository === 'boolean' ? null : 'isCrossRepository',
+    typeof p.headRefName === 'string' ? null : 'headRefName',
+    typeof p.baseRefName === 'string' ? null : 'baseRefName',
+  ].filter(Boolean);
+  if (missing.length) return no(`gh pr view missing or malformed ${missing.join(', ')}`);
+  if (p.number !== expected.pr) return no(`gh pr view returned #${p.number}`);
+  if (ghLogin === '') return no('no authenticated gh login to compare the author with');
+  const merged = p.state === 'MERGED';
+  if (!(p.state === 'OPEN' || (merged && expected.lowerLevel))) {
+    return no(`state ${p.state}${merged ? ' on the chain\'s top submitted level' : ''}`);
+  }
+  if ((author as string).toLowerCase() !== ghLogin.toLowerCase()) return no(`author ${author} is not ${ghLogin}`);
+  if (p.isCrossRepository) return no('opened from a fork');
+  if (p.headRefName !== expected.branch) return no(`head ${p.headRefName} is not ${expected.branch}`);
+  const bases = expected.predecessor ? [TRUNK, expected.predecessor] : [TRUNK];
+  if (!bases.includes(p.baseRefName as string)) return no(`base ${p.baseRefName} is not ${bases.join(' or ')}`);
+  return { ok: true, merged };
+}
+
+// =============================================================================
 // Chain plan input
 // =============================================================================
 
@@ -549,9 +845,18 @@ export interface PlanInput {
   edges: { blocker: string; blocked: string; dependencyType: string }[];
 }
 
-/** `stack.ts plan` input: every non-decision child and the blocks edges among them. */
+/** Id order with numeric segments compared as numbers: pv-r.2 before pv-r.10. */
+function compareIds(a: string, b: string): number {
+  return a.localeCompare(b, 'en', { numeric: true });
+}
+
+/**
+ * `stack.ts plan` input: every non-decision child and the blocks edges among
+ * them. Children are ordered by id, because the plan emits chains in input
+ * order and resume maps a Build state block's chain k to the plan's chain k.
+ */
 export function chainPlanInput(children: BuildBead[]): PlanInput {
-  const kept = children.filter(c => c.issue_type !== 'decision');
+  const kept = children.filter(c => c.issue_type !== 'decision').sort((a, b) => compareIds(a.id, b.id));
   const ids = new Set(kept.map(c => c.id));
   const edges = kept.flatMap(c => (c.dependencies ?? [])
     .map(d => ({ blocker: d.depends_on_id ?? d.id ?? '', type: d.type ?? d.dependency_type }))
@@ -749,6 +1054,21 @@ export function runPreflight(runner: Runner, deps: PreflightDeps | null): Prefli
   return { ok: !failed(), checks };
 }
 
+/**
+ * Release the lock at every run end and every failed-gate exit. Only a
+ * lock holding `ownerPid` is removed; a lock held by another run, or one
+ * that cannot be read, is left for its owner (or the stale-lock rule).
+ */
+export function releaseLock(lock: LockStore, ownerPid: number): Reading {
+  const check = 'lock-release';
+  const current = lock.read();
+  if (current === null) return { check, verdict: 'pass', reading: 'no lock' };
+  const d = lockDecision(current, () => true, ownerPid);
+  if (d.verdict !== 'take') return { check, verdict: 'fail', reading: `not released: ${d.reading}` };
+  lock.remove();
+  return { check, verdict: 'pass', reading: `released (pid ${ownerPid})` };
+}
+
 export function runGates(runner: Runner, now: Date, mode: Mode): GatesResult {
   return evaluateGates({ beads: attempt(() => readBeads(runner)), prs: attempt(() => readOpenPrs(runner)), now, mode });
 }
@@ -790,4 +1110,123 @@ export function runDryRun(runner: Runner, now: Date): DryRunResult {
       : ['bd', ...stateWriteCommand(root, 'spec:building')];
   }
   return { preflight, gates: gates.gates, selection, chain_plan: chainPlan, labels };
+}
+
+/** The kill switch over a fresh read of the root: closed, held or relabelled stops the run. */
+export function runStillOurs(runner: Runner, root: string): Check {
+  const bead = attempt(() => readBead(runner, root));
+  if (isFailure(bead)) return { ok: false, reason: bead.error };
+  if (!WRITABLE_STATUSES.has(bead.status)) return { ok: false, reason: `root is ${bead.status}` };
+  return rootStillOurs(labelsOf(bead));
+}
+
+export interface WriteInput {
+  root: string;
+  /** spec:building, spec:built or spec:stalled; null appends a block with no label change. */
+  label: string | null;
+  /** A Build state (formatBuildState's input), or null on a stall over an unreadable block. */
+  state: unknown;
+  stall: { step: string; report: string } | null;
+  now: Date;
+}
+
+/**
+ * The one write path for the root: format the blocks, re-read the root and
+ * apply the write guard (the kill switch included), then one `bd update`
+ * with the state-write flags and `--append-notes`, through argv only. Any
+ * refusal writes nothing.
+ */
+export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; reading: string } {
+  const refuse = (reading: string) => ({ ok: false, reading });
+  let flags: string[];
+  let state: { text: string; state: BuildState } | null;
+  let stall: string | null;
+  try {
+    assertRootId(input.root);
+    flags = input.label === null ? [] : buildStateWriteArgs(input.label);
+    state = input.state === null ? null : formatBuildState(input.state, input.now);
+    stall = input.stall === null ? null : formatStallBlock(input.stall.step, input.stall.report);
+  }
+  catch (err) {
+    return refuse(err instanceof Error ? err.message : String(err));
+  }
+  const root = attempt(() => readBead(runner, input.root));
+  if (isFailure(root)) return refuse(root.error);
+  const guard = writeGuard(root, input.label, state?.state ?? null, stall !== null);
+  if (guard !== null) return refuse(`write refused: ${guard}`);
+
+  const notes = `\n${[state?.text, stall].filter(Boolean).join('\n\n')}`;
+  const result = runner('bd', ['update', input.root, ...flags, '--append-notes', notes]);
+  if (result.exitCode !== 0) return refuse(`bd update failed (${result.exitCode}): ${result.stderr}`);
+  return { ok: true, reading: `wrote ${input.label ?? 'a Build state block'} on ${input.root}` };
+}
+
+const PR_VIEW_FIELDS = 'number,state,author,isCrossRepository,headRefName,baseRefName';
+
+export interface PrsValidation {
+  ok: boolean;
+  reading: string;
+  /** A lower level merged: run `stack.ts sync` before any checkout. */
+  sync_first: boolean;
+  prs: ({ pr: number; ok: true; merged: boolean } | { pr: number; ok: false; reason: string })[];
+}
+
+/** Every PR the root's last block records, validated read-only against GitHub. */
+export function runValidatePrs(runner: Runner, root: string): PrsValidation {
+  const none = (reading: string): PrsValidation => ({ ok: false, reading, sync_first: false, prs: [] });
+  const bead = attempt(() => readBead(runner, root));
+  if (isFailure(bead)) return none(bead.error);
+  const parsed = parseBuildState(bead.notes);
+  if (!parsed.ok) return none(parsed.stall);
+  if (parsed.state === null) return none(`${root} has no Build state block`);
+
+  const login = runner('gh', ['api', 'user', '--jq', '.login']);
+  if (login.exitCode !== 0 || login.stdout === '') return none(`cannot read the authenticated gh login: ${login.stderr}`);
+
+  const prs = recordedPrExpectations(parsed.state).map(expected => {
+    const view = attempt(() => readJson(runner, 'gh', ['pr', 'view', String(expected.pr), '--json', PR_VIEW_FIELDS]));
+    const result = isFailure(view)
+      ? { ok: false as const, reason: `#${expected.pr}: ${view.error}` }
+      : validateRecordedPr(view, expected, login.stdout);
+    return { pr: expected.pr, ...result };
+  });
+  const bad = prs.filter(p => !p.ok);
+  return {
+    ok: bad.length === 0,
+    reading: bad.length ? `${bad.length} recorded PR(s) failed validation` : `${prs.length} recorded PR(s) valid`,
+    sync_first: prs.some(p => p.ok && p.merged),
+    prs,
+  };
+}
+
+export interface BuildStateResult {
+  ok: boolean;
+  parse: BuildStateParse;
+  start: StartDecision;
+  /** Null unless the run continues or restarts a build. */
+  resume: ResumePoint | Failure | null;
+}
+
+/**
+ * `build-state <root>`: the last block, what the run does with the root,
+ * and — when it continues or restarts — where each chain resumes, from the
+ * chain plan over the root's children. Not ok means stall the root.
+ */
+export function runBuildState(runner: Runner, root: string): BuildStateResult {
+  const bead = readBead(runner, root);
+  const parse = parseBuildState(bead.notes);
+  const start = startDecision(labelsOf(bead), parse);
+  if (start.action === 'stall' || start.action === 'start') {
+    return { ok: start.action === 'start', parse, start, resume: null };
+  }
+  const resume = attempt(() => {
+    const children = readChildren(runner, root);
+    const plan = readJson(runner, 'npx', ['--no-install', 'tsx', STACK_TS, 'plan', JSON.stringify(chainPlanInput(children))]);
+    const chains = (plan as { chains?: unknown } | null)?.chains;
+    if (!Array.isArray(chains) || !chains.every(c => Array.isArray(c) && c.every(id => typeof id === 'string'))) {
+      throw new Error('stack.ts plan: no chains array');
+    }
+    return resumePoint(start.state, chains as string[][], children);
+  });
+  return { ok: !isFailure(resume) && resume.ok, parse, start, resume };
 }
