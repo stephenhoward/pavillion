@@ -811,7 +811,7 @@ class CalendarService {
     const invitation = await this.accountsInterface.inviteNewAccount(
       grantingAccount,
       email,
-      `You've been invited to edit the calendar "${calendar.content('en').name}".\n\n${message || ''}`,
+      message || '',
       calendar.id,
     );
 

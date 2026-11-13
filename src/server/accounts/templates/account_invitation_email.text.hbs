@@ -4,7 +4,9 @@
 
 {{#if inviterName}}{{{t 'invitation_message' inviterName=inviterName instanceName=instanceName}}}{{else}}{{{t 'invitation_message_no_inviter' inviterName=inviterName instanceName=instanceName}}}{{/if}}
 
-{{{t 'instructions_text'}}}
+{{#if message}}{{{t 'inviter_message' message=message}}}
+
+{{/if}}{{{t 'instructions_text'}}}
 
 {{{invitationUrl}}}?code={{{inviteCode}}}
 

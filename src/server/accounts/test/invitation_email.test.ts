@@ -8,9 +8,9 @@ import { initI18Next } from '@/server/common/test/lib/i18next';
 
 initI18Next();
 
-const buildEmail = (context = { instanceName: 'Riverside Events', inviterName: 'Dana Organizer' }) =>
+const buildEmail = (context = { instanceName: 'Riverside Events', inviterName: 'Dana Organizer' }, message?: string) =>
   new AccountInvitationEmail(
-    new AccountInvitation('invite-id', 'invitee@example.com', new Account('inviter-id', 'inviter', 'inviter@example.com')),
+    new AccountInvitation('invite-id', 'invitee@example.com', new Account('inviter-id', 'inviter', 'inviter@example.com'), message),
     'invite-code-123',
     context,
   );
@@ -53,5 +53,32 @@ describe('AccountInvitationEmail', () => {
     expect(message.textMessage).toContain('Riverside Events');
     expect(message.textMessage).not.toMatch(/\n\s+(has invited|te ha invitado|vous a invité)/);
     expect(message.textMessage).not.toContain('undefined');
+  });
+
+  it.each([
+    ['en', 'Personal message from inviter: Welcome aboard'],
+    ['es', 'Mensaje personal de quien te invita: Welcome aboard'],
+    ['fr', 'Message personnel de l\'invitant'],
+  ])('renders the inviter message in text and HTML (%s)', (language, expected) => {
+    const message = buildEmail(undefined, 'Welcome aboard').buildMessage(language);
+
+    expect(message.textMessage).toContain(expected);
+    expect(message.htmlMessage).toContain(expected.replace('\'', '&#x27;'));
+    expect(message.textMessage).toContain('Welcome aboard');
+  });
+
+  it('escapes the inviter message in HTML but not in plain text', () => {
+    const message = buildEmail(undefined, '<b>hi</b> & bye').buildMessage('en');
+
+    expect(message.htmlMessage).not.toContain('<b>hi</b>');
+    expect(message.htmlMessage).toContain('&lt;b&gt;hi&lt;/b&gt;');
+    expect(message.textMessage).toContain('<b>hi</b> & bye');
+  });
+
+  it('omits the personal message when none was written', () => {
+    const message = buildEmail().buildMessage('en');
+
+    expect(message.textMessage).not.toContain('Personal message');
+    expect(message.htmlMessage).not.toContain('Personal message');
   });
 });

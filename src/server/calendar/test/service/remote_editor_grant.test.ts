@@ -193,6 +193,18 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       expect((mockAccountsInterface.inviteNewAccount as sinon.SinonStub).calledOnce).toBe(true);
     });
 
+    it('stores only the inviter message on an editor invitation', async () => {
+      await service.grantEditAccessByEmail(testAccount, testCalendarId, 'newuser@gmail.com', 'See you there');
+      const stub = mockAccountsInterface.inviteNewAccount as sinon.SinonStub;
+      expect(stub.firstCall.args[2]).toBe('See you there');
+    });
+
+    it('stores an empty message when the inviter wrote none', async () => {
+      await service.grantEditAccessByEmail(testAccount, testCalendarId, 'newuser@gmail.com');
+      const stub = mockAccountsInterface.inviteNewAccount as sinon.SinonStub;
+      expect(stub.firstCall.args[2]).toBe('');
+    });
+
     it('should not treat local domain as federated', async () => {
       // Email on local domain should fall through to invitation (user not found locally)
       const result = await service.grantEditAccessByEmail(

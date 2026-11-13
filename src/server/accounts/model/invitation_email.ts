@@ -32,6 +32,7 @@ class AccountInvitationEmail extends EmailMessage {
       invitationUrl,
       instanceName: this.context.instanceName,
       inviterName: this.context.inviterName,
+      message: this.invitation.message,
     };
 
     return {
