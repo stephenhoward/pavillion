@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import type { Transaction } from 'sequelize';
@@ -189,6 +190,7 @@ describe('EventService originator context', () => {
 
       await service.updateEvent(account, EVENT_ID, {}, { source: 'user' });
 
+      await waitFor(() => listener.called);
       expect(listener.calledOnce).toBe(true);
     });
 
@@ -206,6 +208,7 @@ describe('EventService originator context', () => {
 
       await service.updateEvent(account, EVENT_ID, {}, { source: 'import' });
 
+      await waitFor(() => listener.called);
       expect(listener.calledOnce).toBe(true);
     });
   });

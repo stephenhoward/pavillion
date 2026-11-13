@@ -1001,8 +1001,16 @@ class EventService {
    * payload's positive schedules, and moves or removes exclusions only as
    * the schedule edit requires.
    *
+   * Atomicity: when the caller passes no transaction, the update opens its
+   * own, so content, schedule, cancellation and event-row writes commit
+   * together or not at all, and `eventUpdated` fires only after commit. A
+   * caller-supplied transaction is used as given. Location, space and media
+   * resolution run before the transaction opens because `findOrCreateLocation`
+   * opens its own.
+   *
    * @param eventId - the id of the event to update
    * @param eventParams - the parameters and values to update for the event
+   * @param tx - optional transaction to join instead of opening one
    * @returns a promise that resolves to the Event
    */
   async updateEvent(
@@ -1094,55 +1102,6 @@ class EventService {
       event.urlPrompt = validatedUrlPrompt;
       eventEntity.external_url = normalizedExternalUrl;
       eventEntity.url_prompt = validatedUrlPrompt;
-    }
-
-    if ( eventParams.content ) {
-      for( let [language,content] of Object.entries(eventParams.content) ) {
-        let contentEntity = await EventContentEntity.findOne({
-          where: { event_id: eventId, language: language },
-          transaction: tx,
-        });
-
-        if ( contentEntity ) {
-
-          if ( ! content ) {
-            await contentEntity.destroy({ transaction: tx });
-            continue;
-          }
-
-          let c = content as Record<string,any>;
-          delete c.language;
-
-          if ( Object.keys(c).length === 0 ) {
-            await contentEntity.destroy({ transaction: tx });
-            continue;
-          }
-
-          // Support both 'name' and 'title' field names for API compatibility
-          const name = c.name || c.title;
-          await contentEntity.update({
-            name: name,
-            description: c.description,
-            accessibility_info: c.accessibilityInfo ?? '',
-            // Both map nullish to '', matching the `?? ''` idiom above: an
-            // omitted alt text clears the stored one.
-            image_alt: untrusted ? sanitizeImageAlt(c.imageAlt) : validateImageAlt(c.imageAlt),
-          }, { transaction: tx });
-          event.addContent(contentEntity.toModel());
-        }
-        else {
-          if ( !content ) {
-            continue;
-          }
-
-          let c = content as Record<string,any>;
-          delete c.language;
-
-          if ( Object.keys(c).length > 0 ) {
-            event.addContent(await this.createEventContent(eventId, language, c, tx, { untrusted }));
-          }
-        }
-      }
     }
 
     // Handle locationId (reference to existing location) if present
@@ -1243,10 +1202,6 @@ class EventService {
       event.space = null;
     }
 
-    if ( eventParams.schedules ) {
-      await this.reconcileSchedules(eventId, eventParams.schedules, event, tx);
-    }
-
     // Handle media updates
     let newMediaAttached = false;
     if (eventParams.hasOwnProperty('mediaId')) {
@@ -1278,42 +1233,110 @@ class EventService {
       eventEntity.media_zoom = eventParams.mediaZoom;
     }
 
-    // Originator-aware locally_edited flip: a user-driven update to an
-    // imported event flips locally_edited=true on the sibling
-    // EventImportOriginEntity row so subsequent sync runs know this event's
-    // content has diverged from the upstream feed and should not be
-    // overwritten. Import-driven updates leave locally_edited unchanged —
-    // the sync orchestrator explicitly passes context.source='import' for
-    // this case. Non-imported events have no origin row; the SELECT
-    // returns null and the flip is a no-op.
-    //
-    // Note: entity hooks are deliberately NOT used for this rule — hooks
-    // cannot distinguish caller intent. Service layer owns it. See
-    // architecture-playbook.
-    //
-    // Cost: one extra SELECT + UPDATE per user-initiated edit of an imported
-    // event. Accepted per epic DESIGN for structural purity — origin
-    // provenance lives on the sibling table, not on EventEntity.
-    if (context.source === 'user') {
-      const origin = await EventImportOriginEntity.findOne({
-        where: { event_id: eventEntity.id },
-        transaction: tx,
-      });
-      if (origin) {
-        origin.locally_edited = true;
-        await origin.save({ transaction: tx });
+    // Everything below writes. Run it in one transaction so a refused or failed
+    // update leaves no partial content, schedule or cancellation state, and
+    // domain events fire only after commit. Location, space and media
+    // resolution happen above: findOrCreateLocation opens its own transaction,
+    // which must not nest inside this one.
+    const run = async (t: Transaction) => {
+      if ( eventParams.content ) {
+        for( let [language,content] of Object.entries(eventParams.content) ) {
+          let contentEntity = await EventContentEntity.findOne({
+            where: { event_id: eventId, language: language },
+            transaction: t,
+          });
+
+          if ( contentEntity ) {
+
+            if ( ! content ) {
+              await contentEntity.destroy({ transaction: t });
+              continue;
+            }
+
+            let c = content as Record<string,any>;
+            delete c.language;
+
+            if ( Object.keys(c).length === 0 ) {
+              await contentEntity.destroy({ transaction: t });
+              continue;
+            }
+
+            // Support both 'name' and 'title' field names for API compatibility
+            const name = c.name || c.title;
+            await contentEntity.update({
+              name: name,
+              description: c.description,
+              accessibility_info: c.accessibilityInfo ?? '',
+              // Both map nullish to '', matching the `?? ''` idiom above: an
+              // omitted alt text clears the stored one.
+              image_alt: untrusted ? sanitizeImageAlt(c.imageAlt) : validateImageAlt(c.imageAlt),
+            }, { transaction: t });
+            event.addContent(contentEntity.toModel());
+          }
+          else {
+            if ( !content ) {
+              continue;
+            }
+
+            let c = content as Record<string,any>;
+            delete c.language;
+
+            if ( Object.keys(c).length > 0 ) {
+              event.addContent(await this.createEventContent(eventId, language, c, t, { untrusted }));
+            }
+          }
+        }
       }
+
+      if ( eventParams.schedules ) {
+        await this.reconcileSchedules(eventId, eventParams.schedules, event, t);
+      }
+
+      // Originator-aware locally_edited flip: a user-driven update to an
+      // imported event flips locally_edited=true on the sibling
+      // EventImportOriginEntity row so subsequent sync runs know this event's
+      // content has diverged from the upstream feed and should not be
+      // overwritten. Import-driven updates leave locally_edited unchanged —
+      // the sync orchestrator explicitly passes context.source='import' for
+      // this case. Non-imported events have no origin row; the SELECT
+      // returns null and the flip is a no-op.
+      //
+      // Note: entity hooks are deliberately NOT used for this rule — hooks
+      // cannot distinguish caller intent. Service layer owns it. See
+      // architecture-playbook.
+      //
+      // Cost: one extra SELECT + UPDATE per user-initiated edit of an imported
+      // event. Accepted per epic DESIGN for structural purity — origin
+      // provenance lives on the sibling table, not on EventEntity.
+      if (context.source === 'user') {
+        const origin = await EventImportOriginEntity.findOne({
+          where: { event_id: eventEntity.id },
+          transaction: t,
+        });
+        if (origin) {
+          origin.locally_edited = true;
+          await origin.save({ transaction: t });
+        }
+      }
+
+      await eventEntity.save({ transaction: t });
+
+      // Notify media domain that media has been attached to an event.
+      if (newMediaAttached && eventEntity.media_id) {
+        const mediaId = eventEntity.media_id;
+        emitAfterTx(this.eventBus, 'mediaAttachedToEvent', { mediaId, eventId: event.id }, t);
+      }
+
+      emitAfterTx(this.eventBus, 'eventUpdated', { calendar, event }, t);
+    };
+
+    if (tx) {
+      await run(tx);
+    }
+    else {
+      await db.transaction(run);
     }
 
-    await eventEntity.save({ transaction: tx });
-
-    // Notify media domain that media has been attached to an event.
-    if (newMediaAttached && eventEntity.media_id) {
-      const mediaId = eventEntity.media_id;
-      emitAfterTx(this.eventBus, 'mediaAttachedToEvent', { mediaId, eventId: event.id }, tx);
-    }
-
-    emitAfterTx(this.eventBus, 'eventUpdated', { calendar, event }, tx);
     return event;
   }
 

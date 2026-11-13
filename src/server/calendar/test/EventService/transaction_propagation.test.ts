@@ -253,7 +253,7 @@ describe('EventService transaction propagation', () => {
       expect(scheduleUpdateStub.firstCall.args[1]).toEqual({ transaction: fakeTx });
     });
 
-    it('omits transaction when no tx is supplied (backwards compatible)', async () => {
+    it('opens its own transaction when no tx is supplied', async () => {
       const findStub = sandbox.stub(EventEntity, 'findByPk');
       const eventSaveStub = sandbox.stub(EventEntity.prototype, 'save').resolves();
       const entity = EventEntity.build({
@@ -264,7 +264,8 @@ describe('EventService transaction propagation', () => {
 
       await service.updateEvent(account, EVENT_ID, {});
 
-      expect(eventSaveStub.firstCall.args[0]).toEqual({ transaction: undefined });
+      const saveOptions = eventSaveStub.firstCall.args[0] as { transaction?: unknown };
+      expect(saveOptions.transaction).toBeDefined();
     });
 
     it('threads transaction into the origin-row save when flipping locally_edited', async () => {

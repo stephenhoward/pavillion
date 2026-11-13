@@ -8,6 +8,8 @@ import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 /**
  * Integration tests for event content imageAlt over the HTTP API.
@@ -90,6 +92,10 @@ describe('Event content imageAlt — HTTP API round-trip (integration)', () => {
     });
 
     expect(response.status).toBe(201);
+    // The ActivityPub eventCreated listener writes in its own transaction
+    // after this request returns. In-memory SQLite shares one connection, so
+    // a later request's transaction would collide with it; wait for its row.
+    await waitFor(async () => (await EventObjectEntity.count({ where: { event_id: response.body.id } })) > 0);
     return response.body.id;
   };
 

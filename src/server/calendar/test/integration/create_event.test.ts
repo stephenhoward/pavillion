@@ -15,6 +15,7 @@ import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
@@ -193,6 +194,10 @@ describe('Event API', () => {
         schedules: [schedule],
       });
       expect(created.status, 'event created').toBe(201);
+      // The ActivityPub eventCreated listener writes in its own transaction
+      // after this request returns. In-memory SQLite shares one connection, so
+      // a later request's transaction would collide with it; wait for its row.
+      await waitFor(async () => (await EventObjectEntity.count({ where: { event_id: created.body.id } })) > 0);
       return created.body.id as string;
     };
 

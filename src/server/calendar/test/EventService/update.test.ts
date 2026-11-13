@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
 import { EventEmitter } from 'events';
@@ -1165,6 +1166,8 @@ describe('updateEvent exclusion preservation (reconcileSchedules)', () => {
       ],
     });
 
+    // The emit rides the update's own transaction's afterCommit.
+    await waitFor(() => emit.getCalls().some(c => c.args[0] === 'eventUpdated'));
     const payload = emit.getCalls().find(c => c.args[0] === 'eventUpdated')?.args[1] as { event: { schedules: CalendarEventSchedule[] } };
     const fourth = payload.event.schedules.find(s => s.id === 'fourthMondayId');
     expect(fourth?.startDate?.toUTC().toISO()).toBe('2026-01-26T19:00:00.000Z');
