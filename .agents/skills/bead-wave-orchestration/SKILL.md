@@ -26,8 +26,8 @@ Depends on / cross-references:
   `npx tsx .agents/skills/agent-discovery/scripts/agents.ts <role>`).
 - [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md) —
   the canonical prompt every implementer in a wave receives, and the
-  pre-close discipline (kill stale vitest, lint, targeted tests) the wave
-  invariants rely on.
+  pre-close discipline (leave other test runs alone, lint, targeted
+  tests) the wave invariants rely on.
 - [`bead-state-assessment`](../bead-state-assessment/SKILL.md) — the
   enrichment check the orchestrator runs before any implementer is spawned.
 - [`epic-bead-workflow`](../epic-bead-workflow/SKILL.md) — the needs-human
@@ -237,12 +237,32 @@ Once every chain in the wave has finished:
 3. When no remaining chain has a ready head, proceed to the **Epic
    completion sweep** (see below).
 
+### Resuming an interrupted run
+
+A run can stop part-way through a chain. On resume, a level's state is
+read from what was submitted, never from what the local checkout holds:
+
+- **A submitted level** (its PR exists) is recovered with
+  `gh stack checkout <pr-number>`, run in the checkout that will carry
+  the chain on (`git-workflow/stacking.md` "Worktree mode"). If a lower
+  level merged in the meantime, catch the local stack up first per
+  `git-workflow/stacking.md` "Merge ritual" (`stack.ts sync`).
+- **A level with no submitted PR is redone** from its bead — whatever
+  its local branch holds is never trusted as gated. The bead is
+  dispatched again (reopened if it had closed) on a level created from
+  its parent, then goes through its per-bead auditors and build gate as
+  usual.
+
+The chain continues from its lowest unsubmitted level; chains that had
+not started are scheduled as in step 1.
+
 ## Failure handling
 
 Failures can happen at any of four points: unenriched bead slipped past
 the pre-spawn gate, implementer reports test failure, implementer reports
-an implementation blocker, build-guardian fails at wave end. Each has a
-distinct recovery protocol, and all share a common retry ceiling.
+an implementation blocker, a level's build-guardian fails before submit.
+Each has a distinct recovery protocol, and all share a common retry
+ceiling.
 
 ### Unenriched bead (implementer refused)
 
@@ -331,8 +351,9 @@ often a transient integration issue worth one more attempt.
 
 ## Epic completion sweep
 
-Once every wave has closed — no ready beads remain, every wave's
-build-guardian has passed, every bead is closed — the orchestrator runs
+Once every wave has closed — no ready beads remain, every stack level's
+build-guardian has passed and the level is submitted, every bead is
+closed — the orchestrator runs
 a final comprehensive sweep before declaring the epic done.
 
 1. **Discover applicable comprehensive agents** via
