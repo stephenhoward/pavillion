@@ -346,6 +346,34 @@ describe('getRecipients', () => {
     const result = await service.getRecipients(calendar, { id: 'testobject' });
     expect(result).toStrictEqual([OBSERVER_CALENDAR_HANDLE]);
   });
+
+  it('should return an actor once when it is both a follower and an observer', async () => {
+    sandbox.stub(FollowerCalendarEntity, 'findAll').resolves([
+      { calendarActor: { id: 'a1', actor_uri: REMOTE_CALENDAR_HANDLE } } as any,
+    ]);
+    sandbox.stub(EventActivityEntity, 'findAll').resolves([
+      { calendarActor: { id: 'a2', actor_uri: OBSERVER_CALENDAR_HANDLE } } as any,
+      { calendarActor: { id: 'a1', actor_uri: REMOTE_CALENDAR_HANDLE } } as any,
+    ]);
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+    const result = await service.getRecipients(calendar, { id: 'testobject' });
+    expect(result).toStrictEqual([REMOTE_CALENDAR_HANDLE, OBSERVER_CALENDAR_HANDLE]);
+  });
+
+  it('should return followers only and skip the observer query when observers is false', async () => {
+    sandbox.stub(FollowerCalendarEntity, 'findAll').resolves([
+      { calendarActor: { id: 'a1', actor_uri: REMOTE_CALENDAR_HANDLE } } as any,
+    ]);
+    const observersStub = sandbox.stub(EventActivityEntity, 'findAll').resolves([
+      { calendarActor: { id: 'a2', actor_uri: OBSERVER_CALENDAR_HANDLE } } as any,
+    ]);
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+    const result = await service.getRecipients(calendar, { id: 'testobject' }, { observers: false });
+    expect(result).toStrictEqual([REMOTE_CALENDAR_HANDLE]);
+    expect(observersStub.called).toBe(false);
+  });
 });
 
 
@@ -906,6 +934,7 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
     await service.processOutboxMessage(message);
 
     expect(getRecipientsStub.calledOnce, 'getRecipients must be called for fan-out fallback').toBe(true);
+    expect(getRecipientsStub.firstCall.args[2], 'Update keeps observers').toBeUndefined();
     expect(postStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
@@ -1553,6 +1582,10 @@ describe('processOutboxMessage — explicit `to` honoring and per-type local dis
       'Announce: local dispatch must fire for local recipient',
     ).toBe(true);
     expect(postStub.called, 'Announce: HTTP POST must not be used for local recipient').toBe(false);
+    expect(
+      getRecipientsStub.firstCall.args[2],
+      'Announce: must go to followers only, not event observers',
+    ).toEqual({ observers: false });
   });
 
   it('Undo: local recipient routes to handleLocalActivityDispatch instead of HTTP', async () => {

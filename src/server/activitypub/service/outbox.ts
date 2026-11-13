@@ -498,7 +498,9 @@ class ProcessOutboxService {
         if (!activity) {
           throw new Error('Failed to parse Announce activity');
         }
-        recipients = await this.getRecipients(calendar, activity.object);
+        // An Announce reaches the announcing calendar's followers only; other
+        // sharers of the event observe the event, not this calendar.
+        recipients = await this.getRecipients(calendar, activity.object, { observers: false });
         break;
       case 'Undo':
         activity = UndoActivity.fromObject(message.message);
@@ -806,14 +808,21 @@ class ProcessOutboxService {
 
   /**
    * Gets a list of recipient actor URIs for a given calendar and object.
-   * Includes followers of the calendar and calendars that have shared the specific object.
-   * The anchoring calendar's own actor is never returned.
+   * Includes followers of the calendar and, unless `options.observers` is false, calendars
+   * that have shared the specific object. Followers come first; each actor appears once
+   * (first-seen order). The anchoring calendar's own actor is never returned.
    *
    * @param {Calendar} calendar - The source calendar
    * @param {ActivityPubObject|string} object - The ActivityPub object or its ID
-   * @returns {Promise<string[]>} List of recipient actor URIs
+   * @param {{observers?: boolean}} options - Set observers to false to skip event observers
+   * @returns {Promise<string[]>} De-duplicated list of recipient actor URIs
    */
-  async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
+  async getRecipients(
+    calendar: Calendar,
+    object: ActivityPubObject|string,
+    options: { observers?: boolean } = {},
+  ): Promise<string[]> {
+    const { observers: includeObservers = true } = options;
     let recipients: string[] = [];
     const isOwnActor = (actor?: CalendarActorEntity | null) => actor?.calendar_id === calendar.id;
 
@@ -848,17 +857,19 @@ class ProcessOutboxService {
     }
 
     // Get event activity observers with their CalendarActorEntity to get the actor_uri
-    const observers = await EventActivityEntity.findAll({
-      where: { event_id: object_id },
-      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-    });
-    for (const observer of observers) {
-      if (observer.calendarActor?.actor_uri && !isOwnActor(observer.calendarActor)) {
-        recipients.push(observer.calendarActor.actor_uri);
+    if (includeObservers) {
+      const observers = await EventActivityEntity.findAll({
+        where: { event_id: object_id },
+        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+      });
+      for (const observer of observers) {
+        if (observer.calendarActor?.actor_uri && !isOwnActor(observer.calendarActor)) {
+          recipients.push(observer.calendarActor.actor_uri);
+        }
       }
     }
 
-    return recipients;
+    return [...new Set(recipients)];
   }
 
   /**
