@@ -225,7 +225,22 @@ export async function startTestServer(
       ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Own process group, so cleanup can signal npx and the node server it
+    // spawns together. Signalling npx alone leaves the node grandchild alive
+    // in the Linux Playwright container.
+    detached: true,
   });
+
+  // Signal the whole process group. ESRCH means the group is already gone.
+  const signalGroup = (signal: NodeJS.Signals) => {
+    if (serverProcess.pid === undefined) return;
+    try {
+      process.kill(-serverProcess.pid, signal);
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    }
+  };
 
   // Buffer server output for debugging
   let serverOutput = '';
@@ -269,7 +284,7 @@ export async function startTestServer(
   }
   catch (error) {
     // Kill process if startup failed
-    serverProcess.kill();
+    signalGroup('SIGTERM');
     await new Promise<void>(resolve => {
       if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
         resolve();
@@ -278,6 +293,7 @@ export async function startTestServer(
       serverProcess.once('exit', () => resolve());
       setTimeout(resolve, 5000);
     });
+    signalGroup('SIGKILL');
     await removeDbDir();
     throw error;
   }
@@ -286,22 +302,30 @@ export async function startTestServer(
   const cleanup = async () => {
     console.log(`[Test Server] Shutting down server on port ${port}...`);
 
-    // Kill the server process
-    serverProcess.kill('SIGTERM');
+    // Stop the server process group
+    signalGroup('SIGTERM');
 
     // Wait for process to exit (with timeout)
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         console.warn('[Test Server] Process did not exit gracefully, forcing kill...');
-        serverProcess.kill('SIGKILL');
+        signalGroup('SIGKILL');
         resolve();
       }, 5000);
 
-      serverProcess.on('exit', () => {
+      if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+        clearTimeout(timeout);
+        resolve();
+        return;
+      }
+      serverProcess.once('exit', () => {
         clearTimeout(timeout);
         resolve();
       });
     });
+
+    // npx can exit before the node server it spawned; sweep any survivor.
+    signalGroup('SIGKILL');
 
     await removeDbDir();
 
