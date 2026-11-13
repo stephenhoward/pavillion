@@ -9,7 +9,9 @@ Use it to drain the long tail of small, well-scoped chores quickly.
 
 Tier B runs only with `--include-b` (or `--scheduled`, which implies it), and
 **every Tier-B judgment is made by the advisor agent** — see "The Tier-B
-advisor" below. The orchestrator never makes a Tier-B call itself.
+advisor" below. The orchestrator never makes a Tier-B call itself. The medium
+tier runs only with `--scheduled`, after Tier B, and its residual calls go to
+the same advisor.
 
 Beads that are **not** small leaf chores (decision-spikes, features, large
 rippling refactors, structured epics) are explicitly **excluded** here and left
@@ -19,8 +21,8 @@ human-in-loop work. Do not force them through this command.
 ## Arguments
 
 - *(no args)* — default: survey → triage → preflight → **auto-run Tier A** →
-  report. No confirmation gate; Tier B/C are not touched.
-- `--confirm` — present the Tier A/B/C triage and ask which batch to run before
+  report. No confirmation gate; Tier B, medium and C are not touched.
+- `--confirm` — present the Tier A/B/medium/C triage and ask which batch to run before
   dispatching anything (human-in-loop mode).
 - `--triage-only` / `--dry-run` — run the settle step (Phase 0b), produce the
   tiered triage report, and stop. No changes beyond what settle makes.
@@ -32,7 +34,7 @@ human-in-loop work. Do not force them through this command.
   questions and never waits on a human (anything that would have been a
   confirmation or a "needs your decision" prompt goes into the report
   instead); runs the **queue gate** before dispatching anything, ships at most
-  **8 Tier-A PRs**, and writes the per-run **report file** as it goes — see
+  **8 Tier-A PRs** and **2 medium PRs**, and writes the per-run **report file** as it goes — see
   "Scheduled mode" below. Mutually exclusive
   with `--confirm`. The queue gate runs ONLY in this mode: a manual
   invocation (any other argument combination) never checks the queue.
@@ -135,6 +137,21 @@ Read each bead's title + description and sort into tiers. Judgment, not regex:
   extractions (make a property private; route a cross-domain import through an
   interface), helper extractions across 3–4 sites, deps-object constructor
   migrations, voluminous-but-mechanical stylesheet/token migrations.
+- **Medium — analysed leaf, no open decision.** Runs only under `--scheduled`.
+  A leaf qualifies only when **all** of these hold:
+  1. its notes carry an Implementation Context block from `/analyze-bead`;
+  2. it has no `needs-human` or `needs-decision` label;
+  3. it carries no `spec:*` label (those belong to the spec pipeline and the
+     epic-build slot);
+  4. it has no open design question;
+  5. it touches no excluded surface: the federation wire shape or ActivityPub
+     invariants, slugs or URLs, payments or authentication, or a migration.
+
+  A leaf that fails any check is not dispatched. It goes under *Needs your
+  decision* with its route: the spec pipeline (the root needs an `office:*`
+  label for `/plan --scheduled` to draft it) or a sitting. A bead that fits
+  Tier A or Tier B is tiered there; the medium tier is for analysed leaves
+  larger than either.
 - **Tier C — exclude.** Decision-spikes (titles/bodies that say *consider*,
   *decide*, *design*, *NOT ready to implement*), features, large/rippling
   refactors (anything that changes a **public API contract** or cross-cuts many
@@ -149,7 +166,7 @@ Tier from the body, and confirm in Phase 2.
 ### PHASE 2: Preflight the candidates (dud + design-fork detection)
 
 **This is the step that earns its keep.** For every Tier A (and, if running,
-Tier B) candidate, read the FULL bead — description **and** NOTES **and**
+Tier B or medium) candidate, read the FULL bead — description **and** NOTES **and**
 labels — and drop/flag duds before spending an implementer on them:
 
 ```bash
@@ -236,6 +253,21 @@ passed, repeat Phase 2 + Phase 3 for the Tier B set, with three additions:
    advisor verdicts if already obtained, so a future run or a human can pick
    them up.
 
+After Tier B resolves, in `--scheduled` mode only, repeat Phase 2 + Phase 3 for
+the medium set, one PR per leaf, with the Tier-B additions applied:
+
+1. **Advisor first.** The advisor makes any residual call the Implementation
+   Context leaves open, and the implementer (the lightweight implementer, on
+   Sonnet) executes it without re-opening it.
+2. **`[Medium]` PR convention.** The PR title carries a `[Medium]` prefix and
+   the description includes the advisor's rationale **verbatim** under a
+   `## Decision made on your behalf` heading, parallel to Tier B.
+3. **Hard cap: 2 medium PRs per run.** Qualifying leaves beyond the cap are not
+   dispatched; list them in the report as *deferred (medium cap)*.
+
+The queue gate, the run-level stop rule and the merge rule are unchanged: the
+run opens PRs and never merges one.
+
 ### PHASE 4: Design-fork analysis path
 
 For a design-fork bead (or `--analyze <id>`), dispatch an **analysis subagent**
@@ -297,6 +329,7 @@ Consulted at exactly two points:
    naming/scoping call, caller-migration pattern, or interface shape the bead
    leaves open.
 2. **Borderline Phase 2 preflight calls**: dud-vs-viable, or Tier B vs Tier C.
+3. **Each medium leaf's residual call** (Phase 3, `--scheduled`), as for Tier B.
 
 Contract:
 
@@ -307,7 +340,7 @@ Contract:
   stand alone for a reviewer who has not seen the bead.
 - The orchestrator applies the decision (bakes it into the implementer's
   scope, or re-tiers the bead) and carries the rationale into the `[Tier B]`
-  PR. It does not edit, soften, or summarize the advisor's rationale.
+  or `[Medium]` PR. It does not edit, soften, or summarize the advisor's rationale.
 
 ## Run-level stop rule (all modes)
 
@@ -349,12 +382,16 @@ down: dispatch nothing and write a short report recording the gate reading.
 **Tier-A cap.** At most **8 Tier-A PRs** per scheduled run (Phase 3); the
 3-PR Tier-B cap applies as in every `--include-b` run.
 
-The queue-gate values and the Tier-A cap are fixed constants sized to the
+**Medium cap.** At most **2 medium PRs** per scheduled run (Phase 3), dispatched
+after Tier B.
+
+The queue-gate values and the Tier-A, Tier-B and medium caps are fixed constants sized to the
 maintainer's review capacity — they change only by a deliberate edit to this
 command, never inline by a running agent. The gate and the cap exist so an
 unattended run cannot pile PRs onto an already-full review queue; a human
 running this command by hand is making that call themselves, which is why
-manual invocations skip the gate and have no Tier-A cap.
+manual invocations skip the gate and have no Tier-A cap, and run no medium
+tier.
 
 **Per-run report, written as the run goes.** The report lives at
 `reports/clear-backlog/<YYYY-MM-DD>.md` in the workspace (`reports/` is
@@ -368,9 +405,9 @@ incrementally so a run cut off mid-sweep still leaves a record of what it did:
 2. **Append each line when it happens**, not at the end:
    - a **needs-decision** line (with the reason) and a **spec in flight**
      line (with the matching label) as Phase 2 drops the bead;
-   - a **deferred (Tier-A cap)** or **deferred (Tier-B cap)** line, with
-     reasons, when the cap leaves the bead undispatched;
-   - each **Tier-B decision**, with the advisor's rationale, when the advisor
+   - a **deferred (Tier-A cap)**, **deferred (Tier-B cap)** or **deferred
+     (medium cap)** line, with reasons, when the cap leaves the bead undispatched;
+   - each **Tier-B** or **medium decision**, with the advisor's rationale, when the advisor
      returns;
    - a **shipped** line (PR number and a one-line what) when the implementer
      reports its PR, or a needs-decision line if it refused on a blocker.
@@ -383,7 +420,7 @@ remain forbidden in branches, commits, and PRs.
 ## The lightweight implementer (variant of `implementer-prompt-template`)
 
 Dispatch a **general-purpose** subagent per bead on Sonnet
-(`model: "sonnet"`), for Tier A and Tier B alike. The prompt MUST include:
+(`model: "sonnet"`), for Tier A, Tier B and medium alike. The prompt MUST include:
 
 - **Read the bead first** (`bd show <id>`), including its NOTES/DESIGN. The bead
   is the source of truth; do not paste its body into the prompt — summarize the
@@ -466,3 +503,6 @@ This command has no automated tests. To sanity-check after an edit:
    run stands down and writes a gate-reading report with zero dispatches; and
    confirm a normal run writes `reports/clear-backlog/<date>.md` and that the
    path is gitignored (`git check-ignore reports/clear-backlog/x.md`).
+7. For `--scheduled`: confirm the medium tier dispatches after Tier B, stops at
+   2 PRs, titles each `[Medium]`, and lists a leaf that fails any of the five
+   checks under *Needs your decision* with its route rather than dispatching it.
