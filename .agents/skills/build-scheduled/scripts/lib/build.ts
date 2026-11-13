@@ -5,12 +5,13 @@
  * recorded-PR validation, the guarded write and the dry run.
  *
  * Exports:
- *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH, TRUNK
+ *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH, TRUNK,
+ *     STALL_REPORT_MAX
  *   Pure: validateFlags, assertRootId, lockDecision, passingCi, queueGate,
- *     priorEpicGate, selectRoot, evaluateGates, parseBuildState,
+ *     priorEpicGate, selectRoot, evaluateGates, scanNotes, parseBuildState,
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
- *     formatBuildState, formatStallBlock, writeGuard,
+ *     formatBuildState, formatStallBlock, writeGuard, applyFiring,
  *     recordedPrExpectations, validateRecordedPr
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
  *     readBead, readChildren, runPreflight, releaseLock, runGates,
@@ -294,8 +295,20 @@ const STATE_HEADING = /^## Build state(?: \([^)\n]*\))?$/;
 const ANY_HEADING = /^#{1,6}[ \t]/;
 const FENCE = /^(`{3,}|~{3,})/;
 
-/** The body lines of the last unfenced `## Build state` heading, or null. */
-function lastStateBody(notes: string): string[] | null {
+export interface NotesScan {
+  lines: string[];
+  /** Indexes of the column-0 headings outside fenced text. */
+  headings: number[];
+  /** The fence still open at the end of the notes, or null. */
+  openFence: string | null;
+}
+
+/**
+ * One pass over notes, tracking fences the way every reader does. Fence
+ * state is global to the notes, so a write that appends to notes ending
+ * inside an open fence would have its own fence read as the closer.
+ */
+export function scanNotes(notes: string): NotesScan {
   const lines = notes.split('\n').map(l => l.trimEnd());
   let fence: string | null = null;
   const headings: number[] = [];
@@ -311,6 +324,12 @@ function lastStateBody(notes: string): string[] | null {
     }
     if (ANY_HEADING.test(line)) headings.push(i);
   });
+  return { lines, headings, openFence: fence };
+}
+
+/** The body lines of the last unfenced `## Build state` heading, or null. */
+function lastStateBody(notes: string): string[] | null {
+  const { lines, headings } = scanNotes(notes);
   const starts = headings.filter(i => STATE_HEADING.test(lines[i]));
   if (!starts.length) return null;
   const start = starts[starts.length - 1];
@@ -367,6 +386,10 @@ export function parseBuildState(notes: string | undefined): BuildStateParse {
     if (m[3] !== 'done' && !validBranch(m[3])) return bad(`next ${m[3]} is not done or <type>.<kebab>`, line);
     chains.push({ index, levels, next: m[3] });
   }
+
+  const branches = chains.flatMap(c => [...c.levels.map(l => l.branch), ...(c.next === 'done' ? [] : [c.next])]);
+  const twice = branches.find((b, i) => branches.indexOf(b) !== i);
+  if (twice !== undefined) return bad(`branch ${twice} appears twice`);
 
   return {
     ok: true,
@@ -673,7 +696,8 @@ export function resumePoint(state: BuildState, planChains: string[][], children:
 // =============================================================================
 
 const STOPPED = /^[\x20-\x7e]{1,160}$/;
-const STALL_STEP = /^[\x20-\x7e]{1,160}$/;
+/** The failing steps a Build stall block may name. */
+const STALL_STEP = /^(preflight|gates|build-state|validate-prs|firing-limit|sweep|text-check|chain [1-9][0-9]? level [1-9][0-9]? (implement|audit|build-gate|submit))$/;
 
 function stamp(at: Date): string {
   return `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
@@ -724,17 +748,27 @@ export function formatBuildState(input: unknown, at: Date): { text: string; stat
   return { text, state: parsed.state };
 }
 
+/** Report text kept in a Build stall block; the rest is cut with a marker. */
+export const STALL_REPORT_MAX = 8000;
+
+const STALL_INDENT = '    ';
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\x00-\x08\x0b-\x1f\x7f]/g;
+
 /**
- * The `## Build stall` block: the failing step on one line, then the
- * investigator's report in a backtick fence longer than any backtick run
- * inside it (four at least), so no line of the report can close the fence
- * and no heading in it is ever read.
+ * The `## Build stall` block. The step is a closed vocabulary (STALL_STEP),
+ * so no failure text is ever typed on a command line. The report has
+ * control characters stripped, is cut at STALL_REPORT_MAX, and every line
+ * is indented inside a fence: no report line starts in column 0, so none
+ * can open or close a fence or be read as a heading, whatever fence state
+ * the notes before it are in.
  */
 export function formatStallBlock(step: string, report: string): string {
-  if (!STALL_STEP.test(step)) throw new Error('stall step must be one line of 1-160 printable characters');
-  const longest = Math.max(0, ...(report.match(/`+/g) ?? []).map(run => run.length));
-  const fence = '`'.repeat(Math.max(4, longest + 1));
-  return ['## Build stall', `step: ${step}`, `${fence}text`, report, fence].join('\n');
+  if (!STALL_STEP.test(step)) throw new Error(`stall step ${JSON.stringify(step)} is not one of the stall steps`);
+  let text = report.replace(/\r\n?/g, '\n').replace(CONTROL, '');
+  if (text.length > STALL_REPORT_MAX) text = `${text.slice(0, STALL_REPORT_MAX)}\n[truncated]`;
+  const body = text.split('\n').map(line => `${STALL_INDENT}${line}`);
+  return ['## Build stall', `step: ${step}`, '````text', ...body, '````'].join('\n');
 }
 
 const WRITABLE_STATUSES = new Set(['open', 'in_progress']);
@@ -761,15 +795,51 @@ export function writeGuard(root: BuildBead, label: string | null, state: BuildSt
     if (!ours.ok) return ours.reason;
   }
 
+  const fence = scanNotes(root.notes ?? '').openFence;
+  if (fence !== null) return `the root's notes end inside an open ${fence} fence`;
+  if (label === 'spec:building') {
+    const existing = parseBuildState(root.notes);
+    if (!existing.ok || existing.state !== null) return 'spec:ready root already has a Build state block: stall it, never start over';
+  }
+
   const stalling = label === 'spec:stalled';
+  if (stalling !== hasStall) return 'a Build stall block goes with spec:stalled, and only with it';
   if (state === null) return stalling ? null : 'every write but a stall carries a Build state block';
   if (label === 'spec:building' && (state.firings !== 0 || state.restart !== 'none' || state.prs.length || state.stopped !== 'none')) {
     return 'the first Build state block records firings 0, restart none, no submitted level, stopped none';
   }
   if (label === 'spec:built' && state.chains.some(c => c.next !== 'done')) return 'spec:built needs every chain at next: done';
   if (stalling !== (state.stopped === 'stalled')) return 'stopped: stalled goes with spec:stalled, and only with it';
-  if (stalling !== hasStall) return 'a Build stall block goes with spec:stalled, and only with it';
   return null;
+}
+
+const FIRING_KINDS: FiringKind[] = ['building', 'ended', 'gate-skipped', 'dry-run', 'decision-blocked', 'kill-switch'];
+
+/**
+ * The state a write records, with `firings` computed from the count the
+ * firing started with (build-state's `start.firings`, which the input
+ * carries) and how the firing ran. The first `spec:building` block takes
+ * no firing; every other block needs one; `spec:built` is an `ended`
+ * firing. A stop that would leave the root spec:building on its
+ * MAX_FIRINGS-th counted firing is refused: write spec:stalled instead.
+ */
+export function applyFiring(input: unknown, label: string | null, firing: string | null): unknown {
+  if (label === 'spec:building' || input === null) {
+    if (firing !== null) throw new Error(`--firing does not go with ${label ?? 'a stall with no Build state block'}`);
+    return input;
+  }
+  if (firing === null) throw new Error(`--firing is required: one of ${FIRING_KINDS.join(', ')}`);
+  if (!(FIRING_KINDS as string[]).includes(firing)) throw new Error(`unknown firing ${firing}: one of ${FIRING_KINDS.join(', ')}`);
+  if (label === 'spec:built' && firing !== 'ended') throw new Error('spec:built is written by an ended firing');
+  const s = input as { firings?: unknown; stopped?: unknown };
+  // An out-of-range count is left for formatBuildState to refuse, never clamped into range.
+  const start = s?.firings;
+  if (typeof start !== 'number' || !Number.isSafeInteger(start) || start < 0 || start > MAX_FIRINGS) return input;
+  const next = nextFiringCount(start, firing as FiringKind);
+  if (next.stall && label === null && s.stopped !== 'none') {
+    throw new Error(`counted firing ${next.count} still leaves the root spec:building: write spec:stalled with --stall-step firing-limit`);
+  }
+  return { ...s, firings: next.count };
 }
 
 // =============================================================================
@@ -1127,14 +1197,16 @@ export interface WriteInput {
   /** A Build state (formatBuildState's input), or null on a stall over an unreadable block. */
   state: unknown;
   stall: { step: string; report: string } | null;
+  /** How this firing ran (applyFiring); null only on the first spec:building block or a block-less stall. */
+  firing: string | null;
   now: Date;
 }
 
 /**
- * The one write path for the root: format the blocks, re-read the root and
- * apply the write guard (the kill switch included), then one `bd update`
- * with the state-write flags and `--append-notes`, through argv only. Any
- * refusal writes nothing.
+ * The one write path for the root: compute `firings`, format the blocks,
+ * re-read the root and apply the write guard (the kill switch included),
+ * then one `bd update` with the state-write flags and `--append-notes`,
+ * through argv only. Any refusal writes nothing.
  */
 export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; reading: string } {
   const refuse = (reading: string) => ({ ok: false, reading });
@@ -1144,7 +1216,8 @@ export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; read
   try {
     assertRootId(input.root);
     flags = input.label === null ? [] : buildStateWriteArgs(input.label);
-    state = input.state === null ? null : formatBuildState(input.state, input.now);
+    const counted = applyFiring(input.state, input.label, input.firing);
+    state = counted === null ? null : formatBuildState(counted, input.now);
     stall = input.stall === null ? null : formatStallBlock(input.stall.step, input.stall.report);
   }
   catch (err) {
@@ -1169,11 +1242,29 @@ export interface PrsValidation {
   /** A lower level merged: run `stack.ts sync` before any checkout. */
   sync_first: boolean;
   prs: ({ pr: number; ok: true; merged: boolean } | { pr: number; ok: false; reason: string })[];
+  /** Each unfinished chain's `next` branch: on origin already means a cut between submit and the block write. */
+  next: { branch: string; ok: boolean; reading: string }[];
 }
 
-/** Every PR the root's last block records, validated read-only against GitHub. */
+/**
+ * A `next` branch must not exist on origin yet: if it does, the level was
+ * pushed (maybe with a PR) and the cut came before its block was written,
+ * so redoing it would rewrite published work. `git ls-remote --exit-code`
+ * exits 2 when the ref is absent; anything else but 0 fails closed.
+ */
+function nextBranchAbsent(runner: Runner, branch: string): { branch: string; ok: boolean; reading: string } {
+  const r = runner('git', ['ls-remote', '--exit-code', '--heads', 'origin', `refs/heads/${branch}`]);
+  if (r.exitCode === 2) return { branch, ok: true, reading: 'not on origin' };
+  if (r.exitCode === 0) return { branch, ok: false, reading: `${branch} is already on origin: stall, do not redo` };
+  return { branch, ok: false, reading: `git ls-remote failed (${r.exitCode}): ${r.stderr}` };
+}
+
+/**
+ * Every PR the root's last block records, validated read-only against
+ * GitHub, and every `next` branch checked absent from origin.
+ */
 export function runValidatePrs(runner: Runner, root: string): PrsValidation {
-  const none = (reading: string): PrsValidation => ({ ok: false, reading, sync_first: false, prs: [] });
+  const none = (reading: string): PrsValidation => ({ ok: false, reading, sync_first: false, prs: [], next: [] });
   const bead = attempt(() => readBead(runner, root));
   if (isFailure(bead)) return none(bead.error);
   const parsed = parseBuildState(bead.notes);
@@ -1190,12 +1281,16 @@ export function runValidatePrs(runner: Runner, root: string): PrsValidation {
       : validateRecordedPr(view, expected, login.stdout);
     return { pr: expected.pr, ...result };
   });
-  const bad = prs.filter(p => !p.ok);
+  const next = parsed.state.chains.filter(c => c.next !== 'done').map(c => nextBranchAbsent(runner, c.next));
+  const bad = prs.filter(p => !p.ok).length + next.filter(n => !n.ok).length;
   return {
-    ok: bad.length === 0,
-    reading: bad.length ? `${bad.length} recorded PR(s) failed validation` : `${prs.length} recorded PR(s) valid`,
+    ok: bad === 0,
+    reading: bad
+      ? `${bad} check(s) failed: stall the root`
+      : `${prs.length} recorded PR(s) valid, ${next.length} next branch(es) not on origin`,
     sync_first: prs.some(p => p.ok && p.merged),
     prs,
+    next,
   };
 }
 

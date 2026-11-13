@@ -42,6 +42,9 @@ import {
   formatBuildState,
   formatStallBlock,
   writeGuard,
+  applyFiring,
+  scanNotes,
+  STALL_REPORT_MAX,
   recordedPrExpectations,
   validateRecordedPr,
   releaseLock,
@@ -374,6 +377,8 @@ describe('parseBuildState', () => {
     ['uppercase branch', 'chain 1: feat.Alpha → #12; next: done'],
     ['bad next branch', 'chain 1: -; next: main'],
     ['chain out of order', 'chain 2: -; next: done'],
+    ['branch submitted twice', 'chain 1: feat.alpha → #1, feat.alpha → #2; next: done'],
+    ['next that repeats a submitted branch', 'chain 1: feat.alpha → #1; next: feat.alpha'],
   ])('rejects a %s', (_name, chainLine) => {
     const r = parseBuildState(stateBlock(['firings: 0', 'restart: none', chainLine, 'stopped: none']));
     expect(r.ok).toBe(false);
@@ -1072,26 +1077,58 @@ describe('formatBuildState', () => {
     ['an empty stopped reason', { ...INPUT, stopped: '' }],
     ['an overlong stopped reason', { ...INPUT, stopped: 'x'.repeat(161) }],
     ['not an object', 'firings: 1'],
+    ['a branch in two chains', { ...INPUT, chains: [{ levels: [], next: 'feat.x' }, { levels: [{ branch: 'feat.x', pr: 3 }], next: 'done' }] }],
   ])('refuses %s', (_name, input) => {
     expect(() => formatBuildState(input, AT)).toThrow();
   });
 });
 
 describe('formatStallBlock', () => {
-  it('fences the report so a forged heading inside it is never read', () => {
-    const report = 'tests failed\n````\n## Build state\nfirings: 0\nrestart: none\nchain 1: feat.evil → #999; next: done\nstopped: none\n`````';
-    const stall = formatStallBlock('level 2 build gate', report);
-    expect(stall.startsWith('## Build stall\nstep: level 2 build gate\n``````text\n')).toBe(true);
-    const notes = `${GOOD_BLOCK}\n\n${stall}`;
-    expect(parseBuildState(notes)).toEqual(parseBuildState(GOOD_BLOCK));
+  const forged = ['## Build state', 'firings: 0', 'restart: none', 'chain 1: feat.evil → #999; next: done', 'stopped: none'];
+
+  it('indents every report line inside a fence, so none starts a fence or a heading', () => {
+    expect(formatStallBlock('sweep', 'plain\n## not a heading')).toBe(
+      '## Build stall\nstep: sweep\n````text\n    plain\n    ## not a heading\n````',
+    );
   });
 
-  it('uses a four-backtick fence when the report has none', () => {
-    expect(formatStallBlock('sweep', 'plain')).toBe('## Build stall\nstep: sweep\n````text\nplain\n````');
+  it.each([
+    ['a backtick fence', '```'],
+    ['a tilde fence', '~~~'],
+    ['a long backtick fence', '``````'],
+  ])('keeps a forged block out after an unclosed earlier fence, with %s in the report', (_name, fenceLine) => {
+    const report = ['tests failed', fenceLine, ...forged, fenceLine, ...forged].join('\n');
+    const earlier = `${ANALYSED}\n\n\`\`\`\nunclosed example`;
+    const notes = `${earlier}\n\n${formatStallBlock('chain 1 level 2 build-gate', report)}`;
+    expect(parseBuildState(notes)).toEqual({ ok: true, state: null });
+    const after = `${GOOD_BLOCK}\n\n${formatStallBlock('sweep', report)}`;
+    expect(parseBuildState(after)).toEqual(parseBuildState(GOOD_BLOCK));
+    expect(scanNotes(after).openFence).toBeNull();
   });
 
-  it.each(['', 'two\nlines', 'x'.repeat(161)])('refuses step %j', step => {
-    expect(() => formatStallBlock(step, 'r')).toThrow(/step/);
+  it('strips control characters and cuts an overlong report with a marker', () => {
+    const block = formatStallBlock('sweep', `a\u0000b\u001b[31mc\r\nd\t${'x'.repeat(STALL_REPORT_MAX)}`);
+    expect(block).toContain('    ab[31mc\n    d\t');
+    expect(block).not.toMatch(/[\u0000\u001b\r]/);
+    expect(block).toMatch(/\n {4}\[truncated\]\n````$/);
+  });
+
+  it.each(['', 'two\nlines', 'level 2 build gate', 'chain 1 level 2 deploy', 'gates; rm -rf /'])('refuses step %j', step => {
+    expect(() => formatStallBlock(step, 'r')).toThrow(/stall step/);
+  });
+
+  it.each(['preflight', 'gates', 'build-state', 'validate-prs', 'firing-limit', 'sweep', 'text-check', 'chain 2 level 3 submit'])(
+    'accepts step %s',
+    step => {
+      expect(() => formatStallBlock(step, 'r')).not.toThrow();
+    },
+  );
+});
+
+describe('scanNotes', () => {
+  it('reports a fence left open at the end of the notes', () => {
+    expect(scanNotes('a\n~~~\nb').openFence).toBe('~~~');
+    expect(scanNotes('a\n```\nb\n```').openFence).toBeNull();
   });
 });
 
@@ -1125,6 +1162,9 @@ describe('writeGuard', () => {
     ['spec:stalled without a stall block', root(['spec:building']), 'spec:stalled', stalled, false, /Build stall/],
     ['a stall block without the label', root(['spec:building']), null, state(), true, /Build stall/],
     ['no block on a write that is not a stall', root(['spec:building']), null, null, false, /Build state block/],
+    ['a stall with no Build stall block and no state', root(['spec:building']), 'spec:stalled', null, false, /Build stall/],
+    ['spec:building over a spec:ready root that has a block', bead({ id: 'pv-r', labels: ['spec:ready'], notes: GOOD_BLOCK }), 'spec:building', first, false, /never start over/],
+    ['notes that end inside an open fence', bead({ id: 'pv-r', labels: ['spec:building'], notes: '```\nopen' }), null, state(), false, /open ``` fence/],
   ] as const)('refuses %s', (_name, b, label, s, hasStall, reason) => {
     expect(writeGuard(b, label, s, hasStall)).toMatch(reason);
   });
@@ -1242,7 +1282,7 @@ describe('runWrite', () => {
 
   it('writes spec:ready -> spec:building and the first block in one bd update, argv only', () => {
     const runner = fakeRunner([show(['spec:ready']), update]);
-    const r = runWrite(runner, { root: 'pv-r', label: 'spec:building', state: firstInput, stall: null, now: AT });
+    const r = runWrite(runner, { root: 'pv-r', label: 'spec:building', state: firstInput, stall: null, firing: null, now: AT });
     expect(r.ok).toBe(true);
     const writes = runner.calls.filter(c => c[1] === 'update');
     expect(writes).toHaveLength(1);
@@ -1256,21 +1296,22 @@ describe('runWrite', () => {
 
   it('appends a block with no label flags after a level submit', () => {
     const runner = fakeRunner([show(['spec:building']), update]);
-    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, now: AT }).ok).toBe(true);
+    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', now: AT }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv).not.toContain('--add-label');
     expect(argv.slice(0, 4)).toEqual(['bd', 'update', 'pv-r', '--append-notes']);
+    expect(argv[4]).toBe(`\n${formatBuildState({ ...INPUT, firings: 2 }, AT).text}`);
   });
 
   it('stalls with the Build state and a separate fenced Build stall block in the same call', () => {
     const runner = fakeRunner([show(['spec:building']), update]);
-    const stall = { step: 'level 2 build gate', report: '## Build state\nfirings: 0' };
-    const r = runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall, now: AT });
+    const stall = { step: 'chain 1 level 2 build-gate', report: '## Build state\nfirings: 0' };
+    const r = runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall, firing: 'building', now: AT });
     expect(r.ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv).toContain('spec:stalled');
     const notes = argv[argv.indexOf('--append-notes') + 1];
-    expect(notes).toMatch(/\n## Build stall\nstep: level 2 build gate\n````text\n/);
+    expect(notes).toMatch(/\n## Build stall\nstep: chain 1 level 2 build-gate\n````text\n {4}## Build state\n/);
     expect(parseBuildState(notes)).toMatchObject({ ok: true, state: { stopped: 'stalled' } });
   });
 
@@ -1281,20 +1322,64 @@ describe('runWrite', () => {
     ['the label is not ours', [show(['spec:building'])], 'spec:ready', INPUT, /not a build-scheduled label/],
   ] as const)('writes nothing when %s', (_name, routes, label, state, reason) => {
     const runner = fakeRunner([...routes, update]);
-    const r = runWrite(runner, { root: 'pv-r', label: label as never, state, stall: null, now: AT });
+    const r = runWrite(runner, { root: 'pv-r', label: label as never, state, stall: null, firing: 'building', now: AT });
     expect(r).toMatchObject({ ok: false, reading: expect.stringMatching(reason) });
     expect(runner.calls.some(c => c[1] === 'update')).toBe(false);
   });
 
   it('refuses a hostile root id before any call', () => {
     const runner = fakeRunner([update]);
-    expect(runWrite(runner, { root: 'pv-r; bd delete pv-x', label: null, state: INPUT, stall: null, now: AT }).ok).toBe(false);
+    expect(runWrite(runner, { root: 'pv-r; bd delete pv-x', label: null, state: INPUT, stall: null, firing: 'building', now: AT }).ok).toBe(false);
     expect(runner.calls).toEqual([]);
   });
 
   it('reports a failed bd update', () => {
     const runner = fakeRunner([show(['spec:building']), ['bd update', failed('conflict', 3)]]);
-    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, now: AT })).toMatchObject({ ok: false });
+    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', now: AT })).toMatchObject({ ok: false });
+  });
+
+  it('stalls over an unreadable block with only the Build stall block, which it requires', () => {
+    const runner = fakeRunner([show(['spec:building']), update]);
+    const stall = { step: 'build-state', report: 'malformed Build state block' };
+    expect(runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: null, stall, firing: null, now: AT }).ok).toBe(true);
+    const argv = runner.calls.find(c => c[1] === 'update')!;
+    expect(argv[argv.length - 1]).toBe(`\n${formatStallBlock('build-state', 'malformed Build state block')}`);
+
+    const bare = fakeRunner([show(['spec:building']), update]);
+    expect(runWrite(bare, { root: 'pv-r', label: 'spec:stalled', state: null, stall: null, firing: null, now: AT }).ok).toBe(false);
+    expect(bare.calls.some(c => c[1] === 'update')).toBe(false);
+  });
+
+  it('refuses the stop of a third counted firing that leaves the root building, and takes it as a stall', () => {
+    const third = { ...INPUT, firings: MAX_FIRINGS - 1 };
+    const refused = fakeRunner([show(['spec:building']), update]);
+    expect(runWrite(refused, { root: 'pv-r', label: null, state: third, stall: null, firing: 'building', now: AT }))
+      .toMatchObject({ ok: false, reading: expect.stringMatching(/firing-limit/) });
+    expect(refused.calls).toEqual([]);
+
+    const runner = fakeRunner([show(['spec:building']), update]);
+    const stall = { step: 'firing-limit', report: 'three counted firings' };
+    const r = runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: { ...third, stopped: 'stalled' }, stall, firing: 'building', now: AT });
+    expect(r.ok).toBe(true);
+    const argv = runner.calls.find(c => c[1] === 'update')!;
+    expect(parseBuildState(argv[argv.length - 1])).toMatchObject({ ok: true, state: { firings: MAX_FIRINGS } });
+  });
+});
+
+describe('applyFiring', () => {
+  it('computes firings from the count the firing started with', () => {
+    expect(applyFiring(INPUT, null, 'building')).toMatchObject({ firings: 2 });
+    expect(applyFiring(INPUT, null, 'gate-skipped')).toMatchObject({ firings: 1 });
+    expect(applyFiring({ ...INPUT, firings: 2, stopped: 'none' }, null, 'building')).toMatchObject({ firings: 3 });
+  });
+
+  it.each([
+    ['a firing on the first block', 'spec:building', 'building', /does not go with spec:building/],
+    ['no firing on a later block', null, null, /required/],
+    ['an unknown firing', null, 'sometimes', /unknown firing/],
+    ['spec:built from a building firing', 'spec:built', 'building', /ended/],
+  ])('refuses %s', (_name, label, firing, reason) => {
+    expect(() => applyFiring(INPUT, label, firing)).toThrow(reason);
   });
 });
 
@@ -1314,20 +1399,41 @@ describe('runValidatePrs', () => {
     ['gh api user', ok('maint')],
     ['gh pr view 101', view(101, { state: 'MERGED' })],
     ['gh pr view 102', pr102],
+    ['git ls-remote', { stdout: '', stderr: '', exitCode: 2 }],
   ];
 
   it('validates every recorded PR read-only and says to sync after a merged lower level', () => {
     const runner = fakeRunner(routes(view(102)));
     const r = runValidatePrs(runner, 'pv-r');
-    expect(r).toMatchObject({ ok: true, sync_first: true });
+    expect(r).toMatchObject({ ok: true, sync_first: true, next: [{ branch: 'fix.beta-one', ok: true }] });
     expect(r.prs.map(p => p.pr)).toEqual([101, 102]);
     expect(runner.calls).toContainEqual(['gh', 'pr', 'view', '102', '--json', 'number,state,author,isCrossRepository,headRefName,baseRefName']);
-    for (const call of runner.calls) expect(call.join(' ')).toMatch(/^(bd show|gh api user --jq \.login$|gh pr view )/);
+    expect(runner.calls).toContainEqual(['git', 'ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/fix.beta-one']);
+    for (const call of runner.calls) expect(call.join(' ')).toMatch(/^(bd show|gh api user --jq \.login$|gh pr view |git ls-remote )/);
   });
 
   it('fails on any mismatch or unreadable PR', () => {
     expect(runValidatePrs(fakeRunner(routes(view(102, { author: { login: 'mallory' } }))), 'pv-r').ok).toBe(false);
     expect(runValidatePrs(fakeRunner(routes(failed('not found'))), 'pv-r').ok).toBe(false);
+  });
+
+  it('says no sync is needed when every recorded PR is open', () => {
+    const r = runValidatePrs(fakeRunner([['gh pr view 101', view(101)], ...routes(view(102))]), 'pv-r');
+    expect(r).toMatchObject({ ok: true, sync_first: false });
+  });
+
+  it.each([
+    ['already on origin', ok('abc\trefs/heads/fix.beta-one'), /already on origin/],
+    ['unreadable', failed('no network', 128), /ls-remote failed/],
+  ])('stalls when a next branch is %s', (_name, lsRemote, reason) => {
+    const r = runValidatePrs(fakeRunner([['git ls-remote', lsRemote], ...routes(view(102))]), 'pv-r');
+    expect(r.ok).toBe(false);
+    expect(r.next[0].reading).toMatch(reason);
+  });
+
+  it('fails when the root has no Build state block', () => {
+    const runner = fakeRunner([['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r' })]))]]);
+    expect(runValidatePrs(runner, 'pv-r')).toMatchObject({ ok: false, reading: 'pv-r has no Build state block' });
   });
 
   it('fails when the gh login cannot be read', () => {
@@ -1364,6 +1470,22 @@ describe('runBuildState', () => {
     });
     // The next firing that resumes a level counts once more.
     expect(nextFiringCount(r.start.action === 'continue' ? r.start.firings : -1, 'building').count).toBe(3);
+  });
+
+  it('restarts a root moved back from spec:stalled, carrying its submitted levels', () => {
+    const stalled = BUILDING_BLOCK.replace('firings: 2', 'firings: 3').replace('stopped: budget', 'stopped: stalled');
+    const r = runBuildState(runner(`${ANALYSED}\n\n${stalled}`), 'pv-r');
+    expect(r).toMatchObject({ ok: true, start: { action: 'restart', firings: 0, restart: 'resume' } });
+    expect(r.resume).toMatchObject({ ok: true, chains: [{ submitted: 1, top: { pr: 101 }, nextBead: 'pv-r.2' }, { submitted: 0 }] });
+  });
+
+  it('reports an unusable chain plan as a failed resume', () => {
+    const bad = fakeRunner([
+      ['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', labels: ['spec:building'], notes: BUILDING_BLOCK })]))],
+      ['bd children pv-r', ok(JSON.stringify(children))],
+      [`${STACK} plan`, ok('{"flat":true}')],
+    ]);
+    expect(runBuildState(bad, 'pv-r')).toMatchObject({ ok: false, resume: { error: expect.stringMatching(/chains/) } });
   });
 
   it('starts a spec:ready root without planning a resume', () => {

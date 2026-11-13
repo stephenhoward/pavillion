@@ -13,7 +13,7 @@
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts build-state <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts still-ours <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id>
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> [--label <spec:label>] [--state-file <json>] [--stall-step <text> --stall-file <file>]
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
  *
@@ -59,8 +59,14 @@ commands:
                                 exit 1 means stall the root
   still-ours <root-id>          the kill switch over a fresh read of the root (JSON); exit 1 = stop
   validate-prs <root-id>        every recorded PR against gh pr view (JSON); exit 1 = stall
-  write <root-id> [--label <spec:label>] [--state-file <json>] [--stall-step <text> --stall-file <file>]
-                                the one write path: guard, then one bd update --append-notes
+  write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>]
+        [--stall-step <step> --stall-file <file>]
+                                the one write path: computes firings, guards, then one
+                                bd update --append-notes. <kind>: building, ended,
+                                gate-skipped, dry-run, decision-blocked, kill-switch.
+                                <step>: preflight, gates, build-state, validate-prs,
+                                firing-limit, sweep, text-check, or
+                                chain <k> level <n> implement|audit|build-gate|submit
   state-write <spec:label>      the bd update flags for spec:building, spec:built or spec:stalled
   dry-run                       preflight, gates, selection, chain plan, label write; writes nothing (JSON)
 `;
@@ -213,8 +219,11 @@ try {
     case 'write': {
       const [root, ...rest] = args;
       if (!root) fail(USAGE);
-      const flags = flagPairs(rest, ['--label', '--state-file', '--stall-step', '--stall-file']);
-      if (flags.has('--stall-step') !== flags.has('--stall-file')) fail(USAGE);
+      const flags = flagPairs(rest, ['--label', '--state-file', '--firing', '--stall-step', '--stall-file']);
+      const stalling = flags.get('--label') === 'spec:stalled';
+      if (flags.has('--stall-step') !== stalling || flags.has('--stall-file') !== stalling) {
+        fail(`spec:stalled takes --stall-step and --stall-file, and nothing else does\n\n${USAGE}`);
+      }
       const stateFile = flags.get('--state-file');
       const stallFile = flags.get('--stall-file');
       let state: unknown = null;
@@ -231,6 +240,7 @@ try {
         label: flags.get('--label') ?? null,
         state,
         stall: stallFile === undefined ? null : { step: flags.get('--stall-step') as string, report: readInput(stallFile) },
+        firing: flags.get('--firing') ?? null,
         now,
       });
       json(result);
