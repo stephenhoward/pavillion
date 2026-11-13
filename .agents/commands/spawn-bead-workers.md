@@ -130,7 +130,7 @@ When every wave has closed and every bead is complete:
    npx tsx .agents/skills/agent-discovery/scripts/agents.ts auditor
    npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier
    ```
-3. Filter matches against the epic's full changed file set (union across waves: `git diff --name-only main...HEAD`).
+3. Filter matches against every chain's changes and run the agents in the skill's local integration checkout (sweep steps 2, 3 and 7). A conflicting integration merge is a sweep FAIL that no level owns: surface it to the user.
 4. Always include `implementation-verifier` if present (full spec verification: lint, full suite, e2e, acceptance criteria). If absent, log the absence; do not substitute a different agent.
 5. Spawn matched agents in parallel (read-only; unbounded by the 3-chain cap). Pass `Spec: {spec_path}` when an agent's description accepts one.
 6. Collect verdicts. PASS / PASS WITH WARNINGS surface in the final report; FAIL blocks closing the epic and routes through build-guardian-style failure handling (investigator → implementer → rerun the affected level's build gate → redo the sweep).

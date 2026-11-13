@@ -363,23 +363,50 @@ a final comprehensive sweep before declaring the epic done.
      final-pass scope.
    - `npx tsx .agents/skills/agent-discovery/scripts/agents.ts verifier` — all
      `*-verifier` agents.
-2. **Filter matches** against the epic's full changed file set (union of
-   all waves' changes: `git diff --name-only main...HEAD`).
-3. **Always include `implementation-verifier`** if present, regardless
+2. **Filter matches** against the epic's full changed file set: the
+   union of every chain's diff against main, `git diff --name-only
+   main...<top>` for each chain's top submitted branch. A bare
+   `main...HEAD` sees only the chain checked out. With one chain the
+   union is that chain's diff.
+3. **Make the integration checkout.** The sweep's agents run in one
+   local checkout that merges every chain's top level, in a neutrally
+   named worktree under the session scratchpad (`$SCRATCHPAD` below).
+   It is detached, so there is no branch to push; it is never pushed and
+   no PR is opened for it.
+   ```bash
+   git worktree add --detach "$SCRATCHPAD/integration-check" main
+   git -C "$SCRATCHPAD/integration-check" merge --no-edit <chain-1-top>   # once per chain, in chain order
+   ```
+   A merge that conflicts is a sweep FAIL that no level owns, so the
+   failure-handling flow cannot route it: `git merge --abort`, remove
+   the checkout, and name the conflicting chains and files. An attended
+   run surfaces it to the user; a scheduled run follows
+   [`build-scheduled`](../build-scheduled/SKILL.md).
+4. **Always include `implementation-verifier`** if present, regardless
    of match. It performs the full spec verification pass (lint, full
    test suite, e2e, acceptance criteria check against the spec). If it
    is absent, log the absence in the wave summary — do not substitute a
    different agent.
-4. **Spawn matched agents in parallel** (they are read-only, so
-   concurrency is unbounded by the 3-slot rule). When an agent's
-   description accepts a spec path, pass `Spec: {spec_path}` in the
-   spawning prompt.
-5. **Collect verdicts.** PASS / PASS WITH WARNINGS surface in the final
+5. **Spawn matched agents in parallel** in the integration checkout,
+   where an agent's own `git diff main...HEAD` sees every chain (they
+   are read-only, so concurrency is unbounded by the 3-slot rule).
+   When an agent's description accepts a spec path, pass
+   `Spec: {spec_path}` in the spawning prompt.
+6. **Collect verdicts.** PASS / PASS WITH WARNINGS surface in the final
    report; FAIL blocks closing the epic. For a FAIL at this stage, route
    through the same failure-handling flow as build-guardian failure
    (investigator → implementer → rerun the affected level's build gate,
-   then redo the sweep).
-6. **Close the epic** via `bd close <epic-id>` once all comprehensive
+   then redo the sweep on a fresh integration checkout).
+7. **Remove the integration checkout** on every exit — pass, fail or
+   stop — and only from inside the scratchpad:
+   ```bash
+   dir="$SCRATCHPAD/integration-check"
+   case "$(realpath "$dir")/" in
+     "$(realpath "$SCRATCHPAD")"/*) git worktree remove --force "$dir" ;;
+     *) echo "refusing to remove $dir: not under the scratchpad" ;;
+   esac
+   ```
+8. **Close the epic** via `bd close <epic-id>` once all comprehensive
    agents report resolved verdicts.
 
 ## Single-leaf reduction

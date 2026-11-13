@@ -113,6 +113,24 @@ reach its verdict in the session left. With no `[budget]` signals, go on
 level by level. Every stop writes its block, adds its report line and
 releases the lock.
 
+## Completion
+
+Once every chain is at `next: done`, run the wave skill's epic completion
+sweep over every chain, as attended. A sweep FAIL follows its failure
+path; one the retries cannot clear stalls the root (step `sweep`), and so
+do a conflicting integration merge and a sweep blocked by a security
+finding, the finding in the stall file. On a passing sweep, in order:
+
+1. **Each chain's top PR** gets the completion report at the end of its
+   Validation section: verifier names with their verdicts, the number of
+   chains and changed files, and the sibling chains' top PRs as `#<n>`
+   (none with one chain). Start from the PR's current body (`gh pr view
+   <n> --json body`), write it to a file, `pr-text-check` it, run
+   `still-ours`, then `gh pr edit <n> --body-file <file>`.
+2. **The post-submit check** (below).
+3. **`spec:built`**: `write <root> --label spec:built --state-file <file>
+   --firing ended`, never the sweep's close step (Overrides).
+
 ## Publication guards
 
 Every PR title and body the run writes is composed from structured facts:
