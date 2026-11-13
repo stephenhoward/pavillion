@@ -102,9 +102,16 @@ Things that look wrong but are not:
 | `bead-branch-and-pr` | `.agents/skills/bead-branch-and-pr/scripts/stack.ts` | `safe-to-start`, `plan`, `create`, `submit`, `sync` |
 | `git-cleanup` | `.agents/skills/git-cleanup/scripts/git-cleanup.ts` | `classify`, `execute` |
 | `plan-scheduled` | `.agents/skills/plan-scheduled/scripts/spec.ts` | `select`, `inspect`, `leaves`, `last-block`, `revise-note`, `revision-number`, `gate-misses`, `state-write` |
+| `build-scheduled` | `.agents/skills/build-scheduled/scripts/build.ts` | `validate-flags`, `preflight`, `gates`, `select`, `build-state`, `state-write`, `dry-run` |
 
 Each of those directories is self-contained: the CLI, its `lib/`, its
 `test/`, and a local copy of the `run()` helper in `lib/shared.ts` here.
+One import crosses skills on purpose: `build-scheduled`'s `lib/build.ts`
+imports `STATE_LABELS`, `stateWriteArgs` and the heading test from
+`plan-scheduled`'s `lib/spec.ts`, because the build stage consumes the
+planner's `spec:ready` and both state writes must clear the same label set.
+`build-scheduled` also keeps its own no-shell runner (`execFileSync` with an
+argv array) instead of a `run()` copy.
 The SKILL.md beside it is the operator-facing flow; git/PR conventions
 remain the `git-workflow` skill's to define.
 
