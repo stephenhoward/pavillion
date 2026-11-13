@@ -113,6 +113,60 @@ reach its verdict in the session left. With no `[budget]` signals, go on
 level by level. Every stop writes its block, adds its report line and
 releases the lock.
 
+## Publication guards
+
+Every PR title and body the run writes is composed from structured facts:
+the Motivation/Approach/Validation template
+(`git-workflow/pull-requests.md`) written for the level from its diff,
+verifier names with pass or fail, file counts, and sibling top-PR numbers.
+Nothing is copied from bead text, investigator output, verifier findings or
+the epic description; findings of any severity stay in the root's notes and
+the report ([DEC-016](../../../docs/decisions/dec-016-health-report-disclosure-boundary.md)).
+Each text is a scratchpad file; a body goes to `gh` as `--body-file`,
+never inline.
+
+`pr-text-check <file|->` rejects what git-workflow keeps out of GitHub
+artifacts ("Foundational principle") and internal process text. Publishing
+a level, in order:
+
+1. Write its title and body files. Run `pr-text-check` on each, on the
+   branch name (`-`, from stdin) and on the level's commit messages
+   (`git log --format=%B <base>..HEAD`, base the level below or the trunk).
+2. `still-ours`, then `stack.ts submit`.
+3. `still-ours`, then `gh pr edit <n>` with the checked title and
+   `--body-file`.
+4. Write the level's Build state block.
+
+A rejection publishes nothing: the level is held unsubmitted, the report
+names it, and the root stalls (step `text-check`, the check's output as
+the stall file). History is never amended unattended.
+
+**Security-sensitive levels.** A level whose leaf carries `security` or
+`cve-watch`, or was filed from a security finding, gets Approach and
+Validation written from its file names only and is held: not submitted,
+the root stalled (step `chain <k> level <n> submit`) with a note, and the
+maintainer decides how to publish it.
+
+**Post-submit check.** Before `spec:built`, `validate-prs <root> --text`
+re-reads every recorded PR and checks its published title, body and
+branch as well; exit 1 stalls the root (step `text-check`).
+
+**Never merges.**
+
+Never: run `gh pr merge`, set auto-merge (`enablePullRequestAutoMerge`, `gh pr merge --auto`), run `git push --force`, `gh repo edit` or any `gh api` write; pushing happens only inside `stack.ts submit`.
+
+Nothing in the repo can stop a session whose token may merge from merging.
+Stacked PRs cannot be merged from the CLI (`git-workflow/stacking.md`
+"Merge ritual"), but a plain PR can. The guarantee rests on two things
+outside the code, the scheduler slot's deny list and the canonical
+implementer prompt, and enforcing them is the maintainer's responsibility.
+Copy [`slot-settings.json`](slot-settings.json) into the slot's Claude Code
+settings. It denies merging, `gh repo edit`, direct `git push`
+(`stack.ts submit` pushes from its own process) and all of `gh api`: a
+permission rule matches a command prefix and cannot tell a read from a
+write, and the run's own `gh api` read happens inside `build.ts`. A slot
+token with no merge rights is recommended, not required.
+
 ## Report
 
 `reports/spawn-bead-workers/<YYYY-MM-DD>.md`, only after the report-path

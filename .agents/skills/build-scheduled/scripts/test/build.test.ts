@@ -52,6 +52,7 @@ import {
   runWrite,
   runValidatePrs,
   runBuildState,
+  prTextCheck,
 } from '../lib/build.js';
 
 // =============================================================================
@@ -1469,6 +1470,40 @@ describe('runValidatePrs', () => {
     const runner = fakeRunner([['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', notes: bad })]))]]);
     expect(runValidatePrs(runner, 'pv-r')).toMatchObject({ ok: false, reading: expect.stringMatching(/malformed/) });
   });
+
+  describe('with text (the post-submit check)', () => {
+    const CLEAN = { title: 'feat(agents): add the thing', body: '## Motivation\n\nWhy.\n\n## Approach\n\nHow.\n\n## Validation\n\nVerified.' };
+    const textRoutes = (pr102: Record<string, unknown>): [string, RunResult][] => [
+      ['gh pr view 101', view(101, { state: 'MERGED', ...CLEAN })],
+      ...routes(view(102, { ...CLEAN, ...pr102 })),
+    ];
+
+    it('reads title and body with the validation fields and passes clean published text', () => {
+      const runner = fakeRunner(textRoutes({}));
+      const r = runValidatePrs(runner, 'pv-r', { text: true });
+      expect(r.ok).toBe(true);
+      expect(runner.calls).toContainEqual(['gh', 'pr', 'view', '102', '--json', 'number,state,author,isCrossRepository,headRefName,baseRefName,title,body']);
+    });
+
+    it.each([
+      ['a bead id in the body', { body: 'Implements pv-256c.4.' }],
+      ['a session trailer in the title', { title: 'Claude-Session: abc' }],
+    ])('fails on %s', (_name, published) => {
+      const r = runValidatePrs(fakeRunner(textRoutes(published)), 'pv-r', { text: true });
+      expect(r.ok).toBe(false);
+      expect(r.prs.find(p => p.pr === 102)).toMatchObject({ ok: false, reason: expect.stringMatching(/#102: published text/) });
+    });
+
+    it('fails closed when title or body is missing', () => {
+      const r = runValidatePrs(fakeRunner(textRoutes({ body: null })), 'pv-r', { text: true });
+      expect(r.prs.find(p => p.pr === 102)).toMatchObject({ ok: false, reason: expect.stringMatching(/body/) });
+    });
+
+    it('does not read title or body without it', () => {
+      const runner = fakeRunner(textRoutes({ body: 'pv-256c' }));
+      expect(runValidatePrs(runner, 'pv-r').ok).toBe(true);
+    });
+  });
 });
 
 describe('runBuildState', () => {
@@ -1527,6 +1562,118 @@ describe('chainPlanInput ordering', () => {
   it('orders children by id, numerically, so the chain plan is the same every firing', () => {
     const ids = ['pv-r.10', 'pv-r.2', 'pv-r.1'].map(id => bead({ id, parent: 'pv-r', issue_type: 'task' }));
     expect(chainPlanInput(ids).beads).toEqual(['pv-r.1', 'pv-r.2', 'pv-r.10']);
+  });
+});
+
+// =============================================================================
+// Publication text check
+// =============================================================================
+
+describe('prTextCheck', () => {
+  const TEMPLATE = [
+    '## Motivation',
+    '',
+    'Scheduled epic builds left the sweep blind to every chain but one.',
+    '',
+    '## Approach',
+    '',
+    'Changed 3 files under .agents/skills/ and .agents/commands/.',
+    '',
+    '## Validation',
+    '',
+    '- build-guardian: pass',
+    '- architecture-auditor: pass with warnings',
+    '- Reviewed with #1201 and #1204; commit 8ce8bbc4f0e1a2b3c4d5e6f708192a3b4c5d6e7f.',
+    '- `npx vitest run --config .agents/tools/vitest.config.ts` passes.',
+  ].join('\n');
+
+  it('passes a clean template body', () => {
+    expect(prTextCheck(TEMPLATE)).toEqual([]);
+  });
+
+  it.each([
+    ['a bead id', 'Implements pv-256c.', 'bead-id', 'pv-256c'],
+    ['a child bead id', 'see pv-256c.4 for details', 'bead-id', 'pv-256c.4'],
+    ['a bead id in a branch name', 'chore.pv-mgsz-scheduled', 'bead-id', 'pv-mgsz'],
+    ['a macOS home path', 'saved to /Users/someone/notes.md', 'home-path', '/Users/someone'],
+    ['a Linux home path', 'cat /home/dev/.config', 'home-path', '/home/dev'],
+    ['a tilde home path', 'read ~/.claude/settings.json', 'home-path', '~/.claude/settings.json'],
+    ['a Claude-Session trailer', 'fix: x\n\nClaude-Session: https://example.test/s/1', 'session-trailer', 'Claude-Session:'],
+    ['an assistant co-author trailer', 'Co-authored-by: Claude <noreply@anthropic.com>', 'session-trailer', 'Co-authored-by: Claude <noreply@anthropic.com>'],
+    ['a generated-with footer', '🤖 Generated with [Claude Code](https://claude.com/claude-code)', 'session-trailer', 'Generated with [Claude Code'],
+    ['an office label', 'labels: office:engineering', 'office-label', 'office:engineering'],
+  ])('rejects %s', (_name, text, rule, match) => {
+    expect(prTextCheck(text)).toContainEqual(expect.objectContaining({ rule, match }));
+  });
+
+  it.each([
+    ['a GitHub token', `token ghp_${'a1B2'.repeat(9)}`],
+    ['a fine-grained GitHub token', `github_pat_${'x9Y'.repeat(10)}`],
+    ['a Stripe secret key', `sk_live_${'Ab1'.repeat(8)}`],
+    ['a private key header', '-----BEGIN OPENSSH PRIVATE KEY-----'],
+    ['a long mixed-case secret', `secret=${'Q7wErTy9'.repeat(5)}`],
+  ])('rejects %s, and never echoes it whole', (_name, text) => {
+    const matches = prTextCheck(text);
+    expect(matches).toContainEqual(expect.objectContaining({ rule: 'token' }));
+    for (const m of matches.filter(x => x.rule === 'token')) {
+      expect(text).not.toContain(m.match);
+      expect(m.match.length).toBeLessThan(24);
+    }
+  });
+
+  it('names the line of each match', () => {
+    expect(prTextCheck('clean\nalso clean\nsee pv-abcd')).toEqual([{ rule: 'bead-id', line: 3, match: 'pv-abcd' }]);
+  });
+
+  it.each([
+    ['a commit SHA', 'commit 8ce8bbc4f0e1a2b3c4d5e6f708192a3b4c5d6e7f'],
+    ['a kebab-case agent name', 'cross-bead-integration-verifier-and-architecture-auditor'],
+    ['a repository path', '.agents/skills/build-scheduled/scripts/lib/build.ts'],
+    ['a word ending in pv', 'npv-1234 is not a bead'],
+  ])('accepts %s', (_name, text) => {
+    expect(prTextCheck(text)).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Never merges
+// =============================================================================
+
+describe('never merges', () => {
+  /** The only line start on which a merge or force-push pattern may appear. */
+  const NEVER_PREFIX = 'Never:';
+  const PATTERNS = [/pr merge/, /enablePullRequestAutoMerge/, /--auto-merge/, /push --force/];
+  /** The command, the skill and its CLI. This test file is not scanned: it names every pattern. */
+  const FILES = [
+    '../../../../commands/spawn-bead-workers.md',
+    '../../SKILL.md',
+    '../lib/build.ts',
+    '../build.ts',
+  ];
+
+  it('names merge, auto-merge and force-push only on Never: lines', () => {
+    for (const rel of FILES) {
+      const lines = readFileSync(resolve(__dirname, rel), 'utf-8').split('\n');
+      const hits = lines
+        .map((line, i) => ({ line, n: i + 1 }))
+        .filter(({ line }) => PATTERNS.some(p => p.test(line)) && !line.startsWith(NEVER_PREFIX));
+      expect(hits.map(h => `${rel}:${h.n}: ${h.line}`)).toEqual([]);
+    }
+  });
+
+  it('states the never-merge rule in the skill', () => {
+    const skill = readFileSync(resolve(__dirname, '../../SKILL.md'), 'utf-8');
+    expect(skill.split('\n').some(l => l.startsWith(NEVER_PREFIX) && /pr merge/.test(l))).toBe(true);
+  });
+
+  it('ships a slot deny list covering merge, gh api, repo edit and direct push', () => {
+    const settings = JSON.parse(readFileSync(resolve(__dirname, '../../slot-settings.json'), 'utf-8'));
+    expect(settings.permissions.deny).toEqual(expect.arrayContaining([
+      'Bash(gh pr merge:*)',
+      'Bash(gh api:*)',
+      'Bash(gh repo edit:*)',
+      'Bash(git push:*)',
+    ]));
   });
 });
 

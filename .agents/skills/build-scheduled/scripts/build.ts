@@ -12,10 +12,11 @@
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts select
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts build-state <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts still-ours <root-id>
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id>
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id> [--text]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts pr-text-check <file|->
  *
  * Exit codes: 0 ok, 1 a refused flag set / failed check / malformed block /
  * refused write, 2 usage or an unexpected error.
@@ -43,6 +44,7 @@ import {
   runWrite,
   selectRoot,
   validateFlags,
+  prTextCheck,
 } from './lib/build.js';
 
 const USAGE = `usage: build.ts <command> [args]
@@ -58,7 +60,10 @@ commands:
   build-state <root-id>         last Build state block, start decision, resume point (JSON);
                                 exit 1 means stall the root
   still-ours <root-id>          the kill switch over a fresh read of the root (JSON); exit 1 = stop
-  validate-prs <root-id>        every recorded PR against gh pr view (JSON); exit 1 = stall
+  validate-prs <root-id> [--text]
+                                every recorded PR against gh pr view (JSON); exit 1 = stall.
+                                --text also checks each PR's published title, body and
+                                branch (the post-submit check before spec:built)
   write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>]
         [--stall-step <step> --stall-file <file>]
                                 the one write path: computes firings, guards, then one
@@ -69,6 +74,8 @@ commands:
                                 chain <k> level <n> implement|audit|build-gate|submit
   state-write <spec:label>      the bd update flags for spec:building, spec:built or spec:stalled
   dry-run                       preflight, gates, selection, chain plan, label write; writes nothing (JSON)
+  pr-text-check <file|->        a candidate PR title, body, branch name or commit log (- reads
+                                stdin) against the publication patterns (JSON); exit 1 = publish nothing
 `;
 
 function fail(message: string): never {
@@ -209,9 +216,9 @@ try {
       break;
     }
     case 'validate-prs': {
-      const [id] = args;
-      if (!id || args.length > 1) fail(USAGE);
-      const result = runValidatePrs(execRunner, id);
+      const [id, flag] = args;
+      if (!id || args.length > 2 || (flag !== undefined && flag !== '--text')) fail(USAGE);
+      const result = runValidatePrs(execRunner, id, { text: flag === '--text' });
       json(result);
       process.exit(result.ok ? 0 : 1);
       break;
@@ -256,6 +263,14 @@ try {
     case 'dry-run': {
       if (args.length) fail(USAGE);
       json(runDryRun(execRunner, now));
+      break;
+    }
+    case 'pr-text-check': {
+      const [source] = args;
+      if (!source || args.length > 1) fail(USAGE);
+      const matches = prTextCheck(source === '-' ? readFileSync(0, 'utf-8') : readInput(source));
+      json({ ok: matches.length === 0, matches });
+      process.exit(matches.length ? 1 : 0);
       break;
     }
     default:

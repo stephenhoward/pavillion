@@ -112,7 +112,7 @@ For each stack level, once it is ready for its build gate (Phase 4):
 
 1. **`build-guardian`** — exactly one, on that level's branch at its stack position. **NEVER more than one build-guardian at a time** — test suites must not run concurrently.
 2. **Red** — follow the skill's "Build-guardian failure (per-level gate)": the level is not submitted while red, and exhausted retries truncate the chain at that level.
-3. **Green** — submit the level with `stack.ts submit`, then set its title and body with `gh pr edit` per "PR shape". The chain's next level starts on top of it.
+3. **Green** — submit the level with `stack.ts submit`, then set its title and body with `gh pr edit` per "PR shape". The chain's next level starts on top of it. `stack.ts submit` runs `gh stack submit --auto --open`: per `gh stack submit --help` (gh-stack 0.0.8), `--auto` only skips the interactive editor and takes auto-generated titles, and `--open` marks the PRs ready for review. Neither merges a PR or turns on auto-merge.
 
 When a chain's levels are complete, run the chain-end verification pass from the skill, in order: `cross-bead-integration-verifier` only if the chain has more than one bead, then `architecture-auditor`. The pass is **advisory** — its levels are already submitted, so findings go to a follow-up implementer or the wave summary rather than holding anything back. The blocking check is the Phase 7 sweep.
 

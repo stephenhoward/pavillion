@@ -2,7 +2,8 @@
  * Deterministic half of `/spawn-bead-workers --scheduled`: flag validation,
  * preflight, the four gates, root selection, the `## Build state` parser
  * and formatter, the kill switch, start/restart/resume, counted firings,
- * recorded-PR validation, the guarded write and the dry run.
+ * recorded-PR validation, the publication text check, the guarded write
+ * and the dry run.
  *
  * Exports:
  *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH, TRUNK,
@@ -12,7 +13,7 @@
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
  *     formatBuildState, formatStallBlock, writeGuard, applyFiring,
- *     recordedPrExpectations, validateRecordedPr
+ *     recordedPrExpectations, validateRecordedPr, prTextCheck
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
  *     readBead, readChildren, runPreflight, releaseLock, runGates,
  *     runQueueGate, runDryRun, runStillOurs, runWrite, runValidatePrs,
@@ -927,6 +928,73 @@ export function validateRecordedPr(
 }
 
 // =============================================================================
+// Publication text check
+// =============================================================================
+
+export type TextRule = 'bead-id' | 'home-path' | 'session-trailer' | 'office-label' | 'token';
+
+export interface TextMatch {
+  rule: TextRule;
+  /** 1-based line of the candidate text. */
+  line: number;
+  /** The matched text; a token is cut to its first four characters. */
+  match: string;
+}
+
+/**
+ * What no PR title or body, branch name or commit message the run publishes
+ * may carry. The source is git-workflow's rule that local-only references
+ * stay out of GitHub artifacts (SKILL.md "Foundational principle",
+ * branches.md, commits.md and pull-requests.md "Disallowed" / "Never
+ * include"); this list widens it to internal process text. Generic shapes
+ * only: naming any private organisation's vocabulary here would publish it.
+ */
+const TEXT_RULES: { rule: TextRule; pattern: RegExp }[] = [
+  { rule: 'bead-id', pattern: /\bpv-[a-z0-9]+(?:\.[0-9]+)*\b/gi },
+  { rule: 'home-path', pattern: /(?<![\w.])(?:\/(?:Users|home)\/[^\s/]+|\/root(?=[/\s]|$)|[A-Za-z]:\\Users\\[^\s\\]+|~\/\S*)/g },
+  {
+    rule: 'session-trailer',
+    pattern: /^[ \t]*[A-Za-z][\w-]*-Session:|^[ \t]*Co-authored-by:[^\n]*\b(?:claude|anthropic)\b[^\n]*|^[ \t]*Generated-by:[^\n]*|Generated with \[?Claude Code/gim,
+  },
+  { rule: 'office-label', pattern: /\boffice:[a-z][\w-]*/gi },
+  {
+    rule: 'token',
+    pattern: new RegExp([
+      String.raw`\bgh[pousr]_[A-Za-z0-9]{20,}`,
+      String.raw`\bgithub_pat_\w{20,}`,
+      String.raw`\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{10,}`,
+      String.raw`\bwhsec_[A-Za-z0-9]{10,}`,
+      String.raw`\bsk-(?:ant-)?[\w-]{20,}`,
+      String.raw`\bAKIA[0-9A-Z]{16}\b`,
+      String.raw`\bxox[abposr]-[A-Za-z0-9-]{10,}`,
+      String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----`,
+      String.raw`\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}`,
+      // A long run mixing upper case, lower case and digits. Commit SHAs
+      // (lower-case hex) and kebab-case names never mix all three.
+      String.raw`(?<![\w+=-])(?=[\w+=-]*[A-Z])(?=[\w+=-]*[a-z])(?=[\w+=-]*[0-9])[\w+=-]{32,}`,
+    ].join('|'), 'g'),
+  },
+];
+
+/** Every rejected pattern in a candidate title, body, branch name or commit message. */
+export function prTextCheck(text: string): TextMatch[] {
+  const matches: TextMatch[] = [];
+  text.split('\n').forEach((line, i) => {
+    for (const { rule, pattern } of TEXT_RULES) {
+      for (const m of line.matchAll(pattern)) {
+        const found = m[0].trim();
+        matches.push({ rule, line: i + 1, match: rule === 'token' ? `${found.slice(0, 4)}…` : found });
+      }
+    }
+  });
+  return matches;
+}
+
+function describeMatches(matches: TextMatch[]): string {
+  return matches.map(m => `${m.rule} ${JSON.stringify(m.match)} (line ${m.line})`).join('; ');
+}
+
+// =============================================================================
 // Chain plan input
 // =============================================================================
 
@@ -1280,10 +1348,24 @@ function nextBranchAbsent(runner: Runner, branch: string): { branch: string; ok:
 }
 
 /**
- * Every PR the root's last block records, validated read-only against
- * GitHub, and every `next` branch checked absent from origin.
+ * The published title, body and head branch of a recorded PR, through
+ * prTextCheck. A missing title or body fails closed.
  */
-export function runValidatePrs(runner: Runner, root: string): PrsValidation {
+function publishedTextCheck(view: unknown, pr: number): { ok: true } | { ok: false; reason: string } {
+  const p = view as { title?: unknown; body?: unknown; headRefName?: unknown };
+  const missing = ['title', 'body'].filter(k => typeof p[k as 'title' | 'body'] !== 'string');
+  if (missing.length) return { ok: false, reason: `#${pr}: gh pr view missing or malformed ${missing.join(', ')}` };
+  const matches = [p.title, p.body, p.headRefName].flatMap(t => prTextCheck(String(t)));
+  return matches.length ? { ok: false, reason: `#${pr}: published text: ${describeMatches(matches)}` } : { ok: true };
+}
+
+/**
+ * Every PR the root's last block records, validated read-only against
+ * GitHub, and every `next` branch checked absent from origin. With `text`
+ * (the post-submit check before spec:built) each PR's published title,
+ * body and head branch also go through prTextCheck.
+ */
+export function runValidatePrs(runner: Runner, root: string, opts: { text?: boolean } = {}): PrsValidation {
   const none = (reading: string): PrsValidation => ({ ok: false, reading, sync_first: false, prs: [], next: [] });
   const bead = attempt(() => readBead(runner, root));
   if (isFailure(bead)) return none(bead.error);
@@ -1294,12 +1376,13 @@ export function runValidatePrs(runner: Runner, root: string): PrsValidation {
   const login = runner('gh', ['api', 'user', '--jq', '.login']);
   if (login.exitCode !== 0 || login.stdout === '') return none(`cannot read the authenticated gh login: ${login.stderr}`);
 
+  const fields = opts.text ? `${PR_VIEW_FIELDS},title,body` : PR_VIEW_FIELDS;
   const prs = recordedPrExpectations(parsed.state).map(expected => {
-    const view = attempt(() => readJson(runner, 'gh', ['pr', 'view', String(expected.pr), '--json', PR_VIEW_FIELDS]));
-    const result = isFailure(view)
-      ? { ok: false as const, reason: `#${expected.pr}: ${view.error}` }
-      : validateRecordedPr(view, expected, login.stdout);
-    return { pr: expected.pr, ...result };
+    const view = attempt(() => readJson(runner, 'gh', ['pr', 'view', String(expected.pr), '--json', fields]));
+    if (isFailure(view)) return { pr: expected.pr, ok: false as const, reason: `#${expected.pr}: ${view.error}` };
+    const result = validateRecordedPr(view, expected, login.stdout);
+    const text = result.ok && opts.text ? publishedTextCheck(view, expected.pr) : null;
+    return { pr: expected.pr, ...(text && !text.ok ? text : result) };
   });
   const next = parsed.state.chains.filter(c => c.next !== 'done').map(c => nextBranchAbsent(runner, c.next));
   const bad = prs.filter(p => !p.ok).length + next.filter(n => !n.ok).length;
@@ -1307,7 +1390,7 @@ export function runValidatePrs(runner: Runner, root: string): PrsValidation {
     ok: bad === 0,
     reading: bad
       ? `${bad} check(s) failed: stall the root`
-      : `${prs.length} recorded PR(s) valid, ${next.length} next branch(es) not on origin`,
+      : `${prs.length} recorded PR(s) valid${opts.text ? ' with clean published text' : ''}, ${next.length} next branch(es) not on origin`,
     sync_first: prs.some(p => p.ok && p.merged),
     prs,
     next,
