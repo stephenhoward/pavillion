@@ -15,7 +15,8 @@ This is a prose-only skill. There are no scripts. Orchestration logic lives
 in the consuming commands; this skill is what those commands reference so the
 invariants below stay in exactly one place.
 
-Consumers: `/spawn-bead-workers` (core mechanics), plus any future command
+Consumers: `/spawn-bead-workers` (core mechanics), its unattended mode
+[`build-scheduled`](../build-scheduled/SKILL.md), plus any future command
 that executes an epic or multi-bead run (the single-leaf reduction of the
 same pattern applies to lone leaf beads).
 

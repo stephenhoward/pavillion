@@ -33,7 +33,7 @@ The attended phases apply as written, except:
 - **Phase 6 submit and PR text, and Phase 7's report**: see Publication
   guards and Completion; never `gh pr edit` directly.
 
-Never: run `gh pr merge`, set auto-merge (`enablePullRequestAutoMerge`, `gh pr merge --auto`), run `git push --force`, `gh repo edit` or any `gh api` write; pushing happens only inside `stack.ts submit` and `stack.ts sync`, each right after `still-ours`.
+Never: run `gh pr merge`, set auto-merge (`enablePullRequestAutoMerge`, `gh pr merge --auto`), run `git push --force`, `gh repo edit` or any `gh api` write; pushing happens only inside `stack.ts submit` and `stack.ts sync`, each right after `still-ours`; sync's restack push is the only rewrite of remote history, and runs only when `validate-prs` reports `sync_first`.
 
 Nothing in the repo stops a token with merge rights: give the scheduler
 slot one with no merge or admin rights. [`slot-settings.json`](slot-settings.json)
@@ -45,7 +45,7 @@ gh aliases, `npx tsx -e`, `git -C` and MCP merge tools reach around it.
 `validate-flags`, then `preflight --owner-pid $PPID`, then `gates`; each
 prints its readings and fails closed, and a failure ends the run with one
 report line. On `dryRun: true` run `build.ts dry-run` alone: no preflight,
-no lock, no write. The lock is one run per host; no repository setting is
+no lock, no write. The lock is one run per clone, its worktrees included; no repository setting is
 read. Preflight prints this run's own id (`run`): `write` and `release`
 take `--run <id>` and refuse another run's lock. Every exit after
 preflight, a failed gate included, ends with `release --run <id>`.

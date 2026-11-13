@@ -55,7 +55,7 @@ export const QUEUE_GATE = { open: 10, ageDays: 7 } as const;
 /** `gh pr list --limit`; a result this long may be truncated, so it fails. */
 export const GH_PR_LIMIT = 200;
 
-/** The third counted firing still building stalls the root (pv-256c.3). */
+/** The third counted firing still building stalls the root. */
 export const MAX_FIRINGS = 3;
 
 export const ROOT_ID = /^pv-[a-z0-9]+(\.[0-9]+)*$/;

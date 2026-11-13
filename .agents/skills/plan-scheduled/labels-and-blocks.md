@@ -7,9 +7,11 @@ or parsing a `Decisions made for you` or `Advisory Review` block.
 ## Labels
 
 A root carries at most one `spec:*` label after any write this mode makes;
-every state write (`spec.ts state-write <label>`, or `build.ts state-write`
-for the build labels) enforces it, clearing a label the maintainer left
-behind. The table is shared: `/plan --scheduled` owns the first six rows,
+every state write enforces it, clearing a label the maintainer left behind.
+The planner writes through `spec.ts state-write <label>`. The build labels
+are written only through `build.ts write`, which also checks the run's lock,
+the kill switch and the notes block; `build.ts state-write` only prints the
+flags for inspection and is never a write path. The table is shared: `/plan --scheduled` owns the first six rows,
 `/spawn-bead-workers --scheduled` (the
 [`build-scheduled`](../build-scheduled/SKILL.md) skill) owns the three build
 rows, and each script accepts only its own labels as a write target.
@@ -29,8 +31,11 @@ rows, and each script accepts only its own labels as a write target.
 `build:hold` is not a state label and no state write removes it: the
 maintainer sets it to keep a root out of scheduled builds, and only the
 maintainer removes it. The `## Build state` and `## Build stall` note blocks
-the build labels travel with are defined in
-[`build-scheduled/SKILL.md`](../build-scheduled/SKILL.md).
+the build labels travel with are written and parsed only by
+[`build-scheduled`](../build-scheduled/SKILL.md)'s script
+(`formatBuildState`, `formatStallBlock` and `parseBuildState` in
+`scripts/lib/build.ts`); `build.ts build-state <root>` prints a root's last
+block as JSON.
 
 ## Outcome labels
 

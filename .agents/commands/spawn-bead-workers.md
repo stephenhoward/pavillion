@@ -198,7 +198,7 @@ nothing.
 
 ## Acceptance / Manual Verification
 
-This command has no automated tests. After any edit to it:
+This command's prose has no behavioural tests; `build-scheduled`'s test suite only scans it for merge, force-push and slot-denied commands. After any edit to it:
 
 1. Read the command end-to-end and confirm these behavior-preservation invariants are explicitly stated (or referenced via the skills above):
    - Max 3 chains in flight (HARD LIMIT); a chain holds one slot for its whole run.
