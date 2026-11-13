@@ -45,9 +45,10 @@ gh aliases, `npx tsx -e`, `git -C` and MCP merge tools reach around it.
 `validate-flags`, then `preflight --owner-pid $PPID`, then `gates`; each
 prints its readings and fails closed, and a failure ends the run with one
 report line. On `dryRun: true` run `build.ts dry-run` alone: no preflight,
-no lock, no write. The lock is one run per host (labels cannot stop
-overlapping firings); no repository setting is read. Every exit after
-preflight, a failed gate included, ends with `release --owner-pid $PPID`.
+no lock, no write. The lock is one run per host; no repository setting is
+read. Preflight prints this run's own id (`run`): `write` and `release`
+take `--run <id>` and refuse another run's lock. Every exit after
+preflight, a failed gate included, ends with `release --run <id>`.
 
 `gates` prints the selection: a `spec:building` root resumes first,
 otherwise the earliest `spec:ready` root, with each skipped root and its
@@ -57,8 +58,8 @@ root and in the report, and leave the root `spec:building`.
 
 ## Labels and the kill switch
 
-Every write to the root is `build.ts write <root> --owner-pid $PPID`: a
-re-read, the write guard, then **one** `bd update` with the label flags and
+Every write to the root is `build.ts write <root> --run <id>`: a re-read,
+the write guard, then **one** `bd update` with the label flags and
 `--append-notes`, argv only, never `--notes`. Its inputs are scratchpad files.
 
 - **`spec:building`** is written over `spec:ready` with the first block
@@ -78,15 +79,15 @@ stop there, write nothing more, and add one report line.
 `## Build state` is append-only; readers take the last one outside fenced
 text, and a malformed last block stalls the root with no fallback. It is
 written with `spec:building`, after each level is submitted, and at every
-stop, from a `--state-file` holding only `chains` and `stopped` (edited
-from the `state` that `build-state` prints). `write` derives `firings`,
-`restart` and the `firing:` line (session pid and start time) from the
-notes, so every block of one firing carries its count: never count.
+stop, from a `--state-file`: the `next_state` that `build-state` prints,
+with `chains` and `stopped` edited. `write` derives `firings`, `restart`
+and the `firing:` line (the run id) from the notes, so every block of one
+firing carries its count: never count.
 
-`build-state <root>` prints `start.action`: `start` writes the first
-block from the chain plan; `continue` resumes; `restart` resumes after the
-maintainer moved a stalled root back (`write` resets the count); `stall`
-stalls with step `build-state`. There is no start-over.
+`build-state <root>` prints `start.action`: `start` writes the first block
+(set each chain's `next` to its `first_leaf`'s branch); `continue` resumes;
+`restart` resumes a stalled root moved back (`write` resets the count);
+`stall` stalls with step `build-state`. There is no start-over.
 
 ## Resume and stop points
 
@@ -116,8 +117,7 @@ adds its report line and releases the lock.
 Once every chain is at `next: done`, run the wave skill's completion sweep
 over every chain. A FAIL follows its failure path; one the retries cannot
 clear, a conflicting integration merge (no level owns it) or a security
-finding stalls the root (step `sweep`, finding in the stall file). On a
-pass, in order:
+finding stalls the root (step `sweep`, finding in the stall file). On a pass:
 
 1. Append the completion report to the end of each chain's top PR's
    Validation section (body from `gh pr view <n> --json body`) and publish
@@ -126,7 +126,7 @@ pass, in order:
    and the sibling chains' top PRs as `#<n>` (not a "Stacked on" line).
 2. `validate-prs <root> --text`: every recorded PR's published title, body
    and branch; exit 1 stalls the root (step `text-check`).
-3. `write` with `--label spec:built --firing ended`.
+3. `write` with `--label spec:built --state-file <file> --firing ended`.
 
 ## Publication guards
 

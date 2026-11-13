@@ -7,13 +7,13 @@
  * Usage:
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-flags <argv…>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts preflight --owner-pid <pid>
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts release --owner-pid <pid>
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts release --run <id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts gates [--queue-only]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts select
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts build-state <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts still-ours <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id> [--text]
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> --owner-pid <pid> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> --run <id> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts pr-text-check <file|->
@@ -26,12 +26,12 @@
  * Operator-facing flow: .agents/skills/build-scheduled/SKILL.md
  */
 
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import {
   type LockStore,
   LOCK_PATH,
-  REPORT_DIR,
   buildStateWriteArgs,
   execRunner,
   readBeads,
@@ -55,25 +55,26 @@ const USAGE = `usage: build.ts <command> [args]
 
 commands:
   validate-flags <argv…>        exit 1 + message on a refused flag combination
-  preflight --owner-pid <pid>   report path, lock, clean tree; takes the lock (JSON).
-                                Pass $PPID: under the Bash tool that is the agent
-                                session, which outlives each short-lived CLI call
-  release --owner-pid <pid>     remove the lock if this pid holds it (JSON)
+  preflight --owner-pid <pid>   report path, lock, clean tree; takes the lock and prints
+                                this run's id as "run" (JSON). Pass $PPID: the lock goes
+                                stale once that process exits
+  release --run <id>            remove the lock if this run holds it (JSON)
   gates [--queue-only]          each gate's reading and verdict, in order (JSON)
   select                        selected root, ordering source, skipped roots (JSON)
-  build-state <root-id>         last Build state block, start decision, resume point (JSON);
-                                exit 1 means stall the root
+  build-state <root-id>         last Build state block, start decision, resume point and
+                                next_state, the next write's state file (JSON); exit 1
+                                means stall the root
   still-ours <root-id>          the kill switch over a fresh read of the root (JSON); exit 1 = stop
   validate-prs <root-id> [--text]
                                 every recorded PR against gh pr view (JSON); exit 1 = stall.
                                 --text also checks each PR's published title, body and
                                 branch (the post-submit check before spec:built)
-  write <root-id> --owner-pid <pid> [--label <spec:label>] [--state-file <json>]
+  write <root-id> --run <id> [--label <spec:label>] [--state-file <json>]
         [--firing <kind>] [--stall-step <step> --stall-file <file>]
-                                the one write path: takes chains and stopped from the
-                                state file, derives firings and restart from the notes
-                                (the firing is <pid> and its start time: pass $PPID),
-                                guards, then one bd update --append-notes. <kind>:
+                                the one write path: refuses unless the lock is this
+                                run's, takes chains and stopped from the state file,
+                                derives firings and restart from the notes, guards,
+                                then one bd update --append-notes. <kind>:
                                 building, ended, gate-skipped, dry-run,
                                 decision-blocked, kill-switch.
                                 <step>: preflight, gates, build-state, validate-prs,
@@ -104,10 +105,20 @@ function json(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
+/**
+ * The lock lives in the main checkout whichever worktree a command runs in,
+ * so a write from a chain's worktree sees the lock preflight took.
+ */
+function lockPath(): string {
+  const common = execRunner('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (common.exitCode !== 0) fail(`cannot find the main checkout: ${common.stderr}`);
+  return resolve(dirname(common.stdout), LOCK_PATH);
+}
+
 const fileLock: LockStore = {
   read() {
     try {
-      return readFileSync(LOCK_PATH, 'utf-8');
+      return readFileSync(lockPath(), 'utf-8');
     }
     catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
@@ -115,9 +126,10 @@ const fileLock: LockStore = {
     }
   },
   create(content) {
-    mkdirSync(REPORT_DIR, { recursive: true });
+    const path = lockPath();
+    mkdirSync(dirname(path), { recursive: true });
     try {
-      writeFileSync(LOCK_PATH, content, { flag: 'wx' });
+      writeFileSync(path, content, { flag: 'wx' });
       return true;
     }
     catch (err) {
@@ -126,10 +138,10 @@ const fileLock: LockStore = {
     }
   },
   overwrite(content) {
-    writeFileSync(LOCK_PATH, content);
+    writeFileSync(lockPath(), content);
   },
   remove() {
-    rmSync(LOCK_PATH, { force: true });
+    rmSync(lockPath(), { force: true });
   },
 };
 
@@ -188,13 +200,15 @@ try {
     }
     case 'preflight': {
       const ownerPid = ownerPidArg(args);
-      const result = runPreflight(execRunner, { lock: fileLock, isAlive, ownerPid, now });
+      const result = runPreflight(execRunner, { lock: fileLock, isAlive, ownerPid, run: randomUUID(), now });
       json(result);
       process.exit(result.ok ? 0 : 1);
       break;
     }
     case 'release': {
-      const reading = releaseLock(fileLock, ownerPidArg(args));
+      const [flag, run] = args;
+      if (args.length !== 2 || flag !== '--run' || !run) fail(USAGE);
+      const reading = releaseLock(fileLock, run);
       json(reading);
       process.exit(reading.verdict === 'pass' ? 0 : 1);
       break;
@@ -243,9 +257,9 @@ try {
     case 'write': {
       const [root, ...rest] = args;
       if (!root) fail(USAGE);
-      const flags = flagPairs(rest, ['--owner-pid', '--label', '--state-file', '--firing', '--stall-step', '--stall-file']);
-      const ownerPid = Number(flags.get('--owner-pid'));
-      if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) fail(`write takes --owner-pid $PPID\n\n${USAGE}`);
+      const flags = flagPairs(rest, ['--run', '--label', '--state-file', '--firing', '--stall-step', '--stall-file']);
+      const run = flags.get('--run');
+      if (run === undefined) fail(`write takes --run <id from preflight>\n\n${USAGE}`);
       const stalling = flags.get('--label') === 'spec:stalled';
       if (flags.has('--stall-step') !== stalling || flags.has('--stall-file') !== stalling) {
         fail(`spec:stalled takes --stall-step and --stall-file, and nothing else does\n\n${USAGE}`);
@@ -267,9 +281,9 @@ try {
         state,
         stall: stallFile === undefined ? null : { step: flags.get('--stall-step') as string, report: readInput(stallFile) },
         firing: flags.get('--firing') ?? null,
-        ownerPid,
+        run,
         now,
-      });
+      }, fileLock);
       json(result);
       process.exit(result.ok ? 0 : 1);
       break;
@@ -300,14 +314,12 @@ try {
       if (!root || !pr || !/^[1-9][0-9]*$/.test(pr)) fail(USAGE);
       const flags = flagPairs(rest, ['--leaf', '--title-file', '--body-file']);
       if (flags.size !== 3) fail(USAGE);
-      const bodyFile = resolve(callerCwd, flags.get('--body-file') as string);
       const result = runPublishPr(execRunner, {
         root,
         pr: Number(pr),
         leaf: flags.get('--leaf') as string,
         title: readInput(flags.get('--title-file') as string),
-        body: readFileSync(bodyFile, 'utf-8'),
-        bodyFile,
+        body: readInput(flags.get('--body-file') as string),
       });
       json(result);
       process.exit(result.ok ? 0 : 1);

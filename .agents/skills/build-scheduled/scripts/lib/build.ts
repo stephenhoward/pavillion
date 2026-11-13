@@ -6,14 +6,14 @@
  * and the dry run.
  *
  * Exports:
- *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, REPORT_DIR, LOCK_PATH, TRUNK,
- *     STALL_REPORT_MAX
+ *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, RUN_ID, REPORT_DIR, LOCK_PATH,
+ *     TRUNK, STALL_REPORT_MAX
  *   Pure: validateFlags, assertRootId, lockDecision, passingCi, queueGate,
  *     priorEpicGate, selectRoot, evaluateGates, scanNotes, parseBuildState,
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
- *     formatBuildState, formatStallBlock, writeGuard, firingId, firingContext,
- *     applyFiring,
+ *     formatBuildState, formatStallBlock, writeGuard, firingContext,
+ *     applyFiring, parseLock, lockHeldBy,
  *     recordedPrExpectations, validateRecordedPr, prTextCheck, securityHold,
  *     validatePublishTarget
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
@@ -29,6 +29,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 // The first cross-skill script import, accepted on purpose: the build stage
 // consumes the planner's spec:ready, so both state writes share one table.
 import {
@@ -178,38 +181,61 @@ export interface LockDecision {
   reading: string;
 }
 
-/**
- * One scheduled run per checkout. `content` is the lock file's text or null.
- * A live holder stops the run, a dead one is stale and replaced, the
- * session's own pid re-takes it, and anything unparsable fails closed.
- */
-export function lockDecision(
-  content: string | null,
-  isAlive: (pid: number) => boolean,
-  ownerPid: number,
-): LockDecision {
-  if (content === null) return { verdict: 'take', reading: 'no lock' };
+/** A run id as preflight mints it (crypto.randomUUID): one per run, never per process. */
+export const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export interface LockRecord {
+  pid: number;
+  started: string;
+  /** The run that took the lock; absent only on a lock this version did not write. */
+  run: string | null;
+}
+
+/** The lock file's record, or why it is malformed. */
+export function parseLock(content: string): LockRecord | string {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   }
   catch {
-    return { verdict: 'malformed', reading: `malformed lock ${LOCK_PATH}: not JSON` };
+    return `malformed lock ${LOCK_PATH}: not JSON`;
   }
-  const lock = parsed as { pid?: unknown; started?: unknown };
+  const lock = parsed as { pid?: unknown; started?: unknown; run?: unknown };
   if (
     typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)
     || !Number.isSafeInteger(lock.pid) || (lock.pid as number) <= 0
     || typeof lock.started !== 'string'
+    || (lock.run !== undefined && (typeof lock.run !== 'string' || !RUN_ID.test(lock.run)))
   ) {
-    return { verdict: 'malformed', reading: `malformed lock ${LOCK_PATH}: needs {pid, started}` };
+    return `malformed lock ${LOCK_PATH}: needs {pid, started, run}`;
   }
-  const pid = lock.pid as number;
-  if (pid === ownerPid) return { verdict: 'take', reading: `already held by this session (pid ${pid})` };
-  if (isAlive(pid)) {
-    return { verdict: 'held', reading: `held by live pid ${pid} since ${lock.started}` };
+  return { pid: lock.pid as number, started: lock.started, run: (lock.run as string | undefined) ?? null };
+}
+
+/**
+ * One scheduled run per checkout. `content` is the lock file's text or null.
+ * A live holder stops the run whatever its pid — two runs in one long-lived
+ * process share a pid, so a pid never proves the lock is ours — a dead one
+ * is stale and replaced, and anything unparsable fails closed.
+ */
+export function lockDecision(content: string | null, isAlive: (pid: number) => boolean): LockDecision {
+  if (content === null) return { verdict: 'take', reading: 'no lock' };
+  const lock = parseLock(content);
+  if (typeof lock === 'string') return { verdict: 'malformed', reading: lock };
+  if (isAlive(lock.pid)) {
+    return { verdict: 'held', reading: `held by live pid ${lock.pid} since ${lock.started}` };
   }
-  return { verdict: 'replace', reading: `stale lock (pid ${pid} not running) replaced` };
+  return { verdict: 'replace', reading: `stale lock (pid ${lock.pid} not running) replaced` };
+}
+
+/** Whether the lock is held by `run`: the guard on every write and on release. */
+export function lockHeldBy(content: string | null, run: string): Check {
+  if (!RUN_ID.test(run)) return { ok: false, reason: `run id ${JSON.stringify(run)} is not one preflight mints` };
+  if (content === null) return { ok: false, reason: `no lock: run preflight first (${LOCK_PATH})` };
+  const lock = parseLock(content);
+  if (typeof lock === 'string') return { ok: false, reason: lock };
+  if (lock.run !== run) return { ok: false, reason: `lock is held by another run (pid ${lock.pid} since ${lock.started})` };
+  return { ok: true };
 }
 
 // =============================================================================
@@ -288,7 +314,7 @@ export interface BuildState {
   restart: 'none' | 'resume';
   chains: BuildChain[];
   stopped: string;
-  /** The session that wrote the block (firingId), or null on a block without the line. */
+  /** The run that wrote the block (its RUN_ID), or null on a block without the line. */
   firing: string | null;
   /** Every recorded PR number, in chain order. */
   prs: number[];
@@ -357,9 +383,6 @@ export function parseBuildState(notes: string | undefined): BuildStateParse {
   return parseStateBody(bodies[bodies.length - 1]);
 }
 
-/** A firing's identity: the session's pid and its process start time. */
-const FIRING_ID = /^pid [1-9][0-9]{0,9} started [A-Za-z0-9:]+(?: [A-Za-z0-9:]+){0,7}$/;
-
 function parseStateBody(body: string[]): BuildStateParse {
   const bad = (what: string, line?: string): BuildStateParse => ({
     ok: false,
@@ -380,7 +403,7 @@ function parseStateBody(body: string[]): BuildStateParse {
   if (!restart) return bad('second line must be "restart: none | resume"', body[1]);
 
   const firing = hasFiring ? body[2].slice('firing: '.length) : null;
-  if (firing !== null && !FIRING_ID.test(firing)) return bad('firing must be "pid <n> started <time>"', body[2]);
+  if (firing !== null && !RUN_ID.test(firing)) return bad('firing must be the run id preflight minted', body[2]);
 
   const stopped = body[body.length - 1].match(/^stopped: (\S.*)$/);
   if (!stopped) return bad('last line must be "stopped: <reason | none>"', body[body.length - 1]);
@@ -736,8 +759,8 @@ export function formatBuildState(input: unknown, at: Date): { text: string; stat
     throw new Error(`firings must be an integer 0-${MAX_FIRINGS}`);
   }
   if (s.restart !== 'none' && s.restart !== 'resume') throw new Error('restart must be none or resume');
-  if (s.firing != null && (typeof s.firing !== 'string' || !FIRING_ID.test(s.firing))) {
-    throw new Error('firing must be "pid <n> started <time>"');
+  if (s.firing != null && (typeof s.firing !== 'string' || !RUN_ID.test(s.firing))) {
+    throw new Error('firing must be the run id preflight minted');
   }
   if (typeof s.stopped !== 'string' || !STOPPED.test(s.stopped)) {
     throw new Error('stopped must be one line of 1-160 printable characters');
@@ -857,18 +880,7 @@ function continuityGuard(notes: string | undefined, state: BuildState): string |
 
 const FIRING_KINDS: FiringKind[] = ['building', 'ended', 'gate-skipped', 'dry-run', 'decision-blocked', 'kill-switch'];
 
-/**
- * The session a firing runs in: the agent session's pid (`--owner-pid
- * $PPID`, as preflight takes it) and that process's start time from
- * `ps -o lstart=`, so a pid reused by a later session is a new firing.
- */
-export function firingId(pid: number, lstart: string): string {
-  const id = `pid ${pid} started ${lstart.trim().replace(/\s+/g, ' ')}`;
-  if (!FIRING_ID.test(id)) throw new Error(`owner pid ${pid}: unreadable process start time ${JSON.stringify(lstart)}`);
-  return id;
-}
-
-/** What a write in firing `firing` derives from the root's notes. */
+/** What a write in firing `firing` (its run id) derives from the root's notes. */
 export interface FiringContext {
   firing: string;
   /** The count the firing started from: the last block an earlier firing wrote, or 0 after a stall. */
@@ -1254,13 +1266,18 @@ export interface LockStore {
 export interface PreflightDeps {
   lock: LockStore;
   isAlive: (pid: number) => boolean;
+  /** The agent session's pid, recorded so a crashed run's lock goes stale. */
   ownerPid: number;
+  /** This run's id (RUN_ID), freshly minted by the caller. */
+  run: string;
   now: Date;
 }
 
 export interface PreflightResult {
   ok: boolean;
   checks: Reading[];
+  /** The run id that holds the lock: `write` and `release` take it. Null unless ok. */
+  run: string | null;
 }
 
 function reportPathCheck(runner: Runner): Reading {
@@ -1288,11 +1305,12 @@ function cleanTreeCheck(runner: Runner): Reading {
  */
 function takeLock(deps: PreflightDeps): { reading: Reading; took: boolean } {
   const fail = (reading: string) => ({ reading: { check: 'lock', verdict: 'fail' as const, reading }, took: false });
+  if (!RUN_ID.test(deps.run)) return fail(`run id ${JSON.stringify(deps.run)} is not a fresh UUID`);
   if (!deps.isAlive(deps.ownerPid)) return fail(`owner pid ${deps.ownerPid} is not running`);
   const current = deps.lock.read();
-  const d = lockDecision(current, deps.isAlive, deps.ownerPid);
+  const d = lockDecision(current, deps.isAlive);
   if (d.verdict === 'held' || d.verdict === 'malformed') return fail(d.reading);
-  const record = JSON.stringify({ pid: deps.ownerPid, started: deps.now.toISOString() });
+  const record = JSON.stringify({ pid: deps.ownerPid, started: deps.now.toISOString(), run: deps.run });
   if (current === null) {
     if (!deps.lock.create(record)) return fail('lock appeared while taking it: another run started');
   }
@@ -1334,22 +1352,22 @@ export function runPreflight(runner: Runner, deps: PreflightDeps | null): Prefli
   else checks.push(cleanTreeCheck(runner));
 
   if (!dry && failed() && took) deps.lock.remove();
-  return { ok: !failed(), checks };
+  return { ok: !failed(), checks, run: !dry && !failed() ? deps.run : null };
 }
 
 /**
- * Release the lock at every run end and every failed-gate exit. Only a
- * lock holding `ownerPid` is removed; a lock held by another run, or one
- * that cannot be read, is left for its owner (or the stale-lock rule).
+ * Release the lock at every run end and every failed-gate exit. Only the
+ * lock `run` took is removed; a lock held by another run, or one that
+ * cannot be read, is left for its owner (or the stale-lock rule).
  */
-export function releaseLock(lock: LockStore, ownerPid: number): Reading {
+export function releaseLock(lock: LockStore, run: string): Reading {
   const check = 'lock-release';
   const current = lock.read();
   if (current === null) return { check, verdict: 'pass', reading: 'no lock' };
-  const d = lockDecision(current, () => true, ownerPid);
-  if (d.verdict !== 'take') return { check, verdict: 'fail', reading: `not released: ${d.reading}` };
+  const held = lockHeldBy(current, run);
+  if (!held.ok) return { check, verdict: 'fail', reading: `not released: ${held.reason}` };
   lock.remove();
-  return { check, verdict: 'pass', reading: `released (pid ${ownerPid})` };
+  return { check, verdict: 'pass', reading: `released (run ${run})` };
 }
 
 export function runGates(runner: Runner, now: Date, mode: Mode): GatesResult {
@@ -1412,19 +1430,19 @@ export interface WriteInput {
   stall: { step: string; report: string } | null;
   /** How this firing ran (applyFiring); null only on the first spec:building block or a block-less stall. */
   firing: string | null;
-  /** The agent session's pid ($PPID), which with its start time names the firing. */
-  ownerPid: number;
+  /** The run id preflight minted; the lock must hold it, and it names the firing. */
+  run: string;
   now: Date;
 }
 
 /**
- * The one write path for the root: name the firing, re-read the root,
- * derive `firings` and `restart` from its notes, format the blocks, apply
- * the write guard (the kill switch included), then one `bd update` with
- * the state-write flags and `--append-notes`, through argv only. Any
- * refusal writes nothing.
+ * The one write path for the root: check the lock is this run's, re-read
+ * the root, derive `firings` and `restart` from its notes (the run id names
+ * the firing), format the blocks, apply the write guard (the kill switch
+ * included), then one `bd update` with the state-write flags and
+ * `--append-notes`, through argv only. Any refusal writes nothing.
  */
-export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; reading: string } {
+export function runWrite(runner: Runner, input: WriteInput, lock: Pick<LockStore, 'read'>): { ok: boolean; reading: string } {
   const refuse = (reading: string) => ({ ok: false, reading });
   const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
   let flags: string[];
@@ -1438,18 +1456,10 @@ export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; read
     return refuse(message(err));
   }
 
-  let firing: string | null = null;
-  if (input.state !== null) {
-    if (!Number.isSafeInteger(input.ownerPid) || input.ownerPid <= 0) return refuse(`bad owner pid ${input.ownerPid}`);
-    const ps = runner('ps', ['-o', 'lstart=', '-p', String(input.ownerPid)]);
-    if (ps.exitCode !== 0 || ps.stdout === '') return refuse(`owner pid ${input.ownerPid} is not a running session`);
-    try {
-      firing = firingId(input.ownerPid, ps.stdout);
-    }
-    catch (err) {
-      return refuse(message(err));
-    }
-  }
+  const held = attempt(() => lockHeldBy(lock.read(), input.run));
+  if (isFailure(held)) return refuse(held.error);
+  if (!held.ok) return refuse(`write refused: ${held.reason}`);
+  const firing = input.state === null ? null : input.run;
 
   const root = attempt(() => readBead(runner, input.root));
   if (isFailure(root)) return refuse(root.error);
@@ -1587,9 +1597,8 @@ export interface PublishInput {
   /** The leaf the PR's level implements; its labels decide the security hold. */
   leaf: string;
   title: string;
+  /** The body text; the exact string checked is what is published. */
   body: string;
-  /** The absolute path `body` was read from, handed to `gh pr edit --body-file`. */
-  bodyFile: string;
 }
 
 export interface PublishResult {
@@ -1598,6 +1607,14 @@ export interface PublishResult {
   /** A security hold: stall the level unsubmitted rather than retry. */
   hold: boolean;
   matches: (TextMatch & { source: string })[];
+}
+
+/**
+ * An explicit fetch refspec for a validated branch name, so origin/<branch>
+ * is fresh whatever refspec the checkout has configured.
+ */
+function trackingRefspec(branch: string): string {
+  return `+refs/heads/${branch}:refs/remotes/origin/${branch}`;
 }
 
 function refusal(reading: string, extra: Partial<PublishResult> = {}): PublishResult {
@@ -1621,7 +1638,10 @@ function textCheckThenStillOurs(runner: Runner, root: string, sources: [string, 
  * The one way the run edits a PR: security hold, target validation, the
  * text check over the title, body, head branch and the published commits
  * (`origin/<base>..origin/<head>`, fetched first), the kill switch, then
- * `gh pr edit --title --body-file` through argv. Any refusal edits nothing.
+ * `gh pr edit --title --body-file` through argv. The body file is one this
+ * function writes from the checked text and removes afterwards, so the
+ * caller's file changing after the check publishes nothing new. Any
+ * refusal edits nothing.
  */
 export function runPublishPr(runner: Runner, input: PublishInput): PublishResult {
   try {
@@ -1647,7 +1667,7 @@ export function runPublishPr(runner: Runner, input: PublishInput): PublishResult
   const target = validatePublishTarget(view, input.pr, login.stdout);
   if (!target.ok) return refusal(target.reason);
 
-  const fetch = runner('git', ['fetch', '--quiet', 'origin', target.base, target.head]);
+  const fetch = runner('git', ['fetch', '--quiet', 'origin', trackingRefspec(target.base), trackingRefspec(target.head)]);
   if (fetch.exitCode !== 0) return refusal(`git fetch failed (${fetch.exitCode}): ${fetch.stderr}`);
   const log = runner('git', ['log', '--format=%B', `origin/${target.base}..origin/${target.head}`]);
   if (log.exitCode !== 0) return refusal(`git log failed (${log.exitCode}): ${log.stderr}`);
@@ -1655,8 +1675,16 @@ export function runPublishPr(runner: Runner, input: PublishInput): PublishResult
   const stop = textCheckThenStillOurs(runner, input.root, [['title', title], ['body', input.body], ['branch', target.head], ['commits', log.stdout]]);
   if (stop) return stop;
 
-  const edit = runner('gh', ['pr', 'edit', String(input.pr), '--title', title, '--body-file', input.bodyFile]);
-  if (edit.exitCode !== 0) return refusal(`gh pr edit failed (${edit.exitCode}): ${edit.stderr}`);
+  const dir = mkdtempSync(join(tmpdir(), 'publish-pr-'));
+  try {
+    const bodyFile = join(dir, 'body.md');
+    writeFileSync(bodyFile, input.body, { mode: 0o600 });
+    const edit = runner('gh', ['pr', 'edit', String(input.pr), '--title', title, '--body-file', bodyFile]);
+    if (edit.exitCode !== 0) return refusal(`gh pr edit failed (${edit.exitCode}): ${edit.stderr}`);
+  }
+  finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
   return { ok: true, reading: `published title and body on #${input.pr}`, hold: false, matches: [] };
 }
 
@@ -1688,7 +1716,7 @@ export function runSubmitCheck(runner: Runner, input: { root: string; leaf: stri
   // Local main can be stale and would pull merged history into the range.
   let base = input.base;
   if (base === TRUNK) {
-    const fetch = runner('git', ['fetch', '--quiet', 'origin', TRUNK]);
+    const fetch = runner('git', ['fetch', '--quiet', 'origin', trackingRefspec(TRUNK)]);
     if (fetch.exitCode !== 0) return refusal(`git fetch failed (${fetch.exitCode}): ${fetch.stderr}`);
     base = `origin/${TRUNK}`;
   }
@@ -1700,34 +1728,53 @@ export function runSubmitCheck(runner: Runner, input: { root: string; leaf: stri
   return { ok: true, reading: `${head.stdout} may be submitted`, hold: false, matches: [] };
 }
 
+/** A chain of `next_state`; `first_leaf` (start only) names the leaf whose branch `next` must become. */
+export interface NextChain {
+  levels: BuildLevel[];
+  next: string | null;
+  first_leaf?: string;
+}
+
 export interface BuildStateResult {
   ok: boolean;
   parse: BuildStateParse;
   start: StartDecision;
-  /** Null unless the run continues or restarts a build. */
+  /** Where each chain resumes on continue or restart; a failed chain plan on any action; else null. */
   resume: ResumePoint | Failure | null;
+  /**
+   * The state file for the next `write`, ready to edit: on start, every
+   * chain of the plan with no level and `next: null` (set it to the branch
+   * for `first_leaf`); on continue or restart, the last block's chains.
+   * `firings` and `restart` are never in it: `write` derives them.
+   */
+  next_state: { chains: NextChain[]; stopped: 'none' } | null;
 }
 
 /**
  * `build-state <root>`: the last block, what the run does with the root,
- * and — when it continues or restarts — where each chain resumes, from the
- * chain plan over the root's children. Not ok means stall the root.
+ * the chain plan over the root's children, where each chain resumes, and
+ * the next write's state file. Not ok means stall the root.
  */
 export function runBuildState(runner: Runner, root: string): BuildStateResult {
   const bead = readBead(runner, root);
   const parse = parseBuildState(bead.notes);
   const start = startDecision(labelsOf(bead), parse);
-  if (start.action === 'stall' || start.action === 'start') {
-    return { ok: start.action === 'start', parse, start, resume: null };
-  }
-  const resume = attempt(() => {
+  if (start.action === 'stall') return { ok: false, parse, start, resume: null, next_state: null };
+  const plan = attempt(() => {
     const children = readChildren(runner, root);
-    const plan = readJson(runner, 'npx', ['--no-install', 'tsx', STACK_TS, 'plan', JSON.stringify(chainPlanInput(children))]);
-    const chains = (plan as { chains?: unknown } | null)?.chains;
-    if (!Array.isArray(chains) || !chains.every(c => Array.isArray(c) && c.every(id => typeof id === 'string'))) {
+    const out = readJson(runner, 'npx', ['--no-install', 'tsx', STACK_TS, 'plan', JSON.stringify(chainPlanInput(children))]);
+    const chains = (out as { chains?: unknown } | null)?.chains;
+    if (!Array.isArray(chains) || !chains.every(c => Array.isArray(c) && c.length > 0 && c.every(id => typeof id === 'string'))) {
       throw new Error('stack.ts plan: no chains array');
     }
-    return resumePoint(start.state, chains as string[][], children);
+    return { children, chains: chains as string[][] };
   });
-  return { ok: !isFailure(resume) && resume.ok, parse, start, resume };
+  if (isFailure(plan)) return { ok: false, parse, start, resume: plan, next_state: null };
+  if (start.action === 'start') {
+    const chains = plan.chains.map(c => ({ levels: [], next: null, first_leaf: c[0] }));
+    return { ok: true, parse, start, resume: null, next_state: { chains, stopped: 'none' } };
+  }
+  const resume = resumePoint(start.state, plan.chains, plan.children);
+  const chains = start.state.chains.map(c => ({ levels: c.levels, next: c.next }));
+  return { ok: resume.ok, parse, start, resume, next_state: resume.ok ? { chains, stopped: 'none' } : null };
 }

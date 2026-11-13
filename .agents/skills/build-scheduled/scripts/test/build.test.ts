@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   type BuildBead,
@@ -45,7 +45,7 @@ import {
   writeGuard,
   applyFiring,
   firingContext,
-  firingId,
+  lockHeldBy,
   scanNotes,
   STALL_REPORT_MAX,
   recordedPrExpectations,
@@ -67,6 +67,13 @@ import {
 // =============================================================================
 
 const NOW = new Date('2026-11-12T12:00:00Z');
+
+/** Run ids as preflight mints them. */
+const RUN_A = '0b5d2c1e-6a3f-4c2d-9e8f-1a2b3c4d5e6f';
+const RUN_B = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+const runId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+/** A lock file reading held by `run`, as preflight writes it. */
+const lockOf = (run: string) => ({ read: () => JSON.stringify({ pid: 10, started: NOW.toISOString(), run }) });
 const DAY = 24 * 60 * 60 * 1000;
 
 const ANALYSED = '# Bead Analysis\n\nstructure';
@@ -231,29 +238,48 @@ describe('lockDecision', () => {
   const alive = (pids: number[]) => (pid: number) => pids.includes(pid);
 
   it('takes a free lock', () => {
-    expect(lockDecision(null, alive([]), 10).verdict).toBe('take');
+    expect(lockDecision(null, alive([])).verdict).toBe('take');
   });
 
   it('stops on a lock held by a live pid', () => {
-    const d = lockDecision('{"pid":42,"started":"2026-11-12T00:00:00Z"}', alive([42]), 10);
+    const d = lockDecision(`{"pid":42,"started":"2026-11-12T00:00:00Z","run":"${RUN_A}"}`, alive([42]));
     expect(d.verdict).toBe('held');
     expect(d.reading).toContain('42');
   });
 
   it('replaces a stale lock whose pid is dead', () => {
-    expect(lockDecision('{"pid":42,"started":"x"}', alive([]), 10).verdict).toBe('replace');
+    expect(lockDecision('{"pid":42,"started":"x"}', alive([])).verdict).toBe('replace');
   });
 
-  it('takes a lock this session already holds', () => {
-    expect(lockDecision('{"pid":10,"started":"x"}', alive([10]), 10).verdict).toBe('take');
+  it('holds a live lock whatever its pid: one process may run two firings', () => {
+    expect(lockDecision(`{"pid":10,"started":"x","run":"${RUN_A}"}`, alive([10])).verdict).toBe('held');
   });
 
-  it.each(['not json', '{}', '{"pid":"42","started":"x"}', '{"pid":-1,"started":"x"}', '{"pid":4.5,"started":"x"}', '[]', '{"pid":42}'])(
+  it.each([
+    'not json', '{}', '{"pid":"42","started":"x"}', '{"pid":-1,"started":"x"}', '{"pid":4.5,"started":"x"}', '[]', '{"pid":42}',
+    '{"pid":42,"started":"x","run":"not-a-uuid"}', '{"pid":42,"started":"x","run":7}',
+  ])(
     'fails closed on malformed lock %j',
     content => {
-      expect(lockDecision(content, alive([]), 10).verdict).toBe('malformed');
+      expect(lockDecision(content, alive([])).verdict).toBe('malformed');
     },
   );
+});
+
+describe('lockHeldBy', () => {
+  const lock = (run?: string) => JSON.stringify({ pid: 10, started: 'x', ...(run ? { run } : {}) });
+
+  it('holds only for the run that took the lock', () => {
+    expect(lockHeldBy(lock(RUN_A), RUN_A)).toEqual({ ok: true });
+    expect(lockHeldBy(lock(RUN_A), RUN_B)).toMatchObject({ ok: false, reason: expect.stringMatching(/another run/) });
+    expect(lockHeldBy(lock(), RUN_A)).toMatchObject({ ok: false, reason: expect.stringMatching(/another run/) });
+  });
+
+  it('refuses with no lock, a malformed lock or a malformed run id', () => {
+    expect(lockHeldBy(null, RUN_A)).toMatchObject({ ok: false, reason: expect.stringMatching(/no lock/) });
+    expect(lockHeldBy('garbage', RUN_A)).toMatchObject({ ok: false, reason: expect.stringMatching(/malformed/) });
+    expect(lockHeldBy(lock(RUN_A), 'pid 10')).toMatchObject({ ok: false, reason: expect.stringMatching(/run id/) });
+  });
 });
 
 // =============================================================================
@@ -355,16 +381,16 @@ describe('parseBuildState', () => {
     });
   });
 
-  it('parses the firing line that names the session which wrote the block', () => {
-    const block = stateBlock(['firings: 1', 'restart: none', 'firing: pid 500 started Thu Nov 12 20:07:42 2026', 'chain 1: -; next: feat.alpha-one', 'stopped: none']);
+  it('parses the firing line that names the run which wrote the block', () => {
+    const block = stateBlock(['firings: 1', 'restart: none', `firing: ${RUN_A}`, 'chain 1: -; next: feat.alpha-one', 'stopped: none']);
     const r = parseBuildState(block);
-    expect(r.ok && r.state).toMatchObject({ firing: 'pid 500 started Thu Nov 12 20:07:42 2026', chains: [{ index: 1 }] });
+    expect(r.ok && r.state).toMatchObject({ firing: RUN_A, chains: [{ index: 1 }] });
   });
 
   it.each([
-    ['a firing line out of place', ['firings: 1', 'firing: pid 500 started x', 'restart: none', 'chain 1: -; next: done', 'stopped: none']],
-    ['a firing line with no pid', ['firings: 1', 'restart: none', 'firing: someone', 'chain 1: -; next: done', 'stopped: none']],
-    ['a firing line and no chain', ['firings: 1', 'restart: none', 'firing: pid 500 started x', 'stopped: none']],
+    ['a firing line out of place', ['firings: 1', `firing: ${RUN_A}`, 'restart: none', 'chain 1: -; next: done', 'stopped: none']],
+    ['a firing line that is not a run id', ['firings: 1', 'restart: none', 'firing: pid 500 started x', 'chain 1: -; next: done', 'stopped: none']],
+    ['a firing line and no chain', ['firings: 1', 'restart: none', `firing: ${RUN_A}`, 'stopped: none']],
   ])('rejects %s', (_name, lines) => {
     expect(parseBuildState(stateBlock(lines)).ok).toBe(false);
   });
@@ -745,15 +771,17 @@ describe('runPreflight', () => {
     lock,
     isAlive: (pid: number) => alive.includes(pid),
     ownerPid: 10,
+    run: RUN_A,
     now: NOW,
   });
-  const ours = JSON.stringify({ pid: 10, started: NOW.toISOString() });
+  const ours = JSON.stringify({ pid: 10, started: NOW.toISOString(), run: RUN_A });
 
   it('checks the report path, takes the lock, then checks the tree', () => {
     const lock = memoryLock();
     const runner = fakeRunner([['git check-ignore', ok('')], ['npx --no-install tsx', safe]]);
     const r = runPreflight(runner, deps(lock));
     expect(r.ok).toBe(true);
+    expect(r.run).toBe(RUN_A);
     expect(r.checks.map(c => c.check)).toEqual(['report-path', 'lock', 'clean-tree']);
     expect(lock.content).toBe(ours);
     expect(runner.calls[0]).toEqual(['git', 'check-ignore', '-q', 'reports/spawn-bead-workers/']);
@@ -773,6 +801,15 @@ describe('runPreflight', () => {
     const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock, [10, 42]));
     expect(r.checks[1].verdict).toBe('fail');
     expect(lock.content).toBe(held);
+  });
+
+  it('refuses an overlapping run from the same process, and leaves its lock', () => {
+    const first = JSON.stringify({ pid: 10, started: 'x', run: RUN_B });
+    const lock = memoryLock(first);
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock));
+    expect(r).toMatchObject({ ok: false, run: null });
+    expect(r.checks[1]).toMatchObject({ verdict: 'fail', reading: expect.stringContaining('pid 10') });
+    expect(lock.content).toBe(first);
   });
 
   it('replaces a stale lock and confirms the record is ours', () => {
@@ -817,6 +854,7 @@ describe('runPreflight', () => {
     const runner = fakeRunner([['git check-ignore', failed('', 1)], ['npx --no-install tsx', safe]]);
     const r = runPreflight(runner, null);
     expect(r.checks.map(c => c.verdict)).toEqual(['fail', 'skipped', 'pass']);
+    expect(r.run).toBeNull();
   });
 });
 
@@ -1285,23 +1323,24 @@ describe('validateRecordedPr', () => {
 // =============================================================================
 
 describe('releaseLock', () => {
-  it('removes a lock this session holds', () => {
-    const lock = memoryLock('{"pid":10,"started":"x"}');
-    expect(releaseLock(lock, 10).verdict).toBe('pass');
+  it('removes the lock this run took', () => {
+    const lock = memoryLock(`{"pid":10,"started":"x","run":"${RUN_A}"}`);
+    expect(releaseLock(lock, RUN_A).verdict).toBe('pass');
     expect(lock.content).toBeNull();
   });
 
   it.each([
-    ['another pid', '{"pid":42,"started":"x"}'],
+    ['another run in the same process', `{"pid":10,"started":"x","run":"${RUN_B}"}`],
+    ['a lock with no run id', '{"pid":10,"started":"x"}'],
     ['a malformed lock', 'garbage'],
   ])('leaves a lock held by %s', (_name, content) => {
     const lock = memoryLock(content);
-    expect(releaseLock(lock, 10).verdict).toBe('fail');
+    expect(releaseLock(lock, RUN_A).verdict).toBe('fail');
     expect(lock.content).toBe(content);
   });
 
   it('passes when there is no lock', () => {
-    expect(releaseLock(memoryLock(), 10)).toMatchObject({ verdict: 'pass', reading: 'no lock' });
+    expect(releaseLock(memoryLock(), RUN_A)).toMatchObject({ verdict: 'pass', reading: 'no lock' });
   });
 });
 
@@ -1325,22 +1364,18 @@ describe('runStillOurs', () => {
   });
 });
 
-const LSTART = 'Thu Nov 12 20:07:42 2026';
-const F500 = `pid 500 started ${LSTART}`;
-
 describe('runWrite', () => {
-  const PS: [string, RunResult] = ['ps -o lstart= -p 500', ok(LSTART)];
   const show = (labels: string[], notes = ANALYSED) => ['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', labels, notes })]))] as [string, RunResult];
   const update: [string, RunResult] = ['bd update', ok('')];
   const firstInput = { chains: [{ levels: [], next: 'feat.alpha-one' }], stopped: 'none' };
   /** The last block an earlier firing wrote: one counted firing, no firing line. */
   const EARLIER = `${ANALYSED}\n\n${BUILDING_BLOCK.replace('firings: 2', 'firings: 1')}`;
-  const write = (runner: Runner, overrides: Partial<WriteInput> = {}) => runWrite(runner, {
-    root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', ownerPid: 500, now: AT, ...overrides,
-  });
+  const write = (runner: Runner, overrides: Partial<WriteInput> = {}, lock: Pick<LockStore, 'read'> = lockOf(RUN_A)) => runWrite(runner, {
+    root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', run: RUN_A, now: AT, ...overrides,
+  }, lock);
 
   it('writes spec:ready -> spec:building and the first block in one bd update, argv only', () => {
-    const runner = fakeRunner([PS, show(['spec:ready']), update]);
+    const runner = fakeRunner([show(['spec:ready']), update]);
     const r = write(runner, { label: 'spec:building', state: firstInput, firing: null });
     expect(r.ok).toBe(true);
     const writes = runner.calls.filter(c => c[1] === 'update');
@@ -1350,27 +1385,27 @@ describe('runWrite', () => {
     expect(argv).toContain('spec:building');
     expect(argv).not.toContain('--notes');
     const notes = argv[argv.indexOf('--append-notes') + 1];
-    expect(parseBuildState(notes)).toMatchObject({ ok: true, state: { firings: 0, restart: 'none', firing: F500 } });
+    expect(parseBuildState(notes)).toMatchObject({ ok: true, state: { firings: 0, restart: 'none', firing: RUN_A } });
   });
 
   it('appends a block with no label flags after a level submit, one firing above the earlier firing\'s count', () => {
-    const runner = fakeRunner([PS, show(['spec:building'], EARLIER), update]);
+    const runner = fakeRunner([show(['spec:building'], EARLIER), update]);
     expect(write(runner).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv).not.toContain('--add-label');
     expect(argv.slice(0, 4)).toEqual(['bd', 'update', 'pv-r', '--append-notes']);
-    expect(argv[4]).toBe(`\n${formatBuildState({ ...INPUT, firings: 2, firing: F500 }, AT).text}`);
+    expect(argv[4]).toBe(`\n${formatBuildState({ ...INPUT, firings: 2, firing: RUN_A }, AT).text}`);
   });
 
   it('derives firings and restart from the notes, whatever the input carries', () => {
-    const runner = fakeRunner([PS, show(['spec:building'], EARLIER), update]);
+    const runner = fakeRunner([show(['spec:building'], EARLIER), update]);
     expect(write(runner, { state: { ...INPUT, firings: 0, restart: 'resume' } }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(parseBuildState(argv[4])).toMatchObject({ ok: true, state: { firings: 2, restart: 'none' } });
   });
 
   it('stalls with the Build state and a separate fenced Build stall block in the same call', () => {
-    const runner = fakeRunner([PS, show(['spec:building']), update]);
+    const runner = fakeRunner([show(['spec:building']), update]);
     const stall = { step: 'chain 1 level 2 build-gate', report: '## Build state\nfirings: 0' };
     const r = write(runner, { label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall });
     expect(r.ok).toBe(true);
@@ -1388,26 +1423,31 @@ describe('runWrite', () => {
     ['the label is not ours', [show(['spec:building'])], 'spec:ready', INPUT, /not a build-scheduled label/],
     ['the last block is malformed', [show(['spec:building'], `${ANALYSED}\n\n## Build state\nfirings: x`)], null, INPUT, /malformed/],
   ] as const)('writes nothing when %s', (_name, routes, label, state, reason) => {
-    const runner = fakeRunner([PS, ...routes, update]);
+    const runner = fakeRunner([...routes, update]);
     const r = write(runner, { label: label as never, state });
     expect(r).toMatchObject({ ok: false, reading: expect.stringMatching(reason) });
     expect(runner.calls.some(c => c[1] === 'update')).toBe(false);
   });
 
-  it('fails closed when the owner pid names no running session', () => {
-    const runner = fakeRunner([['ps', failed('', 1)], show(['spec:building']), update]);
-    expect(write(runner)).toMatchObject({ ok: false, reading: expect.stringMatching(/owner pid 500/) });
-    expect(runner.calls.some(c => c[1] === 'update')).toBe(false);
+  it.each([
+    ['there is no lock', { read: () => null }, /no lock/],
+    ['another run holds the lock', lockOf(RUN_B), /another run/],
+  ])('writes nothing, not even a stall, when %s', (_name, lock, reason) => {
+    const runner = fakeRunner([show(['spec:building']), update]);
+    expect(write(runner, {}, lock)).toMatchObject({ ok: false, reading: expect.stringMatching(reason) });
+    const stall = { step: 'build-state', report: 'r' };
+    expect(write(runner, { label: 'spec:stalled', state: null, stall, firing: null }, lock).ok).toBe(false);
+    expect(runner.calls).toEqual([]);
   });
 
   it('refuses a hostile root id before any call', () => {
-    const runner = fakeRunner([PS, update]);
+    const runner = fakeRunner([update]);
     expect(write(runner, { root: 'pv-r; bd delete pv-x' }).ok).toBe(false);
     expect(runner.calls).toEqual([]);
   });
 
   it('reports a failed bd update', () => {
-    const runner = fakeRunner([PS, show(['spec:building']), ['bd update', failed('conflict', 3)]]);
+    const runner = fakeRunner([show(['spec:building']), ['bd update', failed('conflict', 3)]]);
     expect(write(runner)).toMatchObject({ ok: false });
   });
 
@@ -1417,7 +1457,6 @@ describe('runWrite', () => {
     expect(write(runner, { label: 'spec:stalled', state: null, stall, firing: null }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv[argv.length - 1]).toBe(`\n${formatStallBlock('build-state', 'malformed Build state block')}`);
-    expect(runner.calls.some(c => c[0] === 'ps')).toBe(false);
 
     const bare = fakeRunner([show(['spec:building']), update]);
     expect(write(bare, { label: 'spec:stalled', state: null, stall: null, firing: null }).ok).toBe(false);
@@ -1426,11 +1465,11 @@ describe('runWrite', () => {
 
   it('refuses the stop of a third counted firing that leaves the root building, and takes it as a stall', () => {
     const second = `${ANALYSED}\n\n${BUILDING_BLOCK}`;
-    const refused = fakeRunner([PS, show(['spec:building'], second), update]);
+    const refused = fakeRunner([show(['spec:building'], second), update]);
     expect(write(refused)).toMatchObject({ ok: false, reading: expect.stringMatching(/firing-limit/) });
     expect(refused.calls.some(c => c[1] === 'update')).toBe(false);
 
-    const runner = fakeRunner([PS, show(['spec:building'], second), update]);
+    const runner = fakeRunner([show(['spec:building'], second), update]);
     const stall = { step: 'firing-limit', report: 'three counted firings' };
     expect(write(runner, { label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
@@ -1438,60 +1477,50 @@ describe('runWrite', () => {
   });
 });
 
-describe('firingId', () => {
-  it('names the session by pid and process start time, whitespace collapsed', () => {
-    expect(firingId(500, ' Thu Nov  5 20:07:42 2026\n')).toBe('pid 500 started Thu Nov 5 20:07:42 2026');
-  });
-
-  it.each([['an empty start time', ''], ['shell text', 'x; rm -rf /'], ['a heading', '## Build state']])('refuses %s', (_name, lstart) => {
-    expect(() => firingId(500, lstart)).toThrow(/start time/);
-  });
-});
-
 describe('firingContext', () => {
-  const G = 'pid 499 started Wed Nov 11 09:00:00 2026';
+  const G = RUN_B;
   const block = (firings: number, stopped: string, firing: string | null, restart = 'none') => stateBlock([
     `firings: ${firings}`, `restart: ${restart}`, ...(firing ? [`firing: ${firing}`] : []), 'chain 1: -; next: feat.alpha-one', `stopped: ${stopped}`,
   ]);
   const notes = (...blocks: string[]) => [ANALYSED, ...blocks].join('\n\n');
 
   it('starts at 0 with no block', () => {
-    expect(firingContext(ANALYSED, F500)).toEqual({ ok: true, firing: F500, start: 0, restart: 'none', counted: false });
+    expect(firingContext(ANALYSED, RUN_A)).toEqual({ ok: true, firing: RUN_A, start: 0, restart: 'none', counted: false });
   });
 
   it('starts a new firing from the last block of an earlier one, with or without a firing line', () => {
-    expect(firingContext(notes(block(2, 'budget', G)), F500)).toMatchObject({ start: 2, restart: 'none', counted: false });
-    expect(firingContext(notes(block(1, 'budget', null)), F500)).toMatchObject({ start: 1, counted: false });
+    expect(firingContext(notes(block(2, 'budget', G)), RUN_A)).toMatchObject({ start: 2, restart: 'none', counted: false });
+    expect(firingContext(notes(block(1, 'budget', null)), RUN_A)).toMatchObject({ start: 1, counted: false });
   });
 
   it('keeps the firing\'s starting count across the blocks it has written', () => {
-    expect(firingContext(notes(block(1, 'budget', G), block(2, 'none', F500), block(2, 'none', F500)), F500))
+    expect(firingContext(notes(block(1, 'budget', G), block(2, 'none', RUN_A), block(2, 'none', RUN_A)), RUN_A))
       .toMatchObject({ start: 1, restart: 'none', counted: true });
   });
 
   it('does not count a firing for its first spec:building block', () => {
-    expect(firingContext(notes(block(0, 'none', F500)), F500)).toMatchObject({ start: 0, counted: false });
+    expect(firingContext(notes(block(0, 'none', RUN_A)), RUN_A)).toMatchObject({ start: 0, counted: false });
   });
 
   it('restarts from 0 after stopped: stalled, and resumes only the first block after it', () => {
-    expect(firingContext(notes(block(3, 'stalled', G)), F500)).toMatchObject({ start: 0, restart: 'resume', counted: false });
-    expect(firingContext(notes(block(3, 'stalled', G), block(1, 'none', F500, 'resume')), F500))
+    expect(firingContext(notes(block(3, 'stalled', G)), RUN_A)).toMatchObject({ start: 0, restart: 'resume', counted: false });
+    expect(firingContext(notes(block(3, 'stalled', G), block(1, 'none', RUN_A, 'resume')), RUN_A))
       .toMatchObject({ start: 0, restart: 'none', counted: true });
   });
 
   it('fails on a malformed block it has to read', () => {
-    expect(firingContext(notes(block(1, 'budget', G), '## Build state\nfirings: x'), F500)).toMatchObject({ ok: false, stall: expect.stringMatching(/malformed/) });
+    expect(firingContext(notes(block(1, 'budget', G), '## Build state\nfirings: x'), RUN_A)).toMatchObject({ ok: false, stall: expect.stringMatching(/malformed/) });
   });
 });
 
 describe('applyFiring', () => {
   const ctx = (overrides: Partial<{ start: number; restart: 'none' | 'resume'; counted: boolean }> = {}) => ({
-    firing: F500, start: 1, restart: 'none' as const, counted: false, ...overrides,
+    firing: RUN_A, start: 1, restart: 'none' as const, counted: false, ...overrides,
   });
 
   it('derives firings, restart and the firing line, keeping only chains and stopped from the input', () => {
     expect(applyFiring({ ...INPUT, firings: 3, restart: 'resume', prs: [7] }, null, 'building', ctx()))
-      .toEqual({ firings: 2, restart: 'none', firing: F500, chains: INPUT.chains, stopped: INPUT.stopped });
+      .toEqual({ firings: 2, restart: 'none', firing: RUN_A, chains: INPUT.chains, stopped: INPUT.stopped });
     expect(applyFiring(INPUT, null, 'gate-skipped', ctx())).toMatchObject({ firings: 1 });
     expect(applyFiring(INPUT, null, 'building', ctx({ start: 0, restart: 'resume' }))).toMatchObject({ firings: 1, restart: 'resume' });
   });
@@ -1501,7 +1530,7 @@ describe('applyFiring', () => {
   });
 
   it('writes the first spec:building block at 0 with the firing line', () => {
-    expect(applyFiring(firstInputOf(), 'spec:building', null, ctx({ start: 0 }))).toMatchObject({ firings: 0, restart: 'none', firing: F500 });
+    expect(applyFiring(firstInputOf(), 'spec:building', null, ctx({ start: 0 }))).toMatchObject({ firings: 0, restart: 'none', firing: RUN_A });
   });
 
   it('refuses the stop of the third counted firing that leaves the root building, never its progress blocks', () => {
@@ -1533,7 +1562,6 @@ describe('firing hand-off from build-state to write', () => {
     const root = { ...initial, labels: [...(initial.labels ?? [])] };
     const runner = ((cmd: string, args: string[]) => {
       const line = [cmd, ...args].join(' ');
-      if (cmd === 'ps') return ok(LSTART);
       if (line === 'bd show pv-r --json') return ok(JSON.stringify([root]));
       if (line === 'bd children pv-r --json') return ok(JSON.stringify(children));
       if (line.startsWith(`${STACK} plan`)) return ok(JSON.stringify(plan));
@@ -1553,12 +1581,12 @@ describe('firing hand-off from build-state to write', () => {
     return runner;
   }
 
-  /** The `state` object build-state prints, as the agent copies it into a state file. */
+  /** The `next_state` build-state prints, as the agent copies it into a state file. */
   function printed(runner: Runner) {
     const r = runBuildState(runner, 'pv-r');
     expect(r.ok).toBe(true);
-    if (!r.parse.ok || !r.parse.state) throw new Error('build-state printed no state');
-    return r.parse.state;
+    if (!r.next_state) throw new Error('build-state printed no next_state');
+    return r.next_state;
   }
 
   /** That state with one more submitted level on chain `k` (0-based). */
@@ -1571,18 +1599,27 @@ describe('firing hand-off from build-state to write', () => {
     };
   }
 
-  const write = (runner: Runner, ownerPid: number, state: unknown, overrides: Partial<WriteInput> = {}) => runWrite(runner, {
-    root: 'pv-r', label: null, state, stall: null, firing: 'building', ownerPid, now: AT, ...overrides,
-  });
+  /** A write by firing `n`: every firing's lock names the same pid, as one long-lived process would. */
+  const write = (runner: Runner, n: number, state: unknown, overrides: Partial<WriteInput> = {}) => runWrite(runner, {
+    root: 'pv-r', label: null, state, stall: null, firing: 'building', run: runId(n), now: AT, ...overrides,
+  }, lockOf(runId(n)));
 
   /** Every block's firings and restart, in order. */
   const recorded = (runner: Runner & { root: BuildBead }) =>
     [...(runner.root.notes ?? '').matchAll(/^firings: (\d+)\nrestart: (\w+)$/gm)].map(m => `${m[1]} ${m[2]}`);
 
-  it('counts a start firing once however many blocks it writes, and each later firing once more', () => {
+  it('counts a start firing once however many blocks it writes, and each later firing of the same process once more', () => {
     const runner = memoryRoot(bead({ id: 'pv-r', labels: ['spec:ready'] }));
-    expect(runBuildState(runner, 'pv-r').start).toEqual({ action: 'start', firings: 0, restart: 'none' });
-    const first = { chains: [{ levels: [], next: 'feat.alpha-one' }, { levels: [], next: 'fix.beta-one' }], stopped: 'none' };
+    const started = runBuildState(runner, 'pv-r');
+    expect(started.start).toEqual({ action: 'start', firings: 0, restart: 'none' });
+    expect(started.next_state).toEqual({
+      chains: [{ levels: [], next: null, first_leaf: 'pv-r.1' }, { levels: [], next: null, first_leaf: 'pv-r.4' }],
+      stopped: 'none',
+    });
+    // Unedited, the start state is refused: next must name a branch.
+    expect(write(runner, 600, started.next_state, { label: 'spec:building', firing: null })).toMatchObject({ ok: false, reading: expect.stringMatching(/next/) });
+    const branch: Record<string, string> = { 'pv-r.1': 'feat.alpha-one', 'pv-r.4': 'fix.beta-one' };
+    const first = { ...started.next_state!, chains: started.next_state!.chains.map(c => ({ ...c, next: branch[c.first_leaf!] })) };
     expect(write(runner, 600, first, { label: 'spec:building', firing: null })).toMatchObject({ ok: true });
 
     // One firing: three submits, then a budget stop. None is refused.
@@ -1607,12 +1644,12 @@ describe('firing hand-off from build-state to write', () => {
     expect(runner.root.labels).toContain('spec:stalled');
   });
 
-  it('restarts from build-state\'s state after a stall: the count resets, then rises by one per firing', () => {
+  it('restarts from build-state\'s next_state after a stall: the count resets, then rises by one per firing', () => {
     const stalled = stateBlock(['firings: 3', 'restart: none', 'chain 1: feat.alpha-one → #101; next: feat.alpha-two', 'chain 2: -; next: fix.beta-one', 'stopped: stalled']);
     const runner = memoryRoot(bead({ id: 'pv-r', labels: ['spec:building'], notes: `${ANALYSED}\n\n${stalled}` }));
     expect(runBuildState(runner, 'pv-r').start).toMatchObject({ action: 'restart', firings: 0, restart: 'resume' });
 
-    // build-state's state still reads firings 3; write derives the restart itself.
+    // The last block still reads firings 3; write derives the restart itself.
     expect(write(runner, 700, submitted(runner, 0, 'feat.alpha-two', 102, 'feat.alpha-three'))).toMatchObject({ ok: true });
     expect(write(runner, 700, submitted(runner, 1, 'fix.beta-one', 103, 'done'))).toMatchObject({ ok: true });
     expect(write(runner, 700, submitted(runner, 0, 'feat.alpha-three', 104, 'done'))).toMatchObject({ ok: true });
@@ -1779,9 +1816,21 @@ describe('runBuildState', () => {
     expect(runBuildState(bad, 'pv-r')).toMatchObject({ ok: false, resume: { error: expect.stringMatching(/chains/) } });
   });
 
-  it('starts a spec:ready root without planning a resume', () => {
+  it('starts a spec:ready root with a next_state built from the chain plan, and no resume', () => {
     const r = runBuildState(runner(ANALYSED, ['spec:ready']), 'pv-r');
     expect(r).toMatchObject({ ok: true, start: { action: 'start' }, resume: null });
+    expect(r.next_state).toEqual({
+      chains: [{ levels: [], next: null, first_leaf: 'pv-r.1' }, { levels: [], next: null, first_leaf: 'pv-r.3' }],
+      stopped: 'none',
+    });
+  });
+
+  it('prints the last block\'s chains as next_state on continue, without firings or restart', () => {
+    const r = runBuildState(runner(`${ANALYSED}\n\n${BUILDING_BLOCK}`), 'pv-r');
+    expect(r.next_state).toEqual({
+      chains: [{ levels: [{ branch: 'feat.alpha-one', pr: 101 }], next: 'feat.alpha-two' }, { levels: [], next: 'fix.beta-one' }],
+      stopped: 'none',
+    });
   });
 
   it('stalls on a spec:ready root with a block, and on a plan that no longer matches', () => {
@@ -1955,7 +2004,6 @@ describe('runPublishPr', () => {
     leaf: 'pv-r.2',
     title: 'feat(agents): add the thing\n',
     body: BODY,
-    bodyFile: '/scratch/body.md',
     ...overrides,
   });
   const prView = (overrides: Record<string, unknown> = {}) => ok(JSON.stringify({
@@ -1982,9 +2030,32 @@ describe('runPublishPr', () => {
     const runner = fakeRunner(routes());
     const r = runPublishPr(runner, input({ title: 'feat(agents): `id` $(whoami)\n' }));
     expect(r).toMatchObject({ ok: true, hold: false });
-    expect(runner.calls).toContainEqual(['git', 'fetch', '--quiet', 'origin', 'feat.alpha-one', 'feat.alpha-two']);
+    expect(runner.calls).toContainEqual([
+      'git', 'fetch', '--quiet', 'origin',
+      '+refs/heads/feat.alpha-one:refs/remotes/origin/feat.alpha-one',
+      '+refs/heads/feat.alpha-two:refs/remotes/origin/feat.alpha-two',
+    ]);
     expect(runner.calls).toContainEqual(['git', 'log', '--format=%B', 'origin/feat.alpha-one..origin/feat.alpha-two']);
-    expect(runner.calls[runner.calls.length - 1]).toEqual(['gh', 'pr', 'edit', '102', '--title', 'feat(agents): `id` $(whoami)', '--body-file', '/scratch/body.md']);
+    const edit = runner.calls[runner.calls.length - 1];
+    expect(edit.slice(0, 7)).toEqual(['gh', 'pr', 'edit', '102', '--title', 'feat(agents): `id` $(whoami)', '--body-file']);
+  });
+
+  it('publishes the body it checked from a file of its own, removed afterwards', () => {
+    let published: { path: string; text: string } | null = null;
+    const base = fakeRunner(routes());
+    const runner = ((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[1] === 'edit') {
+        const path = args[args.indexOf('--body-file') + 1];
+        published = { path, text: readFileSync(path, 'utf-8') };
+      }
+      return base(cmd, args);
+    }) as Runner;
+    expect(runPublishPr(runner, input()).ok).toBe(true);
+    expect(published).not.toBeNull();
+    const { path, text } = published!;
+    expect(text).toBe(BODY);
+    expect(path).toMatch(/publish-pr-[^/]+\/body\.md$/);
+    expect(existsSync(path)).toBe(false);
   });
 
   it.each([['security'], ['cve-watch']])('holds a %s leaf and touches no PR', label => {
@@ -2050,7 +2121,7 @@ describe('runSubmitCheck', () => {
   it('reads a first level against freshly fetched origin/main', () => {
     const runner = fakeRunner(routes());
     expect(runSubmitCheck(runner, { ...input, base: 'main' }).ok).toBe(true);
-    expect(runner.calls).toContainEqual(['git', 'fetch', '--quiet', 'origin', 'main']);
+    expect(runner.calls).toContainEqual(['git', 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
     expect(runner.calls).toContainEqual(['git', 'log', '--format=%B', 'origin/main..HEAD']);
   });
 
