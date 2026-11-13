@@ -6,6 +6,7 @@ import { Op } from 'sequelize';
 
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import { waitFor } from '@/server/common/test/helpers/emit-and-settle';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -703,6 +704,10 @@ describe('Cancel / Restore Event Occurrence API (date-based)', () => {
           }],
         });
       expect(response.status).toBe(201);
+      // The ActivityPub eventCreated listener writes in its own transaction
+      // after this request returns. In-memory SQLite shares one connection, so
+      // a later request's transaction would collide with it; wait for its row.
+      await waitFor(async () => (await EventObjectEntity.count({ where: { event_id: response.body.id } })) > 0);
       return response.body.id;
     }
 
