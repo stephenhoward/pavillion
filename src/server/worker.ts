@@ -14,6 +14,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
+import UnverifiedReportCleanupService from '@/server/moderation/service/unverified-report-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { FollowBackfillService, BackfillRateLimitError } from '@/server/activitypub/service/backfill';
@@ -75,6 +76,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const accountsInterface = new AccountsInterface();
   const alertsService = new AlertsService(emailInterface, accountsInterface);
   const ipCleanupService = new IpCleanupService();
+  const unverifiedReportCleanupService = new UnverifiedReportCleanupService();
   const eventBus = new EventEmitter();
   const calendarInterface = new CalendarInterface(eventBus);
   calendarInterface.setConfigurationInterface(new ConfigurationInterface());
@@ -203,6 +205,21 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     }
     catch (error) {
       logger.error({ err: error }, 'IP cleanup failed');
+      throw error;
+    }
+  });
+
+  // Expired unverified report cleanup (runs daily at 3:30 AM). Deletes
+  // anonymous reports whose verification link expired, ending retention of
+  // the reporter's email hash and IP data.
+  await queue.schedule('moderation:unverified-report-cleanup', '30 3 * * *', async () => {
+    logger.info('Executing moderation:unverified-report-cleanup job');
+    try {
+      const result = await unverifiedReportCleanupService.cleanupExpiredUnverifiedReports();
+      logger.info(result, 'Unverified report cleanup completed');
+    }
+    catch (error) {
+      logger.error({ err: error }, 'Unverified report cleanup failed');
       throw error;
     }
   });
@@ -346,6 +363,7 @@ function logStartupMessages(): void {
     jobs: {
       'backup:daily': `next: ${getNextRunTime('0 2 * * *')}`,
       'moderation:ip-cleanup': `next: ${getNextRunTime('0 3 * * *')}`,
+      'moderation:unverified-report-cleanup': `next: ${getNextRunTime('30 3 * * *')}`,
       'disk:check': `next: ${getNextRunTime('0 * * * *')}`,
       'notifications:cleanup': `next: ${getNextRunTime('0 4 * * *')}`,
       'inbox:cleanup': `next: ${getNextRunTime('0 5 * * *')}`,

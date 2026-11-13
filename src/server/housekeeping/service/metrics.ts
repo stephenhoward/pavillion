@@ -23,6 +23,7 @@ export const MONITORED_QUEUES = [
   'backup:daily',
   'disk:check',
   'moderation:ip-cleanup',
+  'moderation:unverified-report-cleanup',
   'notifications:cleanup',
   'inbox:cleanup',
   'instances:refresh',

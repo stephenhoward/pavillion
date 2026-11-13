@@ -9,6 +9,7 @@ import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import ModerationService from '@/server/moderation/service/moderation';
+import UnverifiedReportCleanupService from '@/server/moderation/service/unverified-report-cleanup';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import {
   ReportNotFoundError,
@@ -618,6 +619,8 @@ describe('ModerationService', () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(true);
       sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
+      sandbox.stub(UnverifiedReportCleanupService.prototype, 'cleanupExpiredUnverifiedReports')
+        .resolves({ reportsDeleted: 0, reporterRowsDeleted: 0 });
 
       await expect(service.createReport({
         eventId: 'event-1',

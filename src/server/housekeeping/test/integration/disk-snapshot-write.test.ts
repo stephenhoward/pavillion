@@ -7,6 +7,7 @@ import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
+import UnverifiedReportCleanupService from '@/server/moderation/service/unverified-report-cleanup';
 import NotificationRetentionCleanupService from '@/server/notifications/service/retention-cleanup';
 import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
@@ -46,6 +47,7 @@ describe('Worker disk snapshot write', () => {
     sandbox.stub(AlertsService.prototype, 'sendDiskWarning').resolves();
     sandbox.stub(AlertsService.prototype, 'sendDiskCritical').resolves();
     sandbox.stub(IpCleanupService.prototype, 'cleanupExpiredIpData').resolves({ hashCleared: 0, subnetCleared: 0 });
+    sandbox.stub(UnverifiedReportCleanupService.prototype, 'cleanupExpiredUnverifiedReports').resolves({ reportsDeleted: 0, reporterRowsDeleted: 0 });
     sandbox.stub(NotificationRetentionCleanupService.prototype, 'cleanupExpiredNotifications').resolves({
       recipientsDeleted: 0,
       activitiesDeleted: 0,
