@@ -176,7 +176,7 @@ If a prior run was interrupted:
 4. Re-run the Phase 2 enrichment gate on the remaining ready beads.
 5. Resume from the current wave state, reusing the standard Phase 3-6 flow.
 
-An interrupted scheduled run needs no `--resume`: the next `--scheduled` firing resumes its `spec:building` root from the root's last Build state block ([`build-scheduled`](../skills/build-scheduled/SKILL.md) "Resume"), and Phase 1 refuses that root attended.
+An interrupted scheduled run needs no `--resume`: the next `--scheduled` firing resumes its `spec:building` root from the root's last Build state block ([`build-scheduled`](../skills/build-scheduled/SKILL.md) "Resume and stop points"), and Phase 1 refuses that root attended.
 
 ### Scheduled
 

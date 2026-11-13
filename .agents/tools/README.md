@@ -107,8 +107,8 @@ Things that look wrong but are not:
 Each of those directories is self-contained: the CLI, its `lib/`, its
 `test/`, and a local copy of the `run()` helper in `lib/shared.ts` here.
 One import crosses skills on purpose: `build-scheduled`'s `lib/build.ts`
-imports `STATE_LABELS`, `stateWriteArgs` and the heading test from
-`plan-scheduled`'s `lib/spec.ts`, because the build stage consumes the
+imports `labelsOwnedBy`, `stateWriteArgs` and `hasHeading` (with the
+types `Bead` and `StateLabel`) from `plan-scheduled`'s `lib/spec.ts`, because the build stage consumes the
 planner's `spec:ready` and both state writes must clear the same label set.
 `build-scheduled` also keeps its own no-shell runner (`execFileSync` with an
 argv array) instead of a `run()` copy.
