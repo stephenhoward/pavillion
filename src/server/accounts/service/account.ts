@@ -59,6 +59,14 @@ export default class AccountService {
   ) {}
 
   /**
+   * Language for emails to recipients who have no account (invitees, applicants),
+   * so no stored language exists: the instance default language.
+   */
+  private async getNoAccountLanguage(): Promise<string> {
+    return this.configurationInterface.getDefaultLanguage();
+  }
+
+  /**
    * Set the CalendarInterface for enabling calendar editor invitation acceptance functionality.
    * This method is called after domain initialization to avoid circular dependencies.
    * TODO: Refactor invitations into their own domain to eliminate this circular dependency.
@@ -285,7 +293,7 @@ export default class AccountService {
         application,
         existingApplication.confirmation_token,
       );
-      await this.emailInterface.sendEmail(confirmationMessage.buildMessage('en'));
+      await this.emailInterface.sendEmail(confirmationMessage.buildMessage(await this.getNoAccountLanguage()));
       return true;
     }
 
@@ -299,7 +307,7 @@ export default class AccountService {
       await existingApplication.save();
 
       const ackMessage = new ApplicationAcknowledgmentEmail(existingApplication.toModel());
-      await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
+      await this.emailInterface.sendEmail(ackMessage.buildMessage(await this.getNoAccountLanguage()));
       return true;
     }
 
@@ -323,7 +331,7 @@ export default class AccountService {
 
     const application = applicationEntity.toModel();
     const confirmationMessage = new ApplicationConfirmationEmail(application, confirmationToken);
-    await this.emailInterface.sendEmail(confirmationMessage.buildMessage('en'));
+    await this.emailInterface.sendEmail(confirmationMessage.buildMessage(await this.getNoAccountLanguage()));
 
     return true;
   }
@@ -412,7 +420,7 @@ export default class AccountService {
     // The model carries the email address; status/timestamp on the model
     // reflect pre-update values but are not surfaced to the recipient.
     const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel());
-    await this.emailInterface.sendEmail(ackMessage.buildMessage('en'));
+    await this.emailInterface.sendEmail(ackMessage.buildMessage(await this.getNoAccountLanguage()));
 
     // Notify instance administrators that an application has reached the
     // `pending` review queue. The status flip already committed above, so any
@@ -704,7 +712,7 @@ export default class AccountService {
       ? new EditorInvitationEmail(invitation.toModel(), invitation.invitation_code, calendar, context)
       : new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code, context);
 
-    await this.emailInterface.sendEmail(message.buildMessage('en'));
+    await this.emailInterface.sendEmail(message.buildMessage(await this.getNoAccountLanguage()));
     return true;
   }
 
@@ -797,7 +805,7 @@ export default class AccountService {
 
     if (!silent) {
       const message = new ApplicationRejectedEmail(application.toModel());
-      await this.emailInterface.sendEmail(message.buildMessage('en'));
+      await this.emailInterface.sendEmail(message.buildMessage(await this.getNoAccountLanguage()));
     }
   }
 

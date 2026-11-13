@@ -6,6 +6,7 @@ import config from 'config';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 
 import { Account } from '@/common/model/account';
+import AccountInvitation from '@/common/model/invitation';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import EmailInterface from '@/server/email/interface';
@@ -1934,4 +1935,106 @@ describe('sendNewAccountInvite', () => {
     expect(getCalendar.calledWith('calendar-id')).toBe(true);
     expect(sendEmail.firstCall.args[0].subject).toContain('Town Hall');
   });
+});
+
+describe('account-less email language', () => {
+  const sb = sinon.createSandbox();
+  let accountService: AccountService;
+  let emailInterface: EmailInterface;
+  let defaultLanguage: sinon.SinonStub;
+
+  const SUBJECTS = {
+    en: {
+      invitation: "You're invited to join",
+      confirmation: 'Confirm your email address',
+      acknowledgment: 'Account Application Received',
+      rejection: 'Regarding Your Account Application',
+    },
+    es: {
+      invitation: 'Invitación para unirte a',
+      confirmation: 'Confirma tu dirección de correo electrónico',
+      acknowledgment: 'Solicitud de cuenta recibida',
+      rejection: 'Sobre tu solicitud de cuenta',
+    },
+  };
+
+  const pendingApplication = (status: string, token?: string) => AccountApplicationEntity.build({
+    id: 'app-id',
+    email: 'applicant@example.com',
+    message: 'hi',
+    status,
+    status_timestamp: new Date(),
+    confirmation_token: token ?? null,
+    confirmation_token_expiration: token ? new Date(Date.now() + 60 * 60 * 1000) : null,
+  });
+
+  beforeEach(() => {
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(new EventEmitter(), new ConfigurationInterface(), new SetupInterface(), emailInterface);
+    defaultLanguage = sb.stub(ConfigurationInterface.prototype, 'getDefaultLanguage');
+    sb.stub(ConfigurationInterface.prototype, 'getAllSettings').resolves({ registrationMode: 'apply' });
+    sb.stub(accountService, 'getAccountByEmail').resolves(undefined);
+  });
+
+  afterEach(() => {
+    sb.restore();
+  });
+
+  for (const lang of ['es', 'en'] as const) {
+    describe(`instance default language ${lang}`, () => {
+      let emailStub: sinon.SinonStub;
+
+      beforeEach(() => {
+        defaultLanguage.resolves(lang);
+        emailStub = sb.stub(emailInterface, 'sendEmail').resolves();
+      });
+
+      it('invitation', async () => {
+        const invitation = AccountInvitationEntity.build({ id: 'i', email: 'invitee@example.com', invitation_code: 'c' });
+        const inviter = new Account('a', 'admin', 'admin@pavillion.dev');
+        sb.stub(invitation, 'toModel').returns(new AccountInvitation('i', 'invitee@example.com', inviter));
+        await accountService.sendNewAccountInvite(inviter, invitation);
+        expect(emailStub.firstCall.args[0].subject).toContain(SUBJECTS[lang].invitation);
+      });
+
+      it('new application confirmation', async () => {
+        sb.stub(AccountApplicationEntity, 'findOne').resolves(undefined);
+        sb.stub(AccountApplicationEntity.prototype, 'save').resolves();
+        await accountService.applyForNewAccount('new@example.com', 'hi');
+        expect(emailStub.firstCall.args[0].subject).toBe(SUBJECTS[lang].confirmation);
+      });
+
+      it('resend confirmation', async () => {
+        const existing = pendingApplication('pending_confirmation', 'b'.repeat(32));
+        sb.stub(existing, 'save').resolves();
+        sb.stub(AccountApplicationEntity, 'findOne').resolves(existing);
+        await accountService.applyForNewAccount('applicant@example.com', 'hi');
+        expect(emailStub.firstCall.args[0].subject).toBe(SUBJECTS[lang].confirmation);
+      });
+
+      it('duplicate acknowledgment', async () => {
+        const existing = pendingApplication('pending');
+        sb.stub(existing, 'save').resolves();
+        sb.stub(AccountApplicationEntity, 'findOne').resolves(existing);
+        await accountService.applyForNewAccount('applicant@example.com', 'hi');
+        expect(emailStub.firstCall.args[0].subject).toBe(SUBJECTS[lang].acknowledgment);
+      });
+
+      it('post-confirm acknowledgment', async () => {
+        const token = 'c'.repeat(32);
+        sb.stub(AccountApplicationEntity, 'findOne').resolves(pendingApplication('pending_confirmation', token));
+        sb.stub(AccountApplicationEntity, 'update').resolves([1] as unknown as [number]);
+        await accountService.confirmAccountApplication(token);
+        expect(emailStub.firstCall.args[0].subject).toBe(SUBJECTS[lang].acknowledgment);
+      });
+
+      it('non-silent rejection', async () => {
+        const application = pendingApplication('pending');
+        sb.stub(application, 'save').resolves();
+        sb.stub(AccountApplicationEntity, 'findByPk').resolves(application);
+        await accountService.rejectAccountApplication('app-id', false);
+        expect(emailStub.firstCall.args[0].subject).toBe(SUBJECTS[lang].rejection);
+      });
+    });
+  }
 });
