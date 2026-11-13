@@ -192,6 +192,33 @@ describe('Widget Admin UI Components', () => {
       expect(colorModeOptions.length).toBe(3); // auto, light, dark
     });
 
+    it('should disable the inputs until the initial config load resolves', async () => {
+      let resolveGet: (value: unknown) => void = () => {};
+      axiosGetStub.returns(new Promise((resolve) => { resolveGet = resolve; }));
+      const wrapper = mount(WidgetConfig, {
+        props: {
+          calendarId: 'test-calendar-id',
+          calendarUrlName: 'my-calendar',
+        },
+        global: {
+          plugins: [[I18NextVue, { i18next }]],
+        },
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const inputs = () => [
+        ...wrapper.findAll('button.view-mode-card'),
+        wrapper.find('input[type="color"]'),
+        wrapper.find('select#colorMode'),
+      ];
+      expect(inputs().every(el => el.attributes('disabled') !== undefined)).toBe(true);
+
+      resolveGet({ data: defaultConfig });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(inputs().every(el => el.attributes('disabled') === undefined)).toBe(true);
+    });
+
     it('should update configuration state when options change', async () => {
       axiosGetStub.resolves({ data: defaultConfig });
       const wrapper = mount(WidgetConfig, {

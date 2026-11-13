@@ -139,10 +139,12 @@ async function saveWidgetConfig(
   const widgetConfig = page.locator('.widget-config');
   await expect(widgetConfig).toBeVisible({ timeout: 15000 });
 
-  // Wait for the initial GET to populate the form before mutating it.
-  // The save button is disabled while the form is in its loaded/clean state.
+  // The form's inputs are disabled until the initial GET resolves. A disabled
+  // save button is no signal: it is also disabled before the load lands, and a
+  // late GET would reset the form and discard the edits below.
   const saveButton = widgetConfig.locator('button.save-button');
-  await expect(saveButton).toBeDisabled({ timeout: 10000 });
+  await expect(widgetConfig.locator('#colorMode')).toBeEnabled({ timeout: 10000 });
+  await expect(saveButton).toBeDisabled();
 
   if (options.view !== undefined) {
     const card = widgetConfig.locator('button.view-mode-card').filter({ hasText: options.view });

@@ -17,6 +17,7 @@
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'list' }"
             :aria-pressed="state.viewMode === 'list'"
+            :disabled="state.isLoading"
             @click="setViewMode('list')"
           >
             <div class="view-mode-card__illustration">
@@ -51,6 +52,7 @@
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'week' }"
             :aria-pressed="state.viewMode === 'week'"
+            :disabled="state.isLoading"
             @click="setViewMode('week')"
           >
             <div class="view-mode-card__illustration">
@@ -89,6 +91,7 @@
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'month' }"
             :aria-pressed="state.viewMode === 'month'"
+            :disabled="state.isLoading"
             @click="setViewMode('month')"
           >
             <div class="view-mode-card__illustration">
@@ -143,6 +146,7 @@
               id="accentColor"
               v-model="state.accentColor"
               type="color"
+              :disabled="state.isLoading"
               class="color-input"
               :aria-invalid="!!state.fieldErrors.accentColor"
               :aria-describedby="state.fieldErrors.accentColor ? 'accentColor-error' : undefined"
@@ -167,6 +171,7 @@
           <select
             id="colorMode"
             v-model="state.colorMode"
+            :disabled="state.isLoading"
             :aria-invalid="!!state.fieldErrors.colorMode"
             :aria-describedby="state.fieldErrors.colorMode ? 'colorMode-error' : undefined"
             @change="clearFieldError('colorMode')"
@@ -266,6 +271,7 @@ const state = reactive({
   viewMode: WIDGET_CONFIG_DEFAULTS.view,
   accentColor: WIDGET_CONFIG_DEFAULTS.accentColor,
   colorMode: WIDGET_CONFIG_DEFAULTS.colorMode,
+  isLoading: true,
   isSaving: false,
   successMessage: '',
   errorMessage: '',
@@ -352,6 +358,9 @@ const refreshSnapshot = () => {
  * On failure, fall back to defaults (already initialized).
  */
 const loadConfig = async () => {
+  // Inputs stay disabled until the response lands, so an edit made while the
+  // request is in flight cannot be overwritten by the loaded values.
+  state.isLoading = true;
   try {
     const encodedId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     const response = await axios.get(`/api/v1/calendars/${encodedId}/widget/config`);
@@ -364,6 +373,9 @@ const loadConfig = async () => {
   catch (error) {
     console.error('Error loading widget config:', error);
     state.errorMessage = t('error_loading');
+  }
+  finally {
+    state.isLoading = false;
   }
 };
 
