@@ -12,7 +12,8 @@
  *     priorEpicGate, selectRoot, evaluateGates, scanNotes, parseBuildState,
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
- *     formatBuildState, formatStallBlock, writeGuard, applyFiring,
+ *     formatBuildState, formatStallBlock, writeGuard, firingId, firingContext,
+ *     applyFiring,
  *     recordedPrExpectations, validateRecordedPr, prTextCheck, securityHold,
  *     validatePublishTarget
  *   CLI helpers (injectable Runner): execRunner, readBeads, readOpenPrs,
@@ -287,6 +288,8 @@ export interface BuildState {
   restart: 'none' | 'resume';
   chains: BuildChain[];
   stopped: string;
+  /** The session that wrote the block (firingId), or null on a block without the line. */
+  firing: string | null;
   /** Every recorded PR number, in chain order. */
   prs: number[];
 }
@@ -329,14 +332,13 @@ export function scanNotes(notes: string): NotesScan {
   return { lines, headings, openFence: fence };
 }
 
-/** The body lines of the last unfenced `## Build state` heading, or null. */
-function lastStateBody(notes: string): string[] | null {
+/** The body lines of every unfenced `## Build state` heading, oldest first. */
+function stateBodies(notes: string): string[][] {
   const { lines, headings } = scanNotes(notes);
-  const starts = headings.filter(i => STATE_HEADING.test(lines[i]));
-  if (!starts.length) return null;
-  const start = starts[starts.length - 1];
-  const end = headings.find(i => i > start) ?? lines.length;
-  return lines.slice(start + 1, end).filter(l => l.trim() !== '');
+  return headings.filter(i => STATE_HEADING.test(lines[i])).map(start => {
+    const end = headings.find(i => i > start) ?? lines.length;
+    return lines.slice(start + 1, end).filter(l => l.trim() !== '');
+  });
 }
 
 function validBranch(name: string): boolean {
@@ -344,20 +346,30 @@ function validBranch(name: string): boolean {
 }
 
 /**
- * Strict parse of the last `## Build state` block (shape in SKILL.md).
- * Headings inside fenced text — a `## Build stall` report — never count. A
- * malformed last block is a stall reason; there is no fallback to an
- * earlier block. No block at all is `state: null`.
+ * Strict parse of the last `## Build state` block, the shape
+ * formatBuildState writes. Headings inside fenced text — a `## Build stall`
+ * report — never count. A malformed last block is a stall reason; there is
+ * no fallback to an earlier block. No block at all is `state: null`.
  */
 export function parseBuildState(notes: string | undefined): BuildStateParse {
-  const body = lastStateBody(notes ?? '');
-  if (body === null) return { ok: true, state: null };
+  const bodies = stateBodies(notes ?? '');
+  if (!bodies.length) return { ok: true, state: null };
+  return parseStateBody(bodies[bodies.length - 1]);
+}
+
+/** A firing's identity: the session's pid and its process start time. */
+const FIRING_ID = /^pid [1-9][0-9]{0,9} started [A-Za-z0-9:]+(?: [A-Za-z0-9:]+){0,7}$/;
+
+function parseStateBody(body: string[]): BuildStateParse {
   const bad = (what: string, line?: string): BuildStateParse => ({
     ok: false,
     stall: `malformed Build state block: ${what}${line === undefined ? '' : ` (line: ${JSON.stringify(line)})`}`,
   });
 
-  if (body.length < 4) return bad(`expected firings, restart, chain and stopped lines, got ${body.length} lines`);
+  // The firing line is optional: a block without it reads as an earlier firing's.
+  const hasFiring = body[2]?.startsWith('firing: ') ?? false;
+  const head = hasFiring ? 3 : 2;
+  if (body.length < head + 2) return bad(`expected firings, restart, chain and stopped lines, got ${body.length} lines`);
 
   const firings = body[0].match(/^firings: (\d+)$/);
   if (!firings) return bad('first line must be "firings: <n>"', body[0]);
@@ -367,11 +379,14 @@ export function parseBuildState(notes: string | undefined): BuildStateParse {
   const restart = body[1].match(/^restart: (none|resume)$/);
   if (!restart) return bad('second line must be "restart: none | resume"', body[1]);
 
+  const firing = hasFiring ? body[2].slice('firing: '.length) : null;
+  if (firing !== null && !FIRING_ID.test(firing)) return bad('firing must be "pid <n> started <time>"', body[2]);
+
   const stopped = body[body.length - 1].match(/^stopped: (\S.*)$/);
   if (!stopped) return bad('last line must be "stopped: <reason | none>"', body[body.length - 1]);
 
   const chains: BuildChain[] = [];
-  for (const line of body.slice(2, -1)) {
+  for (const line of body.slice(head, -1)) {
     const m = line.match(/^chain (\d+): (.+); next: (\S+)$/);
     if (!m) return bad('expected "chain <k>: <levels>; next: <branch|done>"', line);
     const index = Number(m[1]);
@@ -400,6 +415,7 @@ export function parseBuildState(notes: string | undefined): BuildStateParse {
       restart: restart[1] as 'none' | 'resume',
       chains,
       stopped: stopped[1],
+      firing,
       prs: chains.flatMap(c => c.levels.map(l => l.pr)),
     },
   };
@@ -714,12 +730,15 @@ function stamp(at: Date): string {
  * to.
  */
 export function formatBuildState(input: unknown, at: Date): { text: string; state: BuildState } {
-  const s = input as { firings?: unknown; restart?: unknown; chains?: unknown; stopped?: unknown } | null;
+  const s = input as { firings?: unknown; restart?: unknown; firing?: unknown; chains?: unknown; stopped?: unknown } | null;
   if (typeof s !== 'object' || s === null || Array.isArray(s)) throw new Error('Build state input must be an object');
   if (!Number.isSafeInteger(s.firings) || (s.firings as number) < 0 || (s.firings as number) > MAX_FIRINGS) {
     throw new Error(`firings must be an integer 0-${MAX_FIRINGS}`);
   }
   if (s.restart !== 'none' && s.restart !== 'resume') throw new Error('restart must be none or resume');
+  if (s.firing != null && (typeof s.firing !== 'string' || !FIRING_ID.test(s.firing))) {
+    throw new Error('firing must be "pid <n> started <time>"');
+  }
   if (typeof s.stopped !== 'string' || !STOPPED.test(s.stopped)) {
     throw new Error('stopped must be one line of 1-160 printable characters');
   }
@@ -744,6 +763,7 @@ export function formatBuildState(input: unknown, at: Date): { text: string; stat
     `## Build state (${stamp(at)})`,
     `firings: ${s.firings}`,
     `restart: ${s.restart}`,
+    ...(s.firing == null ? [] : [`firing: ${s.firing}`]),
     ...chainLines,
     `stopped: ${s.stopped}`,
   ].join('\n');
@@ -838,30 +858,84 @@ function continuityGuard(notes: string | undefined, state: BuildState): string |
 const FIRING_KINDS: FiringKind[] = ['building', 'ended', 'gate-skipped', 'dry-run', 'decision-blocked', 'kill-switch'];
 
 /**
- * The state a write records, with `firings` computed from the count the
- * firing started with (build-state's `start.firings`, which the input
- * carries) and how the firing ran. The first `spec:building` block takes
- * no firing; every other block needs one; `spec:built` is an `ended`
- * firing. A stop that would leave the root spec:building on its
- * MAX_FIRINGS-th counted firing is refused: write spec:stalled instead.
+ * The session a firing runs in: the agent session's pid (`--owner-pid
+ * $PPID`, as preflight takes it) and that process's start time from
+ * `ps -o lstart=`, so a pid reused by a later session is a new firing.
  */
-export function applyFiring(input: unknown, label: string | null, firing: string | null): unknown {
-  if (label === 'spec:building' || input === null) {
-    if (firing !== null) throw new Error(`--firing does not go with ${label ?? 'a stall with no Build state block'}`);
-    return input;
+export function firingId(pid: number, lstart: string): string {
+  const id = `pid ${pid} started ${lstart.trim().replace(/\s+/g, ' ')}`;
+  if (!FIRING_ID.test(id)) throw new Error(`owner pid ${pid}: unreadable process start time ${JSON.stringify(lstart)}`);
+  return id;
+}
+
+/** What a write in firing `firing` derives from the root's notes. */
+export interface FiringContext {
+  firing: string;
+  /** The count the firing started from: the last block an earlier firing wrote, or 0 after a stall. */
+  start: number;
+  /** `resume` only on the first block after one that reads `stopped: stalled`. */
+  restart: 'none' | 'resume';
+  /** A block this firing already wrote recorded it as counted. */
+  counted: boolean;
+}
+
+/**
+ * Derive the firing's starting count and restart from the notes, so the
+ * agent never counts. Blocks are walked back from the last while they carry
+ * this firing's line; the first one that does not (or none) is where the
+ * firing started. Every block one firing writes therefore carries the same
+ * count, however often `build-state` is re-read between them.
+ */
+export function firingContext(notes: string | undefined, firing: string): { ok: true } & FiringContext | { ok: false; stall: string } {
+  const bodies = stateBodies(notes ?? '');
+  const own: number[] = [];
+  let start = 0;
+  let restart: 'none' | 'resume' = 'none';
+  for (let i = bodies.length - 1; i >= 0; i--) {
+    const parsed = parseStateBody(bodies[i]);
+    if (!parsed.ok) return parsed;
+    const state = parsed.state as BuildState;
+    if (i === bodies.length - 1 && state.stopped === 'stalled') restart = 'resume';
+    if (state.firing !== firing) {
+      start = state.stopped === 'stalled' ? 0 : state.firings;
+      break;
+    }
+    own.push(state.firings);
+  }
+  return { ok: true, firing, start, restart, counted: own.some(n => n > start) };
+}
+
+/**
+ * The state a write records. Only `chains` and `stopped` come from the
+ * input (build-state's `state`, edited); `firings`, `restart` and the
+ * firing line are derived from the notes (firingContext), whatever the
+ * input carries. The first `spec:building` block takes no firing kind;
+ * every other block needs one; `spec:built` is an `ended` firing. Once a
+ * block counted the firing, it stays counted. A stop that would leave the
+ * root spec:building on its MAX_FIRINGS-th counted firing is refused:
+ * write spec:stalled instead.
+ */
+export function applyFiring(input: unknown, label: string | null, firing: string | null, ctx: FiringContext | null): unknown {
+  if (input === null) {
+    if (firing !== null) throw new Error('--firing does not go with a stall with no Build state block');
+    return null;
+  }
+  if (ctx === null) throw new Error('a Build state block needs the firing it is written in');
+  const s = input as { chains?: unknown; stopped?: unknown };
+  const own = { chains: s?.chains, stopped: s?.stopped, firing: ctx.firing };
+  if (label === 'spec:building') {
+    if (firing !== null) throw new Error('--firing does not go with spec:building');
+    return { firings: 0, restart: 'none', ...own };
   }
   if (firing === null) throw new Error(`--firing is required: one of ${FIRING_KINDS.join(', ')}`);
   if (!(FIRING_KINDS as string[]).includes(firing)) throw new Error(`unknown firing ${firing}: one of ${FIRING_KINDS.join(', ')}`);
   if (label === 'spec:built' && firing !== 'ended') throw new Error('spec:built is written by an ended firing');
-  const s = input as { firings?: unknown; stopped?: unknown };
-  // An out-of-range count is left for formatBuildState to refuse, never clamped into range.
-  const start = s?.firings;
-  if (typeof start !== 'number' || !Number.isSafeInteger(start) || start < 0 || start > MAX_FIRINGS) return input;
-  const next = nextFiringCount(start, firing as FiringKind);
+  const kind = ctx.counted && firing !== 'ended' ? 'building' : firing as FiringKind;
+  const next = nextFiringCount(ctx.start, kind);
   if (next.stall && label === null && s.stopped !== 'none') {
     throw new Error(`counted firing ${next.count} still leaves the root spec:building: write spec:stalled with --stall-step firing-limit`);
   }
-  return { ...s, firings: next.count };
+  return { firings: next.count, restart: ctx.restart, ...own };
 }
 
 // =============================================================================
@@ -1320,32 +1394,58 @@ export interface WriteInput {
   stall: { step: string; report: string } | null;
   /** How this firing ran (applyFiring); null only on the first spec:building block or a block-less stall. */
   firing: string | null;
+  /** The agent session's pid ($PPID), which with its start time names the firing. */
+  ownerPid: number;
   now: Date;
 }
 
 /**
- * The one write path for the root: compute `firings`, format the blocks,
- * re-read the root and apply the write guard (the kill switch included),
- * then one `bd update` with the state-write flags and `--append-notes`,
- * through argv only. Any refusal writes nothing.
+ * The one write path for the root: name the firing, re-read the root,
+ * derive `firings` and `restart` from its notes, format the blocks, apply
+ * the write guard (the kill switch included), then one `bd update` with
+ * the state-write flags and `--append-notes`, through argv only. Any
+ * refusal writes nothing.
  */
 export function runWrite(runner: Runner, input: WriteInput): { ok: boolean; reading: string } {
   const refuse = (reading: string) => ({ ok: false, reading });
+  const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
   let flags: string[];
-  let state: { text: string; state: BuildState } | null;
   let stall: string | null;
   try {
     assertRootId(input.root);
     flags = input.label === null ? [] : buildStateWriteArgs(input.label);
-    const counted = applyFiring(input.state, input.label, input.firing);
-    state = counted === null ? null : formatBuildState(counted, input.now);
     stall = input.stall === null ? null : formatStallBlock(input.stall.step, input.stall.report);
   }
   catch (err) {
-    return refuse(err instanceof Error ? err.message : String(err));
+    return refuse(message(err));
   }
+
+  let firing: string | null = null;
+  if (input.state !== null) {
+    if (!Number.isSafeInteger(input.ownerPid) || input.ownerPid <= 0) return refuse(`bad owner pid ${input.ownerPid}`);
+    const ps = runner('ps', ['-o', 'lstart=', '-p', String(input.ownerPid)]);
+    if (ps.exitCode !== 0 || ps.stdout === '') return refuse(`owner pid ${input.ownerPid} is not a running session`);
+    try {
+      firing = firingId(input.ownerPid, ps.stdout);
+    }
+    catch (err) {
+      return refuse(message(err));
+    }
+  }
+
   const root = attempt(() => readBead(runner, input.root));
   if (isFailure(root)) return refuse(root.error);
+
+  let state: { text: string; state: BuildState } | null;
+  try {
+    const ctx = firing === null ? null : firingContext(root.notes, firing);
+    if (ctx !== null && !ctx.ok) return refuse(`${ctx.stall}: stall with no Build state block`);
+    const counted = applyFiring(input.state, input.label, input.firing, ctx);
+    state = counted === null ? null : formatBuildState(counted, input.now);
+  }
+  catch (err) {
+    return refuse(message(err));
+  }
   const guard = writeGuard(root, input.label, state?.state ?? null, stall !== null);
   if (guard !== null) return refuse(`write refused: ${guard}`);
 

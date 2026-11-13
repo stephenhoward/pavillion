@@ -15,6 +15,7 @@ import {
   type Runner,
   type RunResult,
   type LockStore,
+  type WriteInput,
   QUEUE_GATE,
   GH_PR_LIMIT,
   MAX_FIRINGS,
@@ -43,6 +44,8 @@ import {
   formatStallBlock,
   writeGuard,
   applyFiring,
+  firingContext,
+  firingId,
   scanNotes,
   STALL_REPORT_MAX,
   recordedPrExpectations,
@@ -346,9 +349,24 @@ describe('parseBuildState', () => {
           { index: 2, levels: [], next: 'fix.beta-one' },
         ],
         stopped: 'none',
+        firing: null,
         prs: [101, 102],
       },
     });
+  });
+
+  it('parses the firing line that names the session which wrote the block', () => {
+    const block = stateBlock(['firings: 1', 'restart: none', 'firing: pid 500 started Thu Nov 12 20:07:42 2026', 'chain 1: -; next: feat.alpha-one', 'stopped: none']);
+    const r = parseBuildState(block);
+    expect(r.ok && r.state).toMatchObject({ firing: 'pid 500 started Thu Nov 12 20:07:42 2026', chains: [{ index: 1 }] });
+  });
+
+  it.each([
+    ['a firing line out of place', ['firings: 1', 'firing: pid 500 started x', 'restart: none', 'chain 1: -; next: done', 'stopped: none']],
+    ['a firing line with no pid', ['firings: 1', 'restart: none', 'firing: someone', 'chain 1: -; next: done', 'stopped: none']],
+    ['a firing line and no chain', ['firings: 1', 'restart: none', 'firing: pid 500 started x', 'stopped: none']],
+  ])('rejects %s', (_name, lines) => {
+    expect(parseBuildState(stateBlock(lines)).ok).toBe(false);
   });
 
   it('takes the last block', () => {
@@ -1307,14 +1325,23 @@ describe('runStillOurs', () => {
   });
 });
 
+const LSTART = 'Thu Nov 12 20:07:42 2026';
+const F500 = `pid 500 started ${LSTART}`;
+
 describe('runWrite', () => {
-  const show = (labels: string[]) => ['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', labels })]))] as [string, RunResult];
+  const PS: [string, RunResult] = ['ps -o lstart= -p 500', ok(LSTART)];
+  const show = (labels: string[], notes = ANALYSED) => ['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', labels, notes })]))] as [string, RunResult];
   const update: [string, RunResult] = ['bd update', ok('')];
-  const firstInput = { ...INPUT, firings: 0, chains: [{ levels: [], next: 'feat.alpha-one' }], stopped: 'none' };
+  const firstInput = { chains: [{ levels: [], next: 'feat.alpha-one' }], stopped: 'none' };
+  /** The last block an earlier firing wrote: one counted firing, no firing line. */
+  const EARLIER = `${ANALYSED}\n\n${BUILDING_BLOCK.replace('firings: 2', 'firings: 1')}`;
+  const write = (runner: Runner, overrides: Partial<WriteInput> = {}) => runWrite(runner, {
+    root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', ownerPid: 500, now: AT, ...overrides,
+  });
 
   it('writes spec:ready -> spec:building and the first block in one bd update, argv only', () => {
-    const runner = fakeRunner([show(['spec:ready']), update]);
-    const r = runWrite(runner, { root: 'pv-r', label: 'spec:building', state: firstInput, stall: null, firing: null, now: AT });
+    const runner = fakeRunner([PS, show(['spec:ready']), update]);
+    const r = write(runner, { label: 'spec:building', state: firstInput, firing: null });
     expect(r.ok).toBe(true);
     const writes = runner.calls.filter(c => c[1] === 'update');
     expect(writes).toHaveLength(1);
@@ -1323,22 +1350,29 @@ describe('runWrite', () => {
     expect(argv).toContain('spec:building');
     expect(argv).not.toContain('--notes');
     const notes = argv[argv.indexOf('--append-notes') + 1];
-    expect(parseBuildState(notes)).toMatchObject({ ok: true, state: { firings: 0, restart: 'none' } });
+    expect(parseBuildState(notes)).toMatchObject({ ok: true, state: { firings: 0, restart: 'none', firing: F500 } });
   });
 
-  it('appends a block with no label flags after a level submit', () => {
-    const runner = fakeRunner([show(['spec:building']), update]);
-    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', now: AT }).ok).toBe(true);
+  it('appends a block with no label flags after a level submit, one firing above the earlier firing\'s count', () => {
+    const runner = fakeRunner([PS, show(['spec:building'], EARLIER), update]);
+    expect(write(runner).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv).not.toContain('--add-label');
     expect(argv.slice(0, 4)).toEqual(['bd', 'update', 'pv-r', '--append-notes']);
-    expect(argv[4]).toBe(`\n${formatBuildState({ ...INPUT, firings: 2 }, AT).text}`);
+    expect(argv[4]).toBe(`\n${formatBuildState({ ...INPUT, firings: 2, firing: F500 }, AT).text}`);
+  });
+
+  it('derives firings and restart from the notes, whatever the input carries', () => {
+    const runner = fakeRunner([PS, show(['spec:building'], EARLIER), update]);
+    expect(write(runner, { state: { ...INPUT, firings: 0, restart: 'resume' } }).ok).toBe(true);
+    const argv = runner.calls.find(c => c[1] === 'update')!;
+    expect(parseBuildState(argv[4])).toMatchObject({ ok: true, state: { firings: 2, restart: 'none' } });
   });
 
   it('stalls with the Build state and a separate fenced Build stall block in the same call', () => {
-    const runner = fakeRunner([show(['spec:building']), update]);
+    const runner = fakeRunner([PS, show(['spec:building']), update]);
     const stall = { step: 'chain 1 level 2 build-gate', report: '## Build state\nfirings: 0' };
-    const r = runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall, firing: 'building', now: AT });
+    const r = write(runner, { label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall });
     expect(r.ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv).toContain('spec:stalled');
@@ -1349,60 +1383,130 @@ describe('runWrite', () => {
 
   it.each([
     ['the kill switch fires', [show(['spec:building', 'build:hold'])], null, INPUT, /build:hold/],
-    ['the block is malformed', [show(['spec:building'])], null, { ...INPUT, firings: 9 }, /firings/],
+    ['the block is malformed', [show(['spec:building'])], null, { ...INPUT, stopped: '' }, /stopped/],
     ['the root cannot be read', [['bd show', failed('db locked')] as [string, RunResult]], null, INPUT, /db locked/],
     ['the label is not ours', [show(['spec:building'])], 'spec:ready', INPUT, /not a build-scheduled label/],
+    ['the last block is malformed', [show(['spec:building'], `${ANALYSED}\n\n## Build state\nfirings: x`)], null, INPUT, /malformed/],
   ] as const)('writes nothing when %s', (_name, routes, label, state, reason) => {
-    const runner = fakeRunner([...routes, update]);
-    const r = runWrite(runner, { root: 'pv-r', label: label as never, state, stall: null, firing: 'building', now: AT });
+    const runner = fakeRunner([PS, ...routes, update]);
+    const r = write(runner, { label: label as never, state });
     expect(r).toMatchObject({ ok: false, reading: expect.stringMatching(reason) });
     expect(runner.calls.some(c => c[1] === 'update')).toBe(false);
   });
 
+  it('fails closed when the owner pid names no running session', () => {
+    const runner = fakeRunner([['ps', failed('', 1)], show(['spec:building']), update]);
+    expect(write(runner)).toMatchObject({ ok: false, reading: expect.stringMatching(/owner pid 500/) });
+    expect(runner.calls.some(c => c[1] === 'update')).toBe(false);
+  });
+
   it('refuses a hostile root id before any call', () => {
-    const runner = fakeRunner([update]);
-    expect(runWrite(runner, { root: 'pv-r; bd delete pv-x', label: null, state: INPUT, stall: null, firing: 'building', now: AT }).ok).toBe(false);
+    const runner = fakeRunner([PS, update]);
+    expect(write(runner, { root: 'pv-r; bd delete pv-x' }).ok).toBe(false);
     expect(runner.calls).toEqual([]);
   });
 
   it('reports a failed bd update', () => {
-    const runner = fakeRunner([show(['spec:building']), ['bd update', failed('conflict', 3)]]);
-    expect(runWrite(runner, { root: 'pv-r', label: null, state: INPUT, stall: null, firing: 'building', now: AT })).toMatchObject({ ok: false });
+    const runner = fakeRunner([PS, show(['spec:building']), ['bd update', failed('conflict', 3)]]);
+    expect(write(runner)).toMatchObject({ ok: false });
   });
 
   it('stalls over an unreadable block with only the Build stall block, which it requires', () => {
     const runner = fakeRunner([show(['spec:building']), update]);
     const stall = { step: 'build-state', report: 'malformed Build state block' };
-    expect(runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: null, stall, firing: null, now: AT }).ok).toBe(true);
+    expect(write(runner, { label: 'spec:stalled', state: null, stall, firing: null }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(argv[argv.length - 1]).toBe(`\n${formatStallBlock('build-state', 'malformed Build state block')}`);
+    expect(runner.calls.some(c => c[0] === 'ps')).toBe(false);
 
     const bare = fakeRunner([show(['spec:building']), update]);
-    expect(runWrite(bare, { root: 'pv-r', label: 'spec:stalled', state: null, stall: null, firing: null, now: AT }).ok).toBe(false);
+    expect(write(bare, { label: 'spec:stalled', state: null, stall: null, firing: null }).ok).toBe(false);
     expect(bare.calls.some(c => c[1] === 'update')).toBe(false);
   });
 
   it('refuses the stop of a third counted firing that leaves the root building, and takes it as a stall', () => {
-    const third = { ...INPUT, firings: MAX_FIRINGS - 1 };
-    const refused = fakeRunner([show(['spec:building']), update]);
-    expect(runWrite(refused, { root: 'pv-r', label: null, state: third, stall: null, firing: 'building', now: AT }))
-      .toMatchObject({ ok: false, reading: expect.stringMatching(/firing-limit/) });
-    expect(refused.calls).toEqual([]);
+    const second = `${ANALYSED}\n\n${BUILDING_BLOCK}`;
+    const refused = fakeRunner([PS, show(['spec:building'], second), update]);
+    expect(write(refused)).toMatchObject({ ok: false, reading: expect.stringMatching(/firing-limit/) });
+    expect(refused.calls.some(c => c[1] === 'update')).toBe(false);
 
-    const runner = fakeRunner([show(['spec:building']), update]);
+    const runner = fakeRunner([PS, show(['spec:building'], second), update]);
     const stall = { step: 'firing-limit', report: 'three counted firings' };
-    const r = runWrite(runner, { root: 'pv-r', label: 'spec:stalled', state: { ...third, stopped: 'stalled' }, stall, firing: 'building', now: AT });
-    expect(r.ok).toBe(true);
+    expect(write(runner, { label: 'spec:stalled', state: { ...INPUT, stopped: 'stalled' }, stall }).ok).toBe(true);
     const argv = runner.calls.find(c => c[1] === 'update')!;
     expect(parseBuildState(argv[argv.length - 1])).toMatchObject({ ok: true, state: { firings: MAX_FIRINGS } });
   });
 });
 
+describe('firingId', () => {
+  it('names the session by pid and process start time, whitespace collapsed', () => {
+    expect(firingId(500, ' Thu Nov  5 20:07:42 2026\n')).toBe('pid 500 started Thu Nov 5 20:07:42 2026');
+  });
+
+  it.each([['an empty start time', ''], ['shell text', 'x; rm -rf /'], ['a heading', '## Build state']])('refuses %s', (_name, lstart) => {
+    expect(() => firingId(500, lstart)).toThrow(/start time/);
+  });
+});
+
+describe('firingContext', () => {
+  const G = 'pid 499 started Wed Nov 11 09:00:00 2026';
+  const block = (firings: number, stopped: string, firing: string | null, restart = 'none') => stateBlock([
+    `firings: ${firings}`, `restart: ${restart}`, ...(firing ? [`firing: ${firing}`] : []), 'chain 1: -; next: feat.alpha-one', `stopped: ${stopped}`,
+  ]);
+  const notes = (...blocks: string[]) => [ANALYSED, ...blocks].join('\n\n');
+
+  it('starts at 0 with no block', () => {
+    expect(firingContext(ANALYSED, F500)).toEqual({ ok: true, firing: F500, start: 0, restart: 'none', counted: false });
+  });
+
+  it('starts a new firing from the last block of an earlier one, with or without a firing line', () => {
+    expect(firingContext(notes(block(2, 'budget', G)), F500)).toMatchObject({ start: 2, restart: 'none', counted: false });
+    expect(firingContext(notes(block(1, 'budget', null)), F500)).toMatchObject({ start: 1, counted: false });
+  });
+
+  it('keeps the firing\'s starting count across the blocks it has written', () => {
+    expect(firingContext(notes(block(1, 'budget', G), block(2, 'none', F500), block(2, 'none', F500)), F500))
+      .toMatchObject({ start: 1, restart: 'none', counted: true });
+  });
+
+  it('does not count a firing for its first spec:building block', () => {
+    expect(firingContext(notes(block(0, 'none', F500)), F500)).toMatchObject({ start: 0, counted: false });
+  });
+
+  it('restarts from 0 after stopped: stalled, and resumes only the first block after it', () => {
+    expect(firingContext(notes(block(3, 'stalled', G)), F500)).toMatchObject({ start: 0, restart: 'resume', counted: false });
+    expect(firingContext(notes(block(3, 'stalled', G), block(1, 'none', F500, 'resume')), F500))
+      .toMatchObject({ start: 0, restart: 'none', counted: true });
+  });
+
+  it('fails on a malformed block it has to read', () => {
+    expect(firingContext(notes(block(1, 'budget', G), '## Build state\nfirings: x'), F500)).toMatchObject({ ok: false, stall: expect.stringMatching(/malformed/) });
+  });
+});
+
 describe('applyFiring', () => {
-  it('computes firings from the count the firing started with', () => {
-    expect(applyFiring(INPUT, null, 'building')).toMatchObject({ firings: 2 });
-    expect(applyFiring(INPUT, null, 'gate-skipped')).toMatchObject({ firings: 1 });
-    expect(applyFiring({ ...INPUT, firings: 2, stopped: 'none' }, null, 'building')).toMatchObject({ firings: 3 });
+  const ctx = (overrides: Partial<{ start: number; restart: 'none' | 'resume'; counted: boolean }> = {}) => ({
+    firing: F500, start: 1, restart: 'none' as const, counted: false, ...overrides,
+  });
+
+  it('derives firings, restart and the firing line, keeping only chains and stopped from the input', () => {
+    expect(applyFiring({ ...INPUT, firings: 3, restart: 'resume', prs: [7] }, null, 'building', ctx()))
+      .toEqual({ firings: 2, restart: 'none', firing: F500, chains: INPUT.chains, stopped: INPUT.stopped });
+    expect(applyFiring(INPUT, null, 'gate-skipped', ctx())).toMatchObject({ firings: 1 });
+    expect(applyFiring(INPUT, null, 'building', ctx({ start: 0, restart: 'resume' }))).toMatchObject({ firings: 1, restart: 'resume' });
+  });
+
+  it('keeps a firing counted once one of its blocks counted it', () => {
+    expect(applyFiring(INPUT, null, 'kill-switch', ctx({ counted: true }))).toMatchObject({ firings: 2 });
+  });
+
+  it('writes the first spec:building block at 0 with the firing line', () => {
+    expect(applyFiring(firstInputOf(), 'spec:building', null, ctx({ start: 0 }))).toMatchObject({ firings: 0, restart: 'none', firing: F500 });
+  });
+
+  it('refuses the stop of the third counted firing that leaves the root building, never its progress blocks', () => {
+    expect(() => applyFiring(INPUT, null, 'building', ctx({ start: MAX_FIRINGS - 1 }))).toThrow(/firing-limit/);
+    expect(applyFiring({ ...INPUT, stopped: 'none' }, null, 'building', ctx({ start: MAX_FIRINGS - 1 }))).toMatchObject({ firings: MAX_FIRINGS });
   });
 
   it.each([
@@ -1411,7 +1515,111 @@ describe('applyFiring', () => {
     ['an unknown firing', null, 'sometimes', /unknown firing/],
     ['spec:built from a building firing', 'spec:built', 'building', /ended/],
   ])('refuses %s', (_name, label, firing, reason) => {
-    expect(() => applyFiring(INPUT, label, firing)).toThrow(reason);
+    expect(() => applyFiring(INPUT, label, firing, ctx())).toThrow(reason);
+  });
+
+  function firstInputOf() {
+    return { chains: [{ levels: [], next: 'feat.alpha-one' }], stopped: 'none' };
+  }
+});
+
+describe('firing hand-off from build-state to write', () => {
+  const STACK = 'npx --no-install tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts';
+  const children = ['pv-r.1', 'pv-r.2', 'pv-r.3', 'pv-r.4'].map(id => bead({ id, parent: 'pv-r', issue_type: 'task' }));
+  const plan = { chains: [['pv-r.1', 'pv-r.2', 'pv-r.3'], ['pv-r.4']], flat: false, warnings: [] };
+
+  /** A root whose notes and labels every bd update changes, as bd does. */
+  function memoryRoot(initial: BuildBead): Runner & { root: BuildBead } {
+    const root = { ...initial, labels: [...(initial.labels ?? [])] };
+    const runner = ((cmd: string, args: string[]) => {
+      const line = [cmd, ...args].join(' ');
+      if (cmd === 'ps') return ok(LSTART);
+      if (line === 'bd show pv-r --json') return ok(JSON.stringify([root]));
+      if (line === 'bd children pv-r --json') return ok(JSON.stringify(children));
+      if (line.startsWith(`${STACK} plan`)) return ok(JSON.stringify(plan));
+      if (cmd === 'bd' && args[0] === 'update' && args[1] === 'pv-r') {
+        for (let i = 2; i < args.length; i += 2) {
+          const value = args[i + 1];
+          if (args[i] === '--remove-label') root.labels = root.labels.filter(l => l !== value);
+          else if (args[i] === '--add-label') root.labels.push(value);
+          else if (args[i] === '--append-notes') root.notes = `${root.notes ?? ''}${value}`;
+          else return failed(`unexpected flag ${args[i]}`);
+        }
+        return ok('');
+      }
+      return failed(`unexpected call: ${line}`);
+    }) as Runner & { root: BuildBead };
+    runner.root = root;
+    return runner;
+  }
+
+  /** The `state` object build-state prints, as the agent copies it into a state file. */
+  function printed(runner: Runner) {
+    const r = runBuildState(runner, 'pv-r');
+    expect(r.ok).toBe(true);
+    if (!r.parse.ok || !r.parse.state) throw new Error('build-state printed no state');
+    return r.parse.state;
+  }
+
+  /** That state with one more submitted level on chain `k` (0-based). */
+  function submitted(runner: Runner, k: number, branch: string, pr: number, next: string) {
+    const state = printed(runner);
+    return {
+      ...state,
+      chains: state.chains.map((c, i) => (i === k ? { ...c, levels: [...c.levels, { branch, pr }], next } : c)),
+      stopped: 'none',
+    };
+  }
+
+  const write = (runner: Runner, ownerPid: number, state: unknown, overrides: Partial<WriteInput> = {}) => runWrite(runner, {
+    root: 'pv-r', label: null, state, stall: null, firing: 'building', ownerPid, now: AT, ...overrides,
+  });
+
+  /** Every block's firings and restart, in order. */
+  const recorded = (runner: Runner & { root: BuildBead }) =>
+    [...(runner.root.notes ?? '').matchAll(/^firings: (\d+)\nrestart: (\w+)$/gm)].map(m => `${m[1]} ${m[2]}`);
+
+  it('counts a start firing once however many blocks it writes, and each later firing once more', () => {
+    const runner = memoryRoot(bead({ id: 'pv-r', labels: ['spec:ready'] }));
+    expect(runBuildState(runner, 'pv-r').start).toEqual({ action: 'start', firings: 0, restart: 'none' });
+    const first = { chains: [{ levels: [], next: 'feat.alpha-one' }, { levels: [], next: 'fix.beta-one' }], stopped: 'none' };
+    expect(write(runner, 600, first, { label: 'spec:building', firing: null })).toMatchObject({ ok: true });
+
+    // One firing: three submits, then a budget stop. None is refused.
+    expect(write(runner, 600, submitted(runner, 0, 'feat.alpha-one', 101, 'feat.alpha-two'))).toMatchObject({ ok: true });
+    expect(write(runner, 600, submitted(runner, 1, 'fix.beta-one', 102, 'done'))).toMatchObject({ ok: true });
+    expect(write(runner, 600, submitted(runner, 0, 'feat.alpha-two', 103, 'feat.alpha-three'))).toMatchObject({ ok: true });
+    expect(write(runner, 600, { ...printed(runner), stopped: 'budget: context 75%' })).toMatchObject({ ok: true });
+    expect(recorded(runner)).toEqual(['0 none', '1 none', '1 none', '1 none', '1 none']);
+
+    // The next firing resumes and counts once more.
+    expect(runBuildState(runner, 'pv-r').start).toMatchObject({ action: 'continue', firings: 1 });
+    expect(write(runner, 601, submitted(runner, 0, 'feat.alpha-three', 104, 'done'))).toMatchObject({ ok: true });
+    expect(write(runner, 601, { ...printed(runner), stopped: 'budget: session 92%' })).toMatchObject({ ok: true });
+    expect(recorded(runner).slice(5)).toEqual(['2 none', '2 none']);
+
+    // The third counted firing may not stop at spec:building; spec:stalled takes it.
+    expect(write(runner, 602, { ...printed(runner), stopped: 'budget: context 75%' }))
+      .toMatchObject({ ok: false, reading: expect.stringMatching(/firing-limit/) });
+    const stall = { step: 'firing-limit', report: 'three counted firings' };
+    expect(write(runner, 602, { ...printed(runner), stopped: 'stalled' }, { label: 'spec:stalled', stall })).toMatchObject({ ok: true });
+    expect(recorded(runner).slice(7)).toEqual(['3 none']);
+    expect(runner.root.labels).toContain('spec:stalled');
+  });
+
+  it('restarts from build-state\'s state after a stall: the count resets, then rises by one per firing', () => {
+    const stalled = stateBlock(['firings: 3', 'restart: none', 'chain 1: feat.alpha-one → #101; next: feat.alpha-two', 'chain 2: -; next: fix.beta-one', 'stopped: stalled']);
+    const runner = memoryRoot(bead({ id: 'pv-r', labels: ['spec:building'], notes: `${ANALYSED}\n\n${stalled}` }));
+    expect(runBuildState(runner, 'pv-r').start).toMatchObject({ action: 'restart', firings: 0, restart: 'resume' });
+
+    // build-state's state still reads firings 3; write derives the restart itself.
+    expect(write(runner, 700, submitted(runner, 0, 'feat.alpha-two', 102, 'feat.alpha-three'))).toMatchObject({ ok: true });
+    expect(write(runner, 700, submitted(runner, 1, 'fix.beta-one', 103, 'done'))).toMatchObject({ ok: true });
+    expect(write(runner, 700, submitted(runner, 0, 'feat.alpha-three', 104, 'done'))).toMatchObject({ ok: true });
+    expect(write(runner, 700, { ...printed(runner), stopped: 'budget: context 75%' })).toMatchObject({ ok: true });
+
+    expect(write(runner, 701, { ...printed(runner), stopped: 'budget: context 75%' })).toMatchObject({ ok: true });
+    expect(recorded(runner)).toEqual(['3 none', '1 resume', '1 none', '1 none', '1 none', '2 none']);
   });
 });
 
@@ -1929,6 +2137,7 @@ describe('never merges', () => {
     const settings = JSON.parse(readFileSync(resolve(__dirname, '../../slot-settings.json'), 'utf-8'));
     expect(settings.permissions.deny).toEqual(expect.arrayContaining([
       'Bash(gh pr merge:*)',
+      'Bash(gh pr edit:*)',
       'Bash(gh api:*)',
       'Bash(gh repo edit:*)',
       'Bash(gh repo delete:*)',
@@ -1955,6 +2164,13 @@ describe('never merges', () => {
       // A bare `git -C` naming the bypass class is prose; with an argument it is an instruction.
       expect(text, rel).not.toMatch(/\bgit -C\s+[^`\s]|\bgh repo view\b/);
     }
+  });
+
+  it('sets PR text only through publish-pr: the skill names a bare gh pr edit only to forbid it', () => {
+    const skill = readFileSync(resolve(__dirname, '../../SKILL.md'), 'utf-8');
+    const edits = skill.split('\n').filter(l => /gh pr edit/.test(l));
+    expect(edits.length).toBeGreaterThan(0);
+    for (const line of edits) expect(line).toMatch(/never `gh pr edit`/);
   });
 });
 

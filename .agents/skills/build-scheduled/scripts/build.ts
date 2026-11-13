@@ -13,7 +13,7 @@
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts build-state <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts still-ours <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id> [--text]
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> --owner-pid <pid> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts pr-text-check <file|->
@@ -68,11 +68,14 @@ commands:
                                 every recorded PR against gh pr view (JSON); exit 1 = stall.
                                 --text also checks each PR's published title, body and
                                 branch (the post-submit check before spec:built)
-  write <root-id> [--label <spec:label>] [--state-file <json>] [--firing <kind>]
-        [--stall-step <step> --stall-file <file>]
-                                the one write path: computes firings, guards, then one
-                                bd update --append-notes. <kind>: building, ended,
-                                gate-skipped, dry-run, decision-blocked, kill-switch.
+  write <root-id> --owner-pid <pid> [--label <spec:label>] [--state-file <json>]
+        [--firing <kind>] [--stall-step <step> --stall-file <file>]
+                                the one write path: takes chains and stopped from the
+                                state file, derives firings and restart from the notes
+                                (the firing is <pid> and its start time: pass $PPID),
+                                guards, then one bd update --append-notes. <kind>:
+                                building, ended, gate-skipped, dry-run,
+                                decision-blocked, kill-switch.
                                 <step>: preflight, gates, build-state, validate-prs,
                                 firing-limit, sweep, text-check, or
                                 chain <k> level <n> implement|audit|build-gate|submit
@@ -240,7 +243,9 @@ try {
     case 'write': {
       const [root, ...rest] = args;
       if (!root) fail(USAGE);
-      const flags = flagPairs(rest, ['--label', '--state-file', '--firing', '--stall-step', '--stall-file']);
+      const flags = flagPairs(rest, ['--owner-pid', '--label', '--state-file', '--firing', '--stall-step', '--stall-file']);
+      const ownerPid = Number(flags.get('--owner-pid'));
+      if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) fail(`write takes --owner-pid $PPID\n\n${USAGE}`);
       const stalling = flags.get('--label') === 'spec:stalled';
       if (flags.has('--stall-step') !== stalling || flags.has('--stall-file') !== stalling) {
         fail(`spec:stalled takes --stall-step and --stall-file, and nothing else does\n\n${USAGE}`);
@@ -262,6 +267,7 @@ try {
         state,
         stall: stallFile === undefined ? null : { step: flags.get('--stall-step') as string, report: readInput(stallFile) },
         firing: flags.get('--firing') ?? null,
+        ownerPid,
         now,
       });
       json(result);
