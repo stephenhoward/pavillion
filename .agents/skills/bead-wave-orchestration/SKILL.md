@@ -399,8 +399,8 @@ same lifecycle applies in its reduced form:
   bead). Comprehensive auditors matched to the changed files still
   run.
 
-The implementer prompt, refusal protocol, pre-close checklist, kill-vitest
-step, and retry limits are all identical to the epic-wave variant. See
+The implementer prompt, refusal protocol, pre-close checklist, no-`pkill`
+rule, and retry limits are all identical to the epic-wave variant. See
 [`implementer-prompt-template`](../implementer-prompt-template/SKILL.md)
 for the shared contract.
 
