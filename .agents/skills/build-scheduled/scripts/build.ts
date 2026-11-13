@@ -41,7 +41,9 @@ const USAGE = `usage: build.ts <command> [args]
 
 commands:
   validate-flags <argv…>        exit 1 + message on a refused flag combination
-  preflight --owner-pid <pid>   report path, lock, clean tree; takes the lock (JSON)
+  preflight --owner-pid <pid>   report path, lock, clean tree; takes the lock (JSON).
+                                Pass $PPID: under the Bash tool that is the agent
+                                session, which outlives each short-lived CLI call
   gates [--queue-only]          each gate's reading and verdict, in order (JSON)
   select                        selected root, ordering source, skipped roots (JSON)
   build-state <root-id>         parsed last Build state block (JSON); exit 1 if malformed
@@ -68,8 +70,18 @@ const fileLock: LockStore = {
       throw err;
     }
   },
-  write(content) {
+  create(content) {
     mkdirSync(REPORT_DIR, { recursive: true });
+    try {
+      writeFileSync(LOCK_PATH, content, { flag: 'wx' });
+      return true;
+    }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw err;
+    }
+  },
+  overwrite(content) {
     writeFileSync(LOCK_PATH, content);
   },
   remove() {
@@ -109,7 +121,7 @@ try {
       const [flag, pid] = args;
       const ownerPid = Number(pid);
       if (flag !== '--owner-pid' || !Number.isSafeInteger(ownerPid) || ownerPid <= 0) fail(USAGE);
-      const result = runPreflight(execRunner, { lock: fileLock, isAlive, ownerPid, now }, 'run');
+      const result = runPreflight(execRunner, { lock: fileLock, isAlive, ownerPid, now });
       json(result);
       process.exit(result.ok ? 0 : 1);
       break;
@@ -147,7 +159,7 @@ try {
     }
     case 'dry-run': {
       if (args.length) fail(USAGE);
-      json(runDryRun(execRunner, { lock: fileLock, isAlive, ownerPid: process.pid, now }));
+      json(runDryRun(execRunner, now));
       break;
     }
     default:

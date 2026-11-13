@@ -118,12 +118,26 @@ function fakeRunner(routes: [string, RunResult][]): Runner & { calls: string[][]
   return runner;
 }
 
-function memoryLock(initial: string | null = null): LockStore & { content: string | null } {
+/**
+ * An in-memory LockStore. `race` simulates another run writing between our
+ * read and our write: `create` then finds the lock taken, and `overwrite`
+ * is followed by the other run's write.
+ */
+function memoryLock(
+  initial: string | null = null,
+  race: string | null = null,
+): LockStore & { content: string | null } {
   const store = {
     content: initial,
     read: () => store.content,
-    write: (c: string) => {
+    create: (c: string) => {
+      if (race !== null) store.content = race;
+      if (store.content !== null) return false;
       store.content = c;
+      return true;
+    },
+    overwrite: (c: string) => {
+      store.content = race ?? c;
     },
     remove: () => {
       store.content = null;
@@ -232,7 +246,6 @@ describe('passingCi', () => {
     ['pending check', [{ __typename: 'CheckRun', status: 'IN_PROGRESS', conclusion: '' }]],
     ['failed check', [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }]],
     ['pending status', [{ __typename: 'StatusContext', state: 'PENDING' }]],
-    ['unknown entry', [{ __typename: 'Mystery' }]],
   ])('does not pass a %s', (_name, rollup) => {
     expect(passingCi(rollup)).toBe(false);
   });
@@ -261,6 +274,14 @@ describe('queueGate', () => {
       pr(3, 30, { reviewDecision: 'CHANGES_REQUESTED' }),
     ];
     expect(queueGate(rows, NOW).verdict).toBe('pass');
+  });
+
+  it.each([
+    ['an unknown __typename', { __typename: 'Mystery' }],
+    ['a missing __typename', { status: 'COMPLETED', conclusion: 'SUCCESS' }],
+  ])('fails closed on a status check with %s, even on a draft', (_name, entry) => {
+    const r = queueGate([pr(1, 1), pr(7, 1, { isDraft: true, statusCheckRollup: [entry] })], NOW);
+    expect(r).toMatchObject({ verdict: 'fail', reading: expect.stringContaining('#7') });
   });
 
   it('fails closed when the result reaches the --limit', () => {
@@ -432,6 +453,36 @@ describe('selectRoot', () => {
     expect(s).toMatchObject({ root: 'pv-r', kind: 'ready' });
     expect(s.skipped.map(k => k.id)).toEqual(['pv-h', 'pv-n']);
   });
+
+  it('resumes the lowest id of two spec:building roots and names the other', () => {
+    const s = selectRoot([
+      bead({ id: 'pv-y', labels: ['spec:building'] }),
+      bead({ id: 'pv-x', labels: ['spec:building'] }),
+    ]);
+    expect(s).toMatchObject({ root: 'pv-x', kind: 'resume' });
+    expect(s.skipped).toEqual([{ id: 'pv-y', reason: 'another spec:building root (pv-x) resumes first' }]);
+  });
+
+  it('never resumes a closed spec:building root', () => {
+    const s = selectRoot([bead({ id: 'pv-c', status: 'closed', labels: ['spec:building'] })]);
+    expect(s).toMatchObject({ root: null, kind: null, skipped: [] });
+  });
+
+  it.each([
+    ['an id failing the root-id pattern', ready('pv-BAD', '2026-11-01T00:00:00Z'), /root-id pattern/],
+    ['no updated_at', ready('pv-a', '2026-11-01T00:00:00Z', { updated_at: undefined }), /no updated_at/],
+    ['an unparsable updated_at', ready('pv-a', 'yesterday'), /unparsable updated_at timestamp "yesterday"/],
+    ['an unparsable label-event time', ready('pv-a', '2026-11-01T00:00:00Z', { spec_ready_at: 'soon' }), /unparsable label-event/],
+    [
+      'a malformed Build state block',
+      ready('pv-a', '2026-11-01T00:00:00Z', { notes: `${ANALYSED}\n\n## Build state\nfirings: x` }),
+      /Build state/,
+    ],
+  ])('skips a spec:ready root with %s', (_name, root, reason) => {
+    const s = selectRoot([root, ready('pv-ok', '2026-11-09T00:00:00Z')]);
+    expect(s.root).toBe('pv-ok');
+    expect(s.skipped).toEqual([{ id: root.id, reason: expect.stringMatching(reason) }]);
+  });
 });
 
 // =============================================================================
@@ -456,8 +507,27 @@ describe('priorEpicGate', () => {
     expect(priorEpicGate([built('pv-x', GOOD_BLOCK)], new Set([500])).verdict).toBe('pass');
   });
 
-  it('passes a spec:built root with no Build state block', () => {
-    expect(priorEpicGate([built('pv-x', '')], new Set([101])).verdict).toBe('pass');
+  it('fails closed on a spec:built root with no Build state block', () => {
+    const r = priorEpicGate([built('pv-x', '')], new Set([101]));
+    expect(r).toMatchObject({ verdict: 'fail', reading: 'spec:built root pv-x has no Build state block' });
+  });
+
+  it('fails closed when bd omits the notes key', () => {
+    const root = bead({ id: 'pv-x', labels: ['spec:built'] });
+    delete root.notes;
+    expect(priorEpicGate([root], new Set()).verdict).toBe('fail');
+  });
+
+  it('names every spec:built root with an open recorded PR', () => {
+    const other = GOOD_BLOCK.replace('#101', '#201').replace('#102', '#202');
+    const r = priorEpicGate([built('pv-x', GOOD_BLOCK), built('pv-y', other), built('pv-z', other)], new Set([102, 201]));
+    expect(r.verdict).toBe('fail');
+    expect(r.reading).toBe('pv-x has open PR #102; pv-y has open PR #201; pv-z has open PR #201');
+  });
+
+  it('passes several spec:built roots when none has an open PR', () => {
+    const r = priorEpicGate([built('pv-x', GOOD_BLOCK), built('pv-y', GOOD_BLOCK, 'closed')], new Set([999]));
+    expect(r).toMatchObject({ verdict: 'pass', reading: expect.stringContaining('2 spec:built') });
   });
 
   it('fails closed on a malformed block', () => {
@@ -488,31 +558,25 @@ describe('evaluateGates', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('ends at the first failure in a real run and names its reading', () => {
-    const blocked = [...beads, bead({ id: 'pv-x', labels: ['spec:built'], notes: GOOD_BLOCK })];
-    const r = evaluateGates({ beads: blocked, prs: [pr(101, 1)], now: NOW, mode: 'run' });
-    expect(r.gates.map(g => g.verdict)).toEqual(['pass', 'fail', 'not-run', 'not-run']);
-    expect(r.gates[1].reading).toContain('pv-x');
-  });
+  const built = bead({ id: 'pv-x', labels: ['spec:built'], notes: GOOD_BLOCK });
+  const held = [ready('pv-h', '2026-11-01T00:00:00Z', { labels: ['spec:ready', 'build:hold'] })];
+  const bdDown = { error: 'bd list failed (1)' };
+  const ghDown = { error: 'gh pr list failed (4)' };
 
-  it('evaluates every gate in a dry run', () => {
-    const blocked = [...beads, bead({ id: 'pv-x', labels: ['spec:built'], notes: GOOD_BLOCK })];
-    const r = evaluateGates({ beads: blocked, prs: [pr(101, 1)], now: NOW, mode: 'dry' });
-    expect(r.gates.map(g => g.verdict)).toEqual(['pass', 'fail', 'pass', 'pass']);
-    expect(r.selection?.root).toBe('pv-r');
-  });
-
-  it('fails gate 4 when nothing is buildable', () => {
-    const r = evaluateGates({ beads: [ready('pv-h', '2026-11-01T00:00:00Z', { labels: ['spec:ready', 'build:hold'] })], prs: [], now: NOW, mode: 'run' });
-    expect(r.gates[3]).toMatchObject({ check: 'nothing-to-build', verdict: 'fail' });
-  });
-
-  it('fails closed when a reading is an error', () => {
-    const r = evaluateGates({ beads: { error: 'bd list failed (1)' }, prs: [], now: NOW, mode: 'run' });
-    expect(r.gates[0]).toMatchObject({ verdict: 'fail', reading: expect.stringContaining('bd list failed') });
-    expect(r.ok).toBe(false);
-    const q = evaluateGates({ beads, prs: { error: 'gh pr list failed (4)' }, now: NOW, mode: 'run' });
-    expect(q.gates[1].verdict).toBe('fail');
+  it.each([
+    ['gate 2 ends a real run', [...beads, built], [pr(101, 1)], 'run', ['pass', 'fail', 'not-run', 'not-run'], 1, 'pv-x'],
+    ['a dry run evaluates past gate 2', [...beads, built], [pr(101, 1)], 'dry', ['pass', 'fail', 'pass', 'pass'], 3, 'pv-r'],
+    ['gate 3 ends a run with a spec:ready pick', beads, prs(QUEUE_GATE.open), 'run', ['pass', 'pass', 'fail', 'not-run'], 2, '10 open'],
+    ['gate 4 fails when nothing is buildable', held, [], 'run', ['pass', 'pass', 'pass', 'fail'], 3, 'no eligible'],
+    ['a bd failure ends a real run at gate 1', bdDown, [], 'run', ['fail', 'not-run', 'not-run', 'not-run'], 0, 'bd list failed'],
+    ['a bd failure fails gates 1, 2 and 4 in a dry run', bdDown, [], 'dry', ['fail', 'fail', 'pass', 'fail'], 1, 'bd list failed'],
+    ['a gh failure fails gate 2 with its reading', beads, ghDown, 'run', ['pass', 'fail', 'not-run', 'not-run'], 1, 'gh pr list failed'],
+    ['a gh failure fails gates 2 and 3 in a dry run', beads, ghDown, 'dry', ['pass', 'fail', 'fail', 'pass'], 2, 'gh pr list failed'],
+  ] as const)('%s', (_name, input, prRows, mode, verdicts, at, reading) => {
+    const r = evaluateGates({ beads: input as BuildBead[], prs: prRows as PrRow[], now: NOW, mode });
+    expect(r.gates.map(g => g.verdict)).toEqual(verdicts);
+    expect(r.gates[at].reading).toContain(reading);
+    expect(r.ok).toBe(!verdicts.includes('fail'));
   });
 });
 
@@ -626,26 +690,27 @@ describe('readers fail closed', () => {
 
 describe('runPreflight', () => {
   const safe = ok('{"ok":true}');
-  const deps = (lock: LockStore, alive: number[] = []) => ({
+  const deps = (lock: LockStore, alive: number[] = [10]) => ({
     lock,
     isAlive: (pid: number) => alive.includes(pid),
     ownerPid: 10,
     now: NOW,
   });
+  const ours = JSON.stringify({ pid: 10, started: NOW.toISOString() });
 
   it('checks the report path, takes the lock, then checks the tree', () => {
     const lock = memoryLock();
-    const runner = fakeRunner([['git check-ignore', ok('')], ['npx tsx', safe]]);
-    const r = runPreflight(runner, deps(lock), 'run');
+    const runner = fakeRunner([['git check-ignore', ok('')], ['npx --no-install tsx', safe]]);
+    const r = runPreflight(runner, deps(lock));
     expect(r.ok).toBe(true);
     expect(r.checks.map(c => c.check)).toEqual(['report-path', 'lock', 'clean-tree']);
-    expect(JSON.parse(lock.content!)).toEqual({ pid: 10, started: NOW.toISOString() });
+    expect(lock.content).toBe(ours);
     expect(runner.calls[0]).toEqual(['git', 'check-ignore', '-q', 'reports/spawn-bead-workers/']);
   });
 
   it('stops before touching the lock when the report path is not ignored', () => {
     const lock = memoryLock();
-    const r = runPreflight(fakeRunner([['git check-ignore', failed('', 1)]]), deps(lock), 'run');
+    const r = runPreflight(fakeRunner([['git check-ignore', failed('', 1)]]), deps(lock));
     expect(r.ok).toBe(false);
     expect(r.checks.map(c => c.verdict)).toEqual(['fail', 'not-run', 'not-run']);
     expect(lock.content).toBeNull();
@@ -654,28 +719,53 @@ describe('runPreflight', () => {
   it('stops on a live lock and leaves it in place', () => {
     const held = '{"pid":42,"started":"x"}';
     const lock = memoryLock(held);
-    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock, [42]), 'run');
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock, [10, 42]));
     expect(r.checks[1].verdict).toBe('fail');
     expect(lock.content).toBe(held);
   });
 
+  it('replaces a stale lock and confirms the record is ours', () => {
+    const lock = memoryLock('{"pid":42,"started":"x"}');
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')], ['npx --no-install tsx', safe]]), deps(lock));
+    expect(r.checks[1]).toMatchObject({ verdict: 'pass', reading: expect.stringContaining('stale') });
+    expect(lock.content).toBe(ours);
+  });
+
+  it('fails closed when another run creates the lock first', () => {
+    const theirs = '{"pid":77,"started":"y"}';
+    const lock = memoryLock(null, theirs);
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock));
+    expect(r.checks[1]).toMatchObject({ verdict: 'fail', reading: expect.stringContaining('another run') });
+    expect(lock.content).toBe(theirs);
+  });
+
+  it('fails closed when another run overwrites a stale lock in between', () => {
+    const theirs = '{"pid":77,"started":"y"}';
+    const lock = memoryLock('{"pid":42,"started":"x"}', theirs);
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock));
+    expect(r.checks.map(c => c.verdict)).toEqual(['pass', 'fail', 'not-run']);
+    expect(lock.content).toBe(theirs);
+  });
+
+  it('refuses to take the lock for an owner pid that is not running', () => {
+    const lock = memoryLock();
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')]]), deps(lock, []));
+    expect(r.checks[1]).toMatchObject({ verdict: 'fail', reading: 'owner pid 10 is not running' });
+    expect(lock.content).toBeNull();
+  });
+
   it('releases the lock it took when the tree is not clean', () => {
     const lock = memoryLock();
-    const runner = fakeRunner([['git check-ignore', ok('')], ['npx tsx', { stdout: '{"ok":false,"reason":"dirty tree"}', stderr: '', exitCode: 1 }]]);
-    const r = runPreflight(runner, deps(lock), 'run');
+    const dirty = { stdout: '{"ok":false,"reason":"dirty tree"}', stderr: '', exitCode: 1 };
+    const r = runPreflight(fakeRunner([['git check-ignore', ok('')], ['npx --no-install tsx', dirty]]), deps(lock));
     expect(r.checks[2]).toMatchObject({ verdict: 'fail', reading: expect.stringContaining('dirty tree') });
     expect(lock.content).toBeNull();
   });
 
-  it('neither reads nor writes the lock in a dry run, and evaluates every check', () => {
-    const lock = memoryLock('garbage');
-    let reads = 0;
-    const spy: LockStore = { read: () => { reads++; return lock.read(); }, write: lock.write, remove: lock.remove };
-    const runner = fakeRunner([['git check-ignore', failed('', 1)], ['npx tsx', safe]]);
-    const r = runPreflight(runner, deps(spy), 'dry');
+  it('evaluates every check in a dry run and reads no lock', () => {
+    const runner = fakeRunner([['git check-ignore', failed('', 1)], ['npx --no-install tsx', safe]]);
+    const r = runPreflight(runner, null);
     expect(r.checks.map(c => c.verdict)).toEqual(['fail', 'skipped', 'pass']);
-    expect(reads).toBe(0);
-    expect(lock.content).toBe('garbage');
   });
 });
 
@@ -684,22 +774,45 @@ describe('runPreflight', () => {
 // =============================================================================
 
 describe('runDryRun', () => {
-  it('prints preflight, gates, selection, chain plan and labels, writing nothing', () => {
-    const children = [
-      bead({ id: 'pv-r.1', parent: 'pv-r', issue_type: 'task' }),
-      bead({ id: 'pv-r.2', parent: 'pv-r', issue_type: 'task', dependencies: [{ issue_id: 'pv-r.2', depends_on_id: 'pv-r.1', type: 'blocks' }] }),
-    ];
-    const plan = { chains: [['pv-r.1', 'pv-r.2']], flat: false, warnings: [] };
-    const runner = fakeRunner([
+  const STACK = 'npx --no-install tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts';
+  const plan = { chains: [['pv-r.1', 'pv-r.2']], flat: false, warnings: [] };
+  const children = [
+    bead({ id: 'pv-r.1', parent: 'pv-r', issue_type: 'task' }),
+    bead({ id: 'pv-r.2', parent: 'pv-r', issue_type: 'task', dependencies: [{ issue_id: 'pv-r.2', depends_on_id: 'pv-r.1', type: 'blocks' }] }),
+  ];
+
+  /** Every call a dry run may make; anything else would be a write. */
+  const READ_ONLY = [
+    /^git check-ignore -q /,
+    /^bd list --all --limit 0 --json$/,
+    /^bd show [a-z0-9.-]+ --json$/,
+    /^bd children [a-z0-9.-]+ --json$/,
+    /^gh pr list --state open /,
+    new RegExp(`^${STACK} (safe-to-start$|plan )`),
+  ];
+
+  function runnerFor(beads: BuildBead[], overrides: [string, RunResult][] = []) {
+    return fakeRunner([
+      ...overrides,
       ['git check-ignore', ok('')],
-      ['npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts safe-to-start', ok('{"ok":true}')],
-      ['npx tsx .agents/skills/bead-branch-and-pr/scripts/stack.ts plan', ok(JSON.stringify(plan))],
-      ['bd list', ok(JSON.stringify([ready('pv-r', '2026-11-01T00:00:00Z')]))],
+      [`${STACK} safe-to-start`, ok('{"ok":true}')],
+      [`${STACK} plan`, ok(JSON.stringify(plan))],
+      ['bd list', ok(JSON.stringify(beads))],
       ['gh pr list', ok('[]')],
       ['bd children pv-r', ok(JSON.stringify(children))],
     ]);
-    const lock = memoryLock();
-    const r = runDryRun(runner, { lock, isAlive: () => false, ownerPid: 1, now: NOW });
+  }
+
+  function expectReadOnly(calls: string[][]): void {
+    for (const call of calls) {
+      const line = call.join(' ');
+      expect(READ_ONLY.some(re => re.test(line)), `not a read-only call: ${line}`).toBe(true);
+    }
+  }
+
+  it('prints preflight, gates, selection, chain plan and labels, writing nothing', () => {
+    const runner = runnerFor([ready('pv-r', '2026-11-01T00:00:00Z')]);
+    const r = runDryRun(runner, NOW);
     expect(Object.keys(r)).toEqual(['preflight', 'gates', 'selection', 'chain_plan', 'labels']);
     expect(r.selection?.root).toBe('pv-r');
     expect(r.chain_plan).toEqual(plan);
@@ -709,9 +822,44 @@ describe('runDryRun', () => {
       edges: [{ blocker: 'pv-r.1', blocked: 'pv-r.2', dependencyType: 'blocks' }],
     });
     expect(r.labels).toEqual(['bd', 'update', 'pv-r', ...buildStateWriteArgs('spec:building')]);
-    expect(lock.content).toBeNull();
-    const writes = runner.calls.filter(c => c[0] === 'bd' && !['list', 'children'].includes(c[1]));
-    expect(writes).toEqual([]);
+    expectReadOnly(runner.calls);
+  });
+
+  it('plans a resumed root and writes no label', () => {
+    const runner = runnerFor([bead({ id: 'pv-r', labels: ['spec:building'] })]);
+    const r = runDryRun(runner, NOW);
+    expect(r.selection).toMatchObject({ root: 'pv-r', kind: 'resume' });
+    expect(r.chain_plan).toEqual(plan);
+    expect(r.labels).toBe('none: root already carries spec:building');
+    expectReadOnly(runner.calls);
+  });
+
+  it('reports nothing selected without planning', () => {
+    const runner = runnerFor([]);
+    const r = runDryRun(runner, NOW);
+    expect(r).toMatchObject({ selection: { root: null }, chain_plan: null, labels: 'none: nothing selected' });
+    expect(runner.calls.some(c => c.includes('plan') || c[1] === 'children')).toBe(false);
+    expectReadOnly(runner.calls);
+  });
+
+  it('reports a chain-plan error as a reading, not a crash', () => {
+    const runner = runnerFor([ready('pv-r', '2026-11-01T00:00:00Z')], [['bd children pv-r', failed('db locked', 2)]]);
+    const r = runDryRun(runner, NOW);
+    expect(r.chain_plan).toEqual({ error: expect.stringContaining('bd children') });
+    expect(r.labels).toEqual(['bd', 'update', 'pv-r', ...buildStateWriteArgs('spec:building')]);
+    expectReadOnly(runner.calls);
+  });
+
+  it('still selects and plans when preflight fails', () => {
+    const runner = runnerFor(
+      [ready('pv-r', '2026-11-01T00:00:00Z')],
+      [['git check-ignore', failed('', 1)], [`${STACK} safe-to-start`, failed('', 1)]],
+    );
+    const r = runDryRun(runner, NOW);
+    expect(r.preflight.checks.map(c => c.verdict)).toEqual(['fail', 'skipped', 'fail']);
+    expect(r.selection?.root).toBe('pv-r');
+    expect(r.chain_plan).toEqual(plan);
+    expectReadOnly(runner.calls);
   });
 });
 

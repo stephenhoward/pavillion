@@ -207,21 +207,30 @@ export function lockDecision(
 // =============================================================================
 
 const PASSING_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
+const ROLLUP_TYPES = new Set(['CheckRun', 'StatusContext']);
+
+type RollupEntry = { __typename?: string; status?: string; conclusion?: string; state?: string };
 
 /**
  * Passing CI: at least one check, and every check finished green. A pending
- * check is not passing; neither is a PR with no checks at all.
+ * check is not passing; neither is a PR with no checks at all. Entries of an
+ * unknown type never pass; queueGate refuses them before asking.
  */
 export function passingCi(rollup: unknown[]): boolean {
   if (rollup.length === 0) return false;
   return rollup.every(entry => {
-    const c = entry as { __typename?: string; status?: string; conclusion?: string; state?: string };
+    const c = entry as RollupEntry;
     if (c.__typename === 'CheckRun') {
       return c.status === 'COMPLETED' && PASSING_CONCLUSIONS.has(c.conclusion ?? '');
     }
     if (c.__typename === 'StatusContext') return c.state === 'SUCCESS';
     return false;
   });
+}
+
+function unknownRollupEntry(prs: PrRow[]): number | null {
+  const bad = prs.find(p => p.statusCheckRollup.some(e => !ROLLUP_TYPES.has((e as RollupEntry)?.__typename ?? '')));
+  return bad ? bad.number : null;
 }
 
 /**
@@ -233,6 +242,10 @@ export function queueGate(prs: PrRow[], now: Date): Reading {
   const check = 'queue';
   if (prs.length >= GH_PR_LIMIT) {
     return { check, verdict: 'fail', reading: `gh pr list returned its limit (${GH_PR_LIMIT}); the queue may be truncated` };
+  }
+  const unknown = unknownRollupEntry(prs);
+  if (unknown !== null) {
+    return { check, verdict: 'fail', reading: `gh pr list: #${unknown} has a status check of unknown __typename` };
   }
   const counted = prs.filter(p => !p.isDraft && passingCi(p.statusCheckRollup) && p.reviewDecision !== 'CHANGES_REQUESTED');
   const ages = counted.map(p => (now.getTime() - Date.parse(p.createdAt)) / 86_400_000);
@@ -375,7 +388,8 @@ function isRoot(b: BuildBead): boolean {
 
 /**
  * Gate 2: fails if any open PR is recorded in the last Build state block of
- * a spec:built root, open or closed. A malformed block fails closed.
+ * a spec:built root, open or closed. A missing or malformed block fails
+ * closed: a spec:built root without its PR record is a missing field.
  */
 export function priorEpicGate(beads: BuildBead[], openPrs: Set<number>): Reading {
   const check = 'prior-epic-in-review';
@@ -384,7 +398,10 @@ export function priorEpicGate(beads: BuildBead[], openPrs: Set<number>): Reading
   for (const root of built) {
     const parsed = parseBuildState(root.notes);
     if (!parsed.ok) return { check, verdict: 'fail', reading: `${root.id}: ${parsed.stall}` };
-    const open = (parsed.state?.prs ?? []).filter(n => openPrs.has(n));
+    if (parsed.state === null) {
+      return { check, verdict: 'fail', reading: `spec:built root ${root.id} has no Build state block` };
+    }
+    const open = parsed.state.prs.filter(n => openPrs.has(n));
     if (open.length) hits.push(`${root.id} has open PR ${open.map(n => `#${n}`).join(', ')}`);
   }
   if (hits.length) return { check, verdict: 'fail', reading: hits.join('; ') };
@@ -428,9 +445,14 @@ export function selectRoot(beads: BuildBead[]): Selection {
       skipped.push({ id: b.id, reason });
       continue;
     }
-    candidates.push(b.spec_ready_at
-      ? { id: b.id, at: b.spec_ready_at, source: 'label-event' }
-      : { id: b.id, at: b.updated_at as string, source: 'updated_at' });
+    const candidate = b.spec_ready_at
+      ? { id: b.id, at: b.spec_ready_at, source: 'label-event' as const }
+      : { id: b.id, at: b.updated_at as string, source: 'updated_at' as const };
+    if (Number.isNaN(Date.parse(candidate.at))) {
+      skipped.push({ id: b.id, reason: `unparsable ${candidate.source} timestamp ${JSON.stringify(candidate.at)}` });
+      continue;
+    }
+    candidates.push(candidate);
   }
 
   if (resume !== null) return { root: resume, kind: 'resume', source: null, at: null, skipped };
@@ -635,7 +657,9 @@ function attempt<T>(read: () => T): T | Failure {
 
 export interface LockStore {
   read(): string | null;
-  write(content: string): void;
+  /** Create the lock only if it is absent (O_EXCL); false when it exists. */
+  create(content: string): boolean;
+  overwrite(content: string): void;
   remove(): void;
 }
 
@@ -659,7 +683,7 @@ function reportPathCheck(runner: Runner): Reading {
 }
 
 function cleanTreeCheck(runner: Runner): Reading {
-  const r = runner('npx', ['tsx', STACK_TS, 'safe-to-start']);
+  const r = runner('npx', ['--no-install', 'tsx', STACK_TS, 'safe-to-start']);
   if (r.exitCode === 0) return { check: 'clean-tree', verdict: 'pass', reading: 'clean tree at the trunk' };
   let reason = r.stderr || `exit ${r.exitCode}`;
   try {
@@ -670,41 +694,58 @@ function cleanTreeCheck(runner: Runner): Reading {
 }
 
 /**
+ * Take the lock: refused for an owner pid that is not running; a free lock
+ * is created exclusively, so two racing takers cannot both win; a stale one
+ * is overwritten and read back, and anything but our own record fails.
+ */
+function takeLock(deps: PreflightDeps): { reading: Reading; took: boolean } {
+  const fail = (reading: string) => ({ reading: { check: 'lock', verdict: 'fail' as const, reading }, took: false });
+  if (!deps.isAlive(deps.ownerPid)) return fail(`owner pid ${deps.ownerPid} is not running`);
+  const current = deps.lock.read();
+  const d = lockDecision(current, deps.isAlive, deps.ownerPid);
+  if (d.verdict === 'held' || d.verdict === 'malformed') return fail(d.reading);
+  const record = JSON.stringify({ pid: deps.ownerPid, started: deps.now.toISOString() });
+  if (current === null) {
+    if (!deps.lock.create(record)) return fail('lock appeared while taking it: another run started');
+  }
+  else if (d.verdict === 'replace') {
+    deps.lock.overwrite(record);
+    if (deps.lock.read() !== record) return fail('lock changed while replacing it: another run started');
+  }
+  return { reading: { check: 'lock', verdict: 'pass', reading: d.reading }, took: true };
+}
+
+/**
  * Fails closed, in order: the report path is gitignored, the lock is ours,
  * the tree is clean at the trunk. A real run stops at the first failure and
- * releases a lock it took; a dry run evaluates every check and never reads
- * or writes the lock.
+ * releases a lock it took. `deps` null is the dry run: every check is
+ * evaluated and the lock is neither read nor written.
  */
-export function runPreflight(runner: Runner, deps: PreflightDeps, mode: Mode): PreflightResult {
+export function runPreflight(runner: Runner, deps: PreflightDeps | null): PreflightResult {
   const checks: Reading[] = [];
+  const dry = deps === null;
   const failed = (): boolean => checks.some(c => c.verdict === 'fail');
   const notRun = (check: string): Reading => ({ check, verdict: 'not-run', reading: 'an earlier check failed' });
 
   checks.push(reportPathCheck(runner));
 
   let took = false;
-  if (mode === 'dry') {
+  if (dry) {
     checks.push({ check: 'lock', verdict: 'skipped', reading: 'not read in a dry run' });
   }
   else if (failed()) {
     checks.push(notRun('lock'));
   }
   else {
-    const d = lockDecision(deps.lock.read(), deps.isAlive, deps.ownerPid);
-    if (d.verdict === 'take' || d.verdict === 'replace') {
-      deps.lock.write(JSON.stringify({ pid: deps.ownerPid, started: deps.now.toISOString() }));
-      took = true;
-      checks.push({ check: 'lock', verdict: 'pass', reading: d.reading });
-    }
-    else {
-      checks.push({ check: 'lock', verdict: 'fail', reading: d.reading });
-    }
+    const lock = takeLock(deps);
+    took = lock.took;
+    checks.push(lock.reading);
   }
 
-  if (mode === 'run' && failed()) checks.push(notRun('clean-tree'));
+  if (!dry && failed()) checks.push(notRun('clean-tree'));
   else checks.push(cleanTreeCheck(runner));
 
-  if (mode === 'run' && failed() && took) deps.lock.remove();
+  if (!dry && failed() && took) deps.lock.remove();
   return { ok: !failed(), checks };
 }
 
@@ -732,9 +773,9 @@ export interface DryRunResult {
  * written: preflight and gate readings with verdicts, the selection, the
  * chain plan from `stack.ts plan`, and the label write it would make.
  */
-export function runDryRun(runner: Runner, deps: PreflightDeps): DryRunResult {
-  const preflight = runPreflight(runner, deps, 'dry');
-  const gates = runGates(runner, deps.now, 'dry');
+export function runDryRun(runner: Runner, now: Date): DryRunResult {
+  const preflight = runPreflight(runner, null);
+  const gates = runGates(runner, now, 'dry');
   const selection = gates.selection;
   let chainPlan: unknown = null;
   let labels: string[] | string = 'none: nothing selected';
@@ -742,7 +783,7 @@ export function runDryRun(runner: Runner, deps: PreflightDeps): DryRunResult {
     const root = selection.root;
     chainPlan = attempt(() => {
       const input = chainPlanInput(readChildren(runner, root));
-      return readJson(runner, 'npx', ['tsx', STACK_TS, 'plan', JSON.stringify(input)]);
+      return readJson(runner, 'npx', ['--no-install', 'tsx', STACK_TS, 'plan', JSON.stringify(input)]);
     });
     labels = selection.kind === 'resume'
       ? 'none: root already carries spec:building'
