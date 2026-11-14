@@ -17,6 +17,12 @@ const PAGE_SIZE = 50;
 const notificationService = new NotificationService();
 
 /**
+ * In-flight first-page fetch, shared by concurrent callers so a shell mount
+ * and an inbox mount landing together make one request. Cleared on settle.
+ */
+let inFlightFetch: Promise<void> | null = null;
+
+/**
  * Pinia store for managing notification state and operations.
  *
  * The store holds the response objects from `GET /api/v1/notification`
@@ -43,20 +49,27 @@ export const useNotificationStore = defineStore('notifications', {
     /**
      * Fetch the first page of notifications, replacing the current list.
      */
-    async fetchNotifications(): Promise<void> {
+    fetchNotifications(): Promise<void> {
+      if (inFlightFetch) {
+        return inFlightFetch;
+      }
       this.isLoading = true;
-      try {
-        const results = await notificationService.getNotifications(PAGE_SIZE, 0);
-        this.notifications = results;
-        this.hasMore = results.length === PAGE_SIZE;
-      }
-      catch (error) {
-        console.error('Error fetching notifications:', error);
-        throw error;
-      }
-      finally {
-        this.isLoading = false;
-      }
+      inFlightFetch = (async () => {
+        try {
+          const results = await notificationService.getNotifications(PAGE_SIZE, 0);
+          this.notifications = results;
+          this.hasMore = results.length === PAGE_SIZE;
+        }
+        catch (error) {
+          console.error('Error fetching notifications:', error);
+          throw error;
+        }
+        finally {
+          this.isLoading = false;
+          inFlightFetch = null;
+        }
+      })();
+      return inFlightFetch;
     },
 
     /**

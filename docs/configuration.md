@@ -448,6 +448,7 @@ behaviour.
 | `publicCalendarList.byIp` | IP address | 60 per minute |
 | `configSite.byIp` | IP address | 60 per minute |
 | `widgetConfig.byAccount` | Account | 100 per 15 minutes |
+| `notifications.byAccount` | Account | 60 notification list requests per minute |
 | `calendarFollow.byAccount` | Account | 30 follow or unfollow requests per 15 minutes |
 | `calendarFundingPlan.byAccount` | Account | 30 per 15 minutes |
 | `checkoutSession.byAccount` | Account | 10 per 15 minutes |

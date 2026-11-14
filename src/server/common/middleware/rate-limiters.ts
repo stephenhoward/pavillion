@@ -229,6 +229,21 @@ export const limitCalendarFollowByAccount: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Notification list rate limiter for authenticated users.
+ * Limits: 60 requests per account per minute (default config).
+ * Covers GET /api/v1/notification. The bucket is per account, so every open
+ * tab and device shares it; the client polls each tab every 30 seconds and
+ * refetches on focus and inbox mount, so the cap sits well above that load.
+ */
+export const limitNotificationsByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.notifications.byAccount.max'),
+    config.get<number>('rateLimit.notifications.byAccount.windowMs'),
+    'notifications',
+  )
+  : noOpMiddleware;
+
+/**
  * Funding plan change rate limiter for authenticated users.
  * Limits: 10 requests per account per 15 minutes (default config).
  * Bounds POST /cancel and POST /resume, each of which makes a provider call

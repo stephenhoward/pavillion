@@ -105,6 +105,50 @@ describe('NotificationStore', () => {
   });
 
   describe('fetchNotifications action', () => {
+    it('shares one request between concurrent calls', async () => {
+      let resolveFetch!: (v: NotificationResponse[]) => void;
+      mockNotificationService.getNotifications.mockReturnValueOnce(
+        new Promise((resolve) => { resolveFetch = resolve; }),
+      );
+
+      const first = store.fetchNotifications();
+      const second = store.fetchNotifications();
+      resolveFetch([makeNotification()]);
+      await Promise.all([first, second]);
+
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledTimes(1);
+      expect(store.notifications).toHaveLength(1);
+    });
+
+    it('issues a new request once the previous one has settled', async () => {
+      mockNotificationService.getNotifications.mockResolvedValue([]);
+
+      await store.fetchNotifications();
+      await store.fetchNotifications();
+
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects every concurrent caller on failure and does not stick', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let rejectFetch!: (e: Error) => void;
+      mockNotificationService.getNotifications.mockReturnValueOnce(
+        new Promise((_resolve, reject) => { rejectFetch = reject; }),
+      );
+
+      const first = store.fetchNotifications();
+      const second = store.fetchNotifications();
+      rejectFetch(new Error('429'));
+      await expect(first).rejects.toThrow('429');
+      await expect(second).rejects.toThrow('429');
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledTimes(1);
+
+      mockNotificationService.getNotifications.mockResolvedValueOnce([]);
+      await store.fetchNotifications();
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledTimes(2);
+      consoleSpy.mockRestore();
+    });
+
     it('replaces notifications with fetched results', async () => {
       const fetched = [
         makeNotification({ id: 'notif-1', seen: false }),
