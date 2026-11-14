@@ -11,6 +11,8 @@ import i18next from 'i18next';
  *   - `days`: array of ISO day codes (MO, TU, ...) -> localized & joined via Intl.ListFormat
  *   - `day`: single ISO day code                   -> localized via recurrence.days.{code}
  *   - `ordinal`: integer ordinal (1..4, -1)        -> localized via recurrence.ordinals.{n}
+ *   - `groups`: Nth-weekday groups `{ ordinals: number[], day }[]` -> each rendered
+ *     as "<ordinals> <day>" and joined via Intl.ListFormat
  *   - `n`: interval integer (passed through as-is)
  */
 export interface RecurrenceSummary {
@@ -55,6 +57,19 @@ export function useRecurrenceText(
         type: 'conjunction',
       });
       params.days = listFormatter.format(dayNames);
+    }
+
+    // Resolve Nth-weekday groups (e.g. 1st and 3rd Tuesday) -> one joined phrase.
+    if (Array.isArray(params.groups)) {
+      const listFormatter = new Intl.ListFormat(i18next.language, {
+        style: 'long',
+        type: 'conjunction',
+      });
+      const phrases = (params.groups as { ordinals: number[]; day: string }[]).map(group => {
+        const ordinals = listFormatter.format(group.ordinals.map(o => t(`recurrence.ordinals.${o}`)));
+        return `${ordinals} ${t(`recurrence.days.${group.day}`)}`;
+      });
+      params.groups = listFormatter.format(phrases);
     }
 
     // Resolve a single ISO day code -> localized day name.

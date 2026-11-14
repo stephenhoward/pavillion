@@ -37,6 +37,25 @@ function parseNthWeekday(entry: string): { ordinal: number; day: string } | null
 }
 
 /**
+ * Every Nth-weekday entry of a BYDAY list, grouped by weekday so `1TU, 3TU`
+ * can be named "1st and 3rd Tuesday". Groups and ordinals keep first-seen order.
+ */
+function collectNthWeekdayGroups(byDay: string[]): { ordinals: number[]; day: string }[] {
+  const groups: { ordinals: number[]; day: string }[] = [];
+  for (const entry of byDay.map(parseNthWeekday)) {
+    if (!entry) continue;
+    const group = groups.find(g => g.day === entry.day);
+    if (!group) {
+      groups.push({ ordinals: [entry.ordinal], day: entry.day });
+    }
+    else if (!group.ordinals.includes(entry.ordinal)) {
+      group.ordinals.push(entry.ordinal);
+    }
+  }
+  return groups;
+}
+
+/**
  * Generates a structured, locale-agnostic recurrence summary from a schedule.
  *
  * The returned shape is `{ key, params }`: `key` is a translation key (e.g.
@@ -81,11 +100,18 @@ export function generateRecurrenceSummary(schedule: CalendarEventSchedule): Recu
 
     case EventFrequency.MONTHLY: {
       // Detect "Nth weekday of the month" patterns (e.g. '1MO', '-1SA').
-      const nthEntry = byDay
-        .map(parseNthWeekday)
-        .find((entry): entry is { ordinal: number; day: string } => entry !== null);
+      const groups = collectNthWeekdayGroups(byDay);
 
-      if (nthEntry) {
+      if (groups.length > 1 || (groups.length === 1 && groups[0].ordinals.length > 1)) {
+        // Several entries: carry the full list under the list-carrying keys.
+        if (interval === 1) {
+          return { key: 'recurrence.nth_weekdays_of_month', params: { groups } };
+        }
+        return { key: 'recurrence.nth_weekdays_every_n_months', params: { groups, n: interval } };
+      }
+
+      if (groups.length === 1) {
+        const nthEntry = { ordinal: groups[0].ordinals[0], day: groups[0].day };
         if (interval === 1) {
           return {
             key: 'recurrence.nth_weekday_of_month',
@@ -230,13 +256,23 @@ export function generateRecurrenceText(
 
     case EventFrequency.MONTHLY: {
       // Detect "Nth weekday of the month" patterns (e.g. '1MO', '3FR', '-1SA')
-      const nthEntry = byDay
-        .map(parseNthWeekday)
-        .find((entry): entry is { ordinal: number; day: string } => entry !== null);
+      const groups = collectNthWeekdayGroups(byDay);
 
-      if (nthEntry) {
-        const ordinalText = t('recurrence.' + nthEntry.ordinal + 'ord');
-        const dayText = t('recurrence.' + nthEntry.day);
+      if (groups.length > 1 || (groups.length === 1 && groups[0].ordinals.length > 1)) {
+        const groupsText = joinDayList(
+          groups.map(g => joinDayList(g.ordinals.map(o => t('recurrence.' + o + 'ord')), language)
+            + ' ' + t('recurrence.' + g.day)),
+          language,
+        );
+        if (interval === 1) {
+          return t('recurrence.nth_weekdays_of_month', { groups: groupsText });
+        }
+        return t('recurrence.nth_weekdays_every_n_months', { groups: groupsText, n: interval });
+      }
+
+      if (groups.length === 1) {
+        const ordinalText = t('recurrence.' + groups[0].ordinals[0] + 'ord');
+        const dayText = t('recurrence.' + groups[0].day);
 
         if (interval === 1) {
           return t('recurrence.nth_weekday_of_month', {

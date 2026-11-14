@@ -70,6 +70,8 @@ const DYNAMIC_KEYS: Record<string, Record<string, string[]>> = {
   'site/composables/useRecurrenceText.ts': {
     '`recurrence.days.${code}`': RECURRENCE_DAYS,
     '`recurrence.days.${params.day}`': RECURRENCE_DAYS,
+    '`recurrence.days.${group.day}`': RECURRENCE_DAYS,
+    '`recurrence.ordinals.${o}`': ['1', '2', '3', '4', '-1'].map(n => `recurrence.ordinals.${n}`),
     '`recurrence.ordinals.${params.ordinal}`': ['1', '2', '3', '4', '-1'].map(n => `recurrence.ordinals.${n}`),
     'value.key': [
       'recurrence.every_day',
@@ -80,6 +82,8 @@ const DYNAMIC_KEYS: Record<string, Record<string, string[]>> = {
       'recurrence.every_n_weeks_on_days',
       'recurrence.nth_weekday_of_month',
       'recurrence.nth_weekday_every_n_months',
+      'recurrence.nth_weekdays_of_month',
+      'recurrence.nth_weekdays_every_n_months',
       'recurrence.monthly',
       'recurrence.every_n_months',
       'recurrence.yearly',
