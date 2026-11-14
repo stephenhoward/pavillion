@@ -176,7 +176,7 @@ Human procedure: `docs/federation-testing.md`.
 
 ## Architecture Overview
 
-Backend uses domain-driven design with domains: Accounts, Authentication, Calendar, ActivityPub, Configuration, Housekeeping, Media, Public. Each domain has: `api/v1/`, `entity/`, `model/` (server-only business models), `service/`, `interface/`, `events/`, `test/`. Multilingual content uses a `TranslatedModel` base class. TypeScript experimental decorators are enabled for Sequelize entities.
+Backend uses domain-driven design with domains: Accounts, ActivityPub, Authentication, Calendar, Configuration, Email, Funding, Housekeeping, Media, Moderation, Notifications, Public, Setup. Each domain has: `api/v1/`, `entity/`, `model/` (server-only business models), `service/`, `interface/`, `events/`, `test/`. Cross-domain imports go through `interface/` (DEC-003); `npm run lint:deps` enforces that, and the allowlist in `.dependency-cruiser.cjs` only shrinks — a PR may remove an entry, never add one. Multilingual content uses a `TranslatedModel` base class. TypeScript experimental decorators are enabled for Sequelize entities.
 
 Frontend has two apps: Client (authenticated) and Site (public views), using Vue 3 composition API, Pinia stores, and SCSS.
 

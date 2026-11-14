@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-> Last Updated: 2026-11-10
+> Last Updated: 2026-11-14
 > Version: 2.13.0
 > Override Priority: Highest
 
@@ -75,7 +75,7 @@ Supersession is the exception, because it retires a decision rather than refinin
 - **File:** [decisions/dec-003-domain-driven-architecture.md](decisions/dec-003-domain-driven-architecture.md)
 - **Date:** 2025-07-29 · **Status:** Accepted
 - **Decision:** Strict domain boundaries; cross-domain communication via well-defined interfaces only; no direct imports across domain boundaries.
-- **Consult when:** Creating a new domain; refactoring cross-domain code; encountering or resolving cross-domain imports; service-layer design; questions about why the codebase is organized by domain instead of by feature or MVC layer.
+- **Consult when:** Creating a new domain; refactoring cross-domain code; encountering or resolving cross-domain imports; service-layer design; questions about why the codebase is organized by domain instead of by feature or MVC layer; changing `.dependency-cruiser.cjs` or its known-violators allowlist, or the `lint:deps` step in the Lint workflow.
 
 ### DEC-012: Hand-Rolled ActivityPub Implementation
 - **File:** [decisions/dec-012-hand-rolled-activitypub-implementation.md](decisions/dec-012-hand-rolled-activitypub-implementation.md)
