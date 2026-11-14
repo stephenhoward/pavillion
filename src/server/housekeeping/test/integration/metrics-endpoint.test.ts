@@ -9,6 +9,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import HousekeepingInterface from '@/server/housekeeping/interface';
 import MetricsRoutes, { METRICS_CONTENT_TYPE } from '@/server/housekeeping/api/metrics';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
 import { DiskUsageSnapshotEntity } from '@/server/housekeeping/entity/disk-snapshot';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 
@@ -57,6 +58,7 @@ describe('Operational metrics endpoint', () => {
   beforeEach(async () => {
     await BackupEntity.destroy({ where: {}, truncate: true });
     await DiskUsageSnapshotEntity.destroy({ where: {}, truncate: true });
+    await BackupDrillEntity.destroy({ where: {}, truncate: true });
   });
 
   /** Seeds the two data sources this environment can actually populate. */
@@ -102,6 +104,38 @@ describe('Operational metrics endpoint', () => {
     expect(parsed['pavillion_backup_last_success_size_bytes']).toBe(status.lastBackup!.size);
     expect(parsed['pavillion_backup_last_success_timestamp_seconds'])
       .toBe(Math.floor(Date.parse(status.lastBackup!.date) / 1000));
+  });
+
+  describe('restore drill timestamp', () => {
+    const SERIES = 'pavillion_restore_drill_last_success_timestamp_seconds';
+
+    async function scrape() {
+      return (await fetch(`${baseUrl}/metrics`)).text();
+    }
+
+    async function recordDrillAt(filename: string, passed: boolean, ranAt: Date) {
+      await housekeepingInterface.recordDrillResult({ backupFilename: filename, passed });
+      await BackupDrillEntity.update({ ran_at: ranAt }, { where: { backup_filename: filename } });
+    }
+
+    it('is absent, not zero, before any drill has passed', async () => {
+      expect(await scrape()).not.toContain(SERIES);
+
+      await recordDrillAt('only-fail.dump', false, new Date('2026-09-01T02:00:00.000Z'));
+      expect(await scrape()).not.toContain(SERIES);
+    });
+
+    it('reports the last passing drill, unmoved by a later failure, with no filename', async () => {
+      const passedAt = new Date('2026-09-01T02:00:00.000Z');
+      await recordDrillAt('good"\nname.dump', true, passedAt);
+      await recordDrillAt('later-fail.dump', false, new Date('2026-09-02T02:00:00.000Z'));
+
+      const body = await scrape();
+
+      expect(samples(body)[SERIES]).toBe(Math.floor(passedAt.getTime() / 1000));
+      expect(body).not.toContain('name.dump');
+      expect(body).not.toContain('later-fail');
+    });
   });
 
   it('exposes the worker snapshot values and the snapshot write time', async () => {

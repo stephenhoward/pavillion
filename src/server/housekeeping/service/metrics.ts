@@ -5,6 +5,7 @@ import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
+import DrillService from '@/server/housekeeping/service/drill';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('housekeeping');
@@ -76,6 +77,18 @@ export interface BackupMetrics {
 }
 
 /**
+ * Last passing restore drill. Absent when no drill has ever passed.
+ *
+ * Carries the timestamp only. The drilled dump's filename is untrusted input
+ * from whoever can write to the backup volume, so it never reaches the
+ * exposition, as a label or otherwise.
+ */
+export interface RestoreDrillMetrics {
+  /** Unix seconds at which the most recent passing drill ran. */
+  lastSuccessTimestampSeconds: number;
+}
+
+/**
  * Usage for one filesystem.
  *
  * `volume` becomes the series label, so monitoring another filesystem adds a
@@ -124,6 +137,8 @@ export interface FederationBacklogMetrics {
  */
 export interface OperationalMetrics {
   backup: BackupMetrics | null;
+  /** Null when no drill has ever passed, or the drill record could not be read. */
+  restoreDrill: RestoreDrillMetrics | null;
   /**
    * Volumes are separate fields rather than one list so a failure in either
    * source stays isolated to its own label value; the exposition joins them
@@ -173,8 +188,9 @@ export default class MetricsService {
    * @returns The operational metric values, with an absent family as null
    */
   async collect(now: Date = new Date()): Promise<OperationalMetrics> {
-    const [backup, backupVolume, databaseSizeBytes, mediaVolume, queues, federation] = await Promise.all([
+    const [backup, restoreDrill, backupVolume, databaseSizeBytes, mediaVolume, queues, federation] = await Promise.all([
       this.isolate('backup', () => this.getBackupMetrics()),
+      this.isolate('restoreDrill', () => this.getRestoreDrillMetrics()),
       this.isolate('backupVolume', () => this.getBackupVolumeMetrics()),
       this.isolate('databaseSize', () => this.getDatabaseSizeBytes()),
       this.isolate('mediaVolume', () => this.getMediaVolumeMetrics()),
@@ -182,7 +198,7 @@ export default class MetricsService {
       this.isolate('federation', () => this.getFederationMetrics()),
     ]);
 
-    return { backup, backupVolume, mediaVolume, databaseSizeBytes, queues, federation };
+    return { backup, restoreDrill, backupVolume, mediaVolume, databaseSizeBytes, queues, federation };
   }
 
   /**
@@ -225,6 +241,23 @@ export default class MetricsService {
       lastSuccessTimestampSeconds: Math.floor(lastBackup.created_at.getTime() / 1000),
       lastSuccessSizeBytes: Number(lastBackup.size_bytes),
     };
+  }
+
+  /**
+   * Reads the most recent passing restore drill.
+   *
+   * Goes through the same accessor `HousekeepingInterface.getLastSuccessfulDrill`
+   * does. Failed drills are ignored by that accessor, so a failure never
+   * advances (or hides) the timestamp.
+   */
+  private async getRestoreDrillMetrics(): Promise<RestoreDrillMetrics | null> {
+    const drill = await new DrillService().getLastSuccessful();
+
+    if (!drill) {
+      return null;
+    }
+
+    return { lastSuccessTimestampSeconds: Math.floor(drill.ranAt.getTime() / 1000) };
   }
 
   /**

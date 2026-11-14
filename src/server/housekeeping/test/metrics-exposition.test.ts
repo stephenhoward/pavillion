@@ -36,6 +36,7 @@ function expectDeclaredFamily(name: string): void {
 
 const fullMetrics: OperationalMetrics = {
   backup: { lastSuccessTimestampSeconds: 1756000000, lastSuccessSizeBytes: 5242880 },
+  restoreDrill: { lastSuccessTimestampSeconds: 1756100000 },
   backupVolume: {
     volume: 'backups',
     totalBytes: 1000, freeBytes: 600, usedBytes: 400, snapshotTimestampSeconds: 1756003600,
@@ -55,6 +56,7 @@ const fullMetrics: OperationalMetrics = {
 
 const emptyMetrics: OperationalMetrics = {
   backup: null,
+  restoreDrill: null,
   backupVolume: null,
   databaseSizeBytes: null,
   mediaVolume: null,
@@ -273,6 +275,19 @@ describe('OpenMetrics exposition', () => {
     expect(parsed['pavillion_federation_unprocessed_activities{direction="outbound"}']).toBe(0);
     expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="outbound"}']).toBeUndefined();
     expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="inbound"}']).toBe(1756000100);
+  });
+
+  it('renders the last passing restore drill as an unlabelled timestamp gauge', () => {
+    const document = renderOpenMetrics(fullMetrics);
+
+    expect(document).toContain('# TYPE pavillion_restore_drill_last_success_timestamp_seconds gauge\n');
+    expect(samples(document)['pavillion_restore_drill_last_success_timestamp_seconds']).toBe(1756100000);
+  });
+
+  it('emits no restore drill series when no drill has passed', () => {
+    const document = renderOpenMetrics({ ...fullMetrics, restoreDrill: null });
+
+    expect(document).not.toContain('pavillion_restore_drill_');
   });
 
   it('omits the whole federation family when its source is absent', () => {
