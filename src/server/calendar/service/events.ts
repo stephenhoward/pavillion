@@ -2043,12 +2043,16 @@ class EventService {
    * @param account - the account performing the operation
    * @param eventIds - array of event IDs to assign categories to
    * @param categoryIds - array of category IDs to assign
+   * @param calendarId - optional acting calendar (the one being managed). When
+   *   given, every event must be shown on it (owned or reposted) and categories
+   *   are validated against it, rather than against each event's origin calendar.
    * @returns promise that resolves to updated events with their categories
    */
   async bulkAssignCategories(
     account: Account,
     eventIds: string[],
     categoryIds: string[],
+    calendarId?: string,
   ): Promise<CalendarEvent[]> {
     // Validate required array fields
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
@@ -2079,6 +2083,18 @@ class EventService {
       throw new ValidationError('invalid UUID format in categoryIds', { invalidIds: invalidCategoryIds });
     }
 
+    if (calendarId !== undefined && !isValidUuidV4(calendarId)) {
+      throw new ValidationError('invalid UUID format for calendarId');
+    }
+
+    // Checked before any event is loaded so nothing about event or repost
+    // relationships is revealed for a calendar the account cannot edit.
+    if (calendarId !== undefined) {
+      const editable = await this.calendarService.editableCalendarsForUser(account);
+      if (!editable.some(cal => cal.id === calendarId)) {
+        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
+      }
+    }
 
     // The acting calendar id (the reposter for repost events; the source
     // calendar otherwise) is returned from the transaction so the post-commit
@@ -2093,6 +2109,28 @@ class EventService {
 
       if (events.length !== eventIds.length) {
         throw new BulkEventsNotFoundError('Some events were not found or you do not have permission to modify them');
+      }
+
+      if (calendarId !== undefined) {
+        // 2a. Every event must be shown on the acting calendar (owned or
+        // reposted). event.calendar_id is deliberately not compared: for a
+        // repost it is the origin calendar, and null for a remote repost.
+        const shown = await Promise.all(eventIds.map(id => this.isEventVisibleOnCalendar(id, calendarId)));
+        if (shown.some(visible => !visible)) {
+          throw new MixedCalendarEventsError('All events must be shown on the calendar being managed');
+        }
+
+        // 2b. Validate categories belong to the acting calendar
+        const actingCategories = await EventCategoryEntity.findAll({
+          where: { id: categoryIds, calendar_id: calendarId },
+          transaction,
+        });
+        if (actingCategories.length !== categoryIds.length) {
+          throw new CategoriesNotFoundError('Some categories were not found in the calendar');
+        }
+
+        await this.createBulkCategoryAssignments(eventIds, categoryIds, transaction);
+        return calendarId;
       }
 
       // 2. Verify all events belong to same local calendar (remote events not supported)
@@ -2114,9 +2152,9 @@ class EventService {
         effectiveCalendarId,
         userCalendars,
       } = await this.resolveEffectiveCalendarId(account, calendarIds[0] as string, eventIds, transaction);
-      let calendarId = effectiveCalendarId;
+      const legacyCalendarId = effectiveCalendarId;
 
-      const calendar = await this.calendarService.getCalendar(calendarId);
+      const calendar = await this.calendarService.getCalendar(legacyCalendarId);
 
       if (!calendar) {
         throw new CalendarNotFoundError('Calendar not found for events');
@@ -2126,7 +2164,7 @@ class EventService {
       const categories = await EventCategoryEntity.findAll({
         where: {
           id: categoryIds,
-          calendar_id: calendarId,
+          calendar_id: legacyCalendarId,
         },
         transaction,
       });
@@ -2137,44 +2175,12 @@ class EventService {
 
       // 5. Check user has permission to modify events
       // All events are in the same effective calendar, so check permission once
-      const hasPermission = userCalendars.some(cal => cal.id === calendarId);
+      const hasPermission = userCalendars.some(cal => cal.id === legacyCalendarId);
       if (!hasPermission) {
         throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
       }
 
-      // 5. Get existing assignments to avoid duplicates
-      const existingAssignments = await EventCategoryAssignmentEntity.findAll({
-        where: {
-          event_id: eventIds,
-          category_id: categoryIds,
-        },
-        transaction,
-      });
-
-      // 6. Create assignments, avoiding duplicates
-      const assignmentsToCreate = [];
-
-      for (const eventId of eventIds) {
-        for (const categoryId of categoryIds) {
-          // Check if this assignment already exists
-          const existingAssignment = existingAssignments.find(
-            assignment => assignment.event_id === eventId && assignment.category_id === categoryId,
-          );
-
-          if (!existingAssignment) {
-            assignmentsToCreate.push({
-              id: uuidv4(),
-              event_id: eventId,
-              category_id: categoryId,
-            });
-          }
-        }
-      }
-
-      // 7. Bulk create all new assignments
-      if (assignmentsToCreate.length > 0) {
-        await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
-      }
+      await this.createBulkCategoryAssignments(eventIds, categoryIds, transaction);
 
       return effectiveCalendarId;
     });
@@ -2196,6 +2202,49 @@ class EventService {
     }
 
     return updatedEvents;
+  }
+
+  /**
+   * Create missing event/category assignment rows, skipping existing ones.
+   */
+  private async createBulkCategoryAssignments(
+    eventIds: string[],
+    categoryIds: string[],
+    transaction: Transaction,
+  ): Promise<void> {
+    // 5. Get existing assignments to avoid duplicates
+    const existingAssignments = await EventCategoryAssignmentEntity.findAll({
+      where: {
+        event_id: eventIds,
+        category_id: categoryIds,
+      },
+      transaction,
+    });
+
+    // 6. Create assignments, avoiding duplicates
+    const assignmentsToCreate = [];
+
+    for (const eventId of eventIds) {
+      for (const categoryId of categoryIds) {
+        // Check if this assignment already exists
+        const existingAssignment = existingAssignments.find(
+          assignment => assignment.event_id === eventId && assignment.category_id === categoryId,
+        );
+
+        if (!existingAssignment) {
+          assignmentsToCreate.push({
+            id: uuidv4(),
+            event_id: eventId,
+            category_id: categoryId,
+          });
+        }
+      }
+    }
+
+    // 7. Bulk create all new assignments
+    if (assignmentsToCreate.length > 0) {
+      await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
+    }
   }
 
   /**

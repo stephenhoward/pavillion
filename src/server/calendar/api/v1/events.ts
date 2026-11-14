@@ -299,10 +299,18 @@ export default class EventRoutes {
       return;
     }
 
-    const { eventIds, categoryIds } = req.body;
+    const { eventIds, categoryIds, calendarId } = req.body;
+
+    if (calendarId !== undefined && typeof calendarId !== 'string') {
+      res.status(400).json({
+        "error": "calendarId must be a string when provided",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
 
     try {
-      const events = await this.service.bulkAssignCategories(account, eventIds, categoryIds);
+      const events = await this.service.bulkAssignCategories(account, eventIds, categoryIds, calendarId);
       res.json(events.map(event => event.toObject()));
     }
     catch (error) {

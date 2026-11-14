@@ -740,8 +740,9 @@ export default class CalendarInterface {
     account: Account,
     eventIds: string[],
     categoryIds: string[],
+    calendarId?: string,
   ): Promise<CalendarEvent[]> {
-    return this.eventService.bulkAssignCategories(account, eventIds, categoryIds);
+    return this.eventService.bulkAssignCategories(account, eventIds, categoryIds, calendarId);
   }
 
   async replaceEventCategories(

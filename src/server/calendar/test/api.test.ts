@@ -294,6 +294,21 @@ describe('Event API', () => {
     expect(response.body.error).toBe('categoryIds must be a non-empty array');
   });
 
+  it('bulkAssignCategories: should fail with non-string calendarId', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1'],
+        categoryIds: ['cat1'],
+        calendarId: 123,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+  });
+
   it('bulkAssignCategories: should fail with non-string eventIds', async () => {
     router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
+import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -9,6 +10,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
+import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 import {
   BulkEventsNotFoundError,
@@ -220,6 +222,74 @@ describe('CalendarInterface.bulkAssignCategories', () => {
       await expect(
         calendarInterface.bulkAssignCategories(testAccount, eventIds, categoryIds),
       ).rejects.toThrow(CategoriesNotFoundError);
+    });
+  });
+
+  describe('with an acting calendarId (reposts)', () => {
+    let calA: Calendar;
+    let calB: Calendar;
+    let calC: Calendar;
+    let eventB1: CalendarEvent;
+    let eventB2: CalendarEvent;
+    let eventC1: CalendarEvent;
+    let categoryA: EventCategory;
+
+    const makeEvent = (calendarId: string, name: string) => calendarInterface.createEvent(testAccount, {
+      calendarId,
+      content: { en: { name, description: name } },
+      start_date: '2025-09-01',
+      start_time: '10:00',
+      end_date: '2025-09-01',
+      end_time: '11:00',
+    });
+
+    beforeAll(async () => {
+      calA = await calendarInterface.createCalendar(testAccount, 'repostcalendara');
+      calB = await calendarInterface.createCalendar(testAccount, 'repostcalendarb');
+      calC = await calendarInterface.createCalendar(testAccount, 'repostcalendarc');
+      eventB1 = await makeEvent(calB.id, 'B event 1');
+      eventB2 = await makeEvent(calB.id, 'B event 2');
+      eventC1 = await makeEvent(calC.id, 'C event 1');
+      for (const event of [eventB1, eventB2, eventC1]) {
+        await EventRepostEntity.create({ id: uuidv4(), event_id: event.id, calendar_id: calA.id });
+      }
+      categoryA = await calendarInterface.createCategory(testAccount, calA.id, { name: 'Kids', language: 'en' });
+    });
+
+    it('assigns the acting calendar category to reposts from one origin', async () => {
+      const result = await calendarInterface.bulkAssignCategories(
+        testAccount, [eventB1.id, eventB2.id], [categoryA.id], calA.id,
+      );
+
+      expect(result).toHaveLength(2);
+      result.forEach(event => {
+        expect(event.categories.map(c => c.id)).toContain(categoryA.id);
+      });
+    });
+
+    it('accepts reposts from different origin calendars', async () => {
+      const result = await calendarInterface.bulkAssignCategories(
+        testAccount, [eventB1.id, eventC1.id], [categoryA.id], calA.id,
+      );
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('rejects an event that is not shown on the acting calendar', async () => {
+      const unshown = await makeEvent(calB.id, 'B not reposted');
+
+      await expect(
+        calendarInterface.bulkAssignCategories(testAccount, [unshown.id], [categoryA.id], calA.id),
+      ).rejects.toThrow(MixedCalendarEventsError);
+    });
+
+    it('rejects an acting calendar the account cannot edit', async () => {
+      const accountService = new AccountService(eventBus, new ConfigurationInterface(), new SetupInterface());
+      const other = (await accountService._setupAccount('otherbulk@pavillion.dev', 'testpassword')).account;
+
+      await expect(
+        calendarInterface.bulkAssignCategories(other, [eventB1.id], [categoryA.id], calA.id),
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
   });
 });
