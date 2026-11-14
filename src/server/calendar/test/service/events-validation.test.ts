@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import EventsService, { validateMediaTransform, validateSchedulesByDay } from '@/server/calendar/service/events';
+import EventsService, { validateMediaTransform, validateSchedulesByDay, validateSchedulesEndTime } from '@/server/calendar/service/events';
 import { ValidationError } from '@/common/exceptions/base';
 import { Account } from '@/common/model/account';
 import { EventEmitter } from 'events';
@@ -221,6 +221,45 @@ describe('EventsService - Validation', () => {
       expect(() => validateSchedulesByDay([{ frequency: 'monthly', byDay: ['5MO'] }])).not.toThrow();
       expect(() => validateSchedulesByDay([{ byDay: ['6MO'] }])).not.toThrow();
       expect(() => validateSchedulesByDay(undefined)).not.toThrow();
+    });
+  });
+  describe('schedule end-before-start validation', () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+    const bad = [{ start: '2026-12-01T10:00:00.000Z', eventEndTime: '2026-12-01T09:00:00.000Z' }];
+
+    it('rejects an end before the start, naming the schedule', () => {
+      try {
+        validateSchedulesEndTime([{ start: '2026-12-01T10:00:00.000Z' }, ...bad]);
+        expect.unreachable();
+      }
+      catch (e) {
+        expect(e).toBeInstanceOf(ValidationError);
+        expect((e as ValidationError).message).toContain('schedules[1].eventEndTime');
+        expect((e as ValidationError).fields?.schedules).toEqual(['end is before start']);
+      }
+    });
+
+    it('allows equal, missing, exclusion, next-day, and recurrence-until before start', () => {
+      expect(() => validateSchedulesEndTime([
+        { start: '2026-12-01T10:00:00.000Z', eventEndTime: '2026-12-01T10:00:00.000Z' },
+        { start: '2026-12-01T10:00:00.000Z' },
+        { start: '2026-12-01T10:00:00.000Z', eventEndTime: '2026-12-01T09:00:00.000Z', isException: true },
+        { start: '2026-12-01T22:00:00.000Z', eventEndTime: '2026-12-02T01:00:00.000Z' },
+        { start: '2026-12-01T10:00:00.000Z', end: '2026-11-01T10:00:00.000Z', frequency: 'weekly' },
+      ])).not.toThrow();
+      expect(() => validateSchedulesEndTime(undefined)).not.toThrow();
+    });
+
+    it('createEvent rejects end before start', async () => {
+      await expect(
+        service.createEvent(mockAccount, { calendarId: 'cal-1', schedules: bad }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('updateEvent rejects end before start', async () => {
+      await expect(
+        service.updateEvent(mockAccount, validUuid, { schedules: bad }),
+      ).rejects.toThrow(ValidationError);
     });
   });
 });

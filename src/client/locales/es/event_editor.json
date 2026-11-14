@@ -164,6 +164,7 @@
     "end_date_label": "Fecha de finalización",
     "end_time_label": "Hora de finalización",
     "error_time_incomplete": "La hora está incompleta: revisa la hora, los minutos y AM/PM",
+    "error_end_before_start": "El final es anterior al inicio. Si el evento continúa después de medianoche, cambia la fecha de finalización al día siguiente.",
     "timezone_label": "Zona horaria",
     "schedule_header": "Horario {{n}}",
     "every_day": "Todos los días",
