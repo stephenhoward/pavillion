@@ -28,3 +28,34 @@ export function validateSchedulesByDay(schedules: unknown): void {
     }
   });
 }
+
+/**
+ * Rejects a schedule whose event ends strictly before it starts. Author-facing
+ * paths only. Schedules without an end time and exclusion rows are skipped, and
+ * `end` (the recurrence-until) is deliberately not compared.
+ *
+ * Non-array input and non-object entries are left for reconcileSchedules.
+ *
+ * @param {unknown} schedules - The raw `schedules` request value
+ * @throws {ValidationError} On the first schedule whose end is before its start
+ */
+export function validateSchedulesEndTime(schedules: unknown): void {
+  if (!Array.isArray(schedules)) {
+    return;
+  }
+  schedules.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const schedule = CalendarEventSchedule.fromObject(entry as Record<string, any>);
+    if (schedule.isExclusion || !schedule.eventEndTime || !schedule.startDate) {
+      return;
+    }
+    if (schedule.eventEndTime < schedule.startDate) {
+      throw new ValidationError(
+        `schedules[${i}].eventEndTime: end is before start`,
+        { schedules: ['end is before start'] },
+      );
+    }
+  });
+}

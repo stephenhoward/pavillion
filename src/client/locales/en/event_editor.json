@@ -164,6 +164,7 @@
     "end_date_label": "End Date",
     "end_time_label": "End Time",
     "error_time_incomplete": "Time is incomplete — check the hour, minutes and AM/PM",
+    "error_end_before_start": "The end is before the start. If the event runs past midnight, set the end date to the next day.",
     "timezone_label": "Timezone",
     "schedule_header": "Schedule {{n}}",
     "every_day": "Every day",
