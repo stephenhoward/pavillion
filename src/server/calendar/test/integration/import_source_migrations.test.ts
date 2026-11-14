@@ -179,6 +179,8 @@ describe('ICS import foundation migrations', () => {
       expect(desc).toHaveProperty('source_last_seen_at');
       expect(desc).toHaveProperty('locally_edited');
       expect(desc).toHaveProperty('x_props');
+      expect(desc).toHaveProperty('source_fingerprint');
+      expect((desc.source_fingerprint as { allowNull: boolean }).allowNull).toBe(true);
       expect(desc).toHaveProperty('created_at');
       expect(desc).toHaveProperty('updated_at');
     });

@@ -77,6 +77,14 @@ class EventImportOriginEntity extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   declare source_last_seen_at: Date | null;
 
+  /**
+   * sha256 hex of the mapped source data the import last wrote for this event
+   * (see `importFingerprint` in the sync service). Null for rows written
+   * before the column existed.
+   */
+  @Column({ type: DataType.STRING(64), allowNull: true })
+  declare source_fingerprint: string | null;
+
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
   declare locally_edited: boolean;
 

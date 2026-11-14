@@ -386,6 +386,7 @@ class ImportSourceService {
         + run.eventsUpdated
         + (run.eventsSkippedSyncManaged ?? 0)
         + (run.eventsPreservedLocalEdits ?? 0)
+        + (run.eventsUnchanged ?? 0)
         + run.eventsSkippedLocallyEdited;
       if (usableEvents === 0) {
         // Valid VCALENDAR but nothing to import (no VEVENTs). Roll back — a

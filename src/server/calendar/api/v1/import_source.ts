@@ -680,6 +680,7 @@ function toImportRunSummary(
     eventsDisappeared: result.eventsDisappeared,
     eventsSkippedSyncManaged: result.eventsSkippedSyncManaged ?? 0,
     eventsPreservedLocalEdits: result.eventsPreservedLocalEdits ?? 0,
+    eventsUnchanged: result.eventsUnchanged ?? 0,
     errorMessage: result.errorMessage,
   };
 }
