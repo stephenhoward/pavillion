@@ -3,7 +3,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import StorageService, { StorageStats } from '@/server/housekeeping/service/storage';
 import StatusService, { HousekeepingStatus } from '@/server/housekeeping/service/status';
 import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/service/job-queue';
-import MetricsService, { OperationalMetrics } from '@/server/housekeeping/service/metrics';
+import MetricsService, { OperationalMetrics, FederationBacklogSource } from '@/server/housekeeping/service/metrics';
 import DrillService, { DrillRecord, DrillResultInput } from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
@@ -29,6 +29,8 @@ export type {
   BackupMetrics,
   VolumeMetrics,
   QueueMetrics,
+  FederationBacklogMetrics,
+  FederationBacklogSource,
 } from '@/server/housekeeping/service/metrics';
 
 // Re-exported so callers (the management CLI today, the metrics exposition
@@ -103,6 +105,16 @@ export default class HousekeepingInterface {
    */
   setJobQueueService(queue: JobQueueService): void {
     this.jobQueueService = queue;
+  }
+
+  /**
+   * Wires the federation backlog source read by the metrics endpoint.
+   * Late-bound because housekeeping is constructed before ActivityPub; set
+   * once in the web process. The CLI and worker never set it, so the
+   * `pavillion_federation_*` series are absent there.
+   */
+  setActivityPubInterface(source: FederationBacklogSource): void {
+    this.metricsService.setFederationSource(source);
   }
 
   /**

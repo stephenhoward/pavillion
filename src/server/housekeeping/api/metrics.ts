@@ -50,9 +50,9 @@ const SECURITY_HEADERS = {
  * came from a worker snapshot or a live statfs, and `pavillion_media_*` is
  * reserved for non-filesystem media quantities.
  *
- * `pavillion_federation_` is deliberately absent though DEC-017 reserves the
- * name: a future federation series should have to amend this declaration
- * rather than inherit permission from a reservation.
+ * `pavillion_federation_` joined this list with the federation backlog
+ * gauges: a reserved name becomes a declared family only by being added
+ * here, so the next series in it is a deliberate decision too.
  *
  * Enforced at build time by the exposition test rather than at runtime. Every
  * name below is a static literal and no input can produce an undeclared one,
@@ -62,6 +62,7 @@ export const METRIC_FAMILY_PREFIXES = [
   'pavillion_backup_',
   'pavillion_disk_',
   'pavillion_db_',
+  'pavillion_federation_',
   'pavillion_media_',
   'pavillion_queue_',
 ] as const;
@@ -187,6 +188,18 @@ export function renderOpenMetrics(metrics: OperationalMetrics): string {
       'pavillion_queue_failed_jobs',
       `Background jobs in the failed state within the last ${FAILED_JOB_WINDOW_HOURS} hours, by queue. The window is fixed: the job queue deletes rows one day after creation, so older failures are not observable. Counts only — no job identifier, payload, or error text is exposed.`,
       (metrics.queues ?? []).map((queue) => ({ labels: { queue: queue.queue }, value: queue.failedJobs })),
+    ),
+    gauge(
+      'pavillion_federation_unprocessed_activities',
+      'Federation activities stored but not yet processed, by direction.',
+      (metrics.federation ?? []).map((entry) => ({ labels: { direction: entry.direction }, value: entry.count })),
+    ),
+    gauge(
+      'pavillion_federation_oldest_unprocessed_timestamp_seconds',
+      'Unix timestamp at which the oldest unprocessed federation activity was stored, by direction. Absent when nothing is waiting.',
+      (metrics.federation ?? []).flatMap((entry) => entry.oldestStoredTimestampSeconds === undefined
+        ? []
+        : [{ labels: { direction: entry.direction }, value: entry.oldestStoredTimestampSeconds }]),
     ),
   ];
 

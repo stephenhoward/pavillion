@@ -453,6 +453,11 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   const activityPubDomain = new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, housekeepingDomain.interface, moderationDomain.interface);
   activityPubDomain.initialize(app);
 
+  // Housekeeping is constructed before ActivityPub, so the metrics endpoint
+  // learns where to read the federation backlog only now. The CLI and worker
+  // never wire it, which leaves the pavillion_federation_* series absent there.
+  housekeepingDomain.interface.setActivityPubInterface(activityPubDomain.interface);
+
   // Wire AP interface into calendar domain for cross-domain queries
   calendarDomain.interface.setActivityPubInterface(activityPubDomain.interface);
 
