@@ -1,9 +1,8 @@
-import express, { Request, Response, Application, RequestHandler } from 'express';
-import config from 'config';
+import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import { createAccountRateLimiter } from '@/server/common/middleware/rate-limit-by-account';
+import { limitNotificationsByAccount } from '@/server/common/middleware/rate-limiters';
 import NotificationsInterface from '@/server/notifications/interface';
 import { NotificationRecipientNotFoundError } from '@/common/exceptions/notifications';
 import { logError } from '@/server/common/helper/error-logger';
@@ -11,15 +10,6 @@ import { logError } from '@/server/common/helper/error-logger';
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_OFFSET = 10000;
-
-/**
- * Rate limiter for the GET /notification endpoint.
- * Allows 10 requests per minute per authenticated user.
- * Respects the rateLimit.enabled config flag (disabled in test/e2e environments).
- */
-const notificationsRateLimiter: RequestHandler = config.get<boolean>('rateLimit.enabled')
-  ? createAccountRateLimiter(10, 60000, 'notifications')
-  : (_req, _res, next) => next();
 
 export default class NotificationRoutes {
   private service: NotificationsInterface;
@@ -33,7 +23,7 @@ export default class NotificationRoutes {
     router.get(
       '/notification',
       ExpressHelper.loggedInOnly,
-      notificationsRateLimiter,
+      limitNotificationsByAccount,
       this.getNotifications.bind(this),
     );
     router.patch(
