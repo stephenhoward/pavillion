@@ -27,6 +27,7 @@ import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError, InvalidExternalUrlError, SpaceLocationMismatchError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import { sanitizeImageAlt, validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
+import { validateContentLanguages, foldContentLanguages } from '@/server/calendar/service/language_code';
 import { validateMediaTransform } from '@/server/calendar/service/media_transform';
 import { validateSchedulesByDay } from '@/server/calendar/service/schedule_by_day';
 import { remapCancellations } from '@/server/calendar/service/cancellation_remap';
@@ -295,6 +296,15 @@ class EventService {
   ): Promise<{ location: EventLocation | null; space: LocationSpaceEntity | null }> {
     let resolvedLocation: EventLocation | null = null;
     let resolvedSpace: LocationSpaceEntity | null = null;
+
+    // Peer-supplied place and space content is keyed by language; fold the keys
+    // to bare ISO 639-1 codes before anything writes a row from them.
+    if (eventParams.location?.content) {
+      eventParams.location = { ...eventParams.location, content: foldContentLanguages(eventParams.location.content) };
+    }
+    if (eventParams.space?.content) {
+      eventParams.space = { ...eventParams.space, content: foldContentLanguages(eventParams.space.content) };
+    }
 
     if (eventParams.location) {
       const originUri: string | undefined = typeof eventParams.location.originUri === 'string'
@@ -743,6 +753,7 @@ class EventService {
     // holds no transaction when called without one. Import writes normalize
     // instead of throwing, so they skip the pre-pass.
     if (!untrusted) {
+      validateContentLanguages(eventParams.content);
       validateContentImageAlts(eventParams.content);
       validateSchedulesByDay(eventParams.schedules);
     }
@@ -1039,6 +1050,7 @@ class EventService {
     // would 400 the request with the first language's edit already saved.
     // Import writes normalize instead of throwing, so they skip the pre-pass.
     if (!untrusted) {
+      validateContentLanguages(eventParams.content);
       validateContentImageAlts(eventParams.content);
       validateSchedulesByDay(eventParams.schedules);
     }
@@ -1587,6 +1599,12 @@ class EventService {
       eventParams.calendarId = null;
     }
 
+    // A peer's language keys are folded to bare ISO 639-1 codes (or dropped)
+    // before anything reads them; a peer cannot be shown a validation error.
+    if (eventParams.content) {
+      eventParams.content = foldContentLanguages(eventParams.content);
+    }
+
     const event = CalendarEvent.fromObject(eventParams);
     const eventEntity = EventEntity.fromModel(event);
 
@@ -1657,9 +1675,10 @@ class EventService {
 
     let event = eventEntity.toModel();
 
-    // Update content translations
+    // Update content translations. Peer language keys are folded to bare
+    // ISO 639-1 codes (null, meaning "delete", is preserved).
     if (eventParams.content) {
-      for (let [language, content] of Object.entries(eventParams.content)) {
+      for (let [language, content] of Object.entries(foldContentLanguages(eventParams.content))) {
         let contentEntity = await EventContentEntity.findOne({
           where: { event_id: eventParams.id, language: language },
         });
