@@ -38,6 +38,19 @@ export class ReportAlreadyResolvedError extends Error {
 }
 
 /**
+ * Custom error class for attempting to act on a report whose reporter has
+ * not yet verified their email address.
+ */
+export class ReportNotVerifiedError extends Error {
+  constructor(message: string = 'Report has not been verified by its reporter') {
+    super(message);
+    this.name = 'ReportNotVerifiedError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, ReportNotVerifiedError.prototype);
+  }
+}
+
+/**
  * Custom error class for per-email rate limit exceeded.
  * Thrown when an email address has exceeded the maximum number of
  * verification emails within the configured time window.

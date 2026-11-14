@@ -1150,7 +1150,7 @@ describe('ModerationService', () => {
       // scoping keys - an id-only lookup reintroduced here would fail.
       expect(findOneStub.calledOnce).toBe(true);
       const callArgs = findOneStub.firstCall.args[0] as any;
-      expect(Object.keys(callArgs.where).sort()).toEqual(['calendar_id', 'id']);
+      expect(Object.keys(callArgs.where).sort()).toEqual(['calendar_id', 'id', 'status']);
     });
 
     it('should throw ReportNotFoundError without querying when calendarId is missing', async () => {

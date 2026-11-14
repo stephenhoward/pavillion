@@ -10,6 +10,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import {
   ReportNotFoundError,
   ReportAlreadyResolvedError,
+  ReportNotVerifiedError,
 } from '@/server/moderation/exceptions';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
@@ -330,6 +331,14 @@ export default class OwnerReportRoutes {
         return;
       }
 
+      if (error instanceof ReportNotVerifiedError) {
+        res.status(409).json({
+          error: error.message,
+          errorName: 'ReportNotVerifiedError',
+        });
+        return;
+      }
+
       logError(error, 'Failed to resolve report');
       res.status(500).json({
         error: 'Failed to resolve report',
@@ -388,6 +397,14 @@ export default class OwnerReportRoutes {
         res.status(409).json({
           error: error.message,
           errorName: 'ReportAlreadyResolvedError',
+        });
+        return;
+      }
+
+      if (error instanceof ReportNotVerifiedError) {
+        res.status(409).json({
+          error: error.message,
+          errorName: 'ReportNotVerifiedError',
         });
         return;
       }
