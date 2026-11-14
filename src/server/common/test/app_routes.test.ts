@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express, { Express, Request, Response } from 'express';
 import http from 'http';
+import { once } from 'node:events';
 import { AddressInfo } from 'net';
 import request from 'supertest';
 import sinon from 'sinon';
@@ -105,7 +106,8 @@ function buildTestApp(
  * @returns Status code and Location header of the response
  */
 async function rawGet(app: Express, rawPath: string): Promise<{ status: number; location?: string }> {
-  const server = app.listen(0);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
 
   try {
     const { port } = server.address() as AddressInfo;

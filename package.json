@@ -163,7 +163,7 @@
     "sass-loader": "^16.0.3",
     "sinon": "^19.0.2",
     "stylelint": "^17.16.0",
-    "supertest": "^7.1.1",
+    "supertest": "^7.3.1",
     "terser": "^5.44.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
