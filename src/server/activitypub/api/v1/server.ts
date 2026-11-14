@@ -491,7 +491,7 @@ export default class ActivityPubServerRoutes {
             res.status(200).json(result.toObject());
           }
           else {
-            res.status(200).send('Activity processed');
+            res.status(200).json({});
           }
           return;
         }
@@ -566,7 +566,7 @@ export default class ActivityPubServerRoutes {
         throw error;
       }
       logInboxActivityAccepted('calendar', calendarName, req.body);
-      res.status(200).send('Message received');
+      res.status(200).json({});
     }
     else {
       res.status(400).send('Invalid message');
