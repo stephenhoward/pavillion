@@ -20,6 +20,7 @@ import {
   NoSigningCalendarError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
+  ReportNotVerifiedError,
   EmailRateLimitError,
   InstanceAlreadyBlockedError,
   ReporterBlockedError,
@@ -750,10 +751,19 @@ class ModerationService {
     const limit = filters.limit ?? DEFAULT_PAGE_LIMIT;
     const offset = (page - 1) * limit;
 
-    const where: Record<string, any> = { calendar_id: calendarId };
-    if (filters.status) {
-      where.status = filters.status;
+    // Reports awaiting reporter email verification are never visible to the
+    // calendar's reviewers. An explicit request for them matches nothing.
+    if (filters.status === ReportStatus.PENDING_VERIFICATION) {
+      return {
+        reports: [],
+        pagination: { currentPage: page, totalPages: 0, totalCount: 0, limit },
+      };
     }
+
+    const where: Record<string, any> = {
+      calendar_id: calendarId,
+      status: filters.status ?? { [Op.ne]: ReportStatus.PENDING_VERIFICATION },
+    };
     if (filters.category) {
       where.category = filters.category;
     }
@@ -839,7 +849,16 @@ class ModerationService {
       throw new ReportNotFoundError();
     }
 
-    const entity = await ReportEntity.findOne({ where: { id: reportId, calendar_id: calendarId } });
+    // A report still awaiting reporter verification is hidden from the
+    // calendar's reviewers and reads as not found, like any other report
+    // that is not theirs to see.
+    const entity = await ReportEntity.findOne({
+      where: {
+        id: reportId,
+        calendar_id: calendarId,
+        status: { [Op.ne]: ReportStatus.PENDING_VERIFICATION },
+      },
+    });
     if (!entity) {
       throw new ReportNotFoundError();
     }
@@ -1204,6 +1223,7 @@ class ModerationService {
    * @returns The resolved Report
    * @throws ReportNotFoundError if report not found
    * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   * @throws ReportNotVerifiedError if the reporter has not yet verified the report
    */
   async resolveReport(reportId: string, reviewerId: string, notes: string): Promise<Report> {
     const entity = await ReportEntity.findByPk(reportId);
@@ -1214,6 +1234,10 @@ class ModerationService {
     const currentStatus = entity.status as ReportStatus;
     if (currentStatus === ReportStatus.RESOLVED || currentStatus === ReportStatus.DISMISSED) {
       throw new ReportAlreadyResolvedError();
+    }
+
+    if (currentStatus === ReportStatus.PENDING_VERIFICATION) {
+      throw new ReportNotVerifiedError();
     }
 
     // Update report status
@@ -1259,6 +1283,7 @@ class ModerationService {
    * @returns The escalated Report
    * @throws ReportNotFoundError if report not found
    * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   * @throws ReportNotVerifiedError if the reporter has not yet verified the report
    */
   async dismissReport(reportId: string, reviewerId: string, notes: string): Promise<Report> {
     const entity = await ReportEntity.findByPk(reportId);
@@ -1269,6 +1294,10 @@ class ModerationService {
     const currentStatus = entity.status as ReportStatus;
     if (currentStatus === ReportStatus.RESOLVED || currentStatus === ReportStatus.DISMISSED) {
       throw new ReportAlreadyResolvedError();
+    }
+
+    if (currentStatus === ReportStatus.PENDING_VERIFICATION) {
+      throw new ReportNotVerifiedError();
     }
 
     // Auto-escalate: dismissals become escalations to admin
