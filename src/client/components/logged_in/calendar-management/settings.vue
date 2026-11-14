@@ -48,7 +48,6 @@
                 type="text"
                 class="setting-input"
                 v-model="localCalendar.content(currentLanguage).name"
-                :disabled="state.isSaving"
                 :placeholder="t('calendar_title_placeholder')"
                 @blur="saveSettings"
               />
@@ -63,7 +62,6 @@
                 :id="`calendarDescription-${currentLanguage}`"
                 class="setting-textarea"
                 v-model="localCalendar.content(currentLanguage).description"
-                :disabled="state.isSaving"
                 :placeholder="t('calendar_description_placeholder')"
                 rows="3"
                 @blur="saveSettings"
@@ -91,7 +89,6 @@
             aria-describedby="defaultDateRange-help"
             class="setting-select"
             v-model="state.defaultDateRange"
-            :disabled="state.isSaving"
             @change="saveSettings"
           >
             <option v-if="state.defaultDateRange === ''" value="">
@@ -117,7 +114,6 @@
             <button
               type="button"
               class="remove-image-btn"
-              :disabled="state.isSaving"
               @click="removeDefaultImage"
             >
               {{ t('default_event_image_remove_button') }}
