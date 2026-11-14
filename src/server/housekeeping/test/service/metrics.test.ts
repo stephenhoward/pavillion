@@ -158,4 +158,49 @@ describe('MetricsService', () => {
     expect(FAILED_JOB_WINDOW_HOURS).toBe(24);
     expect(failedSince.toISOString()).toBe('2026-08-30T12:00:00.000Z');
   });
+
+  describe('federation backlog', () => {
+    it('is null when no source is wired, leaving sibling families intact', async () => {
+      stubAllSourcesEmpty();
+      (DiskSnapshotService.prototype.getSnapshot as sinon.SinonStub).resolves(null);
+      (db.query as sinon.SinonStub).resolves([[{ size_bytes: '10' }], {}] as any);
+
+      const metrics = await new MetricsService().collect();
+
+      expect(metrics.federation).toBeNull();
+      expect(metrics.databaseSizeBytes).toBe(10);
+      expect(metrics.queues).toHaveLength(MONITORED_QUEUES.length);
+    });
+
+    it('is null when the source throws, leaving sibling families intact', async () => {
+      stubAllSourcesEmpty();
+      (db.query as sinon.SinonStub).resolves([[{ size_bytes: '10' }], {}] as any);
+      const service = new MetricsService();
+      service.setFederationSource({ getUnprocessedActivityStats: sandbox.stub().rejects(new Error('db down')) });
+
+      const metrics = await service.collect();
+
+      expect(metrics.federation).toBeNull();
+      expect(metrics.databaseSizeBytes).toBe(10);
+      expect(metrics.queues).toHaveLength(MONITORED_QUEUES.length);
+    });
+
+    it('maps counts and oldest times, omitting the timestamp when nothing waits', async () => {
+      stubAllSourcesEmpty();
+      const service = new MetricsService();
+      service.setFederationSource({
+        getUnprocessedActivityStats: sandbox.stub().resolves([
+          { direction: 'inbound', count: 2, oldestStoredAt: new Date('2026-11-01T00:00:00.000Z') },
+          { direction: 'outbound', count: 0, oldestStoredAt: null },
+        ]),
+      });
+
+      const metrics = await service.collect();
+
+      expect(metrics.federation).toEqual([
+        { direction: 'inbound', count: 2, oldestStoredTimestampSeconds: Date.parse('2026-11-01T00:00:00.000Z') / 1000 },
+        { direction: 'outbound', count: 0 },
+      ]);
+    });
+  });
 });

@@ -248,6 +248,26 @@ class ProcessOutboxService {
   }
 
   /**
+   * Counts the rows the outbox drain has yet to process, and finds the
+   * longest-waiting one.
+   *
+   * The predicate is the drain's own base (`processed_time IS NULL`) with no
+   * age cutoff, so rows the drain leaves to live delivery are counted. The
+   * oldest row is read by `message_time`, the column the drain's cutoff and
+   * order use.
+   *
+   * @returns The unprocessed count and the oldest row's `message_time`, or
+   *   null when nothing is waiting
+   */
+  async getUnprocessedStats(): Promise<{ count: number; oldestStoredAt: Date | null }> {
+    const where = { processed_time: null };
+    const count = await ActivityPubOutboxMessageEntity.count({ where });
+    const oldest = count > 0 ? await ActivityPubOutboxMessageEntity.min('message_time', { where }) : null;
+
+    return { count, oldestStoredAt: oldest ? new Date(oldest as Date) : null };
+  }
+
+  /**
    * The outbox drain: delivers unprocessed rows oldest first, skipping
    * superseded ones and marking a row that throws `error:` (DEC-024 rules 6
    * and 7). Web process only, because delivery runs local dispatch.
