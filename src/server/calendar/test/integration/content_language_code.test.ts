@@ -14,6 +14,8 @@ import { EventCategoryContentEntity } from '@/server/calendar/entity/event_categ
 import { CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { LocationContentEntity } from '@/server/calendar/entity/location_content';
 import { LocationSpaceContentEntity } from '@/server/calendar/entity/location_space_content';
+import { LocationEntity } from '@/server/calendar/entity/location';
+import { EventLocation } from '@/common/model/location';
 import { LocationSpaceEntity } from '@/server/calendar/entity/location_space';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
@@ -116,6 +118,66 @@ describe('Content language keys — write paths (integration)', () => {
       await expectLanguageRejection(calendarInterface.updateCategory(testAccount, category.id, {
         content: { zz: { name: 'Bad' } },
       }, testCalendar.id));
+    });
+
+    it('rejects an invalid language on place create and writes no row', async () => {
+      const name = `Lang Place ${++counter}`;
+      await expectLanguageRejection(calendarInterface.createLocation(testCalendar, EventLocation.fromObject({
+        name,
+        content: { en: { accessibilityInfo: 'ok' }, zz: { accessibilityInfo: 'bad' } },
+      })));
+      expect(await LocationEntity.count({ where: { name } })).toBe(0);
+    });
+
+    it('rejects an invalid language on a space at place create and writes no row', async () => {
+      const name = `Lang Space Place ${++counter}`;
+      const before = await LocationSpaceEntity.count();
+      await expectLanguageRejection(calendarInterface.createLocation(testCalendar, EventLocation.fromObject({
+        name,
+        spaces: [{ clientId: 'b3b1f0a2-5c1e-4d5e-8f3a-0a1b2c3d4e5f', content: { 'fr-CA': { name: 'Bad' } } }],
+      })));
+      expect(await LocationEntity.count({ where: { name } })).toBe(0);
+      expect(await LocationSpaceEntity.count()).toBe(before);
+    });
+
+    it('rejects an invalid language on place update and leaves the stored content', async () => {
+      const name = `Lang Place Update ${++counter}`;
+      const place = await calendarInterface.createLocation(testCalendar, EventLocation.fromObject({
+        name,
+        content: { en: { accessibilityInfo: 'original' } },
+      }));
+      await expectLanguageRejection(calendarInterface.updateLocation(testCalendar, place.id, EventLocation.fromObject({
+        name,
+        content: { en: { accessibilityInfo: 'changed' }, zz: { accessibilityInfo: 'bad' } },
+      })));
+      const rows = await LocationContentEntity.findAll({ where: { location_id: place.id } });
+      expect(rows.map((r: any) => r.accessibility_info)).toEqual(['original']);
+    });
+
+    it('rejects an invalid language on a space at place update and leaves stored space content', async () => {
+      const name = `Lang Space Update ${++counter}`;
+      const place = await calendarInterface.createLocation(testCalendar, EventLocation.fromObject({
+        name,
+        spaces: [{ content: { en: { name: 'Room' } } }],
+      }));
+      const spaceId = place.spaces[0].id;
+      await expectLanguageRejection(calendarInterface.updateLocation(testCalendar, place.id, EventLocation.fromObject({
+        name,
+        spaces: [{ id: spaceId, content: { en: { name: 'Changed' }, zz: { name: 'Bad' } } }],
+      })));
+      const rows = await LocationSpaceContentEntity.findAll({ where: { space_id: spaceId } });
+      expect(rows.map((r: any) => r.name)).toEqual(['Room']);
+    });
+
+    it('rejects an invalid language on an event with an embedded location and writes no rows', async () => {
+      const name = `Lang Embedded ${++counter}`;
+      await expectLanguageRejection(calendarInterface.createEvent(testAccount, {
+        calendarId: testCalendar.id,
+        content: { en: { name: `Embedded Event ${counter}` } },
+        location: { name, content: { zz: { accessibilityInfo: 'bad' } } },
+      } as any));
+      expect(await LocationEntity.count({ where: { name } })).toBe(0);
+      expect(await EventContentEntity.count({ where: { name: `Embedded Event ${counter}` } })).toBe(0);
     });
   });
 

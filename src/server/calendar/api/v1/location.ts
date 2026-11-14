@@ -11,6 +11,7 @@ import {
   LocationValidationError,
   SpaceHijackError,
 } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -145,6 +146,9 @@ export default class LocationRoutes {
       else if (error instanceof LocationValidationError) {
         res.status(400).json({ error: error.message, errorName: 'LocationValidationError' });
       }
+      else if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
       else if (error instanceof InvalidClientIdError) {
         res.status(400).json({ error: error.message, errorName: 'InvalidClientIdError' });
       }
@@ -239,6 +243,9 @@ export default class LocationRoutes {
       }
       else if (error instanceof LocationValidationError) {
         res.status(400).json({ error: error.message, errorName: 'LocationValidationError' });
+      }
+      else if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof InvalidClientIdError) {
         res.status(400).json({ error: error.message, errorName: 'InvalidClientIdError' });
