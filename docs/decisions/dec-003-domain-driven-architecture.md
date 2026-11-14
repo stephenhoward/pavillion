@@ -39,6 +39,7 @@ Domain-driven design provides clear boundaries while keeping everything in a sin
 - Parallel development possible across domains
 - Federation complexity contained within ActivityPub domain
 - Easier to reason about data flow and dependencies
+- The boundary is enforced by `npm run lint:deps` (rules in `.dependency-cruiser.cjs`), run in the Lint workflow; pre-existing violators sit on an allowlist that only shrinks — a PR may remove an entry, never add one
 
 **Negative:**
 - More initial architectural overhead

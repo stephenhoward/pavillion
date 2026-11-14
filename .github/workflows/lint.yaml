@@ -50,6 +50,11 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
+      # Domain boundary guard: no cross-domain service/model/api/entity imports (see .dependency-cruiser.cjs, DEC-003).
+      - name: Domain boundary guard
+        run: npm run lint:deps
+        if: ${{ !cancelled() }}
+
       # Report-only duplication measurement (see .jscpd.json); never fails the job.
       - name: Duplication report
         run: npm run lint:dup
