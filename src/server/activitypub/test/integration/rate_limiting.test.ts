@@ -143,7 +143,7 @@ describeOrSkip('ActivityPub User Inbox Rate Limiting Integration Tests', () => {
     process.env.SKIP_SIGNATURES = 'true';
 
     server = buildServer();
-    await new Promise<void>((resolve) => server.listen(0, resolve));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   });
 
   afterAll(async () => {
@@ -347,7 +347,7 @@ describeOrSkip('ActivityPub Calendar Inbox Rate Limiting Integration Tests', () 
     process.env.SKIP_SIGNATURES = 'true';
 
     server = buildCalendarServer();
-    await new Promise<void>((resolve) => server.listen(0, resolve));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   });
 
   afterAll(async () => {
