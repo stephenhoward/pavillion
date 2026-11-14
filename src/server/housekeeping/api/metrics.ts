@@ -50,6 +50,9 @@ const SECURITY_HEADERS = {
  * came from a worker snapshot or a live statfs, and `pavillion_media_*` is
  * reserved for non-filesystem media quantities.
  *
+ * `pavillion_restore_drill_` is the proof-of-restorability family, kept apart
+ * from `pavillion_backup_*` because a drill is a different event from a backup.
+ *
  * `pavillion_federation_` joined this list with the federation backlog
  * gauges: a reserved name becomes a declared family only by being added
  * here, so the next series in it is a deliberate decision too.
@@ -65,6 +68,7 @@ export const METRIC_FAMILY_PREFIXES = [
   'pavillion_federation_',
   'pavillion_media_',
   'pavillion_queue_',
+  'pavillion_restore_drill_',
 ] as const;
 
 /**
@@ -153,6 +157,11 @@ export function renderOpenMetrics(metrics: OperationalMetrics): string {
       'pavillion_backup_last_success_size_bytes',
       'Size in bytes of the most recent verified database backup.',
       metrics.backup?.lastSuccessSizeBytes,
+    ),
+    scalarGauge(
+      'pavillion_restore_drill_last_success_timestamp_seconds',
+      'Unix timestamp of the most recent restore drill that passed. Absent until a drill has passed; a failed drill does not advance it.',
+      metrics.restoreDrill?.lastSuccessTimestampSeconds,
     ),
     gauge(
       'pavillion_disk_total_bytes',

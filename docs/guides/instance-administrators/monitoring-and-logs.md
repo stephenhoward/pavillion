@@ -18,6 +18,7 @@ The `app` container serves [OpenMetrics](https://openmetrics.io/) text at `/metr
 |--------|-------------------|
 | `pavillion_backup_last_success_timestamp_seconds` | When the most recent verified database backup finished |
 | `pavillion_backup_last_success_size_bytes` | How large that backup was |
+| `pavillion_restore_drill_last_success_timestamp_seconds` | When a restore drill last passed. Missing until one has; a failed drill does not move it |
 | `pavillion_disk_total_bytes`, `pavillion_disk_free_bytes`, `pavillion_disk_used_bytes` | Filesystem usage, one sample per `volume` label: `backups` and `media` |
 | `pavillion_disk_snapshot_timestamp_seconds` | When the background worker last measured a volume. Only `volume="backups"` carries it — see below |
 | `pavillion_db_size_bytes` | The database's size on disk |

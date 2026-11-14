@@ -6,6 +6,7 @@ import db from '@/server/common/entity/db';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
+import DrillService from '@/server/housekeeping/service/drill';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
 import MetricsService, {
   MONITORED_QUEUES,
@@ -26,6 +27,7 @@ describe('MetricsService', () => {
   /** Makes every source report "no data" so a test can enable one at a time. */
   function stubAllSourcesEmpty() {
     sandbox.stub(BackupEntity, 'findOne').resolves(null);
+    sandbox.stub(DrillService.prototype, 'getLastSuccessful').resolves(null);
     sandbox.stub(DiskSnapshotService.prototype, 'getSnapshot').resolves(null);
     sandbox.stub(db, 'query').resolves([[], {}] as any);
     sandbox.stub(JobQueueService.prototype, 'getQueueStats').resolves([]);
@@ -50,6 +52,7 @@ describe('MetricsService', () => {
     const metrics = await new MetricsService().collect();
 
     expect(metrics.backup).toBeNull();
+    expect(metrics.restoreDrill).toBeNull();
     expect(metrics.backupVolume).toBeNull();
     expect(metrics.databaseSizeBytes).toBeNull();
     expect(metrics.mediaVolume).toBeNull();
@@ -70,6 +73,23 @@ describe('MetricsService', () => {
     expect(metrics.backup).toEqual({
       lastSuccessTimestampSeconds: Math.floor(Date.parse('2026-08-30T02:00:00.000Z') / 1000),
       lastSuccessSizeBytes: 5242880,
+    });
+  });
+
+  it('reports the last passing restore drill as unix seconds, without the filename', async () => {
+    stubAllSourcesEmpty();
+    (DrillService.prototype.getLastSuccessful as sinon.SinonStub).resolves({
+      id: 'd1',
+      backupFilename: 'evil"\nname.dump',
+      ranAt: new Date('2026-09-01T03:00:00.000Z'),
+      passed: true,
+      detail: null,
+    });
+
+    const metrics = await new MetricsService().collect();
+
+    expect(metrics.restoreDrill).toEqual({
+      lastSuccessTimestampSeconds: Math.floor(Date.parse('2026-09-01T03:00:00.000Z') / 1000),
     });
   });
 
