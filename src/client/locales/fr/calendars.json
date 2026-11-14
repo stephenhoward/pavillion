@@ -511,6 +511,8 @@
     "calendar_description_placeholder": "Un calendrier d'événements et d'activités communautaires...",
     "default_date_range_label": "Filtre de dates par défaut",
     "default_date_range_help": "Lorsque les visiteurs consultent votre calendrier public sans préciser de plage de dates, les événements seront filtrés pour afficher cette période à partir d'aujourd'hui.",
+    "listed_label": "Afficher dans la liste des calendriers de cette instance",
+    "listed_help": "Lorsque cette option est activée, votre calendrier apparaît sur la page publique Calendriers sur cette instance. Lorsqu'elle est désactivée, votre calendrier ne figure pas dans cette liste. Il reste public : sa page, ses événements et ses abonnés ne changent pas, et toute personne disposant du lien peut toujours le voir.",
     "default_date_range_instance": "Valeur par défaut de l'instance",
     "date_range_1week": "1 semaine",
     "date_range_2weeks": "2 semaines",

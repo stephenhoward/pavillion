@@ -1085,6 +1085,26 @@ describe('Calendar Settings API', () => {
       expect(settingsArg.content).toEqual({ en: { name: 'Test' } });
     });
 
+    it('should pass listed to service', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      calendar.listed = false;
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.resolves(calendar);
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ listed: false });
+
+      expect(response.status).toBe(200);
+      expect(updateStub.firstCall.args[2].listed).toBe(false);
+      expect(response.body.listed).toBe(false);
+    });
+
     it('should return 404 when calendar not found', async () => {
       let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
       updateStub.rejects(new CalendarNotFoundError('Calendar not found'));

@@ -100,6 +100,30 @@
           </select>
         </div>
 
+        <!--
+          Listed on the instance's calendar list (/discover).
+
+          The heading holds the checkbox's label so the heading text is a tap
+          target too. The help text's "still public" sentence is load-bearing:
+          unlisting takes the calendar off one list and nothing more.
+        -->
+        <div class="setting-card">
+          <div class="setting-checkbox-row">
+            <h2 class="setting-label">
+              <label for="listed">{{ t('listed_label') }}</label>
+            </h2>
+            <input
+              id="listed"
+              type="checkbox"
+              class="setting-checkbox"
+              aria-describedby="listed-help"
+              :checked="state.listed"
+              @change="saveListed"
+            />
+          </div>
+          <p id="listed-help" class="input-description">{{ t('listed_help') }}</p>
+        </div>
+
         <!-- Default Event Image -->
         <div class="setting-card">
           <h2 class="setting-label">{{ t('default_event_image_label') }}</h2>
@@ -321,6 +345,8 @@ const state = reactive<{
   success: string;
   /** Empty while the calendar has no window of its own and uses the instance default. */
   defaultDateRange: DefaultDateRange | '';
+  /** Whether the calendar appears on the instance's public calendar list. */
+  listed: boolean;
   defaultEventImage: Media | null;
   isDisabling: boolean;
   showDisableConfirm: boolean;
@@ -331,6 +357,7 @@ const state = reactive<{
   error: '',
   success: '',
   defaultDateRange: '',
+  listed: true,
   defaultEventImage: null,
   isDisabling: false,
   showDisableConfirm: false,
@@ -448,6 +475,7 @@ const loadSettings = async () => {
     if (calendar) {
       localCalendar.value = calendar.clone();
       state.defaultDateRange = calendar.defaultDateRange || '';
+      state.listed = calendar.listed;
       state.defaultEventImage = calendar.defaultEventImage || null;
 
       // Re-seed the composable's `languages` so its `availableLanguages`
@@ -569,6 +597,41 @@ const saveAltText = async () => {
   }
   finally {
     state.isSavingAlt = false;
+  }
+};
+
+/**
+ * Save the listed setting when the owner changes it.
+ *
+ * Sent on its own rather than through `persistSettings`: it is one flag, and
+ * nothing else on the screen changed. The checkbox is not disabled while the
+ * request is in flight, because disabling the focused control drops focus to
+ * <body>. A failed save puts the checkbox back, so the screen never shows the
+ * calendar off the list while it is still on it.
+ *
+ * @param {Event} event - The checkbox's change event
+ */
+const saveListed = async (event: Event) => {
+  const listed = (event.target as HTMLInputElement).checked;
+  const previous = state.listed;
+  state.listed = listed;
+  state.isSaving = true;
+  try {
+    state.error = '';
+    state.success = '';
+    await calendarService.updateCalendarSettings(props.calendarId, { listed });
+    state.success = t('save_success');
+    clearMessages();
+  }
+  catch (error) {
+    console.error('Error saving listed setting:', error);
+    state.listed = previous;
+    (event.target as HTMLInputElement).checked = previous;
+    state.error = t('error_saving');
+    clearMessages();
+  }
+  finally {
+    state.isSaving = false;
   }
 };
 
@@ -775,6 +838,35 @@ onMounted(() => {
   font-weight: 500;
   color: var(--pav-text-primary);
   margin: 0 0 var(--pav-space-2) 0;
+}
+
+.setting-checkbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pav-space-3);
+
+  .setting-label {
+    flex: 1;
+    margin: 0;
+
+    label {
+      cursor: pointer;
+    }
+  }
+}
+
+.setting-checkbox {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--pav-color-brand-primary);
+}
+
+.setting-checkbox-row + .input-description {
+  margin: var(--pav-space-2) 0 0;
 }
 
 .setting-input {

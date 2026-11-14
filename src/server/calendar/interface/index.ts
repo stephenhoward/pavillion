@@ -760,6 +760,7 @@ export default class CalendarInterface {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
+      listed?: boolean;
       content?: Record<string, { name?: string; description?: string; imageAlt?: string } | null>;
     },
   ): Promise<Calendar> {
