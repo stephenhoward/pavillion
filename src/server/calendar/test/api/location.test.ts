@@ -6,6 +6,7 @@ import express, { Application } from 'express';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationContent, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
+import { ValidationError } from '@/common/exceptions/base';
 import { InvalidClientIdError, LocationValidationError, SpaceHijackError } from '@/common/exceptions/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import LocationRoutes from '@/server/calendar/api/v1/location';
@@ -257,6 +258,22 @@ describe('Location API Tests', () => {
       expect(response.body.error).toBe('Location name is required');
       expect(response.body.errorName).toBe('LocationValidationError');
     });
+
+    it('should return 400 with fields.language when a content language key is invalid', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.createLocation as sinon.SinonStub).rejects(
+        new ValidationError('content language must be an ISO 639-1 language code', { language: ['must be an ISO 639-1 language code'] }),
+      );
+
+      const response = await request(app)
+        .post('/api/v1/calendars/cal-123/locations')
+        .send({ name: 'Hall', content: { zz: { accessibilityInfo: 'x' } } })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields).toHaveProperty('language');
+    });
   });
 
   describe('GET /api/v1/calendars/:calendarId/locations/:locationId', () => {
@@ -493,6 +510,22 @@ describe('Location API Tests', () => {
 
       expect(response.body.error).toBe('Location name is required');
       expect(response.body.errorName).toBe('LocationValidationError');
+    });
+
+    it('should return 400 with fields.language when a content language key is invalid', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).rejects(
+        new ValidationError('content language must be an ISO 639-1 language code', { language: ['must be an ISO 639-1 language code'] }),
+      );
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: 'Hall', content: { zz: { accessibilityInfo: 'x' } } })
+        .expect(400);
+
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields).toHaveProperty('language');
     });
   });
 

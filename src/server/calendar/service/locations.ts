@@ -11,6 +11,7 @@ import {
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
 import { LocationSpaceEntity, LocationSpaceContentEntity } from '@/server/calendar/entity/location_space';
 import { EventEntity } from '@/server/calendar/entity/event';
+import { validateContentLanguage } from '@/server/calendar/service/language_code';
 import expressHelper from '@/server/common/helper/express';
 import db from '@/server/common/entity/db';
 
@@ -143,6 +144,23 @@ export default class LocationService {
   }
 
   /**
+   * Rejects any place or space content key that is not a bare ISO 639-1 code,
+   * before the transaction opens so nothing is written.
+   *
+   * @throws ValidationError for the first invalid language key
+   */
+  private validateContentLanguages(location: EventLocation): void {
+    for (const language of location.getLanguages()) {
+      validateContentLanguage(language);
+    }
+    for (const space of location.spaces ?? []) {
+      for (const language of space.getLanguages()) {
+        validateContentLanguage(language);
+      }
+    }
+  }
+
+  /**
    * Create a new location with optional accessibility content and optional
    * nested Spaces (atomic Place + Spaces save).
    *
@@ -159,6 +177,7 @@ export default class LocationService {
    *                   and optional `spaces[]` for atomic save)
    * @returns Created EventLocation model with `spaces[]` and `clientId` echoes
    * @throws LocationValidationError if location name is empty
+   * @throws ValidationError if a place or space content key is not an ISO 639-1 code
    * @throws InvalidClientIdError if any incoming Space `clientId` is not a
    *         valid UUID v4
    */
@@ -167,6 +186,8 @@ export default class LocationService {
     if (!location.name || location.name.trim().length === 0) {
       throw new LocationValidationError(['Location name is required']);
     }
+
+    this.validateContentLanguages(location);
 
     // Pre-validate incoming Space clientIds before opening the transaction so
     // a malformed token never reaches the writes. UUID-format check follows
@@ -370,6 +391,7 @@ export default class LocationService {
    *          echoes for new entries), or null if not found or not owned by
    *          calendar
    * @throws LocationValidationError if location name is empty
+   * @throws ValidationError if a place or space content key is not an ISO 639-1 code
    * @throws InvalidClientIdError if any incoming Space `clientId` is not a
    *         valid UUID v4
    * @throws SpaceHijackError if any incoming Space `id` does not belong to
@@ -386,6 +408,8 @@ export default class LocationService {
     if (!location.name || location.name.trim().length === 0) {
       throw new LocationValidationError(['Location name is required']);
     }
+
+    this.validateContentLanguages(location);
 
     // Pre-validate incoming Space clientIds before opening the transaction.
     // Malformed tokens never reach the writes (security advisor gate).
