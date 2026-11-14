@@ -61,7 +61,7 @@ When you see `[OK] Deploy complete.`, the app is up and the bundled Caddy is fet
 Drop the `COMPOSE_PROFILES=standalone` if you're putting your own proxy in front instead — see [Reverse proxy and TLS](./reverse-proxy-and-tls) for the config snippets.
 
 ::: tip <Lightbulb /> A note on what gets written to disk.
-Either path writes the same files: a `.env` file (your secrets, mode 600), a `secrets/` directory (the same secrets as files, for containers that read them by path), a `.deploy-state` file (tracks which secrets have ever been provisioned, used by the upgrade path), and `config/local.yaml` (your instance-specific config). Back these up after the next step — see [Backups](./backups). Losing `.env` or `secrets/` means losing your federation identity.
+Either path writes the same files: a `.env` file (your secrets, mode 600), a `secrets/` directory (the same secrets as files, for containers that read them by path), a `.deploy-state` file (tracks which secrets have ever been provisioned, used by the upgrade path), and `config/local.yaml` (your instance-specific config). Back these up after the next step — see [Backups](./backups). Losing them is painful but does not cost you your federation identity: your calendars' signing keys live in the database, so the database backup carries them. What you lose is users' logins, your payment provider keys and moderation history, and you can't reuse the old database volume without `DB_PASSWORD`; [Backups](./backups) lists each secret and what its loss costs.
 :::
 
 ## Create your first admin account
@@ -116,7 +116,7 @@ If nothing arrives within a minute or two, head to [Testing federation](./testin
 You now have a working Pavillion instance with one admin account and confirmed federation. Before you open it up to other people:
 
 - **[Email](./email).** Configure SMTP before anyone signs up — password resets and invitations need a working transport. Without this, any user who forgets their password is locked out.
-- **[Backups](./backups).** Back up `.env`, `secrets/`, `config/local.yaml`, and the Postgres data volume. Losing the secrets means losing your federation identity — every other instance has cached your public key under that domain, and a new key on the same domain looks like an impostor.
+- **[Backups](./backups).** Back up `.env`, `secrets/`, `config/local.yaml`, and the Postgres data volume. Your federation identity (each calendar's signing key) lives in the database, so the database backup is what protects it: every other instance has cached your public keys under that domain, and a new key on the same domain looks like an impostor. Losing the secrets costs logins, payment provider keys and moderation history instead.
 - **[What your instance is for](./what-your-instance-is-for) and [Who gets a calendar](./who-gets-a-calendar).** Before you invite the first calendar owner, decide what you're hosting and for whom. These are the questions nobody else can answer for you.
 - **[Federation policy](./federation-policy).** What you accept from the wider network, and what you don't.
 
