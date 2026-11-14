@@ -114,6 +114,7 @@ export default defineConfig({
             'src/client/test/routing/settings-guards.test.ts',
             'src/client/test/routing/calendar-settings-gate.test.ts',
             'src/client/test/routing/settings-links-contract.test.ts',
+            'src/client/test/routing/not-found-route.test.ts',
             'src/client/test/routing/settings-legacy-redirect.test.ts',
             // Tests that vi.mock('dns'): run in dns-mock-isolated.
             'src/server/common/test/helper/ip-validation-dns.test.ts',

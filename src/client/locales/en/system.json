@@ -355,5 +355,13 @@
       "unblock_success": "Reporter has been unblocked.",
       "unblock_error": "Failed to unblock reporter. Please try again."
     }
+  },
+  "not_found": {
+    "title": "Page not found",
+    "description": "This page does not exist. Check the address, or head back to your calendar.",
+    "back_to_calendar": "Back to your calendar",
+    "load_failed_title": "Could not load your calendars",
+    "load_failed_description": "Something went wrong while loading your calendars. Check your connection and try again.",
+    "try_again": "Try again"
   }
 }

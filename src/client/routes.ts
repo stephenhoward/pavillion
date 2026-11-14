@@ -31,6 +31,7 @@ import ProfileView from '@/client/components/logged_in/settings/profile.vue';
 import SecurityView from '@/client/components/logged_in/settings/security.vue';
 import AccountCalendarsView from '@/client/components/logged_in/settings/account-calendars.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
+import NotFoundView from '@/client/components/logged_in/not-found.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import FundingPlanView from '@/client/components/account/funding-plan.vue';
 
@@ -89,7 +90,8 @@ const RedirectOnly = { render: () => null };
  * Bare `/calendar` and `/feed` resolve to the current calendar; bare `/settings`
  * is the settings root list, forwarding to a leaf of it at md+.
  * Old paths (`/profile`, `/funding`, `/admin/*`, `/calendar/:calendar/manage`)
- * have no redirects.
+ * have no redirects: any unmatched path renders the not-found page inside the
+ * app shell (a final catch-all child of `/`).
  */
 export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
   const {
@@ -168,6 +170,8 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
             },
           ],
         },
+        // Last: any path nothing else matches. Logged-out visitors are sent to login by the parent guard.
+        { path: ':pathMatch(.*)*', component: NotFoundView, name: 'not_found', beforeEnter: mustBeLoggedIn },
       ],
     },
     // Event routes are top-level to render fullscreen without navigation

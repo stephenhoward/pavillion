@@ -333,9 +333,9 @@ describe('Navigation Integration - Task Group 4', () => {
       expect(router.resolve('/calendar/new').name).toBe('calendar');
     });
 
-    it.each(['/profile', '/funding', '/admin/settings'])('does not route the old path %s', (path) => {
+    it.each(['/profile', '/funding', '/admin/settings'])('does not redirect the old path %s; it is not-found', (path) => {
       router = createTestRouter();
-      expect(router.resolve(path).matched).toEqual([]);
+      expect(router.resolve(path).name).toBe('not_found');
     });
   });
 
