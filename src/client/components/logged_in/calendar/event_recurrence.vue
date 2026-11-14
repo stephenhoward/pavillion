@@ -169,11 +169,14 @@
                @input="syncScheduleFromDateTime(); recheckTimeInput('end')"
                @blur="checkTimeInput('end')"
                class="grid-input"
-               :class="{ 'field-input--error': state.timeIncomplete.end }"
-               :aria-invalid="state.timeIncomplete.end ? 'true' : undefined"
-               :aria-describedby="state.timeIncomplete.end ? endTimeErrorId : undefined" />
+               :class="{ 'field-input--error': state.timeIncomplete.end || endBeforeStart }"
+               :aria-invalid="state.timeIncomplete.end || endBeforeStart ? 'true' : undefined"
+               :aria-describedby="endTimeDescribedBy" />
         <p v-if="state.timeIncomplete.end" :id="endTimeErrorId" class="form-error">
           {{ t('error_time_incomplete') }}
+        </p>
+        <p v-if="endBeforeStart" :id="endBeforeStartErrorId" class="form-error">
+          {{ t('error_end_before_start') }}
         </p>
       </div>
 
@@ -213,7 +216,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, useId } from 'vue';
+import { computed, reactive, ref, useId } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
@@ -423,6 +426,25 @@ const timeInputs = { start: startTimeInput, end: endTimeInput };
 const fieldIdBase = useId();
 const startTimeErrorId = `${fieldIdBase}-start-time-error`;
 const endTimeErrorId = `${fieldIdBase}-end-time-error`;
+const endBeforeStartErrorId = `${fieldIdBase}-end-before-start-error`;
+
+// Start and end are both shown in the schedule's zone as zero-padded local
+// strings, so a string comparison orders them. A native time input has no
+// value until it is complete, so an unfinished end time never trips this.
+const endBeforeStart = computed(() => {
+  if (!state.date || !state.time || !state.eventEndDate || !state.eventEndTime) {
+    return false;
+  }
+  return `${state.eventEndDate}T${state.eventEndTime}` < `${state.date}T${state.time}`;
+});
+
+const endTimeDescribedBy = computed(() => {
+  const ids = [
+    state.timeIncomplete.end ? endTimeErrorId : null,
+    endBeforeStart.value ? endBeforeStartErrorId : null,
+  ].filter(Boolean);
+  return ids.length > 0 ? ids.join(' ') : undefined;
+});
 
 /**
  * Marks a time input invalid while the browser reports it as partially

@@ -141,6 +141,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     if (!hasValidSchedule) {
       fieldErrors.schedule = t('error_date_required');
     }
+    else if (model.schedules.some(
+      (schedule: any) => !schedule.isExclusion
+        && schedule.startDate && schedule.eventEndTime
+        && schedule.eventEndTime < schedule.startDate,
+    )) {
+      fieldErrors.schedule = t('recurrence.error_end_before_start');
+    }
 
     return Object.keys(fieldErrors).length === 0;
   };
