@@ -2,6 +2,7 @@ import config from 'config';
 import { Sequelize } from 'sequelize-typescript';
 import path from 'path';
 import fs from 'fs/promises';
+import { mkdirSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '@/server/common/helper/logger';
 
@@ -18,6 +19,12 @@ const databaseConfig: any = config.get('database');
 const isFileBackedSqlite = databaseConfig.dialect === 'sqlite'
   && !!databaseConfig.storage
   && databaseConfig.storage !== ':memory:';
+
+// SQLite creates the file but not its directory, and `storage/` is git-ignored,
+// so a fresh checkout would otherwise fail to open the database.
+if (isFileBackedSqlite) {
+  mkdirSync(path.dirname(path.resolve(databaseConfig.storage)), { recursive: true });
+}
 
 // How long a connection waits for another writer's lock before erroring.
 const SQLITE_BUSY_TIMEOUT_MS = 10000;

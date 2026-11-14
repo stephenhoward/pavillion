@@ -169,7 +169,7 @@ For more troubleshooting help, see the [Deployment Guide](docs/deployment.md).
 
 ### Standard Development (SQLite)
 
-For rapid development with hot-reload and in-memory SQLite database:
+For rapid development with hot-reload and a file-backed SQLite database (`storage/dev.sqlite`, git-ignored):
 
 ```bash
 npm install

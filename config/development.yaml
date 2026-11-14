@@ -1,9 +1,13 @@
 domain: "pavillion.dev"
 
 # Database configuration:
-# - Local development (npm run dev): Uses SQLite in-memory from default.yaml
+# - Local development (npm run dev): Uses a file-backed SQLite database (below),
+#   reset and reseeded on each start. Not ':memory:', whose single shared
+#   connection lets concurrent transactions interleave and roll back each other.
 # - Docker development: Uses PostgreSQL via environment variables (DB_DIALECT, DB_HOST, etc.)
-# No overrides needed here - env vars handle Docker PostgreSQL connection
+# Env vars handle Docker PostgreSQL connection; `storage` is ignored for postgres.
+database:
+  storage: './storage/dev.sqlite'
 
 # Example mail configurations - uncomment and adjust as needed
 # mail:

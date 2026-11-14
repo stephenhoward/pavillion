@@ -20,7 +20,7 @@ The whole project is TypeScript, front to back, written as ES modules. One langu
 
 ## Database
 
-**PostgreSQL in production, SQLite in development and tests.** The default configuration uses an in-memory SQLite database, which is why the development server starts with a freshly seeded database on every restart. Production configuration switches to PostgreSQL. Code that works on one and not the other is a bug, so avoid dialect-specific SQL.
+**PostgreSQL in production, SQLite in development and tests.** Tests use an in-memory SQLite database; `npm run dev` uses a file-backed one (`storage/dev.sqlite`) that is reset and reseeded on every restart. Production configuration switches to PostgreSQL. Code that works on one and not the other is a bug, so avoid dialect-specific SQL.
 
 **Sequelize with sequelize-typescript** maps entities to tables using decorators. Raw SQL is the exception: `npm run lint` runs a check that flags it.
 
