@@ -116,6 +116,32 @@ describe('Operational metrics endpoint', () => {
       .toBe(Math.floor(snapshotWrittenAt.getTime() / 1000));
   });
 
+  it('exposes the federation backlog read through the wired source', async () => {
+    const wired = new HousekeepingInterface(new EmailInterface(), new AccountsInterface());
+    wired.setActivityPubInterface({
+      getUnprocessedActivityStats: async () => [
+        { direction: 'inbound', count: 4, oldestStoredAt: new Date('2026-11-01T00:00:00.000Z') },
+        { direction: 'outbound', count: 0, oldestStoredAt: null },
+      ],
+    });
+    const wiredServer = new MetricsRoutes(wired, 0).createServer();
+    await new Promise<void>((resolve) => wiredServer.listen(0, '127.0.0.1', resolve));
+
+    try {
+      const url = `http://127.0.0.1:${(wiredServer.address() as AddressInfo).port}/metrics`;
+      const parsed = samples(await (await fetch(url)).text());
+
+      expect(parsed['pavillion_federation_unprocessed_activities{direction="inbound"}']).toBe(4);
+      expect(parsed['pavillion_federation_unprocessed_activities{direction="outbound"}']).toBe(0);
+      expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="inbound"}'])
+        .toBe(Date.parse('2026-11-01T00:00:00.000Z') / 1000);
+      expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="outbound"}']).toBeUndefined();
+    }
+    finally {
+      await new Promise<void>((resolve) => wiredServer.close(() => resolve()));
+    }
+  });
+
   it('omits series for data that does not exist yet', async () => {
     const body = await (await fetch(`${baseUrl}/metrics`)).text();
 

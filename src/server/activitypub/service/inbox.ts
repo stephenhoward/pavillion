@@ -271,6 +271,26 @@ class ProcessInboxService {
   }
 
   /**
+   * Counts the rows the inbox drain has yet to process, and finds the
+   * longest-waiting one.
+   *
+   * The predicate is the drain's own base (`processed_time IS NULL`) with no
+   * age cutoff, so rows the drain leaves to live delivery are counted. The
+   * oldest row is read by `createdAt`, the write time, because `message_time`
+   * is the sender's clamped published time and would report false ages.
+   *
+   * @returns The unprocessed count and the oldest row's write time, or null
+   *   when nothing is waiting
+   */
+  async getUnprocessedStats(): Promise<{ count: number; oldestStoredAt: Date | null }> {
+    const where = { processed_time: null };
+    const count = await ActivityPubInboxMessageEntity.count({ where });
+    const oldest = count > 0 ? await ActivityPubInboxMessageEntity.min('createdAt', { where }) : null;
+
+    return { count, oldestStoredAt: oldest ? new Date(oldest as Date) : null };
+  }
+
+  /**
    * Processes a single inbox message based on its type.
    * Checks if the source instance is blocked before processing.
    *

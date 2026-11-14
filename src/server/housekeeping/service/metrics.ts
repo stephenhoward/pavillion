@@ -48,6 +48,26 @@ export const FAILED_JOB_WINDOW_HOURS = 24;
 export const BACKUP_VOLUME_LABEL = 'backups';
 export const MEDIA_VOLUME_LABEL = 'media';
 
+/**
+ * Label values for the `direction` dimension of the `pavillion_federation_*`
+ * family. In-code constants, not table names, so storage vocabulary stays out
+ * of the operator contract.
+ */
+export const FEDERATION_INBOUND_LABEL = 'inbound';
+export const FEDERATION_OUTBOUND_LABEL = 'outbound';
+
+/**
+ * Where the federation backlog is read from. Satisfied by ActivityPub's
+ * interface; declared here so housekeeping depends on a shape, not a domain.
+ */
+export interface FederationBacklogSource {
+  getUnprocessedActivityStats(): Promise<{
+    direction: 'inbound' | 'outbound';
+    count: number;
+    oldestStoredAt: Date | null;
+  }[]>;
+}
+
 /** Last verified backup. Absent when no verified backup exists yet. */
 export interface BackupMetrics {
   /** Unix seconds at which the backup was created. */
@@ -85,6 +105,15 @@ export interface QueueMetrics {
   failedJobs: number;
 }
 
+/** Unprocessed federation activities in one direction. */
+export interface FederationBacklogMetrics {
+  /** Direction label value, from the fixed `FEDERATION_*_LABEL` constants. */
+  direction: string;
+  count: number;
+  /** Unix seconds at which the oldest waiting row was stored; absent when none waits. */
+  oldestStoredTimestampSeconds?: number;
+}
+
 /**
  * The complete set of operational values the metrics endpoint may expose.
  *
@@ -105,6 +134,8 @@ export interface OperationalMetrics {
   databaseSizeBytes: number | null;
   /** Null when queue state could not be read at all; never a partial list. */
   queues: QueueMetrics[] | null;
+  /** Null when the federation source is unwired (CLI, worker) or its read failed. */
+  federation: FederationBacklogMetrics[] | null;
 }
 
 /**
@@ -119,10 +150,20 @@ export interface OperationalMetrics {
 export default class MetricsService {
   private diskMonitor: DiskMonitorService;
   private diskSnapshots: DiskSnapshotService;
+  private federationSource: FederationBacklogSource | null = null;
 
   constructor() {
     this.diskMonitor = new DiskMonitorService();
     this.diskSnapshots = new DiskSnapshotService();
+  }
+
+  /**
+   * Late-binds the federation backlog source. Housekeeping is constructed
+   * before ActivityPub, so the source arrives after construction; processes
+   * that never set it report the family as absent.
+   */
+  setFederationSource(source: FederationBacklogSource): void {
+    this.federationSource = source;
   }
 
   /**
@@ -132,15 +173,16 @@ export default class MetricsService {
    * @returns The operational metric values, with an absent family as null
    */
   async collect(now: Date = new Date()): Promise<OperationalMetrics> {
-    const [backup, backupVolume, databaseSizeBytes, mediaVolume, queues] = await Promise.all([
+    const [backup, backupVolume, databaseSizeBytes, mediaVolume, queues, federation] = await Promise.all([
       this.isolate('backup', () => this.getBackupMetrics()),
       this.isolate('backupVolume', () => this.getBackupVolumeMetrics()),
       this.isolate('databaseSize', () => this.getDatabaseSizeBytes()),
       this.isolate('mediaVolume', () => this.getMediaVolumeMetrics()),
       this.isolate('queues', () => this.getQueueMetrics(now)),
+      this.isolate('federation', () => this.getFederationMetrics()),
     ]);
 
-    return { backup, backupVolume, mediaVolume, databaseSizeBytes, queues };
+    return { backup, backupVolume, mediaVolume, databaseSizeBytes, queues, federation };
   }
 
   /**
@@ -272,6 +314,26 @@ export default class MetricsService {
       queue,
       depth: byQueue.get(queue)?.depth ?? 0,
       failedJobs: byQueue.get(queue)?.failed ?? 0,
+    }));
+  }
+
+  /**
+   * Reads the unprocessed federation backlog per direction.
+   *
+   * A successful count of zero is reported as zero, as queue depth is. Null
+   * when no source is wired, which is the CLI and worker shape.
+   */
+  private async getFederationMetrics(): Promise<FederationBacklogMetrics[] | null> {
+    if (!this.federationSource) {
+      return null;
+    }
+
+    const stats = await this.federationSource.getUnprocessedActivityStats();
+
+    return stats.map((stat) => ({
+      direction: stat.direction === 'inbound' ? FEDERATION_INBOUND_LABEL : FEDERATION_OUTBOUND_LABEL,
+      count: stat.count,
+      ...(stat.oldestStoredAt ? { oldestStoredTimestampSeconds: Math.floor(stat.oldestStoredAt.getTime() / 1000) } : {}),
     }));
   }
 }

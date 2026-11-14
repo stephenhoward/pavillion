@@ -29,6 +29,14 @@ import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FlagActivityBuilder from '@/server/activitypub/service/flag-activity-builder';
 
+/** Unprocessed-row backlog for one direction of federation traffic. */
+export interface UnprocessedActivityStats {
+  direction: 'inbound' | 'outbound';
+  count: number;
+  /** When the longest-waiting row was stored; null when nothing is waiting. */
+  oldestStoredAt: Date | null;
+}
+
 /**
  * Implementation of the ActivityPub internal API interface
  * Aggregates functionality from both member and server services
@@ -57,6 +65,25 @@ export default class ActivityPubInterface {
     this.inboxService = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
     this.outboxService = new ProcessOutboxService(eventBus, this.inboxService);
     this.federationPublisher = new FederationPublisher(eventBus, calendarInterface, this.outboxService);
+  }
+
+  /**
+   * Reports how many inbox and outbox rows are stored but not yet processed,
+   * and when the oldest of each was stored. Read by the operational metrics
+   * endpoint; counts only, never row content.
+   *
+   * @returns One entry per direction, inbound first
+   */
+  async getUnprocessedActivityStats(): Promise<UnprocessedActivityStats[]> {
+    const [inbound, outbound] = await Promise.all([
+      this.inboxService.getUnprocessedStats(),
+      this.outboxService.getUnprocessedStats(),
+    ]);
+
+    return [
+      { direction: 'inbound', ...inbound },
+      { direction: 'outbound', ...outbound },
+    ];
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {

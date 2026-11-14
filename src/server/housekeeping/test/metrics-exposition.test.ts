@@ -47,6 +47,10 @@ const fullMetrics: OperationalMetrics = {
     { queue: 'backup:daily', depth: 0, failedJobs: 2 },
     { queue: 'disk:check', depth: 1, failedJobs: 0 },
   ],
+  federation: [
+    { direction: 'inbound', count: 3, oldestStoredTimestampSeconds: 1756000100 },
+    { direction: 'outbound', count: 0 },
+  ],
 };
 
 const emptyMetrics: OperationalMetrics = {
@@ -55,6 +59,7 @@ const emptyMetrics: OperationalMetrics = {
   databaseSizeBytes: null,
   mediaVolume: null,
   queues: null,
+  federation: null,
 };
 
 describe('OpenMetrics exposition', () => {
@@ -245,5 +250,36 @@ describe('OpenMetrics exposition', () => {
     expect(document).not.toContain('admin@example.com');
     expect(document).not.toContain('calendar');
     expect(declaredFamilies(document).length).toBe(declaredFamilies(renderOpenMetrics(fullMetrics)).length);
+  });
+
+  it('renders the federation backlog for both directions', () => {
+    const parsed = samples(renderOpenMetrics({
+      ...fullMetrics,
+      federation: [
+        { direction: 'inbound', count: 3, oldestStoredTimestampSeconds: 1756000100 },
+        { direction: 'outbound', count: 5, oldestStoredTimestampSeconds: 1756000200 },
+      ],
+    }));
+
+    expect(parsed['pavillion_federation_unprocessed_activities{direction="inbound"}']).toBe(3);
+    expect(parsed['pavillion_federation_unprocessed_activities{direction="outbound"}']).toBe(5);
+    expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="inbound"}']).toBe(1756000100);
+    expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="outbound"}']).toBe(1756000200);
+  });
+
+  it('renders an empty direction as a zero count with no timestamp', () => {
+    const parsed = samples(renderOpenMetrics(fullMetrics));
+
+    expect(parsed['pavillion_federation_unprocessed_activities{direction="outbound"}']).toBe(0);
+    expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="outbound"}']).toBeUndefined();
+    expect(parsed['pavillion_federation_oldest_unprocessed_timestamp_seconds{direction="inbound"}']).toBe(1756000100);
+  });
+
+  it('omits the whole federation family when its source is absent', () => {
+    const document = renderOpenMetrics({ ...fullMetrics, federation: null });
+
+    expect(declaredFamilies(document)).not.toContain('pavillion_federation_unprocessed_activities');
+    expect(declaredFamilies(document)).not.toContain('pavillion_federation_oldest_unprocessed_timestamp_seconds');
+    expect(samples(document)['pavillion_db_size_bytes']).toBe(78901234);
   });
 });

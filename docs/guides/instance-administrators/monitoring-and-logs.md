@@ -23,6 +23,8 @@ The `app` container serves [OpenMetrics](https://openmetrics.io/) text at `/metr
 | `pavillion_db_size_bytes` | The database's size on disk |
 | `pavillion_queue_depth` | Background jobs waiting or running, one sample per `queue` label |
 | `pavillion_queue_failed_jobs` | Background jobs that failed in the last 24 hours, per `queue` |
+| `pavillion_federation_unprocessed_activities` | Federation activities stored but not yet processed, one sample per `direction` label: `inbound` and `outbound` |
+| `pavillion_federation_oldest_unprocessed_timestamp_seconds` | When the longest-waiting unprocessed activity was stored, per `direction`. Missing while nothing is waiting |
 
 The backup volume is mounted on the worker container, not the app, so the worker measures it once an hour and the app reports the last reading. That's why the backups volume has a snapshot timestamp and the media volume, which the app measures live on every scrape, doesn't.
 
@@ -246,6 +248,8 @@ docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
 ```
 
 The database container already knows its own user and database name, so the command reads them from there and needs no editing. A handful of rows in the last few minutes is normal traffic. Rows days old mean deliveries were interrupted and not yet caught up.
+
+The metrics endpoint reports the same count without a shell on the server: `pavillion_federation_unprocessed_activities{direction="outbound"}` (and `inbound` for received activities). A non-zero count is normal, since it includes rows still inside the 15-minute window left to normal delivery. To alert on a catch-up that has stopped working, watch the age of the oldest row instead: `time() - pavillion_federation_oldest_unprocessed_timestamp_seconds > 1800` for 5 minutes. Thirty minutes is past the 15-minute window plus the one-minute catch-up check, so it fires only on rows the app has had a chance to deliver and didn't.
 
 **The first start after upgrading.** Before Pavillion could catch up on interrupted deliveries, those rows were left behind for good. The first start of a version that catches up delivers all of them, however old. Run the count above before you upgrade so you know how many to expect; activities that were since deleted or undone are skipped rather than sent.
 
