@@ -129,13 +129,13 @@ class CalendarRoutes {
       return;
     }
 
-    const { defaultDateRange, defaultEventImageId, content } = req.body;
+    const { defaultDateRange, defaultEventImageId, listed, content } = req.body;
 
     try {
       const calendar = await this.service.updateCalendarSettings(
         account,
         calendarId,
-        { defaultDateRange, defaultEventImageId, content },
+        { defaultDateRange, defaultEventImageId, listed, content },
       );
 
       res.json(calendar.toObject());

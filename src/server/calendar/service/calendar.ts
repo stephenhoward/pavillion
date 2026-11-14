@@ -1442,7 +1442,9 @@ class CalendarService {
    *
    * @param account - Account making the update (must be calendar owner or admin)
    * @param calendarId - ID of the calendar to update
-   * @param settings - Settings to update
+   * @param settings - Settings to update. `listed` decides whether the calendar
+   *   appears on the instance's public calendar list (/discover); it does not
+   *   change who can see the calendar itself.
    * @returns The updated calendar
    * @throws CalendarNotFoundError if calendar not found
    * @throws CalendarEditorPermissionError if permission denied
@@ -1454,6 +1456,7 @@ class CalendarService {
     settings: {
       defaultDateRange?: DefaultDateRange;
       defaultEventImageId?: string | null;
+      listed?: boolean;
       content?: Record<string, { name?: string; description?: string; imageAlt?: string } | null>;
     },
   ): Promise<Calendar> {
@@ -1474,6 +1477,12 @@ class CalendarService {
       if (!isValidUuidV4(settings.defaultEventImageId)) {
         throw new ValidationError('defaultEventImageId must be a valid UUID or null');
       }
+    }
+
+    // Strict: a string "false" is truthy, so coercing it would list the
+    // calendar the owner asked to take off the list.
+    if (settings.listed !== undefined && typeof settings.listed !== 'boolean') {
+      throw new ValidationError('listed must be a boolean', { listed: ['must be a boolean'] });
     }
 
     // Validate every language's imageAlt before the first setting or content
@@ -1510,6 +1519,10 @@ class CalendarService {
     // Update the settings
     if (settings.defaultDateRange) {
       await calendarEntity.update({ default_date_range: settings.defaultDateRange });
+    }
+
+    if (settings.listed !== undefined) {
+      await calendarEntity.update({ listed: settings.listed });
     }
 
     // Update defaultEventImageId if provided

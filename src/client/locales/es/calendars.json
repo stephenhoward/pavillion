@@ -511,6 +511,8 @@
     "calendar_description_placeholder": "Un calendario de eventos y actividades de la comunidad...",
     "default_date_range_label": "Filtro de fechas predeterminado",
     "default_date_range_help": "Cuando los visitantes vean tu calendario público sin especificar un intervalo de fechas, los eventos se filtrarán para mostrar este período de tiempo a partir de hoy.",
+    "listed_label": "Mostrar en la lista de calendarios de esta instancia",
+    "listed_help": "Cuando esta opción está activada, tu calendario aparece en la página pública Calendarios en esta instancia. Cuando está desactivada, tu calendario queda fuera de esa lista. Sigue siendo público: su página, sus eventos y sus seguidores no cambian, y cualquier persona con el enlace puede seguir viéndolo.",
     "default_date_range_instance": "Predeterminado de la instancia",
     "date_range_1week": "1 semana",
     "date_range_2weeks": "2 semanas",
