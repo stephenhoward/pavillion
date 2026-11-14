@@ -21,6 +21,7 @@ import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
 import { isClaimableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
+import { validateContentLanguages } from '@/server/calendar/service/language_code';
 import { validateMediaTransform } from '@/server/calendar/service/media_transform';
 
 /**
@@ -87,6 +88,7 @@ class SeriesService {
     // malformed now reports the malformed alt text rather than the permission
     // failure, which is already how the three sibling methods answer.
     validateMediaTransform(seriesData);
+    validateContentLanguages(seriesData.content);
     validateContentImageAlts(seriesData.content);
 
     // Get calendar and verify ownership/editor permissions
@@ -247,6 +249,7 @@ class SeriesService {
     // unresolvable (or unauthorized) and malformed reports the malformed alt
     // text on all four enforcement sites alike.
     validateMediaTransform(seriesData);
+    validateContentLanguages(seriesData.content);
     validateContentImageAlts(seriesData.content);
 
     // Get series to verify it exists

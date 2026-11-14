@@ -11,6 +11,7 @@ import {
   CategoryEventCalendarMismatchError,
   DuplicateCategoryNameError,
 } from '@/common/exceptions/category';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
 class CategoryRoutes {
@@ -105,6 +106,11 @@ class CategoryRoutes {
     }
     catch (error) {
       logError(error, 'Error creating category');
+
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
 
       if (error instanceof DuplicateCategoryNameError) {
         res.status(409).json({ "error": "A category with this name already exists", errorName: 'DuplicateCategoryNameError' });
@@ -202,6 +208,11 @@ class CategoryRoutes {
     }
     catch (error) {
       logError(error, 'Error updating category');
+
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });

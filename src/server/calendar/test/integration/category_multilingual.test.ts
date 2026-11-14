@@ -46,6 +46,18 @@ describe('Category Multilingual Integration', () => {
   });
 
   describe('Multilingual Category Creation', () => {
+    it('should answer 400 with fields.language for a non-ISO-639-1 language key', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+
+      const response = await env.authPost(authKey, `/api/v1/calendars/${calendar.id}/categories`, {
+        content: { en: { name: 'Fine' }, 'pt-BR': { name: 'Not allowed' } },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.fields).toHaveProperty('language');
+    });
+
     it('should create category with content in multiple languages', async () => {
       const authKey = await env.login(userEmail, userPassword);
 
@@ -360,7 +372,7 @@ describe('Category Multilingual Integration', () => {
           th: {
             name: 'ไทย: สวัสดีครับ',
           },
-          emoji: {
+          cy: {
             name: '🎨🎭🎪🎨 Arts & Fun 🎨🎭🎪🎨',
           },
         },
@@ -373,7 +385,7 @@ describe('Category Multilingual Integration', () => {
       expect(response.body.content.ja.name).toBe('ひらがな・カタカナ・漢字：こんにちは');
       expect(response.body.content.ko.name).toBe('한글: 안녕하세요');
       expect(response.body.content.th.name).toBe('ไทย: สวัสดีครับ');
-      expect(response.body.content.emoji.name).toBe('🎨🎭🎪🎨 Arts & Fun 🎨🎭🎪🎨');
+      expect(response.body.content.cy.name).toBe('🎨🎭🎪🎨 Arts & Fun 🎨🎭🎪🎨');
     });
 
     it('should handle very long category names in multiple languages', async () => {
@@ -494,30 +506,21 @@ describe('Category Multilingual Integration', () => {
       });
     });
 
-    it('should handle non-standard language codes gracefully', async () => {
+    it('should reject regional and non-standard language codes', async () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const categoryData = {
         content: {
           en: { name: 'English - Non-Standard' },
           'en-US': { name: 'American English' },
-          'es-MX': { name: 'Español Mexicano' },
-          'zh-CN': { name: '简体中文' },
-          'zh-TW': { name: '繁體中文' },
           custom: { name: 'Custom Language' },
         },
       };
 
       const response = await env.authPost(authKey, `/api/v1/calendars/${calendar.id}/categories`, categoryData);
 
-      // Should either handle gracefully or accept all codes
-      expect(response.status).toBe(201);
-      expect(response.body.content.en.name).toBe('English - Non-Standard');
-
-      // Non-standard codes may or may not be accepted depending on validation
-      if (response.body.content['en-US']) {
-        expect(response.body.content['en-US'].name).toBe('American English');
-      }
+      expect(response.status).toBe(400);
+      expect(response.body.fields).toHaveProperty('language');
     });
   });
 });

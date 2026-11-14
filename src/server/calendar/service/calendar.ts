@@ -30,6 +30,7 @@ import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 import { isValidUuidV4 } from '@/server/common/helper/uuid';
 import { validateContentImageAlts, validateImageAlt } from '@/server/calendar/service/image_alt';
+import { validateContentLanguages } from '@/server/calendar/service/language_code';
 
 const logger = createLogger('calendar');
 import FundingInterface from '@/server/funding/interface';
@@ -1478,6 +1479,7 @@ class CalendarService {
     // Validate every language's imageAlt before the first setting or content
     // row is written — the per-language loop below throws, and this method
     // holds no transaction.
+    validateContentLanguages(settings.content);
     validateContentImageAlts(settings.content);
 
     const calendar = await this.getCalendar(calendarId);

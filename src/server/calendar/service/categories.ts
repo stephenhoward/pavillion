@@ -20,6 +20,7 @@ import {
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
 import { QueryTypes } from 'sequelize';
+import { validateContentLanguages } from '@/server/calendar/service/language_code';
 
 /**
  * Service for managing event categories within calendars.
@@ -43,6 +44,9 @@ class CategoryService {
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
+
+    // Reject a non-ISO-639-1 language key before any row is written.
+    validateContentLanguages(categoryData.content);
 
     // Check for duplicate names per language before creating
     if (categoryData.content) {
@@ -182,6 +186,9 @@ class CategoryService {
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
+
+    // Reject a non-ISO-639-1 language key before any row is written.
+    validateContentLanguages(categoryData.content);
 
     // Handle content updates
     if (categoryData.content) {
