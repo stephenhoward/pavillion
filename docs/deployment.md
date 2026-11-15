@@ -282,6 +282,7 @@ chmod 600 secrets/*.txt
 | `S3_ACCESS_KEY` | No | - | S3 access key ID |
 | `S3_SECRET_KEY` | No | - | S3 secret access key |
 | `S3_ENDPOINT` | No | - | Custom S3 endpoint (for DigitalOcean Spaces, MinIO) |
+| `BACKUP_S3_*` | No | - | Off-host copy of each database backup, read by the worker only and separate from `S3_*`. See [Configuration](./configuration.md#off-host-backup-copy) and [Copy backups off the server](./backups.md#copy-backups-off-the-server) |
 | `DOMAIN` | No | `localhost` | Public domain name (required for standalone mode) |
 | `COMPOSE_PROFILES` | No | - | Set to `standalone` to enable built-in Caddy proxy |
 | `PAVILLION_IMAGE_TAG` | No | `latest` | Tag of the `ghcr.io/stephenhoward/pavillion` image to deploy. Set to `main` on staging to track unreleased builds, or pin to a specific version (e.g., `v1.2.3`) for reproducible production deploys. |

@@ -3,6 +3,8 @@ import { DateTime } from 'luxon';
 import BackupService from '@/server/housekeeping/service/backup';
 import config from 'config';
 import * as fs from 'fs';
+import * as path from 'path';
+import type OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 
@@ -204,6 +206,55 @@ describe('BackupService', () => {
         category: expect.stringMatching(/^(daily|weekly|monthly)$/),
         verified: true,
         storage_location: config.get('housekeeping.backup.path'),
+      });
+    });
+
+    describe('off-host copy', () => {
+      let copy: ReturnType<typeof vi.fn>;
+      let copyingService: BackupService;
+
+      beforeEach(() => {
+        copy = vi.fn().mockResolvedValue(true);
+        copyingService = new BackupService({ copy } as unknown as OffsiteCopyService);
+        vi.spyOn(copyingService as any, 'executeCommand').mockResolvedValue(undefined);
+      });
+
+      it('should copy a verified backup once, by its full path, after saving its row', async () => {
+        const result = await copyingService.createBackup('scheduled');
+
+        expect(result.verified).toBe(true);
+        expect(copy).toHaveBeenCalledTimes(1);
+        expect(copy).toHaveBeenCalledWith(path.join(config.get<string>('housekeeping.backup.path'), result.filename));
+        expect(vi.mocked(BackupEntity.create).mock.invocationCallOrder[0])
+          .toBeLessThan(copy.mock.invocationCallOrder[0]);
+      });
+
+      it('should never copy an unverified backup', async () => {
+        vi.mocked(fs.statSync).mockReturnValue({ size: 500 } as any);
+
+        const result = await copyingService.createBackup('manual');
+
+        expect(result.verified).toBe(false);
+        expect(copy).not.toHaveBeenCalled();
+      });
+
+      it('should resolve the same metadata, keeping the row and the file, when the copy fails', async () => {
+        copy.mockResolvedValue(false);
+
+        const result = await copyingService.createBackup('manual');
+
+        expect(result).toMatchObject({ verified: true, size_bytes: 5000, type: 'manual' });
+        expect(BackupEntity.create).toHaveBeenCalledTimes(1);
+        expect(BackupEntity.create).toHaveBeenCalledWith(expect.objectContaining({ id: result.id, filename: result.filename }));
+        expect(fs.unlinkSync).not.toHaveBeenCalled();
+        expect(fs.rmSync).not.toHaveBeenCalled();
+      });
+
+      it('should not copy when saving the row fails', async () => {
+        vi.mocked(BackupEntity.create).mockRejectedValue(new Error('database connection lost'));
+
+        await expect(copyingService.createBackup('manual')).rejects.toBeInstanceOf(BackupCreateError);
+        expect(copy).not.toHaveBeenCalled();
       });
     });
   });

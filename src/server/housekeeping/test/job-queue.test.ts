@@ -278,6 +278,23 @@ describe('JobQueueService', () => {
       expect(PgBoss.prototype.schedule).toHaveBeenCalledWith('backup:daily', '0 2 * * *', {});
     });
 
+    it('passes schedule options to pg-boss as send options, so each cron run carries them', async () => {
+      await service.start();
+      const handler = vi.fn().mockResolvedValue(undefined);
+
+      await service.schedule('backup:daily', '0 2 * * *', handler, undefined, { expireInSeconds: 3600 });
+
+      expect(PgBoss.prototype.schedule).toHaveBeenCalledWith('backup:daily', '0 2 * * *', {}, { expireInSeconds: 3600 });
+    });
+
+    it('calls pg-boss schedule with three arguments when no options are given', async () => {
+      await service.start();
+
+      await service.schedule('backup:daily', '0 2 * * *', vi.fn().mockResolvedValue(undefined));
+
+      expect((PgBoss.prototype.schedule as any).mock.calls[0]).toHaveLength(3);
+    });
+
     it('should throw error when scheduling before start', async () => {
       const handler = vi.fn();
       await expect(

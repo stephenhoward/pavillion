@@ -87,6 +87,86 @@ describe('Docker Configuration', () => {
     });
   });
 
+  describe('off-host backup copy settings', () => {
+    const BACKUP_S3_NAMES = [
+      'BACKUP_S3_BUCKET',
+      'BACKUP_S3_REGION',
+      'BACKUP_S3_ENDPOINT',
+      'BACKUP_S3_ACCESS_KEY',
+      'BACKUP_S3_SECRET_KEY',
+      'BACKUP_S3_SECRET_KEY_FILE',
+    ];
+
+    function serviceEnvironment(service: string): string[] {
+      const config = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
+      return config.services[service].environment ?? [];
+    }
+
+    it('should default the offsite block to the s3 driver with inert values', () => {
+      const defaults = parseYaml(readFileSync('config/default.yaml', 'utf-8'));
+      const offsite = defaults.housekeeping.backup.offsite;
+      const s3 = offsite.s3;
+
+      // The driver names a destination type; the empty bucket keeps it off.
+      expect(offsite.driver).toBe('s3');
+      expect(s3.bucket).toBe('');
+      expect(s3.region).toBe('us-east-1');
+      expect(s3.endpoint).toBe('');
+      // Credentials are environment-only; declaring them here would invite
+      // putting them in config/local.yaml.
+      expect(s3).not.toHaveProperty('accessKeyId');
+      expect(s3).not.toHaveProperty('secretAccessKey');
+    });
+
+    it('should drop the commented-out future-enhancement s3 block', () => {
+      const raw = readFileSync('config/default.yaml', 'utf-8');
+
+      expect(raw).not.toContain('future enhancement');
+      expect(raw).not.toMatch(/^\s*#\s*s3:/m);
+    });
+
+    it('should map the BACKUP_S3_* variables onto housekeeping.backup.offsite.s3', () => {
+      const mapping = parseYaml(readFileSync('config/custom-environment-variables.yaml', 'utf-8'));
+
+      expect(mapping.housekeeping.backup.offsite.s3).toEqual({
+        bucket: 'BACKUP_S3_BUCKET',
+        region: 'BACKUP_S3_REGION',
+        endpoint: 'BACKUP_S3_ENDPOINT',
+        accessKeyId: 'BACKUP_S3_ACCESS_KEY',
+        secretAccessKey: 'BACKUP_S3_SECRET_KEY',
+      });
+    });
+
+    it('should read BACKUP_S3_SECRET_KEY from a _FILE secret in the entrypoint', () => {
+      const entrypoint = readFileSync('bin/entrypoint.sh', 'utf-8');
+
+      expect(entrypoint).toContain('file_env \'BACKUP_S3_SECRET_KEY\'');
+      expect(entrypoint).toMatch(/^#\s+- BACKUP_S3_SECRET_KEY_FILE\s+-> BACKUP_S3_SECRET_KEY$/m);
+    });
+
+    it('should pass every BACKUP_S3_* variable to the worker service', () => {
+      const env = serviceEnvironment('worker');
+
+      for (const name of BACKUP_S3_NAMES) {
+        expect(env).toContain(`${name}=\${${name}:-}`);
+      }
+    });
+
+    it('should pass AWS_REQUEST_CHECKSUM_CALCULATION to the worker service', () => {
+      const env = serviceEnvironment('worker');
+
+      expect(env).toContain('AWS_REQUEST_CHECKSUM_CALCULATION=${AWS_REQUEST_CHECKSUM_CALCULATION:-}');
+    });
+
+    it('should pass no BACKUP_S3_* variable to the app service', () => {
+      const env = serviceEnvironment('app');
+
+      // Guard against passing because the list failed to load.
+      expect(env.length).toBeGreaterThan(0);
+      expect(env.filter((entry) => /^BACKUP_S3_/.test(entry))).toEqual([]);
+    });
+  });
+
   describe('docker-compose.yml metrics listener exposure', () => {
     /** The port the app process serves OpenMetrics on, from shipped config. */
     function configuredMetricsPort(): string {

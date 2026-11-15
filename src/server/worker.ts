@@ -8,7 +8,8 @@ import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 import db from '@/server/common/entity/db';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
-import BackupService from '@/server/housekeeping/service/backup';
+import BackupService, { BACKUP_JOB_EXPIRE_SECONDS } from '@/server/housekeeping/service/backup';
+import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 import RetentionService from '@/server/housekeeping/service/retention';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
@@ -74,7 +75,11 @@ function backupErrorMessage(error: unknown): string {
  * @param queue - JobQueueService instance
  */
 async function registerJobHandlers(queue: JobQueueService): Promise<void> {
-  const backupService = new BackupService();
+  // Built once so both backup handlers share it; null when the configured
+  // destination has no target (for s3, no bucket).
+  const offsiteCopy = OffsiteCopyService.fromConfig();
+  offsiteCopy?.logStartup();
+  const backupService = new BackupService(offsiteCopy);
   const retentionService = new RetentionService();
   const diskMonitorService = new DiskMonitorService();
   const diskSnapshotService = new DiskSnapshotService();
@@ -140,7 +145,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       }
       throw error;
     }
-  });
+  }, undefined, { expireInSeconds: BACKUP_JOB_EXPIRE_SECONDS });
 
   // Disk check job handler (runs hourly)
   await queue.schedule('disk:check', '0 * * * *', async (_data) => {

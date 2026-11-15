@@ -14,12 +14,12 @@ In order of importance:
 
 | What | Where it lives | Who backs it up |
 |---|---|---|
-| The PostgreSQL database | Docker volume `pavillion-db` | Pavillion makes nightly dumps; **you** move them off the server |
+| The PostgreSQL database | Docker volume `pavillion-db` | Pavillion makes nightly dumps; **you** get them off the server, with the [off-host copy](#copy-backups-off-the-server) or your own tool |
 | `.env` and `secrets/` | The checkout directory (`/opt/pavillion` if you used `bin/provision.sh`) | You |
 | `config/local.yaml` and your reverse-proxy config | The checkout directory (`Caddyfile`, `caddy-extras.d/` for the bundled Caddy) | You |
 | Media (event images, avatars) | Docker volume `pavillion-media`, or your S3 bucket | You |
 
-Pavillion's own backup system runs `pg_dump` and nothing else. It produces no media archive and does not copy your secrets or config.
+Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each dump to a bucket. It produces no media archive and does not copy your secrets or config.
 
 ## The database
 
@@ -46,13 +46,238 @@ export PAVILLION_CONTAINER=pavillion-app
 
 ### Get the dumps off the server
 
-The dumps live on the same machine as the database they protect. A failed disk takes both. Copy `/opt/pavillion/backups` somewhere else on a schedule, using whatever you already trust: `rsync` or `scp` to another host, your provider's snapshot feature on the backup directory, or an object-storage sync tool. Pavillion does not do this for you. The `housekeeping.backup.s3` block in `config/default.yaml` is commented out and the code only logs that S3 upload is not implemented, so don't count on it.
+The dumps live on the same machine as the database they protect. A failed disk takes both. You have two ways to get them somewhere else:
+
+- **Let the worker do it.** Give Pavillion a bucket on an object-storage service and it uploads each verified dump right after writing it. That's the off-host copy, set up in [Copy backups off the server](#copy-backups-off-the-server) below.
+- **Use what you already trust.** `rsync` or `scp` to another host, your provider's snapshot feature on `/opt/pavillion/backups`, or an object-storage sync tool, on a schedule.
+
+Either works. The off-host copy has nothing to schedule and nothing to forget, and with the bucket settings below it survives someone breaking into the server, not just the server dying. A tool you already run for other machines is fine if it gives you the same.
 
 Some guidance that isn't about tooling:
 
 - Not on the same disk as the instance, and not in the same region if your provider is your only redundancy.
 - Encrypted at rest. A dump is your whole community's data, including account email addresses and the private keys your calendars sign federation traffic with. Treat it like the secrets below.
 - Frequency follows how fast events get created. For most community instances the nightly dump plus a nightly copy is enough. If losing a day of edits would be painful, copy more often, or run `./scripts/backup.sh create` before risky changes like upgrades.
+
+## Copy backups off the server
+
+This section is for an admin who has never set up object storage. By the end, every dump the worker writes also lands in a bucket somewhere else, under a key that can add files but not delete them, and you'll have seen one arrive.
+
+Object storage is a service that keeps files ("objects") in named containers ("buckets") and lets you reach them over HTTPS. Amazon S3 is the original. Many providers offer the same interface ("S3-compatible"), and the off-host copy should work with any S3-compatible service. Whichever you choose must offer every one of the [required bucket settings](#required-bucket-settings) below; check that before you sign up. Pick one that isn't the company hosting your server, or at least not the same data center, so that one account problem or one outage can't take both copies.
+
+### What leaves your server
+
+The dump is the whole database: everything Pavillion stores, not only the examples here. That includes every account's email address and password hash, moderation reports and the hashed reporter emails and IPs kept with them, the funding provider credentials you entered in the admin settings (stored encrypted, with the key in your `.env`), the private keys your calendars and user actors sign federation traffic with, and what your instance knows about other servers: followers, followed calendars and the remote actors behind them. Anyone who can read the bucket can read all of that.
+
+Pavillion does not encrypt the dump before uploading it. There is no client-side encryption option. The protection comes from the bucket settings below and from who holds the keys to read it, so don't skip them.
+
+### Create the bucket
+
+The steps are the same on every provider:
+
+1. Create a bucket. Choose a region that suits your community's data: if your members are in the EU, keep the bucket in the EU. Name it something you'll recognize, like `riverbend-pavillion-backups`.
+2. Apply the [required bucket settings](#required-bucket-settings).
+3. Create a [write-only key](#a-write-only-key) for the server, and a separate read key for restores that never goes on the server.
+
+**Worked example: AWS S3.** In the S3 console, create a bucket in your chosen region. Leave **Block all public access** on, which is the default for new buckets. Under **Bucket Versioning**, choose **Enable**. Under **Advanced settings**, enable **Object Lock** now if you want it, in compliance mode (see [Versioning or Object Lock](#versioning-or-object-lock)). Default encryption (SSE-S3) is already on for new AWS buckets. Create the bucket, then add the lifecycle rule from the next section under **Management**.
+
+On any other provider, look for the same settings under similar names, and note the endpoint URL your provider gives for the bucket's region. You'll set it as `BACKUP_S3_ENDPOINT`. On AWS leave it empty.
+
+### Required bucket settings
+
+All four, not a selection:
+
+- **Block all public access.** The bucket is never served to anyone. If your provider has a "public" or "CDN" toggle, it stays off.
+- **Server-side encryption on.** The provider encrypts objects on its disks. This protects against a lost drive at the provider, not against someone holding a read key, which is why the keys matter.
+- **Versioning, with expiry of noncurrent versions, or Object Lock.** A write-only key can't delete, but it can overwrite: uploading a new file under an existing name replaces it. Versioning keeps the replaced file as an older version that the write-only key can't touch. Without versioning or Object Lock, someone who breaks into your server can overwrite every copy with junk, and the copy only protects you against losing the server, not against losing control of it. All of this assumes the server's key can't delete; see [A write-only key](#a-write-only-key) for what changes when it can.
+- **A lifecycle rule that expires backups.** Expire objects under the `pavillion-backups/` prefix after 180 days, which matches the default local retention of six monthly backups. With versioning on, also expire noncurrent versions after 60 days and remove expired delete markers.
+
+::: tip <Lightbulb /> A note on remote retention.
+Pavillion never deletes anything from the bucket, and the local pruning schedule (7 daily, 4 weekly, 6 monthly) doesn't apply to it. That's deliberate. If the server's key could delete remote copies, a break-in on the server, or a bug in pruning, could destroy both copies at once. So expiry is the bucket's job. Without the lifecycle rule, every nightly dump is kept forever, and so is the data of every account deleted since.
+:::
+
+### Versioning or Object Lock
+
+Both stop an overwrite from destroying a backup. Versioning keeps the overwritten object as a noncurrent version for as long as your noncurrent-version rule allows. Object Lock goes further and refuses to remove an object until its retention period ends.
+
+- **Versioning** is enough for most instances, provided the server's key can't delete. The noncurrent-version expiry, 60 days in the lifecycle rule above, must be longer than the longest time an overwrite could go unnoticed. 60 days covers checking the bucket monthly; if you check less often, raise it, and raise it everywhere this guide uses the figure.
+- **Object Lock in compliance mode** is for an instance that wants protection even against someone who gets hold of your provider account, and it is required when the server's key can delete. On AWS, turn it on when you create the bucket; that's the simple path, and some providers allow it only then. Set a default retention shorter than your 180-day expiry, such as 30 days.
+
+Object Lock comes in two modes, and only one holds against everyone. **Compliance mode** refuses removal by anyone, including the account owner, until retention ends, and its retention period can't be shortened once set: a longer period keeps backups past the expiry you chose, with no way to undo it. **Governance mode** can be bypassed by any user or key with the right permission, so it doesn't protect against someone who gets hold of such a key. Wherever this guide says Object Lock, it means compliance mode.
+
+### A write-only key
+
+The key you put on the server should be able to add backups and do nothing else: not list the bucket, not read a backup, not delete one. On AWS, create an IAM user (for example `pavillion-backup-writer`), attach this policy with your bucket name in place of `<bucket>`, and create an access key for it:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::<bucket>/pavillion-backups/*"
+    }
+  ]
+}
+```
+
+AWS shows the secret once. Copy the access key ID and the secret now.
+
+Create a second key that can read the bucket, for restores, and keep it off the server, in your password manager. The write-only key can't download anything, by design.
+
+Not every provider can make a key this narrow. Before you rely on one, check whether your provider can make a key that can upload but not delete. If it can't, two things change:
+
+- Versioning no longer protects you. A key that can delete objects can usually delete their older versions too, so someone who breaks into the server can remove every copy. Only Object Lock in compliance mode still holds. If your provider has no compliance-mode Object Lock, choose another provider.
+- The server's key can then usually read every remote backup as well, so a break-in on the server also exposes every dump in the bucket, not just the one on disk.
+
+### Set the variables
+
+The off-host copy is on when `BACKUP_S3_BUCKET` is set, and off when it's empty. There's no separate switch. These variables are read by the worker only, and are separate from the `S3_*` variables for [media storage](./media-storage), even if both point at the same provider.
+
+Add the non-secret settings to `.env`:
+
+```bash
+BACKUP_S3_BUCKET=riverbend-pavillion-backups
+BACKUP_S3_REGION=eu-central-1
+BACKUP_S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+# BACKUP_S3_ENDPOINT=https://s3.eu-central-003.backblazeb2.com   # S3-compatible providers only
+```
+
+Put the secret in a file rather than in `.env`. A value passed as a plain `BACKUP_S3_SECRET_KEY` variable shows up in `docker inspect pavillion-worker` to anyone who can run Docker commands on the host. A file mounted as a Docker secret doesn't. Write the secret into `secrets/`:
+
+```bash
+cd /opt/pavillion
+read -rs BACKUP_SECRET            # paste the secret, then press Enter; nothing is shown
+printf '%s' "$BACKUP_SECRET" > secrets/backup_s3_secret_key.txt
+unset BACKUP_SECRET
+chmod 600 secrets/backup_s3_secret_key.txt
+```
+
+Reading the secret into a variable keeps it out of your shell history, which a secret typed on the command line would land in.
+
+The file must be readable by the user the containers run as, uid 1001. If you used `bin/provision.sh` and ran the commands above as its `pavillion` user, which has uid 1001, it already is. Otherwise run `sudo chown 1001 secrets/backup_s3_secret_key.txt`. If the worker can't read the file, it exits at startup, which stops local backups too, not just the copy.
+
+Then mount it on the worker, and only the worker, with a `docker-compose.override.yml` in the checkout. If you already have one (for example from [Monitoring and logs](./monitoring-and-logs)), add these entries to it:
+
+```yaml
+services:
+  worker:
+    environment:
+      - BACKUP_S3_SECRET_KEY_FILE=/run/secrets/backup_s3_secret_key
+    secrets:
+      - backup_s3_secret_key
+
+secrets:
+  backup_s3_secret_key:
+    file: ./secrets/backup_s3_secret_key.txt
+```
+
+```bash
+echo docker-compose.override.yml >> .git/info/exclude
+```
+
+The last line keeps `./bin/deploy.sh` from treating the override as an uncommitted change. Skip it if the file is already excluded.
+
+Set both the access key and the secret, or neither. One without the other is a configuration error. If the path in `BACKUP_S3_SECRET_KEY_FILE` is wrong, the worker logs `Secret file not found` at startup and carries on with an empty secret, which is that same error.
+
+::: tip <Lightbulb /> A note on leaving the keys out.
+With neither key set, the worker uses whatever credentials its environment provides, the same way the AWS command-line tool does. That's useful on an AWS server with an instance role. Anywhere else, set the keys: with a custom endpoint and no keys, the worker could sign requests to that provider with credentials meant for something else.
+:::
+
+### Check the setup
+
+1. Recreate the worker so it picks up the new settings, and check that it stayed up:
+
+   ```bash
+   docker compose up -d worker
+   docker compose ps worker
+   ```
+
+   If `ps` shows the worker restarting or exited, read `docker compose logs worker`. An unreadable secret file is the usual cause; see the ownership note above.
+
+2. Look for the startup line:
+
+   ```bash
+   docker compose logs worker | grep 'Off-host'
+   ```
+
+   You want `Off-host backup copy enabled`, with your bucket, the endpoint host (`AWS` when no endpoint is set) and the credential source: `static keys` if you set them. If you see `Off-host backup copy is misconfigured; copies will fail`, the `configError` field on that line says what to fix. No line at all means `BACKUP_S3_BUCKET` didn't reach the worker.
+
+3. Make a backup now:
+
+   ```bash
+   export PAVILLION_CONTAINER=pavillion-app
+   ./scripts/backup.sh create
+   ```
+
+4. Wait for `Manual backup completed` in the worker log. The upload happens before that line, so once it appears the copy is either in the bucket or has failed.
+5. Open the bucket in your provider's console, using your read access, not the server's key. You should see `pavillion-backups/pavillion_<date>_<time>_manual.dump`, the same size as the file in `/opt/pavillion/backups`.
+
+From then on, every backup the worker makes, the nightly one and any you queue by hand, is copied the same way. A dump that fails the "verified" check isn't copied.
+
+### What a failure looks like
+
+A failed copy never fails the backup. The local dump is kept and recorded as usual, the failure is logged, and the next backup is copied as usual. The failed one is not tried again; if you want it in the bucket, copy it by hand or run `./scripts/backup.sh create`.
+
+For now, failures appear only in the worker log. There is no email and no admin-panel warning, so check the log or the bucket now and then. Search for the exact message:
+
+```bash
+docker compose logs worker | grep 'Off-host backup copy failed'
+```
+
+The line carries the file name, the bucket, the endpoint host and the provider's error name, code, HTTP status and message. Just before it you may see `An error was encountered in a non-retryable streaming request.` That line comes from the storage library, describes the same failure, and isn't a second problem.
+
+Common causes:
+
+- **`AccessDenied`, 403.** The key's policy doesn't allow `s3:PutObject` on `pavillion-backups/*` in this bucket, or the bucket name or region is wrong.
+- **The provider rejects checksums.** Some S3-compatible services refuse the integrity checksums the current AWS library adds to every upload, often with a 400 or a `NotImplemented` error mentioning a checksum or `x-amz-` header. Add `AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED` to `.env` and recreate the worker. Leave it unset on AWS.
+- **A timeout.** The worker gives up on a connection after 10 seconds, on an upload that goes quiet for a minute, and on any upload still running after 45 minutes. The whole backup job, dump and copy together, has an hour. A dump that can't upload in 45 minutes on your connection needs a closer region or a faster uplink.
+- **An endpoint that isn't https.** Plain `http://` is refused, except for `localhost` and `127.0.0.1`, which are there for testing. That also rules out a MinIO container next to Pavillion, at `http://minio:9000`: a copy on the same server isn't an off-host copy.
+
+### Restoring from the bucket
+
+A copy in the bucket restores only together with your `.env` and `secrets/`, and those must be kept somewhere other than the server, such as your password manager. If the server is gone and they were only on it, the dump still restores, with the losses described in [What each secret does if you lose it](#what-each-secret-does-if-you-lose-it).
+
+To restore, download the dump with your read key, from a machine that isn't the server:
+
+```bash
+aws s3 cp s3://riverbend-pavillion-backups/pavillion-backups/pavillion_20260315_020000_scheduled.dump ./restore/
+```
+
+(Add `--endpoint-url` for an S3-compatible provider.) From there it's an ordinary dump. Run the [restore drill](#the-restore-drill) against it, which proves the copy restores, then follow [Restoring for real](#restoring-for-real). `PAVILLION_BACKUP_DIR` must be an absolute path:
+
+```bash
+PAVILLION_BACKUP_DIR="$PWD/restore" ./scripts/restore-drill.sh
+```
+
+#### Restoring after a suspected compromise
+
+If someone may have had the server's key, don't trust the newest object under a name. The write-only key can't read or delete, but it can overwrite a dump with another file under the same name, or upload new files with plausible names. A restore runs the dump's SQL against your database, so a planted dump is not harmless.
+
+1. List every version under the prefix, with your read key:
+
+   ```bash
+   aws s3api list-object-versions --bucket riverbend-pavillion-backups --prefix pavillion-backups/
+   ```
+
+2. Pick a version whose `LastModified` is before the earliest time the server could have been compromised. Ignore files whose names or times don't match the backup schedule.
+3. Download that exact version:
+
+   ```bash
+   aws s3api get-object --bucket riverbend-pavillion-backups \
+     --key pavillion-backups/pavillion_20260315_020000_scheduled.dump \
+     --version-id <VersionId> ./restore/pavillion_20260315_020000_scheduled.dump
+   ```
+
+4. If you still have the server's backup listing (`./scripts/backup.sh list`) or a copy of `/opt/pavillion/backups`, compare the file's size with the one recorded there.
+5. Run the restore drill against it, as above, before restoring for real.
+
+This works only with versioning or Object Lock on, which is one more reason they're required.
+
+### Deleted accounts
+
+When an account is deleted, its data stays in every backup made before the deletion, local and remote, until those backups expire. Restoring an old dump brings the account back. With the lifecycle rule above, a deleted account is gone from the bucket after at most 180 days plus the 60-day noncurrent-version window, about eight months, plus any Object Lock retention still running and up to about a day while the provider applies the rule. If someone asks when their data is fully gone, that's the honest answer, and if you restore an old dump, delete again any accounts that had been deleted since it was made.
 
 ## Secrets and config
 
@@ -108,7 +333,7 @@ It restores the dump into a throwaway Postgres container with no network access 
 - the applied migrations match the migration files in this checkout, and
 - the core tables (`account`, `calendar`, `event`) are not empty.
 
-It prints row counts, then deletes the container. The drill needs Docker on the host. By default it reads the `pavillion-backups` volume; set `PAVILLION_BACKUP_DIR` to point it at a directory of dumps instead, for example a copy you pulled back from off-site storage, which also tests that copy. It uses the `postgres:17` image to match the deployed database; override with `PAVILLION_DRILL_IMAGE` if you changed that.
+It prints row counts, then deletes the container. The drill needs Docker on the host. By default it reads the `pavillion-backups` volume; set `PAVILLION_BACKUP_DIR` to point it at a directory of dumps instead, for example a dump you pulled back from your off-host copy, which also tests that copy. It uses the `postgres:17` image to match the deployed database; override with `PAVILLION_DRILL_IMAGE` if you changed that.
 
 When it finishes it records the outcome in your database, through the app container, using the same `PAVILLION_CONTAINER` variable as above. `./scripts/backup.sh status` then shows the last successful drill. If the app container isn't running the result isn't recorded, but the verdict is unaffected. Don't call `backup record-drill` yourself; a hand-entered row would claim a drill passed when none did.
 
