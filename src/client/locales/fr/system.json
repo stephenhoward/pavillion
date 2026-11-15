@@ -355,5 +355,13 @@
       "unblock_success": "L'auteur a été débloqué.",
       "unblock_error": "Impossible de débloquer l'auteur. Veuillez réessayer."
     }
+  },
+  "not_found": {
+    "title": "Page introuvable",
+    "description": "Cette page n'existe pas. Vérifiez l'adresse ou retournez à votre calendrier.",
+    "back_to_calendar": "Retour à votre calendrier",
+    "load_failed_title": "Impossible de charger vos calendriers",
+    "load_failed_description": "Un problème est survenu lors du chargement de vos calendriers. Vérifiez votre connexion et réessayez.",
+    "try_again": "Réessayer"
   }
 }

@@ -118,7 +118,7 @@ describe('current calendar route guards', () => {
     expect(localStorage.getItem(CURRENT_CALENDAR_STORAGE_KEY)).toBeNull();
   });
 
-  it('aborts the navigation when the redirect load fails', async () => {
+  it('lands on the not_found route flagged as a load failure when the redirect load fails', async () => {
     const failing = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -126,12 +126,16 @@ describe('current calendar route guards', () => {
         { path: '/calendar', component: Stub, name: 'calendars',
           beforeEnter: createCurrentCalendarRedirect('calendar', true, () => Promise.reject(new Error('network'))) },
         { path: '/calendar/:calendar', component: Stub, name: 'calendar' },
+        { path: '/:pathMatch(.*)*', component: Stub, name: 'not_found' },
       ],
     });
     await failing.push('/');
 
-    await expect(failing.push('/calendar')).rejects.toThrow('network');
-    expect(failing.currentRoute.value.fullPath).toBe('/');
+    await failing.push('/calendar');
+
+    expect(failing.currentRoute.value.name).toBe('not_found');
+    expect(failing.currentRoute.value.query.error).toBe('load');
+    expect(failing.currentRoute.value.path).toBe('/calendar');
   });
 
   it('the redirect guard persists the resolved id without the sync guard', async () => {

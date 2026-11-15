@@ -39,16 +39,27 @@ export type CalendarLoader = () => Promise<CalendarInfo[]>;
  * calendar resolves, go to `fallback`, or render in place when `fallback`
  * is `true`. The guard persists the resolved ID itself, so a stale entry is
  * overwritten even where no sync guard runs; in the app the sync guard also
- * persists it on the redirected navigation. A failed load rejects, aborting
- * the navigation: there is nowhere sound to send the user.
+ * persists it on the redirected navigation. A failed load lands on the
+ * in-shell `not_found` page flagged `?error=load`, which offers a retry,
+ * rather than aborting into an empty shell.
  */
 export function createCurrentCalendarRedirect(
   routeName: string,
   fallback: RouteLocationRaw | true,
   load: CalendarLoader,
 ): NavigationGuard {
-  return async () => {
-    const infos = await load();
+  return async (to) => {
+    let infos: CalendarInfo[];
+    try {
+      infos = await load();
+    }
+    catch {
+      return {
+        name: 'not_found',
+        params: { pathMatch: to.path.split('/').filter(Boolean) },
+        query: { error: 'load' },
+      };
+    }
     const store = useCalendarStore();
     const target = resolveCurrentCalendar(store.selectedCalendarId, infos);
     if (!target) {

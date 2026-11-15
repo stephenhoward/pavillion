@@ -17,7 +17,7 @@ import { isValidLanguageCode } from '@/common/i18n/languages';
  * the site SPA because the server serves them; others because the client SPA
  * routes them; `profile`, `admin` and `funding` are **reserved but unrouted** —
  * the server answers them with the client shell, the client router has no
- * route for them, and they stay reserved because releasing a name is
+ * route for them (the catch-all not-found page renders), and they stay reserved because releasing a name is
  * irreversible once a calendar claims it; `discover` is a site SPA route; and
  * `view` is none of these — it redirects. A router consuming this list
  * therefore has to decide each segment's disposition separately; an

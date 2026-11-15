@@ -355,5 +355,13 @@
       "unblock_success": "El reportante ha sido desbloqueado.",
       "unblock_error": "No se pudo desbloquear al reportante. Por favor intenta de nuevo."
     }
+  },
+  "not_found": {
+    "title": "Página no encontrada",
+    "description": "Esta página no existe. Revisa la dirección o vuelve a tu calendario.",
+    "back_to_calendar": "Volver a tu calendario",
+    "load_failed_title": "No se pudieron cargar tus calendarios",
+    "load_failed_description": "Algo salió mal al cargar tus calendarios. Revisa tu conexión e inténtalo de nuevo.",
+    "try_again": "Intentar de nuevo"
   }
 }
