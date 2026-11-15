@@ -490,6 +490,7 @@ housekeeping:
       monthly: 6              # Monthly backups kept
     path: '/backups'          # Where backups are written
     offsite:
+      driver: 's3'            # Destination type; s3 is the only one today
       s3:
         bucket: ''            # BACKUP_S3_BUCKET; empty means no off-host copy
         region: 'us-east-1'   # BACKUP_S3_REGION
@@ -523,10 +524,15 @@ backups are written to, and the filesystem the disk check measures. See
 [Backups](./guides/instance-administrators/backups.md) for what to back up
 beyond the database and how to test a restore.
 
-`offsite.s3` controls the off-host copy: after each verified backup, the
-worker uploads the dump to `pavillion-backups/<filename>` in the configured
-bucket. The copy is on if and only if `bucket` is non-empty after trimming
-whitespace; there is no `enabled` flag. A failed copy is logged as
+`offsite` controls the off-host copy: after each verified backup, the
+worker uploads the dump to `pavillion-backups/<filename>` at the destination.
+`offsite.driver` picks the destination type and its own block holds the
+settings; `s3`, the default and the only type today, covers AWS S3 and
+S3-compatible providers. The copy is on if and only if the selected
+destination has a target, which for `s3` means `bucket` is non-empty after
+trimming whitespace; there is no `enabled` flag. A driver Pavillion does not
+recognise is logged as a configuration error at worker startup, and every
+copy then fails. A failed copy is logged as
 `Off-host backup copy failed` in the worker log and never fails the backup.
 Remote copies do not follow the retention policy above: the worker never
 deletes from the bucket, so expiry is a lifecycle rule on the bucket. Set
