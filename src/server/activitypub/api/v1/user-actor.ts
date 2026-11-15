@@ -173,7 +173,7 @@ export default class UserActorRoutes {
         logInboxActivityAccepted('user', username, activity);
       }
 
-      res.status(200).send('Activity processed');
+      res.status(200).json({});
     }
     catch (error) {
       logger.error({ err: error }, 'Error processing user inbox activity');

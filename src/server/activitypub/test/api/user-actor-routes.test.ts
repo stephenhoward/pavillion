@@ -216,13 +216,14 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
     const res = {
       status: sandbox.stub(),
       send: sandbox.stub(),
+      json: sandbox.stub(),
     };
     res.status.returns(res);
 
     await routes.postToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Activity processed')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
   });
 
   it('should record acceptance for a Remove the handler acted on', async () => {
