@@ -150,6 +150,30 @@ describe('generateRecurrenceSummary', () => {
     });
   });
 
+  test('monthly with several Nth weekdays on one day lists every ordinal', () => {
+    const schedule = buildSchedule({ frequency: EventFrequency.MONTHLY, interval: 1, byDay: ['1TU', '3TU'] });
+    expect(generateRecurrenceSummary(schedule)).toEqual({
+      key: 'recurrence.nth_weekdays_of_month',
+      params: { groups: [{ ordinals: [1, 3], day: 'TU' }] },
+    });
+  });
+
+  test('monthly with Nth weekdays on different days lists every entry', () => {
+    const schedule = buildSchedule({ frequency: EventFrequency.MONTHLY, interval: 1, byDay: ['1MO', '3TH'] });
+    expect(generateRecurrenceSummary(schedule)).toEqual({
+      key: 'recurrence.nth_weekdays_of_month',
+      params: { groups: [{ ordinals: [1], day: 'MO' }, { ordinals: [3], day: 'TH' }] },
+    });
+  });
+
+  test('monthly with several Nth weekdays and interval > 1 uses the every-n-months list key', () => {
+    const schedule = buildSchedule({ frequency: EventFrequency.MONTHLY, interval: 2, byDay: ['1TU', '3TU'] });
+    expect(generateRecurrenceSummary(schedule)).toEqual({
+      key: 'recurrence.nth_weekdays_every_n_months',
+      params: { groups: [{ ordinals: [1, 3], day: 'TU' }], n: 2 },
+    });
+  });
+
   test('monthly nth-weekday with interval 1 returns recurrence.nth_weekday_of_month with integer ordinal', () => {
     const schedule = buildSchedule({
       frequency: EventFrequency.MONTHLY,
@@ -408,6 +432,24 @@ describe('generateRecurrenceText', () => {
       const schedule = makeSchedule({ frequency: 'monthly', interval: 2, byDay: ['1SA'] });
       expect(generateRecurrenceText(schedule, stubT))
         .toBe('recurrence.nth_weekday_every_n_months:{"day":"recurrence.SA","n":2,"ordinal":"recurrence.1ord"}');
+    });
+
+    it('should name every ordinal for several Nth weekdays on one day', () => {
+      const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['1TU', '3TU'] });
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekdays_of_month:{"groups":"recurrence.1ord and recurrence.3ord recurrence.TU"}');
+    });
+
+    it('should list mixed days in full', () => {
+      const schedule = makeSchedule({ frequency: 'monthly', interval: 1, byDay: ['1MO', '3TH'] });
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekdays_of_month:{"groups":"recurrence.1ord recurrence.MO and recurrence.3ord recurrence.TH"}');
+    });
+
+    it('should use the every-n-months list key when interval > 1', () => {
+      const schedule = makeSchedule({ frequency: 'monthly', interval: 2, byDay: ['1TU', '3TU'] });
+      expect(generateRecurrenceText(schedule, stubT))
+        .toBe('recurrence.nth_weekdays_every_n_months:{"groups":"recurrence.1ord and recurrence.3ord recurrence.TU","n":2}');
     });
 
     it('should return every_n_months key for interval=3 without byDay', () => {

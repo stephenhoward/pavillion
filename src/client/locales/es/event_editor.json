@@ -177,6 +177,8 @@
     "every_n_months": "Cada {{n}} meses",
     "nth_weekday_of_month": "El {{ordinal}} {{day}} de cada mes",
     "nth_weekday_every_n_months": "El {{ordinal}} {{day}} cada {{n}} meses",
+    "nth_weekdays_of_month": "El {{groups}} de cada mes",
+    "nth_weekdays_every_n_months": "El {{groups}} cada {{n}} meses",
     "yearly": "Anualmente",
     "every_n_years": "Cada {{n}} años"
   },

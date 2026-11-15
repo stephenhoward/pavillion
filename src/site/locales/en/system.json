@@ -157,6 +157,8 @@
     "every_n_months": "Every {{n}} months",
     "nth_weekday_of_month": "The {{ordinal}} {{day}} of every month",
     "nth_weekday_every_n_months": "The {{ordinal}} {{day}} every {{n}} months",
+    "nth_weekdays_of_month": "The {{groups}} of every month",
+    "nth_weekdays_every_n_months": "The {{groups}} every {{n}} months",
     "yearly": "Yearly",
     "every_n_years": "Every {{n}} years",
     "days": {
