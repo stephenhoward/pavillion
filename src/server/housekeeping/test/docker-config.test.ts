@@ -102,10 +102,13 @@ describe('Docker Configuration', () => {
       return config.services[service].environment ?? [];
     }
 
-    it('should default the offsite S3 block to inert values', () => {
+    it('should default the offsite block to the s3 driver with inert values', () => {
       const defaults = parseYaml(readFileSync('config/default.yaml', 'utf-8'));
-      const s3 = defaults.housekeeping.backup.offsite.s3;
+      const offsite = defaults.housekeeping.backup.offsite;
+      const s3 = offsite.s3;
 
+      // The driver names a destination type; the empty bucket keeps it off.
+      expect(offsite.driver).toBe('s3');
       expect(s3.bucket).toBe('');
       expect(s3.region).toBe('us-east-1');
       expect(s3.endpoint).toBe('');

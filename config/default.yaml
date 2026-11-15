@@ -328,8 +328,11 @@ housekeeping:
       weekly: 4
       monthly: 6
     path: '/backups'
-    # Off-host copy of each completed backup. Inert while bucket is empty.
+    # Off-host copy of each completed backup. `driver` picks the destination
+    # type; the copy is off until that destination's target is set (for s3,
+    # until bucket is non-empty). s3 is the only driver today.
     offsite:
+      driver: 's3'
       s3:
         bucket: ''
         region: 'us-east-1'
