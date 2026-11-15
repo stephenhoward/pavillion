@@ -35,7 +35,7 @@ describe('lookupUser', () => {
 
   it('should fail without resource', async () => {
     let req = { query: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.lookupUser(req as any, res as any);
@@ -46,7 +46,7 @@ describe('lookupUser', () => {
 
   it('should fail with unknown user', async () => {
     let req = { query: { resource: 'acct:testuser@testdomain.com' } };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     let lookupMock = sandbox.stub(activityPubInterface, 'lookupWebFinger');
@@ -91,7 +91,7 @@ describe('addToInbox', () => {
 
   it('should fail without user', async () => {
     let req = { params: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let calendarFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     res.status.returns(res);
     calendarFindMock.resolves(null);
@@ -131,7 +131,7 @@ describe('addToInbox', () => {
         object: { id: 'https://example.com/objects/456', type: 'Event' },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -142,7 +142,7 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
     expect(inboxMock.calledOnce).toBe(true);
     const auth = inboxMock.firstCall.args[2] as any;
     expect(auth).toBeDefined();
@@ -162,7 +162,7 @@ describe('addToInbox', () => {
         object: { id: 'https://example.com/objects/456', type: 'Event' },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -188,7 +188,7 @@ describe('addToInbox', () => {
         object: 'https://local.example/calendars/testuser/follows/1',
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('testId', 'testuser'));
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
     res.status.returns(res);
@@ -214,7 +214,7 @@ describe('addToInbox', () => {
         object: { id: 'https://example.com/objects/456', type: 'Event' },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -242,7 +242,7 @@ describe('addToInbox', () => {
         object: { id: 'https://example.com/objects/456', type: 'Event' },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -271,7 +271,7 @@ describe('addToInbox', () => {
 
   it('should respond 500 when the calendar lookup itself fails', async () => {
     let req = { params: { urlname: 'testuser' }, body: { type: 'Create' } };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     sandbox.stub(calendarAPI, 'getCalendarByName').rejects(new Error('connection refused'));
     res.status.returns(res);
 
@@ -421,7 +421,7 @@ describe('addToInbox', () => {
         object: { id: 'https://example.com/objects/789', type: 'Event' },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -494,7 +494,7 @@ describe('addToInbox', () => {
 
     // HTTP URLs are allowed in test environment
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
   });
 
   it('should succeed with valid HTTPS actor URI', async () => {
@@ -508,7 +508,7 @@ describe('addToInbox', () => {
         object: 'https://local.example.com/calendars/testuser',
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -519,7 +519,7 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
   });
 
   it('should succeed with a valid Accept activity', async () => {
@@ -539,7 +539,7 @@ describe('addToInbox', () => {
         object: { ...embeddedFollow, summary: 'x'.repeat(1000) },
       },
     };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -550,7 +550,7 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
 
     // Only the fields a consumer reads are kept; the peer's extra payload is
     // not persisted with the inbox row.
@@ -590,7 +590,7 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
     expect(inboxMock.calledOnce).toBe(true);
 
     const message = inboxMock.firstCall.args[1] as any;
@@ -656,7 +656,7 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(200)).toBe(true);
-    expect(res.send.calledWith('Message received')).toBe(true);
+    expect(res.json.calledWith({})).toBe(true);
     expect(inboxMock.calledOnce).toBe(true);
 
     // The Flag must be constructed and handed to the inbox intact — the
