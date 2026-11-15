@@ -68,6 +68,7 @@ For enhanced security, Pavillion supports Docker secrets using the `_FILE` suffi
 | `CALENDAR_IMPORT_HMAC_SECRET` | `CALENDAR_IMPORT_HMAC_SECRET_FILE` | `/run/secrets/calendar_import_hmac_secret` |
 | `S3_SECRET_KEY` | `S3_SECRET_KEY_FILE` | `/run/secrets/s3_secret_key` |
 | `SMTP_PASSWORD` | `SMTP_PASSWORD_FILE` | `/run/secrets/smtp_password` |
+| `BACKUP_S3_SECRET_KEY` | `BACKUP_S3_SECRET_KEY_FILE` | `/run/secrets/backup_s3_secret_key` (worker only; mount it with an override file, as the shipped compose file declares no secret for it) |
 
 **Example docker-compose.yml configuration:**
 
@@ -147,6 +148,22 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 | `S3_ENDPOINT` | No | - | Custom endpoint URL for S3-compatible services |
 
 *Required only if using S3 storage. Also requires setting `media.storage.driver: 's3'` in `config/local.yaml`.
+
+### Off-host backup copy
+
+Optional. Read by the worker only, and separate from the media `S3_*`
+variables above. The copy is on when `BACKUP_S3_BUCKET` is set and off when it
+is empty. See
+[Copy backups off the server](./guides/instance-administrators/backups.md#copy-backups-off-the-server).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BACKUP_S3_BUCKET` | No | - | Bucket each verified backup is copied to. Empty turns the copy off |
+| `BACKUP_S3_REGION` | No | `us-east-1` | Bucket region |
+| `BACKUP_S3_ENDPOINT` | No | - | Endpoint URL for S3-compatible providers; empty means AWS S3. Must be `https://`, except `http://localhost` or `http://127.0.0.1` for testing |
+| `BACKUP_S3_ACCESS_KEY` | No | - | Access key ID. Set together with the secret key, or neither to use the default credential chain |
+| `BACKUP_S3_SECRET_KEY` | No | - | Secret access key. Prefer `BACKUP_S3_SECRET_KEY_FILE`: a plain value shows in `docker inspect` |
+| `AWS_REQUEST_CHECKSUM_CALCULATION` | No | - | Set to `WHEN_REQUIRED` for a provider that rejects the upload checksums the AWS SDK adds by default |
 
 ### SMTP Configuration
 
@@ -472,6 +489,13 @@ housekeeping:
       weekly: 4               # Weekly backups kept
       monthly: 6              # Monthly backups kept
     path: '/backups'          # Where backups are written
+    offsite:
+      s3:
+        bucket: ''            # BACKUP_S3_BUCKET; empty means no off-host copy
+        region: 'us-east-1'   # BACKUP_S3_REGION
+        endpoint: ''          # BACKUP_S3_ENDPOINT; empty means AWS S3
+        # Keys come only from BACKUP_S3_ACCESS_KEY and BACKUP_S3_SECRET_KEY
+        # (or BACKUP_S3_SECRET_KEY_FILE), never from a config file.
   monitoring:
     disk:
       enabled: true
@@ -496,8 +520,20 @@ After each backup the worker prunes old ones on a grandfather-father-son
 policy, keeping the most recent `retention.daily` daily, `retention.weekly`
 weekly and `retention.monthly` monthly backups. `path` is the directory the
 backups are written to, and the filesystem the disk check measures. See
-[Backups](./backups.md) for what to back up
+[Backups](./guides/instance-administrators/backups.md) for what to back up
 beyond the database and how to test a restore.
+
+`offsite.s3` controls the off-host copy: after each verified backup, the
+worker uploads the dump to `pavillion-backups/<filename>` in the configured
+bucket. The copy is on if and only if `bucket` is non-empty after trimming
+whitespace; there is no `enabled` flag. A failed copy is logged as
+`Off-host backup copy failed` in the worker log and never fails the backup.
+Remote copies do not follow the retention policy above: the worker never
+deletes from the bucket, so expiry is a lifecycle rule on the bucket. Set
+these through the `BACKUP_S3_*` environment variables (see
+[Off-host backup copy](#off-host-backup-copy)). See
+[Copy backups off the server](./guides/instance-administrators/backups.md#copy-backups-off-the-server)
+for the bucket settings and key policy the copy relies on.
 
 The backup job runs daily at 2 AM regardless of `backup.schedule`. That key
 is shown in the admin status panel and the housekeeping status command but
@@ -618,6 +654,13 @@ APP_PORT=127.0.0.1:3000
 # S3_ACCESS_KEY=your-access-key
 # S3_SECRET_KEY=your-secret-key
 # S3_ENDPOINT=https://custom-endpoint.example.com
+
+# Optional off-host backup copy (worker only; separate from S3_* above)
+# BACKUP_S3_BUCKET=your-backup-bucket
+# BACKUP_S3_REGION=us-east-1
+# BACKUP_S3_ACCESS_KEY=your-write-only-access-key
+# BACKUP_S3_SECRET_KEY_FILE=/run/secrets/backup_s3_secret_key
+# BACKUP_S3_ENDPOINT=https://custom-endpoint.example.com
 
 # Optional SMTP settings (can also be in local.yaml)
 # SMTP_HOST=smtp.example.org
