@@ -1,5 +1,6 @@
+import { createHash } from 'crypto';
 import * as fs from 'fs';
-import { PassThrough } from 'stream';
+import { PassThrough, addAbortSignal } from 'stream';
 import config from 'config';
 import { PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
 import type { OffsiteDestination } from '@/server/housekeeping/service/offsite/destination';
@@ -87,12 +88,18 @@ function endpointHostOf(endpoint: string): string {
  *
  * The credentials key is omitted, not set to undefined, when no keys are
  * configured, so the SDK's default credential chain applies.
+ *
+ * Request checksums are pinned to WHEN_REQUIRED. The SDK default
+ * (WHEN_SUPPORTED) sends the body aws-chunked with a trailing CRC32, which a
+ * store that does not decode aws-chunked saves verbatim: a corrupt copy
+ * reported as success. Integrity comes from Content-MD5 instead (see put).
  */
 export function buildClientConfig(settings: OffsiteS3Settings): S3ClientConfig {
   const clientConfig: S3ClientConfig = {
     region: settings.region || 'us-east-1',
     forcePathStyle: Boolean(settings.endpoint),
     maxAttempts: 3,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
     requestHandler: {
       connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
       socketTimeout: S3_SOCKET_TIMEOUT_MS,
@@ -111,12 +118,39 @@ export function buildClientConfig(settings: OffsiteS3Settings): S3ClientConfig {
 }
 
 /**
+ * Computes the base64 MD5 of a file in one streaming pass, never holding the
+ * file in memory. Rejects with an AbortError when the signal aborts, and with
+ * the read error when the file cannot be read; the async iterator turns a
+ * stream 'error' event into that rejection, so nothing escapes as an
+ * uncaughtException.
+ */
+async function md5Base64(localPath: string, signal: AbortSignal): Promise<string> {
+  const hash = createHash('md5');
+  const stream = addAbortSignal(signal, fs.createReadStream(localPath));
+  for await (const chunk of stream) {
+    hash.update(chunk as Buffer);
+  }
+  return hash.digest('base64');
+}
+
+/**
  * Off-host copy destination for AWS S3 and S3-compatible stores (MinIO,
  * Backblaze B2, DigitalOcean Spaces and others), selected by the `s3` driver.
  *
- * The upload is one PutObject of a file stream. The client is configured with
- * three attempts, but the SDK does not retry a streaming body, so in practice a
- * failed upload is not retried; the next backup makes a fresh copy.
+ * The upload is one PutObject of a file stream, carrying the file's MD5 as
+ * Content-MD5, computed in a pass over the file before the upload. The store
+ * checks the bytes it received against it and refuses a mismatch with
+ * BadDigest, so a copy altered in transit is never kept. There is no read-back
+ * (HeadObject or GetObject) to verify the stored object: the documented
+ * write-only key policy withholds s3:GetObject, and must not be widened for it.
+ * Content-MD5 is also the only integrity header a bucket with Object Lock
+ * accepts from this client (checksums are pinned to WHEN_REQUIRED), so removing
+ * it would fail every copy to a locked bucket, which the operator guide
+ * recommends.
+ *
+ * The client is configured with three attempts, but the SDK does not retry a
+ * streaming body, so in practice a failed upload is not retried; the next
+ * backup makes a fresh copy.
  *
  * Only PutObject is ever sent (see OffsiteDestination on why a destination is
  * write-only).
@@ -167,6 +201,7 @@ export default class S3Destination implements OffsiteDestination {
     }
 
     const { size } = await fs.promises.stat(localPath);
+    const contentMD5 = await md5Base64(localPath, signal);
 
     // A read error on the file stream is an 'error' event, which a try does
     // not catch and which the SDK re-raises on its own wrapper stream. Piping
@@ -195,6 +230,7 @@ export default class S3Destination implements OffsiteDestination {
             Key: name,
             Body: body,
             ContentLength: size,
+            ContentMD5: contentMD5,
           }),
           { abortSignal: AbortSignal.any([signal, readAbort.signal]) },
         ),

@@ -163,7 +163,6 @@ is empty. See
 | `BACKUP_S3_ENDPOINT` | No | - | Endpoint URL for S3-compatible providers; empty means AWS S3. Must be `https://`, except `http://localhost` or `http://127.0.0.1` for testing |
 | `BACKUP_S3_ACCESS_KEY` | No | - | Access key ID. Set together with the secret key, or neither to use the default credential chain |
 | `BACKUP_S3_SECRET_KEY` | No | - | Secret access key. Prefer `BACKUP_S3_SECRET_KEY_FILE`: a plain value shows in `docker inspect` |
-| `AWS_REQUEST_CHECKSUM_CALCULATION` | No | - | Set to `WHEN_REQUIRED` for a provider that rejects the upload checksums the AWS SDK adds by default |
 
 ### SMTP Configuration
 

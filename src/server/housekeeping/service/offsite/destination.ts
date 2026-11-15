@@ -32,6 +32,11 @@ export interface OffsiteDestination {
   /**
    * Writes the local file to the destination under `name`.
    *
+   * Resolves only once the destination has accepted content it checked
+   * against the local file (for S3, Content-MD5), since the caller reports a
+   * resolved write as a stored copy. That check must not be a read-back of
+   * the stored object, which a write-only destination cannot do.
+   *
    * Rejects on any failure; the caller turns that into a logged `false`. Must
    * stop and reject promptly once `signal` aborts, and must not leave an
    * error to escape as an uncaught stream event.

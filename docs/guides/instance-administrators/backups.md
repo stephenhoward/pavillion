@@ -231,7 +231,7 @@ The line carries the file name, the bucket, the endpoint host and the provider's
 Common causes:
 
 - **`AccessDenied`, 403.** The key's policy doesn't allow `s3:PutObject` on `pavillion-backups/*` in this bucket, or the bucket name or region is wrong.
-- **The provider rejects checksums.** Some S3-compatible services refuse the integrity checksums the current AWS library adds to every upload, often with a 400 or a `NotImplemented` error mentioning a checksum or `x-amz-` header. Add `AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED` to `.env` and recreate the worker. Leave it unset on AWS.
+- **`BadDigest`, 400.** The bytes the provider received didn't match the dump, so it refused the copy and kept nothing corrupt. The next backup is copied as usual. If every copy fails this way, something between the server and the provider is altering uploads, such as a proxy, or the provider mishandles the `Content-MD5` check the worker sends with each upload.
 - **A timeout.** The worker gives up on a connection after 10 seconds, on an upload that goes quiet for a minute, and on any upload still running after 45 minutes. The whole backup job, dump and copy together, has an hour. A dump that can't upload in 45 minutes on your connection needs a closer region or a faster uplink.
 - **An endpoint that isn't https.** Plain `http://` is refused, except for `localhost` and `127.0.0.1`, which are there for testing. That also rules out a MinIO container next to Pavillion, at `http://minio:9000`: a copy on the same server isn't an off-host copy.
 
