@@ -143,10 +143,14 @@ async function md5Base64(localPath: string, signal: AbortSignal): Promise<string
  * BadDigest, so a copy altered in transit is never kept. There is no read-back
  * (HeadObject or GetObject) to verify the stored object: the documented
  * write-only key policy withholds s3:GetObject, and must not be widened for it.
+ * Content-MD5 is also the only integrity header a bucket with Object Lock
+ * accepts from this client (checksums are pinned to WHEN_REQUIRED), so removing
+ * it would fail every copy to a locked bucket, which the operator guide
+ * recommends.
  *
- * The client is configured with
- * three attempts, but the SDK does not retry a streaming body, so in practice a
- * failed upload is not retried; the next backup makes a fresh copy.
+ * The client is configured with three attempts, but the SDK does not retry a
+ * streaming body, so in practice a failed upload is not retried; the next
+ * backup makes a fresh copy.
  *
  * Only PutObject is ever sent (see OffsiteDestination on why a destination is
  * write-only).
