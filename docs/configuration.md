@@ -154,7 +154,7 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 Optional. Read by the worker only, and separate from the media `S3_*`
 variables above. The copy is on when `BACKUP_S3_BUCKET` is set and off when it
 is empty. See
-[Copy backups off the server](./guides/instance-administrators/backups.md#copy-backups-off-the-server).
+[Copy backups off the server](./backups.md#copy-backups-off-the-server).
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -521,7 +521,7 @@ After each backup the worker prunes old ones on a grandfather-father-son
 policy, keeping the most recent `retention.daily` daily, `retention.weekly`
 weekly and `retention.monthly` monthly backups. `path` is the directory the
 backups are written to, and the filesystem the disk check measures. See
-[Backups](./guides/instance-administrators/backups.md) for what to back up
+[Backups](./backups.md) for what to back up
 beyond the database and how to test a restore.
 
 `offsite` controls the off-host copy: after each verified backup, the
@@ -538,7 +538,7 @@ Remote copies do not follow the retention policy above: the worker never
 deletes from the bucket, so expiry is a lifecycle rule on the bucket. Set
 these through the `BACKUP_S3_*` environment variables (see
 [Off-host backup copy](#off-host-backup-copy)). See
-[Copy backups off the server](./guides/instance-administrators/backups.md#copy-backups-off-the-server)
+[Copy backups off the server](./backups.md#copy-backups-off-the-server)
 for the bucket settings and key policy the copy relies on.
 
 The backup job runs daily at 2 AM regardless of `backup.schedule`. That key
