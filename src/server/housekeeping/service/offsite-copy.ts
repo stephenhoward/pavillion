@@ -9,6 +9,15 @@ const logger = createLogger('housekeeping');
 /** Prefix every remote copy is stored under; a destination expiry rule targets it. */
 export const OFFSITE_KEY_PREFIX = 'pavillion-backups/';
 
+/**
+ * Overall limit on one copy, whatever the destination. A destination's own
+ * timers (for S3, a socket idle timer that resets on every byte) cannot bound
+ * a store that trickles data, and the backup job awaits the copy under
+ * BACKUP_JOB_EXPIRE_SECONDS (one hour). Forty-five minutes leaves the rest of
+ * that hour to pg_dump.
+ */
+export const OFFSITE_COPY_DEADLINE_MS = 45 * 60_000;
+
 const FAILURE_MESSAGE = 'Off-host backup copy failed';
 const REDACTED = '[redacted]';
 
@@ -55,7 +64,8 @@ function unsupportedDestination(driver: string): OffsiteDestination {
  *
  * **Never rejects.** `copy()` resolves `true` on success and `false` on any
  * failure, including an invalid configuration, an unknown driver, a missing
- * file and a rejected or stalled write. This diverges from the usual
+ * file, a rejected or stalled write and one that outlives
+ * OFFSITE_COPY_DEADLINE_MS. This diverges from the usual
  * convention of throwing a domain exception, because an off-host copy failing
  * must never fail the backup it copies: the local dump is already written and
  * recorded. A failure is logged at error level instead, with a fixed message
@@ -119,6 +129,7 @@ export default class OffsiteCopyService {
    */
   async copy(localPath: string): Promise<boolean> {
     let filename = '';
+    let deadline: NodeJS.Timeout | undefined;
 
     try {
       filename = path.basename(localPath);
@@ -129,12 +140,33 @@ export default class OffsiteCopyService {
       }
 
       const abort = new AbortController();
-      await this.destination.put(localPath, OFFSITE_KEY_PREFIX + filename, abort.signal);
+      const timedOut = new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => {
+          abort.abort();
+          reject(Object.assign(
+            new Error(`Copy did not finish within ${OFFSITE_COPY_DEADLINE_MS / 60_000} minutes`),
+            { name: 'OffsiteCopyTimeoutError' },
+          ));
+        }, OFFSITE_COPY_DEADLINE_MS);
+      });
+      // Mark the rejection handled for the paths that settle the race first;
+      // the race still sees it.
+      timedOut.catch(() => {});
+
+      // The race, not the abort alone, is what ends a write that ignores the
+      // signal, so a misbehaving destination cannot hold the backup job open.
+      await Promise.race([
+        this.destination.put(localPath, OFFSITE_KEY_PREFIX + filename, abort.signal),
+        timedOut,
+      ]);
       return true;
     }
     catch (error) {
       this.logFailure(filename, error);
       return false;
+    }
+    finally {
+      clearTimeout(deadline);
     }
   }
 

@@ -6,6 +6,7 @@ import JobQueueService, { JobPublishOptions } from '@/server/housekeeping/servic
 import MetricsService, { OperationalMetrics, FederationBacklogSource } from '@/server/housekeeping/service/metrics';
 import DrillService, { DrillRecord, DrillResultInput } from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { BACKUP_JOB_EXPIRE_SECONDS } from '@/server/housekeeping/service/backup';
 
 // Re-exported so other domains set a job's retry/expiry policy via the
 // housekeeping boundary without reaching into the pg-boss adapter directly.
@@ -287,7 +288,11 @@ export default class HousekeepingInterface {
     const queue = new JobQueueService();
     await queue.start();
     try {
-      return await queue.publish('backup:create', { type: 'manual' });
+      return await queue.publish(
+        'backup:create',
+        { type: 'manual' },
+        { expireInSeconds: BACKUP_JOB_EXPIRE_SECONDS },
+      );
     }
     finally {
       await queue.stop();

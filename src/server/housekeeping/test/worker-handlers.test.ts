@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
-import BackupService from '@/server/housekeeping/service/backup';
+import BackupService, { BACKUP_JOB_EXPIRE_SECONDS } from '@/server/housekeeping/service/backup';
+import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 import RetentionService from '@/server/housekeeping/service/retention';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
@@ -10,7 +11,7 @@ import NotificationRetentionCleanupService from '@/server/notifications/service/
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import CalendarInterface from '@/server/calendar/interface';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
-import { JobHandler, JobMeta } from '@/server/housekeeping/service/job-queue';
+import { JobHandler, JobMeta, JobPublishOptions } from '@/server/housekeeping/service/job-queue';
 import { MONITORED_QUEUES } from '@/server/housekeeping/service/metrics';
 import { registerJobHandlers } from '@/server/worker';
 
@@ -22,14 +23,22 @@ import { registerJobHandlers } from '@/server/worker';
 class FakeJobQueueService {
   public handlers: Record<string, JobHandler<any>> = {};
   public schedules: Record<string, string> = {};
+  public scheduleOptions: Record<string, JobPublishOptions | undefined> = {};
 
   async subscribe<T>(jobName: string, handler: JobHandler<T>): Promise<void> {
     this.handlers[jobName] = handler;
   }
 
-  async schedule<T>(jobName: string, cron: string, handler: JobHandler<T>): Promise<void> {
+  async schedule<T>(
+    jobName: string,
+    cron: string,
+    handler: JobHandler<T>,
+    _data?: T,
+    options?: JobPublishOptions,
+  ): Promise<void> {
     this.handlers[jobName] = handler;
     this.schedules[jobName] = cron;
+    this.scheduleOptions[jobName] = options;
   }
 }
 
@@ -191,6 +200,57 @@ describe('Worker backup-job retry-storm alerting', () => {
       await expect(handler({ type: 'manual' }, { retryCount: 1, retryLimit: 2 })).rejects.toBe(failure);
 
       expect(sendBackupFailedStub.callCount).toBe(0);
+    });
+  });
+
+  describe('backup job expiry', () => {
+    it('schedules backup:daily with the backup job expiry, not the 60s queue default', () => {
+      expect(queue.schedules['backup:daily']).toBe('0 2 * * *');
+      expect(queue.scheduleOptions['backup:daily']).toEqual({ expireInSeconds: BACKUP_JOB_EXPIRE_SECONDS });
+    });
+  });
+
+  describe('off-host copy wiring', () => {
+    const metadata = {
+      id: 'b-1',
+      filename: 'pavillion_20261114_020000_scheduled.dump',
+      size_bytes: 5000,
+      created_at: new Date(),
+      type: 'scheduled' as const,
+      category: 'daily' as const,
+      verified: true,
+      storage_location: '/backups',
+    };
+
+    it('hands the copier built at startup to the BackupService both backup handlers use', async () => {
+      const fakeCopier = { logStartup: sandbox.stub(), copy: sandbox.stub().resolves(false) };
+      sandbox.stub(OffsiteCopyService, 'fromConfig').returns(fakeCopier as unknown as OffsiteCopyService);
+      createBackupStub.resolves(metadata);
+
+      const wiredQueue = new FakeJobQueueService();
+      await registerJobHandlers(wiredQueue as any);
+      await wiredQueue.handlers['backup:create']({ type: 'manual' }, { retryCount: 0, retryLimit: 2 });
+      await wiredQueue.handlers['backup:daily']({}, { retryCount: 0, retryLimit: 2 });
+
+      expect(fakeCopier.logStartup.callCount).toBe(1);
+      expect(createBackupStub.callCount).toBe(2);
+      const [manualService, dailyService] = createBackupStub.thisValues;
+      expect(manualService).toBe(dailyService);
+      expect((manualService as any).offsiteCopy).toBe(fakeCopier);
+      // A copy result never stops retention: it runs after each backup.
+      expect(enforceRetentionStub.callCount).toBe(2);
+    });
+
+    it('builds no copier and logs no startup line when the bucket is unset', async () => {
+      const logStartup = sandbox.spy(OffsiteCopyService.prototype, 'logStartup');
+      createBackupStub.resolves(metadata);
+
+      const unwiredQueue = new FakeJobQueueService();
+      await registerJobHandlers(unwiredQueue as any);
+      await unwiredQueue.handlers['backup:daily']({}, { retryCount: 0, retryLimit: 2 });
+
+      expect(logStartup.called).toBe(false);
+      expect((createBackupStub.firstCall.thisValue as any).offsiteCopy).toBeNull();
     });
   });
 

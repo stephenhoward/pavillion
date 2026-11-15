@@ -9,6 +9,7 @@ import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
 import StorageService from '@/server/housekeeping/service/storage';
+import { BACKUP_JOB_EXPIRE_SECONDS } from '@/server/housekeeping/service/backup';
 import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
@@ -50,6 +51,8 @@ describe('CLI Commands (HousekeepingInterface)', () => {
       expect(publishStub.calledOnce).toBe(true);
       expect(publishStub.firstCall.args[0]).toBe('backup:create');
       expect(publishStub.firstCall.args[1]).toEqual({ type: 'manual' });
+      // The job's own expiry, not the queue's 60s default, bounds dump and copy.
+      expect(publishStub.firstCall.args[2]).toEqual({ expireInSeconds: BACKUP_JOB_EXPIRE_SECONDS });
       // Queue lifecycle is owned by the interface, not the CLI.
       expect(startStub.calledOnce).toBe(true);
       expect(stopStub.calledOnce).toBe(true);

@@ -9,8 +9,21 @@ import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupCreateError } from '@/common/exceptions/housekeeping';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
+// Type-only, so the web process and the CLI, which also import this file,
+// never load the AWS SDK.
+import type OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 
 const logger = createLogger('housekeeping');
+
+/**
+ * Per-job expiry for backup:create and backup:daily. The queue default is 60
+ * seconds, after which pg-boss fails the job and retries it while the first
+ * attempt is still running, so a slow pg_dump or off-host copy would start
+ * overlapping backups and the failure would never reach the handler's alert.
+ * Set per job because existing queue rows keep the 60-second default. The
+ * copy's own deadline (OFFSITE_COPY_DEADLINE_MS) sits inside this.
+ */
+export const BACKUP_JOB_EXPIRE_SECONDS = 3600;
 
 /**
  * Backup metadata returned after backup creation
@@ -50,7 +63,11 @@ export default class BackupService {
   private backupPath: string;
   private minBackupSize: number = 1024; // 1KB minimum
 
-  constructor() {
+  /**
+   * @param offsiteCopy - Copies each verified backup off the host; null when
+   *   no destination is configured. Built once at worker startup.
+   */
+  constructor(private readonly offsiteCopy: OffsiteCopyService | null = null) {
     this.backupPath = config.get('housekeeping.backup.path');
   }
 
@@ -86,6 +103,7 @@ export default class BackupService {
 
     logger.info({ type, filename }, 'Creating backup');
 
+    let metadata: BackupMetadata;
     try {
       // Build pg_dump arguments or write a stub file for SQLite environments
       const pgArgs = this.buildPgDumpArgs(fullPath);
@@ -106,7 +124,7 @@ export default class BackupService {
       const category = this.categorizeBackup(timestamp);
 
       // Create metadata
-      const metadata: BackupMetadata = {
+      metadata = {
         id: uuidv4(),
         filename,
         size_bytes: verification.size,
@@ -130,40 +148,21 @@ export default class BackupService {
       });
 
       logger.info({ filename, size: verification.size, category, verified: verification.verified }, 'Backup created');
-
-      // Check for optional S3 upload configuration
-      this.checkS3Upload();
-
-      return metadata;
     }
     catch (error) {
       logError(error, '[Housekeeping] Failed to create backup');
       const originalMessage = error instanceof Error ? error.message : String(error);
       throw new BackupCreateError(originalMessage, filename, error);
     }
-  }
 
-  /**
-   * Checks if S3 upload is configured and logs appropriate message.
-   *
-   * This is a placeholder for future S3 upload functionality.
-   */
-  private checkS3Upload(): void {
-    try {
-      // Check if S3 configuration exists
-      if (config.has('housekeeping.backup.s3')) {
-        const s3Config = config.get('housekeeping.backup.s3');
+    // Outside the try: the backup is written and recorded, so the copy's
+    // result never changes what this returns. copy() never rejects and logs
+    // its own failure. An unverified dump is not worth sending off the host.
+    if (this.offsiteCopy && metadata.verified) {
+      await this.offsiteCopy.copy(fullPath);
+    }
 
-        // Check if S3 is enabled (would be set via environment variables in production)
-        if (s3Config && typeof s3Config === 'object' && 's3Enabled' in s3Config && s3Config.s3Enabled) {
-          logger.info('S3 upload configured but not yet implemented (future enhancement)');
-          logger.info('Backup stored locally only at this time');
-        }
-      }
-    }
-    catch {
-      // Config doesn't exist, which is fine - S3 is optional
-    }
+    return metadata;
   }
 
   /**

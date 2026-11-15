@@ -311,9 +311,18 @@ export default class JobQueueService {
    * @param jobName - Name of the scheduled job
    * @param cronExpression - Cron expression (e.g., "0 2 * * *" for daily at 2 AM)
    * @param handler - Function to handle the scheduled job
+   * @param data - Payload for each scheduled run
+   * @param options - Optional per-job retry/expiry policy, applied to every
+   *   run the schedule sends. When omitted the queue defaults apply.
    * @throws Error if service not started
    */
-  async schedule<T = any>(jobName: string, cronExpression: string, handler: JobHandler<T>, data?: T): Promise<void> {
+  async schedule<T = any>(
+    jobName: string,
+    cronExpression: string,
+    handler: JobHandler<T>,
+    data?: T,
+    options?: JobPublishOptions,
+  ): Promise<void> {
     if (!this.started || !this.boss) {
       throw new Error('JobQueueService not started. Call start() first.');
     }
@@ -322,7 +331,12 @@ export default class JobQueueService {
     await this.subscribe(jobName, handler);
 
     // Schedule the job with cron expression
-    await this.boss.schedule(jobName, cronExpression, data || {} as T);
+    if (options) {
+      await this.boss.schedule(jobName, cronExpression, data || {} as T, this.toSendOptions(options));
+    }
+    else {
+      await this.boss.schedule(jobName, cronExpression, data || {} as T);
+    }
     logger.info({ jobName, cronExpression }, 'Scheduled job');
   }
 

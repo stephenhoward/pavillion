@@ -26,7 +26,8 @@ vi.mock('@/server/common/helper/logger', () => {
   return { createLogger: () => stub, default: stub };
 });
 
-import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
+import OffsiteCopyService, { OFFSITE_COPY_DEADLINE_MS } from '@/server/housekeeping/service/offsite-copy';
+import { BACKUP_JOB_EXPIRE_SECONDS } from '@/server/housekeeping/service/backup';
 import S3Destination from '@/server/housekeeping/service/offsite/s3';
 import type { OffsiteDestination } from '@/server/housekeeping/service/offsite/destination';
 
@@ -219,6 +220,33 @@ describe('OffsiteCopyService', () => {
       const destination = fakeDestination({ put: sandbox.stub().throws(new TypeError('synchronous failure')) });
 
       await expect(new OffsiteCopyService('s3', destination).copy(DUMP)).resolves.toBe(false);
+    });
+
+    it('should abort the write and resolve false once the overall deadline passes', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        // A write that never settles and ignores its signal: only the
+        // deadline's race can end it.
+        const destination = fakeDestination({ put: sandbox.stub().returns(new Promise(() => {})) });
+
+        const pending = new OffsiteCopyService('s3', destination).copy(DUMP);
+        vi.advanceTimersByTime(OFFSITE_COPY_DEADLINE_MS);
+
+        await expect(pending).resolves.toBe(false);
+        const signal: AbortSignal = destination.put.firstCall.args[2];
+        expect(signal.aborted).toBe(true);
+        expect(errorLogs()[0][1]).toMatchObject({ errorName: 'OffsiteCopyTimeoutError' });
+      }
+      finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should end the copy well inside the backup job expiry', () => {
+      // The backup handler awaits the copy, so a copy outliving the job
+      // expiry would let pg-boss fail and re-run a backup that is still going.
+      // The remainder is the time left for pg_dump itself.
+      expect(OFFSITE_COPY_DEADLINE_MS).toBeLessThan(BACKUP_JOB_EXPIRE_SECONDS * 1000 * 0.8);
     });
 
     it('should resolve false when put rejects with a non-Error value', async () => {
