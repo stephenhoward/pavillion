@@ -26,6 +26,7 @@ import SyncService, {
   buildEventParamsForCreate,
   buildEventParamsForUpdate,
   dedupKey,
+  importFingerprint,
 } from '@/server/calendar/service/import/sync';
 import db from '@/server/common/entity/db';
 
@@ -115,6 +116,7 @@ function makeOriginEntity(overrides: Partial<EventImportOriginEntity> = {}): Eve
     external_recurrence_id: null,
     source_last_modified: null,
     source_last_seen_at: null,
+    source_fingerprint: null,
     locally_edited: false,
     x_props: null,
     save,
@@ -194,6 +196,48 @@ describe('SyncService', () => {
       expect(dedupKey('uid-1', null)).toBe('uid-1::');
       expect(dedupKey('uid-1', undefined)).toBe('uid-1::');
       expect(dedupKey('uid-1', '2026-04-22T10:00:00Z')).toBe('uid-1::2026-04-22T10:00:00Z');
+    });
+  });
+
+  describe('importFingerprint', () => {
+    const baseVEvent = () => makeVEvent({
+      uid: 'fp@example.test',
+      summary: 'Fingerprint event',
+    });
+    const map = (v: VEvent) => mapVEvent({ vevent: v, calendarPrimaryLanguage: 'en' });
+
+    it('is stable for equal input and is a sha256 hex string', () => {
+      const a = importFingerprint(map(baseVEvent()));
+      const b = importFingerprint(map(baseVEvent()));
+      expect(a).toBe(b);
+      expect(a).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('differs when the name changes', () => {
+      const a = importFingerprint(map(baseVEvent()));
+      const b = importFingerprint(map(makeVEvent({ uid: 'fp@example.test', summary: 'Changed' })));
+      expect(a).not.toBe(b);
+    });
+
+    it('differs when the start changes', () => {
+      const base = baseVEvent();
+      const moved = { ...base, start: makeDtz('2026-04-22T11:00:00Z', 'Etc/UTC') } as unknown as VEvent;
+      expect(importFingerprint(map(moved))).not.toBe(importFingerprint(map(base)));
+    });
+
+    it('differs when an exclusion is added', () => {
+      const base = baseVEvent();
+      const withExdate = {
+        ...base,
+        exdate: { '2026-04-23': makeDtz('2026-04-23T10:00:00Z', 'Etc/UTC') },
+      } as unknown as VEvent;
+      expect(importFingerprint(map(withExdate))).not.toBe(importFingerprint(map(base)));
+    });
+
+    it('ignores LAST-MODIFIED', () => {
+      const base = baseVEvent();
+      const touched = { ...base, lastmodified: new Date('2030-01-01T00:00:00Z') } as unknown as VEvent;
+      expect(importFingerprint(map(touched))).toBe(importFingerprint(map(base)));
     });
   });
 
@@ -1223,12 +1267,14 @@ describe('SyncService', () => {
         ownerType: 'file' | 'url';
         ownerUrl?: string | null;
         locally_edited?: boolean;
+        source_fingerprint?: string | null;
       }): EventImportOriginEntity {
         return makeOriginEntity({
           event_id: fields.event_id,
           external_uid: fields.external_uid,
           import_source_id: fields.import_source_id,
           locally_edited: fields.locally_edited ?? false,
+          source_fingerprint: fields.source_fingerprint ?? null,
           importSource: {
             id: fields.import_source_id,
             source_type: fields.ownerType,
@@ -1314,6 +1360,61 @@ describe('SyncService', () => {
         const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
         expect(values.event_id).toBe('evt-file-owned');
         expect(values.import_source_id).toBe(UPLOAD_SRC_ID);
+      });
+
+      it('rule: file-owned with a matching fingerprint → no updateEvent, origin re-pointed, counted unchanged', async () => {
+        const src = makeUploadSource();
+        const vevent = makeVEvent({ uid: 'cal-same@example.test' });
+        const fingerprint = importFingerprint(
+          mapVEvent({ vevent, calendarPrimaryLanguage: 'en' }),
+        );
+        const existing = makeCalendarOrigin({
+          event_id: 'evt-same',
+          external_uid: 'cal-same@example.test',
+          import_source_id: 'other-file-src',
+          ownerType: 'file',
+          source_fingerprint: fingerprint,
+        });
+        const svc = makeProcessService([vevent], [existing]);
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsUnchanged).toBe(1);
+        expect(result.eventsUpdated).toBe(0);
+        expect(result.eventsCreated).toBe(0);
+        expect(eventService.updateEvent.called).toBe(false);
+        expect(originUpsertStub.calledOnce).toBe(true);
+        const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
+        expect(values.event_id).toBe('evt-same');
+        expect(values.import_source_id).toBe(UPLOAD_SRC_ID);
+        expect(values.source_fingerprint).toBe(fingerprint);
+      });
+
+      it.each([
+        ['a different', 'not-the-fingerprint'],
+        ['a null', null],
+      ])('rule: file-owned with %s fingerprint → updates the event and stores the new fingerprint', async (_label, stored) => {
+        const src = makeUploadSource();
+        const vevent = makeVEvent({ uid: 'cal-diff@example.test' });
+        const existing = makeCalendarOrigin({
+          event_id: 'evt-diff',
+          external_uid: 'cal-diff@example.test',
+          import_source_id: 'other-file-src',
+          ownerType: 'file',
+          source_fingerprint: stored,
+        });
+        const svc = makeProcessService([vevent], [existing]);
+        eventService.updateEvent.resolves({ id: 'evt-diff' } as never);
+
+        const result = await runCalendar(svc, src);
+
+        expect(result.eventsUpdated).toBe(1);
+        expect(result.eventsUnchanged).toBe(0);
+        expect(eventService.updateEvent.calledOnce).toBe(true);
+        const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
+        expect(values.source_fingerprint).toBe(
+          importFingerprint(mapVEvent({ vevent, calendarPrimaryLanguage: 'en' })),
+        );
       });
 
       it('rule: URL-sync-owned → skips untouched and reports the owning source URL', async () => {

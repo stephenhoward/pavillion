@@ -60,6 +60,11 @@ export type ImportRunSummary = {
    * path).
    */
   eventsPreservedLocalEdits: number;
+  /**
+   * Calendar-wide dedup only: events matched to an earlier upload whose source
+   * data is unchanged. Not rewritten or federated. Always present on the wire.
+   */
+  eventsUnchanged: number;
   errorMessage: string | null;
 };
 

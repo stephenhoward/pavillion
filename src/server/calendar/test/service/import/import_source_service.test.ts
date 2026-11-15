@@ -595,6 +595,15 @@ describe('ImportSourceService', () => {
       ).rejects.toBeInstanceOf(ImportSourceParseError);
     });
 
+    it('does not reject a run whose only usable events were unchanged', async () => {
+      const { wired } = wireFileService({
+        processResult: fileRunResult({ eventsCreated: 0, eventsUpdated: 0, eventsUnchanged: 2 }),
+      });
+
+      const result = await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+      expect(result.source.sourceType).toBe('file');
+    });
+
     it('throws a guard error when the SyncService is not wired', async () => {
       sandbox.stub(ImportSourceEntity, 'count').resolves(0);
       // Service constructed without a SyncService.

@@ -42,6 +42,7 @@
 
 import type { CalendarResponse, VEvent } from 'node-ical';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { Op, type Transaction } from 'sequelize';
 
@@ -134,6 +135,14 @@ export interface SyncResult {
    * the field is additive for existing `SyncResult` literals.
    */
   eventsPreservedLocalEdits?: number;
+  /**
+   * Calendar-wide dedup only: uploaded events that matched a file-owned origin
+   * whose source fingerprint equals the incoming one. Not rewritten and not
+   * federated; only provenance is re-pointed. `recordRun` always populates this
+   * (0 on the per-source path); optional so the field is additive for existing
+   * `SyncResult` literals.
+   */
+  eventsUnchanged?: number;
   /**
    * Calendar-wide dedup only: per-event detail for the sync-managed skips,
    * carrying the owning URL source's `url` so the run summary can name which
@@ -463,6 +472,7 @@ class SyncService {
       disappeared: 0,
       skippedSyncManaged: 0,
       preservedLocalEdits: 0,
+      unchanged: 0,
     };
     // Calendar-wide dedup only: owning-source detail for each sync-managed skip.
     const skippedSyncManagedDetails: Array<{ externalUid: string; sourceUrl: string | null }> = [];
@@ -575,6 +585,17 @@ class SyncService {
               }
               else if (existingOrigin.locally_edited) {
                 counts.preservedLocalEdits++;
+              }
+              else if (
+                existingOrigin.importSource?.source_type === 'file'
+                && existingOrigin.source_fingerprint
+                && existingOrigin.source_fingerprint === importFingerprint(mapped)
+              ) {
+                // Same source data as the last import wrote: re-point
+                // provenance and refresh last-seen, but do not rewrite the
+                // event (no eventUpdated, no federated Update).
+                await this.stampImportOrigin(existingOrigin.event_id, source, mapped, txn);
+                counts.unchanged++;
               }
               else if (existingOrigin.importSource?.source_type === 'file') {
                 await this.updateEvent(actingAccount, existingOrigin.event_id, source, mapped, txn);
@@ -850,6 +871,7 @@ class SyncService {
           : null,
         source_last_seen_at: this.nowFn(),
         x_props: mapped.x_props,
+        source_fingerprint: importFingerprint(mapped),
       },
       { transaction: tx, conflictFields: ['event_id'] },
     );
@@ -951,6 +973,7 @@ class SyncService {
       // for pv-84da.1.3, which touches sync.ts + its test only).
       skippedSyncManaged?: number;
       preservedLocalEdits?: number;
+      unchanged?: number;
     };
     skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
     errorMessage: string | null;
@@ -987,6 +1010,7 @@ class SyncService {
       eventsDisappeared: input.counts.disappeared,
       eventsSkippedSyncManaged: input.counts.skippedSyncManaged ?? 0,
       eventsPreservedLocalEdits: input.counts.preservedLocalEdits ?? 0,
+      eventsUnchanged: input.counts.unchanged ?? 0,
       skippedSyncManagedDetails: input.skippedSyncManagedDetails ?? [],
       errorMessage: input.errorMessage,
     };
@@ -1026,6 +1050,26 @@ class SyncService {
  */
 export function dedupKey(externalUid: string | null | undefined, recurrenceId: string | null | undefined): string {
   return `${externalUid ?? ''}::${recurrenceId ?? ''}`;
+}
+
+/**
+ * Fingerprint of exactly what the import writes for an event: the single
+ * language's content, the schedule, its exclusions and the external URL.
+ * Computed from the mapper output rather than the params builders so a change
+ * to those builders does not invalidate stored fingerprints. LAST-MODIFIED and
+ * x_props are excluded; categories, media and location are never written.
+ */
+export function importFingerprint(mapped: MapperOutput): string {
+  const exclusions = mapped.exclusions
+    .map(e => e.toObject())
+    .sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  const payload = JSON.stringify({
+    content: mapped.content.toObject(),
+    schedule: mapped.schedule.toObject(),
+    exclusions,
+    externalUrl: mapped.external_url,
+  });
+  return createHash('sha256').update(payload).digest('hex');
 }
 
 /**
