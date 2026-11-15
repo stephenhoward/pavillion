@@ -156,10 +156,22 @@ export default class BackupService {
     }
 
     // Outside the try: the backup is written and recorded, so the copy's
-    // result never changes what this returns. copy() never rejects and logs
-    // its own failure. An unverified dump is not worth sending off the host.
+    // result never changes what this returns. copy() resolves false and logs
+    // its own failure, but a throw from it (its failure logging included)
+    // must not reject here either: that would skip retention and make the job
+    // retry a backup that already succeeded. The catch logs only the filename
+    // and error name, because the copier's secret redaction has not run on
+    // this path. An unverified dump is not worth sending off the host.
     if (this.offsiteCopy && metadata.verified) {
-      await this.offsiteCopy.copy(fullPath);
+      try {
+        await this.offsiteCopy.copy(fullPath);
+      }
+      catch (error) {
+        logger.error(
+          { filename, errorName: error instanceof Error ? error.name : typeof error },
+          'Off-host backup copy threw; backup kept',
+        );
+      }
     }
 
     return metadata;

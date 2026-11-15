@@ -293,6 +293,29 @@ describe('OffsiteCopyService', () => {
       expect(serialised).not.toContain(SECRET_KEY);
     });
 
+    it('should redact a secret carried in the error name', async () => {
+      const error = Object.assign(new Error('denied'), { name: `Err-${SECRET_KEY}` });
+      const destination = fakeDestination({ put: sandbox.stub().rejects(error) });
+
+      await new OffsiteCopyService('s3', destination).copy(DUMP);
+
+      expect(errorLogs()[0][1]).toMatchObject({ errorName: 'Err-[redacted]' });
+      expect(JSON.stringify(logCalls)).not.toContain(SECRET_KEY);
+    });
+
+    it('should leave no deadline timer pending after a copy that resolves true', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const result = await new OffsiteCopyService('s3', fakeDestination()).copy(DUMP);
+
+        expect(result).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      }
+      finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("should not let a destination's fields overwrite the service's own", async () => {
       const destination = fakeDestination({
         logFields: { driver: 'spoofed', filename: 'spoofed', bucket: 'community-backups' },
