@@ -328,14 +328,14 @@ housekeeping:
       weekly: 4
       monthly: 6
     path: '/backups'
-    # Optional S3 upload configuration (future enhancement)
-    # s3:
-    #   enabled: false
-    #   bucket: 'my-backups'
-    #   endpoint: 'https://s3.amazonaws.com'
-    #   region: 'us-east-1'
-    #   accessKeyId: ''
-    #   secretAccessKey: ''
+    # Off-host copy of each completed backup. Inert while bucket is empty.
+    offsite:
+      s3:
+        bucket: ''
+        region: 'us-east-1'
+        endpoint: ''  # Set for S3-compatible providers; empty means AWS S3
+        # Credentials come only from BACKUP_S3_ACCESS_KEY / BACKUP_S3_SECRET_KEY
+        # (or BACKUP_S3_SECRET_KEY_FILE). Never put them in config/local.yaml.
   monitoring:
     disk:
       enabled: true
