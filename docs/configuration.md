@@ -494,8 +494,8 @@ housekeeping:
         bucket: ''            # BACKUP_S3_BUCKET; empty means no off-host copy
         region: 'us-east-1'   # BACKUP_S3_REGION
         endpoint: ''          # BACKUP_S3_ENDPOINT; empty means AWS S3
-        # Keys come only from BACKUP_S3_ACCESS_KEY and BACKUP_S3_SECRET_KEY
-        # (or BACKUP_S3_SECRET_KEY_FILE), never from a config file.
+        # Set the keys through BACKUP_S3_ACCESS_KEY and BACKUP_S3_SECRET_KEY
+        # (or BACKUP_S3_SECRET_KEY_FILE). Never put them in a config file.
   monitoring:
     disk:
       enabled: true
