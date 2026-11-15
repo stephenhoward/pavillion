@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /**
  * The logger module is mocked wholesale because `createLogger` returns a new
@@ -28,53 +26,40 @@ vi.mock('@/server/common/helper/logger', () => {
   return { createLogger: () => stub, default: stub };
 });
 
-import OffsiteCopyService, { buildClientConfig } from '@/server/housekeeping/service/offsite-copy';
+import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
+import S3Destination from '@/server/housekeeping/service/offsite/s3';
+import type { OffsiteDestination } from '@/server/housekeeping/service/offsite/destination';
 
 const ACCESS_KEY = 'AKIAEXAMPLEACCESSKEY';
 const SECRET_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLESECRET';
+const DUMP = '/backups/pavillion_20261114-020000_daily.dump';
 
-interface S3Settings {
-  bucket?: string;
-  region?: string;
-  endpoint?: string;
-  accessKeyId?: string;
-  secretAccessKey?: string;
+interface FakeDestination extends OffsiteDestination {
+  put: sinon.SinonStub;
 }
 
 /**
- * Unit coverage for the off-host copy: configuration validation, client
- * construction, the upload itself, and the never-rejects contract with its
- * credential-free failure log.
+ * Unit coverage for the driver-agnostic off-host copy: driver selection, the
+ * never-rejects contract, and the credential-free startup and failure logs.
+ * A fake destination stands in for a real one; S3Destination has its own
+ * suite.
  */
 describe('OffsiteCopyService', () => {
   let sandbox: sinon.SinonSandbox;
   let configStub: sinon.SinonStub;
-  let tmpDir: string;
 
-  function useSettings(settings: S3Settings) {
-    configStub.withArgs('housekeeping.backup.offsite.s3').returns({
-      bucket: 'community-backups',
-      region: 'eu-west-1',
-      endpoint: '',
-      ...settings,
-    });
+  function fakeDestination(overrides: Partial<OffsiteDestination> = {}): FakeDestination {
+    return {
+      configError: null,
+      logFields: { bucket: 'community-backups', endpointHost: 's3.example.com', credentialSource: 'static keys' },
+      secrets: [ACCESS_KEY, SECRET_KEY],
+      put: sandbox.stub().resolves(),
+      ...overrides,
+    } as FakeDestination;
   }
 
-  /** A fake client whose send reads the whole body, as the real one would. */
-  function consumingClient(): { client: S3Client; send: sinon.SinonStub } {
-    const send = sandbox.stub().callsFake(async (command: PutObjectCommand) => {
-      for await (const chunk of command.input.Body as AsyncIterable<Buffer>) {
-        void chunk;
-      }
-      return {};
-    });
-    return { client: { send } as unknown as S3Client, send };
-  }
-
-  function writeDump(name = 'pavillion_20261114-020000_daily.dump', contents = 'x'.repeat(4096)): string {
-    const filePath = path.join(tmpDir, name);
-    fs.writeFileSync(filePath, contents);
-    return filePath;
+  function useDriver(driver: string | undefined) {
+    configStub.withArgs('housekeeping.backup.offsite.driver').returns(driver);
   }
 
   function errorLogs(): unknown[][] {
@@ -86,253 +71,164 @@ describe('OffsiteCopyService', () => {
     logCalls.length = 0;
     const realGet = config.get.bind(config);
     configStub = sandbox.stub(config, 'get').callsFake((key: any) => realGet(key));
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'offsite-copy-'));
+    // Every key the service reads is stubbed: node-config freezes itself on
+    // its first real get(), after which the sandbox cannot restore the stub.
+    useDriver('s3');
   });
 
   afterEach(() => {
     sandbox.restore();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe('fromConfig', () => {
-    it.each([
-      ['unset', undefined],
-      ['empty', ''],
-      ['whitespace-only', '   '],
-    ])('should return null when the bucket is %s', (_label, bucket) => {
-      useSettings({ bucket: bucket as string | undefined });
-      // No client is injected: a null result is reached before the default
-      // client would be built, and nothing is logged.
-      expect(OffsiteCopyService.fromConfig()).toBeNull();
-      expect(logCalls).toHaveLength(0);
-    });
+    it('should select the s3 destination for the s3 driver', () => {
+      const destination = fakeDestination();
+      const build = sandbox.stub(S3Destination, 'fromConfig').returns(destination as unknown as S3Destination);
 
-    it('should return an instance with no configError for a valid config', () => {
-      useSettings({ accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY });
+      const service = OffsiteCopyService.fromConfig();
 
-      const service = OffsiteCopyService.fromConfig(consumingClient().client);
-
+      expect(build.calledOnce).toBe(true);
       expect(service).not.toBeNull();
       expect(service!.configError).toBeNull();
     });
 
-    it('should treat absent credential keys as empty and use the default chain', () => {
-      useSettings({});
+    it('should return null when the selected destination has no target configured', () => {
+      sandbox.stub(S3Destination, 'fromConfig').returns(null);
 
-      const service = OffsiteCopyService.fromConfig(consumingClient().client);
+      expect(OffsiteCopyService.fromConfig()).toBeNull();
+      expect(logCalls).toHaveLength(0);
+    });
 
-      expect(service!.configError).toBeNull();
+    it("should carry the destination's configError", () => {
+      sandbox.stub(S3Destination, 'fromConfig')
+        .returns(fakeDestination({ configError: 'Set both keys' }) as unknown as S3Destination);
+
+      expect(OffsiteCopyService.fromConfig()!.configError).toBe('Set both keys');
     });
 
     it.each([
-      ['only the access key', { accessKeyId: ACCESS_KEY, secretAccessKey: '' }],
-      ['only the secret key', { accessKeyId: '', secretAccessKey: SECRET_KEY }],
-    ])('should set a configError when %s is set', (_label, keys) => {
-      useSettings(keys);
+      ['an unknown driver', 'ftp'],
+      ['an empty driver', ''],
+      ['an inherited method name', 'toString'],
+      ['the prototype key', '__proto__'],
+      ['the constructor key', 'constructor'],
+    ])('should set a configError naming the supported drivers for %s', (_label, driver) => {
+      useDriver(driver);
+      const build = sandbox.stub(S3Destination, 'fromConfig');
 
-      const service = OffsiteCopyService.fromConfig(consumingClient().client);
+      const service = OffsiteCopyService.fromConfig();
 
-      expect(service!.configError).toMatch(/both/i);
+      expect(build.called).toBe(false);
+      expect(service).not.toBeNull();
+      expect(service!.configError).toMatch(/not supported \(supported: s3\)/);
     });
 
-    it.each([
-      ['https://s3.example.com'],
-      ['http://localhost:9000'],
-      ['http://127.0.0.1:9000'],
-    ])('should accept the endpoint %s', (endpoint) => {
-      useSettings({ endpoint });
+    it('should not echo a driver value that is not shaped like a driver name', () => {
+      useDriver(`AKIA ${SECRET_KEY}`);
 
-      expect(OffsiteCopyService.fromConfig(consumingClient().client)!.configError).toBeNull();
-    });
+      const service = OffsiteCopyService.fromConfig()!;
+      service.logStartup();
 
-    it.each([
-      ['http://minio:9000'],
-      ['http://localhost.example.com'],
-      ['https://user:pass@s3.example.com'],
-      ['ftp://s3.example.com'],
-      ['not a url'],
-    ])('should set a configError for the endpoint %s', (endpoint) => {
-      useSettings({ endpoint });
-
-      const service = OffsiteCopyService.fromConfig(consumingClient().client);
-
-      expect(service!.configError).toBeTruthy();
-      expect(service!.configError).not.toContain('pass');
-    });
-  });
-
-  describe('buildClientConfig', () => {
-    const base = { bucket: 'b', region: 'eu-west-1', endpoint: '', accessKeyId: '', secretAccessKey: '' };
-
-    it('should carry static credentials when both keys are set', () => {
-      const result = buildClientConfig({ ...base, accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY });
-
-      expect(result.credentials).toEqual({ accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY });
-    });
-
-    it('should carry no credentials key when neither key is set', () => {
-      const result = buildClientConfig(base);
-
-      expect(Object.prototype.hasOwnProperty.call(result, 'credentials')).toBe(false);
-    });
-
-    it('should use path-style addressing exactly when an endpoint is set', () => {
-      expect(buildClientConfig(base).forcePathStyle).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(buildClientConfig(base), 'endpoint')).toBe(false);
-
-      const custom = buildClientConfig({ ...base, endpoint: 'https://s3.example.com' });
-      expect(custom.forcePathStyle).toBe(true);
-      expect(custom.endpoint).toBe('https://s3.example.com');
-    });
-
-    it('should set the region, three attempts and connection and socket timeouts', () => {
-      const result = buildClientConfig(base);
-
-      expect(result.region).toBe('eu-west-1');
-      expect(result.maxAttempts).toBe(3);
-      expect(result.requestHandler).toEqual({
-        connectionTimeout: expect.any(Number),
-        socketTimeout: expect.any(Number),
-      });
-    });
-  });
-
-  describe('logStartup', () => {
-    it('should name the bucket, AWS and the default credential chain', () => {
-      useSettings({});
-
-      OffsiteCopyService.fromConfig(consumingClient().client)!.logStartup();
-
-      expect(logCalls).toHaveLength(1);
-      expect(logCalls[0][0]).toBe('info');
-      expect(logCalls[0][1]).toEqual({
-        bucket: 'community-backups',
-        endpointHost: 'AWS',
-        credentialSource: 'default credential chain',
-      });
-    });
-
-    it('should name the endpoint host and static keys without the key values', () => {
-      useSettings({ endpoint: 'https://s3.example.com', accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY });
-
-      OffsiteCopyService.fromConfig(consumingClient().client)!.logStartup();
-
-      expect(logCalls[0][1]).toEqual({
-        bucket: 'community-backups',
-        endpointHost: 's3.example.com',
-        credentialSource: 'static keys',
-      });
-      const serialised = JSON.stringify(logCalls);
-      expect(serialised).not.toContain(SECRET_KEY);
-      expect(serialised).not.toContain(ACCESS_KEY);
-    });
-
-    it('should log the configError at error level without the secret', () => {
-      useSettings({ accessKeyId: '', secretAccessKey: SECRET_KEY });
-
-      OffsiteCopyService.fromConfig(consumingClient().client)!.logStartup();
-
-      expect(logCalls).toHaveLength(1);
-      expect(logCalls[0][0]).toBe('error');
+      expect(service.configError).toContain('"(invalid value)"');
+      expect(logCalls[0][1]).toMatchObject({ driver: '(invalid value)' });
       expect(JSON.stringify(logCalls)).not.toContain(SECRET_KEY);
     });
   });
 
-  describe('copy', () => {
-    it('should send one PutObjectCommand with the bucket, key and on-disk size and resolve true', async () => {
-      useSettings({});
-      const { client, send } = consumingClient();
-      const dump = writeDump();
+  describe('logStartup', () => {
+    it('should name the driver and the destination fields at info level', () => {
+      new OffsiteCopyService('s3', fakeDestination()).logStartup();
 
-      const result = await OffsiteCopyService.fromConfig(client)!.copy(dump);
+      expect(logCalls).toHaveLength(1);
+      expect(logCalls[0][0]).toBe('info');
+      expect(logCalls[0][1]).toEqual({
+        driver: 's3',
+        bucket: 'community-backups',
+        endpointHost: 's3.example.com',
+        credentialSource: 'static keys',
+      });
+      expect(logCalls[0][2]).toBe('Off-host backup copy enabled');
+    });
+
+    it('should log the configError at error level without a secret', () => {
+      new OffsiteCopyService('s3', fakeDestination({ configError: 'Set both keys' })).logStartup();
+
+      expect(logCalls).toHaveLength(1);
+      expect(logCalls[0][0]).toBe('error');
+      expect(logCalls[0][1]).toMatchObject({ driver: 's3', configError: 'Set both keys' });
+      expect(JSON.stringify(logCalls)).not.toContain(SECRET_KEY);
+    });
+
+    it('should log an unknown driver at error level', () => {
+      useDriver('ftp');
+
+      OffsiteCopyService.fromConfig()!.logStartup();
+
+      expect(logCalls[0][0]).toBe('error');
+      expect(logCalls[0][1]).toEqual({
+        driver: 'ftp',
+        configError: expect.stringMatching(/"ftp" is not supported/),
+      });
+    });
+  });
+
+  describe('copy', () => {
+    it('should put the dump under pavillion-backups/ and resolve true', async () => {
+      const destination = fakeDestination();
+
+      const result = await new OffsiteCopyService('s3', destination).copy(DUMP);
 
       expect(result).toBe(true);
-      expect(send.calledOnce).toBe(true);
-      const command = send.firstCall.args[0];
-      expect(command).toBeInstanceOf(PutObjectCommand);
-      expect(command.input.Bucket).toBe('community-backups');
-      expect(command.input.Key).toBe('pavillion-backups/pavillion_20261114-020000_daily.dump');
-      expect(command.input.ContentLength).toBe(fs.statSync(dump).size);
-      expect(send.firstCall.args[1]).toHaveProperty('abortSignal');
+      expect(destination.put.calledOnce).toBe(true);
+      const [localPath, name, signal] = destination.put.firstCall.args;
+      expect(localPath).toBe(DUMP);
+      expect(name).toBe('pavillion-backups/pavillion_20261114-020000_daily.dump');
+      expect(signal).toBeInstanceOf(AbortSignal);
       expect(errorLogs()).toHaveLength(0);
     });
 
-    it('should destroy the source and body streams after a successful copy', async () => {
-      useSettings({});
-      let body: NodeJS.ReadableStream & { destroyed: boolean } | undefined;
-      const send = sandbox.stub().callsFake(async (command: PutObjectCommand) => {
-        body = command.input.Body as any;
-        return {};
-      });
-      const dump = writeDump();
+    it('should log the configError and resolve false without calling put', async () => {
+      const destination = fakeDestination({ configError: 'Set both keys' });
 
-      await OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(dump);
-
-      expect(body!.destroyed).toBe(true);
-    });
-
-    it('should log the configError and resolve false without calling send', async () => {
-      useSettings({ accessKeyId: ACCESS_KEY, secretAccessKey: '' });
-      const { client, send } = consumingClient();
-
-      const result = await OffsiteCopyService.fromConfig(client)!.copy(writeDump());
+      const result = await new OffsiteCopyService('s3', destination).copy(DUMP);
 
       expect(result).toBe(false);
-      expect(send.called).toBe(false);
+      expect(destination.put.called).toBe(false);
       expect(errorLogs()).toHaveLength(1);
+      expect(errorLogs()[0][1]).toMatchObject({ errorName: 'OffsiteConfigError', errorMessage: 'Set both keys' });
       expect(errorLogs()[0][2]).toBe('Off-host backup copy failed');
-      expect(JSON.stringify(logCalls)).not.toContain(ACCESS_KEY);
     });
 
-    it('should resolve false when send rejects', async () => {
-      useSettings({});
-      const send = sandbox.stub().rejects(new Error('boom'));
+    it('should resolve false for an unknown driver and name it in the log', async () => {
+      useDriver('ftp');
 
-      await expect(OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(writeDump()))
-        .resolves.toBe(false);
-    });
-
-    it('should resolve false when the file is missing, without calling send', async () => {
-      useSettings({});
-      const { client, send } = consumingClient();
-
-      const result = await OffsiteCopyService.fromConfig(client)!.copy(path.join(tmpDir, 'missing.dump'));
+      const result = await OffsiteCopyService.fromConfig()!.copy(DUMP);
 
       expect(result).toBe(false);
-      expect(send.called).toBe(false);
-      expect(errorLogs()[0][1]).toMatchObject({ filename: 'missing.dump', errorCode: 'ENOENT' });
+      expect(errorLogs()[0][1]).toMatchObject({ driver: 'ftp', errorName: 'OffsiteConfigError' });
     });
 
-    it('should resolve false when the client throws synchronously', async () => {
-      useSettings({});
-      const send = sandbox.stub().throws(new TypeError('synchronous failure'));
+    it('should resolve false when put rejects', async () => {
+      const destination = fakeDestination({ put: sandbox.stub().rejects(new Error('boom')) });
 
-      await expect(OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(writeDump()))
-        .resolves.toBe(false);
+      await expect(new OffsiteCopyService('s3', destination).copy(DUMP)).resolves.toBe(false);
+      expect(errorLogs()[0][1]).toMatchObject({ errorMessage: 'boom' });
     });
 
-    it('should resolve false and raise no uncaughtException when the read fails after the stat', async () => {
-      useSettings({});
-      const { client } = consumingClient();
-      const uncaught = sinon.spy();
-      process.on('uncaughtException', uncaught);
+    it('should resolve false when put throws synchronously', async () => {
+      const destination = fakeDestination({ put: sandbox.stub().throws(new TypeError('synchronous failure')) });
 
-      try {
-        // A directory stats successfully and then fails to read with EISDIR.
-        const result = await OffsiteCopyService.fromConfig(client)!.copy(tmpDir);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        expect(result).toBe(false);
-        expect(uncaught.called).toBe(false);
-        expect(errorLogs()[0][1]).toMatchObject({ errorCode: 'EISDIR' });
-      }
-      finally {
-        process.off('uncaughtException', uncaught);
-      }
+      await expect(new OffsiteCopyService('s3', destination).copy(DUMP)).resolves.toBe(false);
     });
 
-    it('should log only the whitelisted fields, with the configured keys redacted', async () => {
-      useSettings({ endpoint: 'https://s3.example.com', accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY });
+    it('should resolve false when put rejects with a non-Error value', async () => {
+      const destination = fakeDestination({ put: sandbox.stub().rejects('plain string') });
+
+      await expect(new OffsiteCopyService('s3', destination).copy(DUMP)).resolves.toBe(false);
+      expect(errorLogs()).toHaveLength(1);
+    });
+
+    it('should log only the whitelisted fields, with the destination secrets redacted', async () => {
       const error = Object.assign(new Error(`Signature for ${ACCESS_KEY} with ${SECRET_KEY} does not match`), {
         name: 'SignatureDoesNotMatch',
         Code: `Bad-${SECRET_KEY}`,
@@ -340,19 +236,23 @@ describe('OffsiteCopyService', () => {
         $response: { headers: { authorization: SECRET_KEY } },
         credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY },
       });
-      const send = sandbox.stub().rejects(error);
+      const destination = fakeDestination({ put: sandbox.stub().rejects(error) });
 
-      const result = await OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(writeDump());
+      const result = await new OffsiteCopyService('s3', destination).copy(DUMP);
 
       expect(result).toBe(false);
       const [[level, fields, message]] = errorLogs();
       expect(level).toBe('error');
       expect(message).toBe('Off-host backup copy failed');
       expect(Object.keys(fields as object).sort()).toEqual(
-        ['bucket', 'endpointHost', 'errorCode', 'errorMessage', 'errorName', 'filename', 'httpStatus'],
+        [
+          'bucket', 'credentialSource', 'driver', 'endpointHost',
+          'errorCode', 'errorMessage', 'errorName', 'filename', 'httpStatus',
+        ],
       );
       expect(fields).toMatchObject({
         filename: 'pavillion_20261114-020000_daily.dump',
+        driver: 's3',
         bucket: 'community-backups',
         endpointHost: 's3.example.com',
         errorName: 'SignatureDoesNotMatch',
@@ -363,40 +263,60 @@ describe('OffsiteCopyService', () => {
       const serialised = JSON.stringify(logCalls);
       expect(serialised).not.toContain(ACCESS_KEY);
       expect(serialised).not.toContain(SECRET_KEY);
-      expect(serialised).toContain('s3.example.com');
     });
 
-    it('should read the error code from a Node socket error', async () => {
-      useSettings({});
-      const send = sandbox.stub().rejects(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }));
+    it("should not let a destination's fields overwrite the service's own", async () => {
+      const destination = fakeDestination({
+        logFields: { driver: 'spoofed', filename: 'spoofed', bucket: 'community-backups' },
+        put: sandbox.stub().rejects(new Error('boom')),
+      });
 
-      await OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(writeDump());
+      await new OffsiteCopyService('s3', destination).copy(DUMP);
+
+      expect(errorLogs()[0][1]).toMatchObject({
+        driver: 's3',
+        filename: 'pavillion_20261114-020000_daily.dump',
+        errorMessage: 'boom',
+      });
+    });
+
+    it('should read the error code from a Node system error', async () => {
+      const destination = fakeDestination({
+        put: sandbox.stub().rejects(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })),
+      });
+
+      await new OffsiteCopyService('s3', destination).copy(DUMP);
 
       expect(errorLogs()[0][1]).toMatchObject({ errorCode: 'ECONNREFUSED', httpStatus: undefined });
     });
 
-    it('should pass an error message through unaltered when no keys are configured', async () => {
-      useSettings({ accessKeyId: '', secretAccessKey: '' });
-      const send = sandbox.stub().rejects(new Error('Access Denied'));
+    it('should pass an error message through unaltered when the destination has no secrets', async () => {
+      const destination = fakeDestination({ secrets: [], put: sandbox.stub().rejects(new Error('Access Denied')) });
 
-      await OffsiteCopyService.fromConfig({ send } as unknown as S3Client)!.copy(writeDump());
+      await new OffsiteCopyService('s3', destination).copy(DUMP);
 
       expect(errorLogs()[0][1]).toMatchObject({ errorMessage: 'Access Denied' });
     });
   });
 
   describe('module boundaries', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, '../../service/offsite-copy.ts'),
-      'utf8',
-    );
+    const serviceDir = path.resolve(__dirname, '../../service');
+    const read = (file: string) => fs.readFileSync(path.join(serviceDir, file), 'utf8');
 
-    it('should import no delete command', () => {
-      expect(source).not.toMatch(/Delete\w*Command/);
+    it('should keep the copy service free of any storage SDK', () => {
+      // Destination-specific code lives behind OffsiteDestination.
+      expect(read('offsite-copy.ts')).not.toMatch(/@aws-sdk|flydrive|@google-cloud/);
+    });
+
+    it('should give a destination no way to delete, list or overwrite-check', () => {
+      const methods = [...read('offsite/destination.ts').matchAll(/^\s+(\w+)\s*\(/gm)].map((match) => match[1]);
+
+      expect(methods).toEqual(['put']);
     });
 
     it("should not import Media's storage factory", () => {
-      expect(source).not.toMatch(/storage-factory/);
+      expect(read('offsite-copy.ts')).not.toMatch(/storage-factory/);
+      expect(read('offsite/destination.ts')).not.toMatch(/storage-factory/);
     });
   });
 });
