@@ -6,7 +6,8 @@ import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
+import { PutObjectCommand, S3Client, type S3ClientConfig } from '@aws-sdk/client-s3';
 import S3Destination, { buildClientConfig } from '@/server/housekeeping/service/offsite/s3';
 
 const ACCESS_KEY = 'AKIAEXAMPLEACCESSKEY';
@@ -275,6 +276,49 @@ describe('S3Destination', () => {
       expect(drained[0].equals(contents)).toBe(true);
     });
 
+    it('should send a plain, signed Content-MD5 request through the real client, with no aws-chunked framing', async () => {
+      // The fake clients above bypass the SDK's middleware, which is where
+      // checksum framing is added; this runs the real client built from
+      // buildClientConfig and captures the request at the HTTP handler.
+      const settings = {
+        bucket: 'community-backups',
+        region: 'eu-west-1',
+        endpoint: 'https://s3.example.com',
+        accessKeyId: ACCESS_KEY,
+        secretAccessKey: SECRET_KEY,
+      };
+      useSettings(settings);
+      const contents = randomBytes(300_000);
+      const dump = writeDump(undefined, contents);
+      let headers: Record<string, string> = {};
+      let sentBody = Buffer.alloc(0);
+      const client = new S3Client({
+        ...buildClientConfig(settings),
+        requestHandler: {
+          handle: async (request: { headers: Record<string, string>; body: AsyncIterable<Buffer> }) => {
+            headers = request.headers;
+            const chunks: Buffer[] = [];
+            for await (const chunk of request.body) {
+              chunks.push(Buffer.from(chunk));
+            }
+            sentBody = Buffer.concat(chunks);
+            return { response: { statusCode: 200, headers: {}, body: Readable.from([]) } };
+          },
+        } as unknown as S3ClientConfig['requestHandler'],
+      });
+
+      await S3Destination.fromConfig(client)!.put(dump, NAME, signal());
+
+      const names = Object.keys(headers).map((name) => name.toLowerCase());
+      const header = (name: string) => headers[Object.keys(headers).find((key) => key.toLowerCase() === name) ?? ''];
+      expect(header('content-encoding') ?? '').not.toContain('aws-chunked');
+      expect(names).not.toContain('x-amz-trailer');
+      expect(names.filter((name) => name.startsWith('x-amz-checksum-'))).toEqual([]);
+      expect(header('content-md5')).toBe(createHash('md5').update(contents).digest('base64'));
+      expect(header('authorization')).toMatch(/SignedHeaders=[^,]*\bcontent-md5\b/);
+      expect(sentBody.equals(contents)).toBe(true);
+    });
+
     it('should reject without calling send when the caller has aborted before the digest is computed', async () => {
       useSettings({});
       const { client, send } = consumingClient();
@@ -286,16 +330,20 @@ describe('S3Destination', () => {
       expect(send.called).toBe(false);
     });
 
-    it('should stop the digest and reject without calling send when the caller aborts mid-read', async () => {
+    // mkfifo is POSIX-only.
+    it.skipIf(process.platform === 'win32')('should stop the digest and reject without calling send when the caller aborts mid-pass', async () => {
       useSettings({});
       const { client, send } = consumingClient();
       const caller = new AbortController();
-      // A FIFO keeps the digest pass reading for as long as its writer stays
-      // open, so the abort lands while the pass is in flight; without the
-      // abort the pass would never finish.
+      // A FIFO never reaches end of file while a writer holds it open, so the
+      // digest pass is still waiting for data when the abort lands; without
+      // the abort the pass would never finish.
       const fifo = path.join(tmpDir, 'pavillion_20261114-020000_daily.dump');
       execFileSync('mkfifo', [fifo]);
-      const writer = fs.createWriteStream(fifo);
+      // Opened read-write, which returns at once on Linux and macOS; a
+      // write-only open would block a libuv thread until a reader appeared,
+      // and nothing could unblock it if put failed before opening the file.
+      const writer = fs.createWriteStream(fifo, { fd: fs.openSync(fifo, fs.constants.O_RDWR) });
       writer.on('error', () => {});
       // Closed when the test ends however it ends, timeout included.
       onTestFinished(() => {
@@ -303,8 +351,10 @@ describe('S3Destination', () => {
       });
 
       const pending = S3Destination.fromConfig(client)!.put(fifo, NAME, caller.signal);
+      // Small enough to always fit the pipe buffer, so the write never waits
+      // on a reader.
       await new Promise<void>((resolve, reject) => {
-        writer.write(randomBytes(64 * 1024), (error) => (error ? reject(error) : resolve()));
+        writer.write(randomBytes(1024), (error) => (error ? reject(error) : resolve()));
       });
       caller.abort();
 
