@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, onTestFinished, vi } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
+import { execFileSync } from 'child_process';
+import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -39,18 +41,24 @@ describe('S3Destination', () => {
     });
   }
 
-  /** A fake client whose send reads the whole body, as the real one would. */
-  function consumingClient(): { client: S3Client; send: sinon.SinonStub } {
+  /**
+   * A fake client whose send reads the whole body, as the real one would.
+   * `drained` holds the bytes of each body it read, in call order.
+   */
+  function consumingClient(): { client: S3Client; send: sinon.SinonStub; drained: Buffer[] } {
+    const drained: Buffer[] = [];
     const send = sandbox.stub().callsFake(async (command: PutObjectCommand) => {
+      const chunks: Buffer[] = [];
       for await (const chunk of command.input.Body as AsyncIterable<Buffer>) {
-        void chunk;
+        chunks.push(chunk);
       }
+      drained.push(Buffer.concat(chunks));
       return {};
     });
-    return { client: { send } as unknown as S3Client, send };
+    return { client: { send } as unknown as S3Client, send, drained };
   }
 
-  function writeDump(name = 'pavillion_20261114-020000_daily.dump', contents = 'x'.repeat(4096)): string {
+  function writeDump(name = 'pavillion_20261114-020000_daily.dump', contents: string | Buffer = 'x'.repeat(4096)): string {
     const filePath = path.join(tmpDir, name);
     fs.writeFileSync(filePath, contents);
     return filePath;
@@ -205,6 +213,14 @@ describe('S3Destination', () => {
       expect(custom.endpoint).toBe('https://s3.example.com');
     });
 
+    it('should pin request checksums to WHEN_REQUIRED so no body is sent aws-chunked', () => {
+      // The SDK default (WHEN_SUPPORTED) frames the body aws-chunked with a
+      // trailing CRC32, which a store that does not decode it saves verbatim.
+      expect(buildClientConfig(base).requestChecksumCalculation).toBe('WHEN_REQUIRED');
+      expect(buildClientConfig({ ...base, endpoint: 'https://s3.example.com', accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY })
+        .requestChecksumCalculation).toBe('WHEN_REQUIRED');
+    });
+
     it('should set the region, three attempts and connection and socket timeouts', () => {
       const result = buildClientConfig(base);
 
@@ -232,6 +248,68 @@ describe('S3Destination', () => {
       expect(command.input.Key).toBe(NAME);
       expect(command.input.ContentLength).toBe(fs.statSync(dump).size);
       expect(send.firstCall.args[1].abortSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('should send the base64 MD5 of the file as ContentMD5', async () => {
+      useSettings({});
+      const { client, send } = consumingClient();
+      const contents = randomBytes(300_000);
+      const dump = writeDump(undefined, contents);
+
+      await S3Destination.fromConfig(client)!.put(dump, NAME, signal());
+
+      const expected = createHash('md5').update(contents).digest('base64');
+      expect(send.firstCall.args[0].input.ContentMD5).toBe(expected);
+    });
+
+    it('should stream a body equal to the file contents byte for byte', async () => {
+      useSettings({});
+      const { client, drained } = consumingClient();
+      // Larger than one read-stream chunk, so the body arrives in pieces.
+      const contents = randomBytes(300_000);
+      const dump = writeDump(undefined, contents);
+
+      await S3Destination.fromConfig(client)!.put(dump, NAME, signal());
+
+      expect(drained).toHaveLength(1);
+      expect(drained[0].equals(contents)).toBe(true);
+    });
+
+    it('should reject without calling send when the caller has aborted before the digest is computed', async () => {
+      useSettings({});
+      const { client, send } = consumingClient();
+      const caller = new AbortController();
+      caller.abort();
+
+      await expect(S3Destination.fromConfig(client)!.put(writeDump(undefined, randomBytes(300_000)), NAME, caller.signal))
+        .rejects.toMatchObject({ name: 'AbortError' });
+      expect(send.called).toBe(false);
+    });
+
+    it('should stop the digest and reject without calling send when the caller aborts mid-read', async () => {
+      useSettings({});
+      const { client, send } = consumingClient();
+      const caller = new AbortController();
+      // A FIFO keeps the digest pass reading for as long as its writer stays
+      // open, so the abort lands while the pass is in flight; without the
+      // abort the pass would never finish.
+      const fifo = path.join(tmpDir, 'pavillion_20261114-020000_daily.dump');
+      execFileSync('mkfifo', [fifo]);
+      const writer = fs.createWriteStream(fifo);
+      writer.on('error', () => {});
+      // Closed when the test ends however it ends, timeout included.
+      onTestFinished(() => {
+        writer.destroy();
+      });
+
+      const pending = S3Destination.fromConfig(client)!.put(fifo, NAME, caller.signal);
+      await new Promise<void>((resolve, reject) => {
+        writer.write(randomBytes(64 * 1024), (error) => (error ? reject(error) : resolve()));
+      });
+      caller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(send.called).toBe(false);
     });
 
     it('should abort the request when the caller aborts', async () => {
@@ -298,9 +376,9 @@ describe('S3Destination', () => {
         .rejects.toThrow('synchronous failure');
     });
 
-    it('should reject and raise no uncaughtException when the read fails after the stat', async () => {
+    it('should reject without calling send and raise no uncaughtException when the read fails after the stat', async () => {
       useSettings({});
-      const { client } = consumingClient();
+      const { client, send } = consumingClient();
       const uncaught = sinon.spy();
       process.on('uncaughtException', uncaught);
 
@@ -311,6 +389,9 @@ describe('S3Destination', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         expect(uncaught.called).toBe(false);
+        // The digest pass reads the file first, so the read error ends the
+        // attempt before any request is made.
+        expect(send.called).toBe(false);
       }
       finally {
         process.off('uncaughtException', uncaught);

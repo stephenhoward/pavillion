@@ -152,10 +152,12 @@ describe('Docker Configuration', () => {
       }
     });
 
-    it('should pass AWS_REQUEST_CHECKSUM_CALCULATION to the worker service', () => {
+    it('should not pass AWS_REQUEST_CHECKSUM_CALCULATION to the worker service, since the client pins it', () => {
       const env = serviceEnvironment('worker');
 
-      expect(env).toContain('AWS_REQUEST_CHECKSUM_CALCULATION=${AWS_REQUEST_CHECKSUM_CALCULATION:-}');
+      // Guard against passing because the list failed to load.
+      expect(env.length).toBeGreaterThan(0);
+      expect(env.filter((entry) => entry.startsWith('AWS_REQUEST_CHECKSUM_CALCULATION'))).toEqual([]);
     });
 
     it('should pass no BACKUP_S3_* variable to the app service', () => {
