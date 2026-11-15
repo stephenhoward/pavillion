@@ -345,9 +345,10 @@ export default class CalendarService {
    * Assign categories to multiple events in bulk
    * @param eventIds Array of event IDs to assign categories to
    * @param categoryIds Array of category IDs to assign
+   * @param calendarId The calendar being managed (needed for reposted events)
    * @returns Promise<CalendarEvent[]> Array of updated events with their categories
    */
-  async bulkAssignCategories(eventIds: string[], categoryIds: string[]): Promise<CalendarEvent[]> {
+  async bulkAssignCategories(eventIds: string[], categoryIds: string[], calendarId?: string): Promise<CalendarEvent[]> {
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
       throw new EmptyValueError('eventIds must be a non-empty array');
     }
@@ -360,6 +361,7 @@ export default class CalendarService {
       const response = await axios.post('/api/v1/events/bulk-assign-categories', {
         eventIds,
         categoryIds,
+        ...(calendarId ? { calendarId } : {}),
       });
 
       return response.data.map((eventData: Record<string, any>) => CalendarEvent.fromObject(eventData));

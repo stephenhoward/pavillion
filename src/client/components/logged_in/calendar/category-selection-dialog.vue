@@ -106,11 +106,12 @@ const handleAssignCategories = async () => {
     const updatedEvents = await calendarService.bulkAssignCategories(
       props.selectedEventIds,
       selectedCategoryIds.value,
+      props.calendarId,
     );
 
     // Update the event store with updated events
     updatedEvents.forEach(event => {
-      eventStore.updateEvent(event.calendarId, event);
+      eventStore.updateEvent(props.calendarId, event);
     });
 
     emit('assign-complete', {

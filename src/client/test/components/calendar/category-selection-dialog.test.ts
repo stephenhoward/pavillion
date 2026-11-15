@@ -134,8 +134,24 @@ describe('CategorySelectionDialog', () => {
     await assign!.trigger('click');
     await vi.waitFor(() => expect(mockBulkAssign).toHaveBeenCalled());
 
-    expect(mockBulkAssign).toHaveBeenCalledWith(['e1', 'e2', 'e3'], ['B']);
+    expect(mockBulkAssign).toHaveBeenCalledWith(['e1', 'e2', 'e3'], ['B'], 'calendar-123');
     expect(wrapper!.emitted('assign-complete')![0][0]).toEqual({ eventCount: 3, categoryCount: 1 });
+  });
+
+  it('stores updated reposts under the managed calendar, not the origin calendar', async () => {
+    await mountDialog(seeded());
+    const repost = makeEvent('e1', [categoryA, categoryB]);
+    repost.calendarId = 'origin-calendar';
+    mockBulkAssign.mockResolvedValue([repost]);
+
+    await chip('B').trigger('click');
+    const assign = wrapper!.findAll('button').find(b => b.text() === i18next.t('calendars:bulk_operations.assign_categories'));
+    await assign!.trigger('click');
+    await vi.waitFor(() => expect(mockBulkAssign).toHaveBeenCalled());
+
+    const store = useEventStore(pinia);
+    await vi.waitFor(() => expect(store.events['calendar-123'].some(e => e.id === 'e1')).toBe(true));
+    expect(store.events['origin-calendar']).toBeUndefined();
   });
 
   it('announces a category on every event as checked and disabled', async () => {
