@@ -330,7 +330,7 @@ describe('EventService.deleteEvent', () => {
     sandbox.stub(CalendarMemberEntity, 'findOne').resolves(mockRemoteMembership as any);
 
     // Stub the private deleteRemoteEventViaActivityPub method
-    const deleteRemoteStub = sandbox.stub(eventService as any, 'deleteRemoteEventViaActivityPub').resolves();
+    const deleteRemoteStub = sandbox.stub(eventService as unknown as { deleteRemoteEventViaActivityPub: EventService['deleteRemoteEventViaActivityPub'] }, 'deleteRemoteEventViaActivityPub').resolves();
 
     // Call deleteEvent with calendarId (the remote calendar's UUID)
     await eventService.deleteEvent(account, eventId, calendarId);

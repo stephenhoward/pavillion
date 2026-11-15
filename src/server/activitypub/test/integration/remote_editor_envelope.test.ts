@@ -18,6 +18,13 @@ import { MediaEntity } from '@/server/media/entity/media';
 import { IMAGE_ALT_MAX_LENGTH } from '@/server/calendar/service/image_alt';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type InboxInternals = {
+  isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'];
+  isPersonActorUri: ProcessInboxService['isPersonActorUri'];
+};
+const inboxInternals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+
 /**
  * Integration tests for the remote-editor envelope (`object.eventParams` on a
  * Person-actor Create or Update).
@@ -80,8 +87,8 @@ describe('Remote-editor envelope — inbound sanitization (integration)', () => 
   });
 
   function asAuthorizedEditor() {
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
   }
 
   /** Person-actor Create carrying `envelope`; returns the stored event's id. */

@@ -21,6 +21,13 @@ import db from '@/server/common/entity/db';
 import { InvalidOccurrenceDateError } from '@/common/exceptions/calendar';
 import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type EventInstanceInternals = {
+  assertDateMatchesOccurrence: EventInstanceService['assertDateMatchesOccurrence'];
+  fetchRemoteSourceActorMap: EventInstanceService['fetchRemoteSourceActorMap'];
+};
+const eventInstanceInternals = (s: EventInstanceService) => s as unknown as EventInstanceInternals;
+
 /**
  * A configuration interface whose `eventInstanceMonths` setting reads as
  * `value`; `'throw'` makes the lookup fail.
@@ -1727,7 +1734,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     // getEventInstanceWithDetails tests elsewhere; here we want to exercise
     // only the find-or-materialize branching logic.
     sandbox.stub(service['categoryService'], 'getEventCategories').resolves([]);
-    sandbox.stub(service as any, 'fetchRemoteSourceActorMap').resolves(new Map());
+    sandbox.stub(eventInstanceInternals(service), 'fetchRemoteSourceActorMap').resolves(new Map());
   });
 
   afterEach(() => {
@@ -1786,7 +1793,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     const eventEntity = buildEventWithWeeklyMondaySchedule();
     const cached = buildCachedInstanceEntity(eventEntity, MATCHING_START);
     sandbox.stub(EventInstanceEntity, 'findOne').resolves(cached);
-    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+    const assertStub = sandbox.stub(eventInstanceInternals(service), 'assertDateMatchesOccurrence')
       .throws(new Error('RRule should not be called on cache hit'));
 
     const result = await service.findOrMaterializeInstanceWithDetails(EVENT_ID, MATCHING_START);
@@ -1882,7 +1889,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     );
     sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
     sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
-    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+    const assertStub = sandbox.stub(eventInstanceInternals(service), 'assertDateMatchesOccurrence')
       .throws(new Error('RRule should not be called when pre-flight guard triggers'));
     const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();
 
@@ -1903,7 +1910,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     );
     sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
     sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
-    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+    const assertStub = sandbox.stub(eventInstanceInternals(service), 'assertDateMatchesOccurrence')
       .throws(new Error('RRule should not be called past horizon'));
 
     const justOutside = DateTime.utc().plus({ months: 30 }); // > 24 months
@@ -1927,7 +1934,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     sandbox.stub(EventInstanceEntity, 'findOne').resolves(null);
     // Rejecting the date keeps the probe from materialising; reaching the
     // check at all is what proves the guard let the probe through.
-    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+    const assertStub = sandbox.stub(eventInstanceInternals(service), 'assertDateMatchesOccurrence')
       .throws(new InvalidOccurrenceDateError());
 
     await service.findOrMaterializeInstanceWithDetails(EVENT_ID, DateTime.utc().plus({ months: outside }));
@@ -1945,7 +1952,7 @@ describe('EventInstanceService.findOrMaterializeInstanceWithDetails', () => {
     );
     sandbox.stub(EventEntity, 'findByPk').resolves(eventEntity);
     // Stub assertDateMatchesOccurrence so we can prove it WAS reached.
-    const assertStub = sandbox.stub(service as any, 'assertDateMatchesOccurrence')
+    const assertStub = sandbox.stub(eventInstanceInternals(service), 'assertDateMatchesOccurrence')
       .resolves(undefined);
     sandbox.stub(EventInstanceEntity, 'count').resolves(0);
     const saveStub = sandbox.stub(EventInstanceEntity.prototype, 'save').resolves();

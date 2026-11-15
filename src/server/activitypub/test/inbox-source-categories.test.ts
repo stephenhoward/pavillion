@@ -25,6 +25,13 @@ import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type InboxInternals = {
+  checkAndPerformAutoRepost: ProcessInboxService['checkAndPerformAutoRepost'];
+  isPersonActorUri: ProcessInboxService['isPersonActorUri'];
+};
+const inboxInternals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+
 describe('ProcessInboxService - source_categories parsing', () => {
   let sandbox: sinon.SinonSandbox;
   let inboxService: ProcessInboxService;
@@ -47,10 +54,10 @@ describe('ProcessInboxService - source_categories parsing', () => {
     testCalendar.content('en').title = 'Test Calendar';
 
     // Stub isPersonActorUri to return false (calendar actor)
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
     // Stub actorOwnsObject to avoid remote HTTP calls
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+    sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
 
     // Stub addRemoteEvent to avoid database operations
     sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({
@@ -59,7 +66,7 @@ describe('ProcessInboxService - source_categories parsing', () => {
     } as any);
 
     // Stub checkAndPerformAutoRepost to avoid follow-up processing
-    sandbox.stub(inboxService as any, 'checkAndPerformAutoRepost').resolves();
+    sandbox.stub(inboxInternals(inboxService), 'checkAndPerformAutoRepost').resolves();
 
   });
 
