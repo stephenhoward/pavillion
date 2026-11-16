@@ -6,7 +6,7 @@ description: Monitor a Pavillion instance honestly — the metrics endpoint an e
 
 > Status: in progress. The metrics section below is complete. The healthcheck, autoheal and log-management topics listed under [Still to come](#still-to-come) are not written yet.
 
-Pavillion ships with enough self-healing to recover from most short-lived problems on its own — Docker healthchecks plus the `autoheal` sidecar that restarts unhealthy containers. What it doesn't ship is alerting. If your instance is down at 3am, nothing is going to wake you up unless you wire that part yourself. However, Pavillion does give you is something you can wire to: a metrics endpoint that reports backup, disk, database and job-queue health in the format most monitoring tools already read. This guide can help you add monitoring so youfind out the backup disk is filling up from a graph than from a failed backup.
+Pavillion ships with enough self-healing to recover from most short-lived problems on its own — Docker healthchecks plus the `autoheal` sidecar that restarts unhealthy containers. What it doesn't ship is alerting. If your instance is down at 3am, nothing is going to wake you up unless you wire that part yourself. What Pavillion does give you is something you can wire to: a metrics endpoint that reports backup, disk, database and job-queue health in the format most monitoring tools already read. This guide can help you add monitoring, so you find out the backup disk is filling up before your backups fail.
 
 ## Metrics for an external monitor
 

@@ -8,10 +8,10 @@ This guide takes you from a clean Linux server to a Pavillion instance that's re
 
 ## What you need before you start
 
-- **A domain you control.** A subdomain is fine — `events.example.org` works. The domain is your instance's identity on the federated network; once events have flown, you can't change it without breaking every existing federation relationship. Pick a domain you'll be comfortable with in five years.
+- **A domain you control.** A subdomain is fine — `events.example.org` works. The domain is your instance's identity on the federated network; once events on your server have reached a peer, you can't change it without breaking every existing federation relationship. Pick a domain you'll be comfortable with in five years.
 - **DNS that already resolves.** Point the domain's A or AAAA record at your server's public IP *before* you run the deploy. The script doesn't check, and federation handshakes won't work if other instances can't reach you at the name you claim.
-- **A Linux server with at least 1 GB of RAM.** If it's a freshly-imaged Debian or Ubuntu box, `bin/provision.sh` will install Docker, set up a deploy user, and harden SSH for you — see the [fresh server path](#fresh-server-use-the-provisioning-script) below. If you're putting Pavillion on a server you already run, you'll want Docker and Docker Compose installed and working (`docker compose version` should print a version). Podman with the compose plugin works too if your shop doesn't run Docker.
-- **A decision about TLS.** Either (a) you'll use the bundled standalone Caddy that ships with Pavillion's Compose file and let it get a Let's Encrypt cert automatically, or (b) you'll put your own http proxy (nginx, Caddy, etc) in front. The bundled option is simpler and right for a dedicated Pavillion server. Bring-your-own is right when your server hosts other apps and already has a proxy. The Quickstart assumes you'll used the bundled Caddy — if you're bringing your own, jump to [Reverse proxy and TLS](./reverse-proxy-and-tls) for the config snippets before continuing.
+- **A Linux server with at least 1 GB of RAM.** If it's a freshly-imaged Debian or Ubuntu box, `bin/provision.sh` will install Docker, set up a deploy user, and harden SSH for you — see the [fresh server path](#fresh-server-use-the-provisioning-script) below. If you're putting Pavillion on a server you already run, you'll want Docker and Docker Compose installed and working (`docker compose version` should print a version). Podman with the compose plugin works too if your organization doesn't run Docker.
+- **A decision about TLS.** Either (a) you'll use the bundled standalone Caddy that ships with Pavillion's Compose file and let it get a Let's Encrypt cert automatically, or (b) you'll put your own http proxy (nginx, Caddy, etc) in front. The bundled option is simpler and right for a dedicated Pavillion server. Bring-your-own is right when your server hosts other apps and already has a proxy. The Quickstart assumes you'll use the bundled Caddy — if you're bringing your own, jump to [Reverse proxy and TLS](./reverse-proxy-and-tls) for the config snippets before continuing.
 - **Ports 80 and 443 open** on your server's firewall to the public internet. Caddy needs both — 80 for ACME HTTP-01 challenges, 443 for the actual traffic.
 
 ::: tip <Lightbulb /> A note on DNS propagation.
@@ -66,7 +66,7 @@ Either path writes the same files: a `.env` file (your secrets, mode 600), a `se
 
 ## Create your first admin account
 
-The first time a browser hits your instance, it gets redirected to `/setup`. This page only exists when the database has no admin accounts yet — once you create the first one, the route returns 404 forever.
+The first time a browser hits your instance, it gets redirected to `/setup`. This page only exists when the database has no admin accounts yet.
 
 The setup page opens on a language step: pick your instance's default language and click <Btn>Continue</Btn>. The form that follows asks for:
 
