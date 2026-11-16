@@ -11,6 +11,10 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 import { EventEmitter } from 'events';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type ProviderConnectionInternals = { getAdapter: ProviderConnectionService['getAdapter']; };
+const providerConnectionInternals = (s: ProviderConnectionService) => s as unknown as ProviderConnectionInternals;
+
 describe('ProviderConnectionService', () => {
   let sandbox: sinon.SinonSandbox;
   let service: ProviderConnectionService;
@@ -381,7 +385,7 @@ describe('ProviderConnectionService', () => {
       };
 
       // Stub adapter
-      sandbox.stub(service as any, 'getAdapter').returns(mockPayPalAdapter);
+      sandbox.stub(providerConnectionInternals(service), 'getAdapter').returns(mockPayPalAdapter);
       mockPayPalAdapter.validateCredentials.withArgs(credentials).resolves(true);
 
       // Stub entity
@@ -413,7 +417,7 @@ describe('ProviderConnectionService', () => {
         environment: 'sandbox',
       };
 
-      sandbox.stub(service as any, 'getAdapter').returns(mockPayPalAdapter);
+      sandbox.stub(providerConnectionInternals(service), 'getAdapter').returns(mockPayPalAdapter);
       mockPayPalAdapter.validateCredentials.withArgs(credentials).resolves(false);
 
       await expect(service.configurePayPal(credentials, adminUser)).rejects.toThrow('Invalid PayPal credentials');
@@ -505,7 +509,7 @@ describe('ProviderConnectionService', () => {
       findAllStub.resolves(mockPlans as any);
 
       // Stub adapter
-      sandbox.stub(service as any, 'getAdapter').returns(mockStripeAdapter);
+      sandbox.stub(providerConnectionInternals(service), 'getAdapter').returns(mockStripeAdapter);
 
       // Stub cancel funding plan via service
       const cancelStub = sandbox.stub();

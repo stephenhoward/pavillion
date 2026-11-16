@@ -123,7 +123,7 @@ describe('readOutbox and undone reposts', () => {
       remoteEvent.addContent(new CalendarEventContent('en', 'Reposted Event', ''));
 
       const inbox = new ProcessInboxService(eventBus, calendarInterface);
-      sinon.stub(inbox as any, 'isPersonActorUri').resolves(false);
+      sinon.stub(inbox as unknown as { isPersonActorUri: ProcessInboxService['isPersonActorUri'] }, 'isPersonActorUri').resolves(false);
       sinon.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
       sinon.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 

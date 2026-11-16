@@ -53,6 +53,14 @@ vi.mock('@/server/activitypub/helper/rejection-logger', () => ({
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 import { logActivityRejection } from '@/server/activitypub/helper/rejection-logger';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type InboxInternals = {
+  checkAndPerformAutoRepost: ProcessInboxService['checkAndPerformAutoRepost'];
+  isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'];
+  isPersonActorUri: ProcessInboxService['isPersonActorUri'];
+};
+const inboxInternals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+
 
 describe('processInboxMessage', () => {
   let service: ProcessInboxService;
@@ -1013,7 +1021,7 @@ describe('processCreateEvent existing-object auto-repost trust gate', () => {
         attributed_to: SOURCE_ACTOR_URL,
       }),
     );
-    const autoRepostSpy = sandbox.stub(service as any, 'checkAndPerformAutoRepost').resolves();
+    const autoRepostSpy = sandbox.stub(inboxInternals(service), 'checkAndPerformAutoRepost').resolves();
 
     const activityMessage = createMockCreateActivity(SOURCE_ACTOR_URL, {
       type: 'Event',
@@ -1040,7 +1048,7 @@ describe('processCreateEvent existing-object auto-repost trust gate', () => {
         attributed_to: SOURCE_ACTOR_URL,
       }),
     );
-    const autoRepostSpy = sandbox.stub(service as any, 'checkAndPerformAutoRepost').resolves();
+    const autoRepostSpy = sandbox.stub(inboxInternals(service), 'checkAndPerformAutoRepost').resolves();
 
     const activityMessage = createMockCreateActivity(SOURCE_ACTOR_URL, {
       type: 'Event',
@@ -1396,8 +1404,8 @@ describe('Structured Logging for Activity Rejections', () => {
   describe('Unauthorized Create Rejection', () => {
     it('should log before throwing exception for unauthorized Create', async () => {
       // Mock to indicate this is a Person actor
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to simulate no existing event
       sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
@@ -1430,7 +1438,7 @@ describe('Structured Logging for Activity Rejections', () => {
       const mockFetchRemoteObject = vi.mocked(fetchRemoteObject);
 
       // Mock as calendar actor (not person)
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(false);
 
       // Stub EventObjectEntity.findOne to simulate no existing event
       sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
@@ -1466,8 +1474,8 @@ describe('Structured Logging for Activity Rejections', () => {
 
   describe('Unauthorized Update Rejection', () => {
     it('should log before throwing exception for unauthorized Update', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to return a mock event object
       const mockEventId = 'mock-event-id';
@@ -1531,8 +1539,8 @@ describe('Structured Logging for Activity Rejections', () => {
     }
 
     it('rejects an editor Update for an event owned by another calendar and writes nothing', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(true);
       stubEventLookup(OTHER_CALENDAR_ID);
       const updateRemoteEvent = sandbox.stub(service.calendarInterface, 'updateRemoteEvent');
 
@@ -1549,8 +1557,8 @@ describe('Structured Logging for Activity Rejections', () => {
     });
 
     it('applies an editor Update for an event owned by the receiving calendar', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(true);
       stubEventLookup(TEST_CALENDAR_ID);
       const updateRemoteEvent = sandbox.stub(service.calendarInterface, 'updateRemoteEvent')
         .resolves({ id: TARGET_EVENT_ID, calendarId: TEST_CALENDAR_ID } as any);
@@ -1569,8 +1577,8 @@ describe('Structured Logging for Activity Rejections', () => {
 
   describe('Unauthorized Delete Rejection', () => {
     it('should log before throwing exception for unauthorized Delete', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to return a mock event object
       const mockEventId = 'mock-event-id';
@@ -1626,8 +1634,8 @@ describe('Structured Logging for Activity Rejections', () => {
     }
 
     it('rejects an editor Delete for an event owned by another calendar and deletes nothing', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(true);
       stubEventLookup(OTHER_CALENDAR_ID);
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       const deleteRemoteEvent = sandbox.stub(service.calendarInterface, 'deleteRemoteEvent').resolves();
@@ -1645,8 +1653,8 @@ describe('Structured Logging for Activity Rejections', () => {
     });
 
     it('applies an editor Delete for an event owned by the receiving calendar', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(true);
       stubEventLookup(TEST_CALENDAR_ID);
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       const deleteRemoteEvent = sandbox.stub(service.calendarInterface, 'deleteRemoteEvent').resolves();
@@ -1733,8 +1741,8 @@ describe('Structured Logging for Activity Rejections', () => {
 
   describe('Exception Behavior Verification', () => {
     it('should still throw exception after logging for Create', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to simulate no existing event
       sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
@@ -1751,8 +1759,8 @@ describe('Structured Logging for Activity Rejections', () => {
     });
 
     it('should still throw exception after logging for Update', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to return a mock event object
       const mockEventId = 'mock-event-id';
@@ -1776,8 +1784,8 @@ describe('Structured Logging for Activity Rejections', () => {
     });
 
     it('should still throw exception after logging for Delete', async () => {
-      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+      sandbox.stub(inboxInternals(service), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(service), 'isAuthorizedRemoteEditor').resolves(false);
 
       // Stub EventObjectEntity.findOne to return a mock event object
       const mockEventId = 'mock-event-id';

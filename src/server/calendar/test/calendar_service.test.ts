@@ -17,6 +17,10 @@ import { MediaNotFoundError } from '@/common/exceptions/media';
 import { MediaEntity } from '@/server/media/entity/media';
 import db from '@/server/common/entity/db';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type CalendarInternals = { sendEditorNotificationEmail: CalendarService['sendEditorNotificationEmail']; };
+const calendarInternals = (s: CalendarService) => s as unknown as CalendarInternals;
+
 describe('isValidUrlName', () => {
 
   let sandbox = sinon.createSandbox();
@@ -752,7 +756,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
       const memberCreateStub = sandbox.stub(CalendarMemberEntity, 'create');
-      const mockSendEmailStub = sandbox.stub(service as any, 'sendEditorNotificationEmail');
+      const mockSendEmailStub = sandbox.stub(calendarInternals(service), 'sendEditorNotificationEmail');
 
       getCalendarStub.resolves(calendar);
       isOwnerStub.resolves(true);
@@ -778,7 +782,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
     it('should succeed for admin even if not owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const memberCreateStub = sandbox.stub(CalendarMemberEntity, 'create');
-      const mockSendEmailStub = sandbox.stub(service as any, 'sendEditorNotificationEmail');
+      const mockSendEmailStub = sandbox.stub(calendarInternals(service), 'sendEditorNotificationEmail');
 
       getCalendarStub.resolves(calendar);
       memberCreateStub.resolves({} as any);
@@ -864,7 +868,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
     it('should return active editors and pending invitations for calendar owner', async () => {
       // Mock the calendar and permission checks
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
-      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const canViewEditorsStub = sandbox.stub(service, 'canViewCalendarEditors');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
@@ -904,7 +908,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
     it('should throw CalendarEditorPermissionError for non-owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
-      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const canViewEditorsStub = sandbox.stub(service, 'canViewCalendarEditors');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(false);
@@ -917,7 +921,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
   describe('listCalendarEditorsWithInvitations', () => {
     it('should call listInvitations with undefined inviterId and defined calendarId', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
-      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const canViewEditorsStub = sandbox.stub(service, 'canViewCalendarEditors');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
@@ -938,7 +942,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
     it('should return both active editors and pending invitations', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
-      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const canViewEditorsStub = sandbox.stub(service, 'canViewCalendarEditors');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
@@ -992,7 +996,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
     it('should throw CalendarEditorPermissionError for non-owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
-      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const canViewEditorsStub = sandbox.stub(service, 'canViewCalendarEditors');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(false);
@@ -1292,7 +1296,7 @@ describe('updateCalendarSettings - defaultEventImageId', () => {
     sandbox.stub(service, 'getCalendar').resolves(cal);
 
     // Stub isCalendarOwner (private, but accessed via prototype)
-    sandbox.stub(service as any, 'isCalendarOwner').resolves(true);
+    sandbox.stub(service, 'isCalendarOwner').resolves(true);
   });
 
   afterEach(() => {
@@ -1383,7 +1387,7 @@ describe('updateCalendarSettings - defaultEventImageId', () => {
 
     const cal = new Calendar(calendarId, 'test-calendar');
     sandbox.stub(serviceWithBus, 'getCalendar').resolves(cal);
-    sandbox.stub(serviceWithBus as any, 'isCalendarOwner').resolves(true);
+    sandbox.stub(serviceWithBus, 'isCalendarOwner').resolves(true);
 
     const calendarEntityStub = {
       update: sandbox.stub().resolves(),
@@ -1413,7 +1417,7 @@ describe('updateCalendarSettings - defaultEventImageId', () => {
 
     const cal = new Calendar(calendarId, 'test-calendar');
     sandbox.stub(serviceWithBus, 'getCalendar').resolves(cal);
-    sandbox.stub(serviceWithBus as any, 'isCalendarOwner').resolves(true);
+    sandbox.stub(serviceWithBus, 'isCalendarOwner').resolves(true);
 
     const calendarEntityStub = {
       update: sandbox.stub().resolves(),

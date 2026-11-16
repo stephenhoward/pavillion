@@ -75,6 +75,13 @@ import CalendarInterface from '@/server/calendar/interface';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 import config from 'config';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type InboxInternals = {
+  checkAndPerformAutoRepost: ProcessInboxService['checkAndPerformAutoRepost'];
+  dispatchByType: ProcessInboxService['dispatchByType'];
+};
+const inboxInternals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+
 // Local dispatch refuses an activity whose id is not on this instance's
 // domain, so every fixture actor (and the activity ids derived from it) lives
 // on the configured domain.
@@ -256,7 +263,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     // Spy on private checkAndPerformAutoRepost via bracket-notation pattern.
     // Kept as secondary verification that the private branch did not execute;
     // the primary contract assertion below checks the observable side effect.
-    const checkSpy = sandbox.spy(inboxService as any, 'checkAndPerformAutoRepost');
+    const checkSpy = sandbox.spy(inboxInternals(inboxService), 'checkAndPerformAutoRepost');
 
     // Act
     await inboxService.handleLocalActivityDispatch(testCalendar, announceActivity);
@@ -552,7 +559,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
     // activity reaching this method has an id on our domain.
     const foreignActor = 'https://foreign.example.com/calendars/elsewhere';
     const announce = new AnnounceActivity(foreignActor, `${foreignActor}/events/foreign`);
-    const dispatchByType = sandbox.spy(inboxService as any, 'dispatchByType');
+    const dispatchByType = sandbox.spy(inboxInternals(inboxService), 'dispatchByType');
 
     await expect(inboxService.handleLocalActivityDispatch(testCalendar, announce))
       .rejects.toThrow(ActivityIdOriginMismatchError);
@@ -591,7 +598,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       const { actorUri, eventApId } = await createSourceWithEvent('source-retry');
       const announce = new AnnounceActivity(actorUri, eventApId);
 
-      const dispatchByType = sandbox.stub(inboxService as any, 'dispatchByType');
+      const dispatchByType = sandbox.stub(inboxInternals(inboxService), 'dispatchByType');
       dispatchByType.onFirstCall().rejects(new Error('transient failure'));
       dispatchByType.callThrough();
 
@@ -619,7 +626,7 @@ describe('ProcessInboxService.handleLocalActivityDispatch (integration)', () => 
       });
       const announce = new AnnounceActivity(actorUri, eventApId);
 
-      const dispatchByType = sandbox.spy(inboxService as any, 'dispatchByType');
+      const dispatchByType = sandbox.spy(inboxInternals(inboxService), 'dispatchByType');
 
       await inboxService.handleLocalActivityDispatch(testCalendar, announce);
       await inboxService.handleLocalActivityDispatch(secondCalendar, announce);

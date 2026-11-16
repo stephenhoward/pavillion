@@ -101,7 +101,7 @@ describe('Auto-Repost Integration Tests', () => {
       } as any);
 
       // Stub actorOwnsObject to avoid remote fetch
-      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+      sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
 
       // Stub getEventById to avoid real DB lookup: addRemoteEvent is stubbed so no
       // real EventEntity is created, but checkAndPerformAutoRepost now calls
@@ -243,7 +243,7 @@ describe('Auto-Repost Integration Tests', () => {
       } as any);
 
       // Stub actorOwnsObject to avoid remote fetch
-      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+      sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
 
       // Build CreateActivity with proper object structure
       const eventObject = {
@@ -311,10 +311,10 @@ describe('Auto-Repost Integration Tests', () => {
       } as any);
 
       // Stub actorOwnsObject to avoid remote fetch
-      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+      sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
 
       // Stub isAuthorizedRemoteEditor to allow the person actor
-      sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxService as unknown as { isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'] }, 'isAuthorizedRemoteEditor').resolves(true);
 
       // Build CreateActivity from Person actor with proper object structure
       const eventObject = {
@@ -441,7 +441,7 @@ describe('Auto-Repost Integration Tests', () => {
         name: 'Initial Event',
       });
 
-      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+      sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
       await inboxService['processCreateEvent'](calendarA, initialActivity);
 
       // Get the created EventObjectEntity to find its event_id

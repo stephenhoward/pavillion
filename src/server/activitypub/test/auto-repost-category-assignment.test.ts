@@ -75,10 +75,10 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
     sourceCategories: Array<{ id: string }> | null,
   ) {
     // Stub isPersonActorUri → false (calendar actor)
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxService as unknown as { isPersonActorUri: ProcessInboxService['isPersonActorUri'] }, 'isPersonActorUri').resolves(false);
 
     // Stub actorOwnsObject → true
-    sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
+    sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
 
     // Stub calendarInterface.addRemoteEvent
     sandbox.stub(calendarInterface, 'addRemoteEvent').resolves({

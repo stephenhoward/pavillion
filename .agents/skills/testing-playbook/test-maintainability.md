@@ -101,6 +101,37 @@ Keep factories in the same test file unless shared across multiple test files. S
 - Each test restores its own stubs (sandbox.restore in afterEach)
 - Integration tests that touch the database should clean up after themselves
 
+### Stubbing Private Methods
+
+`sandbox.stub(x as any, 'name')` erases sinon's `key extends keyof typeof obj` constraint, so renaming the method fails only when a test runs. ESLint bans an `as any` receiver on `stub` and `spy`.
+
+```typescript
+// BAD: the string is unchecked
+sandbox.stub(service as any, 'fetchRemoteSourceActorMap').resolves(new Map());
+
+// GOOD: a narrow cast keeps the name checked against the real class
+sandbox.stub(
+  service as unknown as { fetchRemoteSourceActorMap: EventInstanceService['fetchRemoteSourceActorMap'] },
+  'fetchRemoteSourceActorMap',
+).resolves(new Map());
+```
+
+- Public method: no cast at all, `sandbox.stub(service, 'canViewCalendarEditors')`.
+- A file that stubs the same private members repeatedly declares one file-local alias and reuses it:
+
+  ```typescript
+  type InboxInternals = {
+    isPersonActorUri: ProcessInboxService['isPersonActorUri'];
+    isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'];
+  };
+  const internals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+  sandbox.stub(internals(inboxService), 'isPersonActorUri');
+  ```
+
+- If a typed `.returns()` / `.resolves()` value no longer fits, cast the value, never the receiver.
+- There is no shared generic helper: `keyof` excludes private members and a mapped type over them does not compile, so the inline cast or file-local alias is the only form.
+- The name check fires only under `npx tsc --noEmit -p . | grep <file>`; Vitest transpiles without type checking, and no CI step runs `tsc` yet.
+
 ## Anti-Patterns
 
 ### God Test Files

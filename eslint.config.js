@@ -61,6 +61,13 @@ export default [
         varsIgnorePattern: '^_',
         caughtErrorsIgnorePattern: '^_',
       }],
+      // `stub(x as any, 'name')` erases sinon's keyof check, so a renamed method
+      // only fails at runtime. See "Stubbing Private Methods" in
+      // .agents/skills/testing-playbook/test-maintainability.md.
+      'no-restricted-syntax': ['error', {
+        selector: 'CallExpression[callee.property.name=/^(stub|spy)$/] > TSAsExpression.arguments:first-child > TSAnyKeyword',
+        message: 'Do not cast a stub/spy receiver to any: it hides renames from the compiler. Drop the cast for public methods or use a narrow cast; see "Stubbing Private Methods" in .agents/skills/testing-playbook/test-maintainability.md.',
+      }],
     },
   },
   // Vue config

@@ -20,6 +20,13 @@ import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/common/test/helpers/database';
 
+// Private members these tests stub; a rename fails under `tsc` instead of at runtime.
+type InboxInternals = {
+  isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'];
+  isPersonActorUri: ProcessInboxService['isPersonActorUri'];
+};
+const inboxInternals = (s: ProcessInboxService) => s as unknown as InboxInternals;
+
 describe('ProcessInboxService - Follow Activity Processing', () => {
   let sandbox: sinon.SinonSandbox;
   let inboxService: ProcessInboxService;
@@ -1419,7 +1426,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedEventObject(eventId, eventApId);
     await seedShare(eventId);
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
 
@@ -1452,7 +1459,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedEventObject(eventId, eventApId);
     // No SharedEventEntity row.
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId));
 
@@ -1476,7 +1483,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedEventObject(eventId, eventApId);
     await seedShare(eventId);
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(null);
 
@@ -1502,7 +1509,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedShare(eventId);
 
     const existingEvent = buildReconstitutedEvent(eventId);
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
@@ -1528,7 +1535,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
 
   describe('origin delete of a re-shared event retracts the Announce', () => {
     async function runDelete(eventId: string, eventApId: string) {
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
       sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
       sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
       const enqueued: any[] = [];
@@ -1625,7 +1632,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     // Now run the Delete(Event) for the same (calendar, event). The cascade
     // already created the SharedEventEntity row, so this is a true re-shared
     // event delete.
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
     const deleteEnqueued: any[] = [];
@@ -1650,7 +1657,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedEventObject(eventId, eventApId);
     // No SharedEventEntity row.
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
@@ -1675,7 +1682,7 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     await seedEventObject(eventId, eventApId);
     await seedShare(eventId);
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
@@ -1710,8 +1717,8 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     });
     // No SharedEventEntity row — locally-owned events are never re-shared.
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
     sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
 
@@ -1745,8 +1752,8 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     // Deliberately NO EventObjectEntity row → apObject stays null on the
     // Person-actor path after both the ap_id and event_id re-lookups miss.
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
     // Event resolves only via the eventParams.id local UUID lookup.
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
     const updateRemoteEvent = sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
@@ -1786,8 +1793,8 @@ describe('ProcessInboxService - inbox-originated lifecycle Note cascade (pv-taf2
     });
     // No SharedEventEntity row.
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
     sandbox.stub(calendarInterface, 'getEventById').resolves(buildReconstitutedEvent(eventId, testCalendar.id));
     sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
@@ -1835,7 +1842,7 @@ describe('ProcessInboxService - processDeleteEvent calendar-actor ownership', ()
 
     sandbox.stub(console, 'log');
     sandbox.stub(console, 'warn');
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
   });
 
   afterEach(async () => {
@@ -1858,7 +1865,7 @@ describe('ProcessInboxService - processDeleteEvent calendar-actor ownership', ()
     const eventApId = 'https://remote.instance/events/gone';
     const eventId = await seedRemoteCopy(eventApId, sourceActorUri);
     // The origin hard-deleted the object, so a re-fetch can only 404.
-    const ownsObject = sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(false);
+    const ownsObject = sandbox.stub(inboxService, 'actorOwnsObject').resolves(false);
     const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
     await inboxService.processDeleteEvent(testCalendar, new DeleteActivity(sourceActorUri, eventApId));
@@ -1896,7 +1903,7 @@ describe('ProcessInboxService - processDeleteEvent calendar-actor ownership', ()
 
   it('is a no-op for an unknown object IRI and never fetches it', async () => {
     const getEventById = sandbox.stub(calendarInterface, 'getEventById').resolves(null);
-    const ownsObject = sandbox.spy(inboxService as any, 'actorOwnsObject');
+    const ownsObject = sandbox.spy(inboxService, 'actorOwnsObject');
     const deleteRemoteEvent = sandbox.stub(calendarInterface, 'deleteRemoteEvent').resolves();
 
     await inboxService.processDeleteEvent(
@@ -1964,7 +1971,7 @@ describe('ProcessInboxService - processUpdateEvent', () => {
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
 
       // Stub isPersonActorUri to return false (calendar actor)
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
       const updateMessage = UpdateActivity.fromObject({
         type: 'Update',
@@ -1997,7 +2004,7 @@ describe('ProcessInboxService - processUpdateEvent', () => {
 
       const existingEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
       const updatedEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
@@ -2038,8 +2045,8 @@ describe('ProcessInboxService - processUpdateEvent', () => {
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
 
       // This is a Person actor
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-      sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
 
       const updatedEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
@@ -2078,7 +2085,7 @@ describe('ProcessInboxService - processUpdateEvent', () => {
 
       const existingEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
       const updatedEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
@@ -2119,7 +2126,7 @@ describe('ProcessInboxService - processUpdateEvent', () => {
 
       const existingEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
       // updateRemoteEvent returns null
       sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(null);
@@ -2158,7 +2165,7 @@ describe('ProcessInboxService - processUpdateEvent', () => {
 
       const existingEvent = new CalendarEvent(eventId, null);
       sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
-      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+      sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
       const emittedEvents: any[] = [];
       eventBus.on('eventUpdated', (payload) => emittedEvents.push(payload));
@@ -2382,7 +2389,7 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
 
   it('processCreateEvent skips Note-typed objects without creating an EventObjectEntity or calling addRemoteEvent', async () => {
     const addRemoteEventSpy = sandbox.stub(calendarInterface, 'addRemoteEvent');
-    const ownsObjectSpy = sandbox.stub(inboxService as any, 'actorOwnsObject');
+    const ownsObjectSpy = sandbox.stub(inboxService, 'actorOwnsObject');
 
     const createNote = new CreateActivity(remoteActorUri, {
       id: noteApId,
@@ -2417,7 +2424,7 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
       attributed_to: remoteActorUri,
     });
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
     const updateSpy = sandbox.stub(calendarInterface, 'updateRemoteEvent');
 
@@ -2451,7 +2458,7 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
       attributed_to: remoteActorUri,
     });
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
     // The seeded attributed_to matches the actor, so ownership verification
     // would pass: only the Note IRI guard can stop the delete.
 
@@ -2471,7 +2478,7 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
       attributed_to: remoteActorUri,
     });
     sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(phantomEventId, null));
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
 
     const deleteEventSpy = sandbox.stub(calendarInterface, 'deleteRemoteEvent');
 
@@ -2555,8 +2562,8 @@ describe('ProcessInboxService - remote-editor envelope', () => {
       languages: 'en',
     });
 
-    sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
-    sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(true);
+    sandbox.stub(inboxInternals(inboxService), 'isAuthorizedRemoteEditor').resolves(true);
   });
 
   afterEach(async () => {
