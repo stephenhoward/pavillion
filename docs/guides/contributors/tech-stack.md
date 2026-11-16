@@ -4,7 +4,7 @@ description: What Pavillion is built on — the framework, database, frontend, t
 
 # Tech stack
 
-This guide covers what Pavillion is built on. It names each framework or tool by area and, where the choice isn't obvious, why it was chosen. For exact versions and the full dependency list, read `package.json`. 
+This guide covers what Pavillion is built on. It names each framework or tool by area and, where the choice isn't obvious, why it was chosen. For exact versions and the full dependency list, read `package.json`.
 
 The whole project is TypeScript, front to back, written as ES modules. One language across server, browser and shared code is what lets the models in `src/common/` run on both sides (see [Architecture](./architecture)).
 

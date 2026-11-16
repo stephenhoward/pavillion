@@ -4,7 +4,7 @@ description: Guides for running a Pavillion server — installation, day-two ope
 
 # For instance administrators
 
-This guide is for the people who run a Pavillion server for other people put their calendars on — sysadmins at nonprofits and co-ops, technically inclined organizers running a neighborhood instance, IT staff at regional councils — anyone whose job it is to keep a Pavillion server up and to make the call about who gets a calendar on it.
+This guide is for the people who run a Pavillion server for other people to put their calendars on — sysadmins at nonprofits and co-ops, technically inclined organizers running a neighborhood instance, IT staff at regional councils — anyone whose job it is to keep a Pavillion server up and to make the call about who gets a calendar on it.
 
 Your role has two halves:
 
