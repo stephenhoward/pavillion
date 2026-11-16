@@ -237,11 +237,12 @@ describe('Worker backup-job retry-storm alerting', () => {
       const [manualService, dailyService] = createBackupStub.thisValues;
       expect(manualService).toBe(dailyService);
       expect((manualService as any).offsiteCopy).toBe(fakeCopier);
-      // A copy result never stops retention: it runs after each backup.
+      // With a copier that resolves false, retention still runs after each createBackup that resolves.
       expect(enforceRetentionStub.callCount).toBe(2);
     });
 
-    it('builds no copier and logs no startup line when the bucket is unset', async () => {
+    it('builds no copier and logs no startup line when no destination is configured', async () => {
+      sandbox.stub(OffsiteCopyService, 'fromConfig').returns(null);
       const logStartup = sandbox.spy(OffsiteCopyService.prototype, 'logStartup');
       createBackupStub.resolves(metadata);
 

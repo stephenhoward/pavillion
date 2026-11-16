@@ -250,6 +250,17 @@ describe('BackupService', () => {
         expect(fs.rmSync).not.toHaveBeenCalled();
       });
 
+      it('should resolve the same metadata, keeping the row and the file, when the copier throws', async () => {
+        copy.mockRejectedValue(new Error('logger exploded'));
+
+        const result = await copyingService.createBackup('manual');
+
+        expect(result).toMatchObject({ verified: true, size_bytes: 5000, type: 'manual' });
+        expect(BackupEntity.create).toHaveBeenCalledTimes(1);
+        expect(fs.unlinkSync).not.toHaveBeenCalled();
+        expect(fs.rmSync).not.toHaveBeenCalled();
+      });
+
       it('should not copy when saving the row fails', async () => {
         vi.mocked(BackupEntity.create).mockRejectedValue(new Error('database connection lost'));
 
