@@ -636,6 +636,8 @@ test.describe('axe, further leaves (light)', () => {
     await loginViaUi(page, env.baseURL, MULTI_CALENDAR_USER.email, MULTI_CALENDAR_USER.password);
     // Widget is the one calendar leaf an editor sees.
     await gotoSettings(page, env.baseURL, calendarLeaf(TESTUSER_CALENDAR_URL_NAME, 'widget'));
+    // The view-mode cards are disabled (and styled so) until the widget config loads; axe must scan the live state.
+    await expect(page.locator('.widget-config #colorMode')).toBeEnabled({ timeout: 10000 });
 
     expect(await axeViolations(page, {
       exclude: [KNOWN_COPY_BUTTON_CONTRAST, WIDGET_PREVIEW_FRAME],
