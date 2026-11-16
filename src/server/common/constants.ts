@@ -19,6 +19,19 @@
 export const FEDERATION_HTTP_TIMEOUT_MS = 15000;
 
 /**
+ * Overall deadline for one outbound federation HTTP request (in milliseconds),
+ * from the start of the request to the last byte of the response.
+ *
+ * `FEDERATION_HTTP_TIMEOUT_MS` is an idle timeout: axios's Node adapter resets
+ * it whenever the socket moves, so a peer that sends headers and then trickles
+ * the body one byte at a time never trips it. This is the bound on total time,
+ * passed to axios as an `AbortSignal` by `federationRequestBounds`. Twice the
+ * idle timeout, so a slow but steady peer is not cut off while one that holds
+ * a delivery worker indefinitely is.
+ */
+export const FEDERATION_HTTP_DEADLINE_MS = 30000;
+
+/**
  * HTTP timeout for public key fetching (in milliseconds).
  *
  * Used when fetching public keys for HTTP signature verification.

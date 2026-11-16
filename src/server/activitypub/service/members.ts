@@ -41,6 +41,7 @@ import {
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { ActivityPubCalendarUnfollowedPayload, ActivityPubEventRepostedPayload } from '@/server/activitypub/events/types';
 import { ACTOR_PROFILE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
+import { federationRequestBounds } from '@/server/activitypub/helper/request-bounds';
 
 /**
  * Converts an ActivityPub actor URI to a human-readable calendar@domain format.
@@ -792,7 +793,11 @@ class ActivityPubService {
 
     try {
       await validateUrlNotPrivate(webfingerUrl);
-      webfingerResponse = await axios.get(webfingerUrl, { timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS, maxRedirects: 0 });
+      webfingerResponse = await axios.get(webfingerUrl, {
+        timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
+        maxRedirects: 0,
+        ...federationRequestBounds(ACTOR_PROFILE_MAX_BYTES),
+      });
     }
     catch (error: any) {
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -825,9 +830,8 @@ class ActivityPubService {
         },
         timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
         maxRedirects: 0,
-        // Guards the *response* body; axios's `maxBodyLength` guards request
-        // bodies and is irrelevant to a GET.
-        maxContentLength: ACTOR_PROFILE_MAX_BYTES,
+        // Caps the *response* body and the total time.
+        ...federationRequestBounds(ACTOR_PROFILE_MAX_BYTES),
       });
     }
     catch (error: any) {
