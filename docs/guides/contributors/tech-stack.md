@@ -4,7 +4,7 @@ description: What Pavillion is built on — the framework, database, frontend, t
 
 # Tech stack
 
-This guide is for developers who want to know what Pavillion is built on before they change it. It names each tool by area and, where the choice isn't obvious, why it was made. For exact versions and the full dependency list, read [`package.json`](https://github.com/stephenhoward/pavillion/blob/main/package.json) — it is the source of truth, and this page deliberately doesn't repeat it. The same goes for commands: the `scripts` block in `package.json` lists every one.
+This guide covers what Pavillion is built on. It names each framework or tool by area and, where the choice isn't obvious, why it was chosen. For exact versions and the full dependency list, read `package.json`. 
 
 The whole project is TypeScript, front to back, written as ES modules. One language across server, browser and shared code is what lets the models in `src/common/` run on both sides (see [Architecture](./architecture)).
 
@@ -22,7 +22,7 @@ The whole project is TypeScript, front to back, written as ES modules. One langu
 
 **PostgreSQL in production, SQLite in development and tests.** Tests use an in-memory SQLite database; `npm run dev` uses a file-backed one (`storage/dev.sqlite`) that is reset and reseeded on every restart. Production configuration switches to PostgreSQL. Code that works on one and not the other is a bug, so avoid dialect-specific SQL.
 
-**Sequelize with sequelize-typescript** maps entities to tables using decorators. Raw SQL is the exception: `npm run lint` runs a check that flags it.
+**Sequelize with sequelize-typescript** maps entities to tables using decorators. Writing raw SQL is something we avoid: `npm run lint` runs a check that flags it.
 
 **Umzug** runs schema migrations. They live in the top-level `migrations/` folder and are numbered in order.
 

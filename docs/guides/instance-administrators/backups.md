@@ -4,9 +4,9 @@ description: Back up a Pavillion instance — database, media, secrets, config �
 
 # Backups
 
-A backup you haven't tested isn't a backup. This is the most-skipped piece of admin work and the one that determines whether a server failure is an inconvenience or a community-rebuilding exercise.
+Backups are the most-skipped piece of admin work and the one that determines whether a server failure is an inconvenience or a community-rebuilding exercise.
 
-Pavillion backs up one thing on its own: the PostgreSQL database. Everything else — media, secrets, your config — is yours to copy somewhere safe. This guide covers all four, and the drill that proves the database backup works.
+Pavillion backs up one thing on its own: the PostgreSQL database. Everything else — media, secrets, your config — is yours to copy somewhere safe. This guide covers all four, and describes the drill that proves the database backup works.
 
 ## What to back up
 
@@ -14,12 +14,12 @@ In order of importance:
 
 | What | Where it lives | Who backs it up |
 |---|---|---|
-| The PostgreSQL database | Docker volume `pavillion-db` | Pavillion makes nightly dumps; **you** get them off the server, with the [off-host copy](#copy-backups-off-the-server) or your own tool |
+| The PostgreSQL database | Docker volume `pavillion-db` | Pavillion makes nightly dumps automatically; **you** get them off the server, with the [off-host copy](#copy-backups-off-the-server) or your own tool |
 | `.env` and `secrets/` | The checkout directory (`/opt/pavillion` if you used `bin/provision.sh`) | You |
 | `config/local.yaml` and your reverse-proxy config | The checkout directory (`Caddyfile`, `caddy-extras.d/` for the bundled Caddy) | You |
 | Media (event images, avatars) | Docker volume `pavillion-media`, or your S3 bucket | You |
 
-Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each dump to a bucket. It produces no media archive and does not copy your secrets or config.
+Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each dump to an off-site bucket. It produces no media archive and does not copy your secrets or config.
 
 ## The database
 
@@ -27,7 +27,7 @@ Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each 
 
 The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02:00 by default (`housekeeping.backup.schedule`) and writes a file named like `pavillion_20260315_020000_scheduled.dump` to the `pavillion-backups` volume (`/backups` inside the worker). `docker-compose.yml` binds that volume to `/opt/pavillion/backups` on the host, so the dumps are ordinary files you can see and copy.
 
-Old dumps are pruned on a grandfather-father-son schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
+Old dumps are pruned on a grandparent-parent-child schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
 
 Run the commands below from the Pavillion directory. `scripts/backup.sh` runs the Pavillion CLI inside a container. It looks for one named `pavillion-app-1` unless you set `PAVILLION_CONTAINER`, and the container in the shipped `docker-compose.yml` is named `pavillion-app`, so set the variable:
 
@@ -49,9 +49,9 @@ export PAVILLION_CONTAINER=pavillion-app
 The dumps live on the same machine as the database they protect. A failed disk takes both. You have two ways to get them somewhere else:
 
 - **Let the worker do it.** Give Pavillion a bucket on an object-storage service and it uploads each verified dump right after writing it. That's the off-host copy, set up in [Copy backups off the server](#copy-backups-off-the-server) below.
-- **Use what you already trust.** `rsync` or `scp` to another host, your provider's snapshot feature on `/opt/pavillion/backups`, or an object-storage sync tool, on a schedule.
+- **Use what you already know.** `rsync` or `scp` to another host, your provider's snapshot feature on `/opt/pavillion/backups`, or an object-storage sync tool, on a schedule.
 
-Either works. The off-host copy has nothing to schedule and nothing to forget, and with the bucket settings below it survives someone breaking into the server, not just the server dying. A tool you already run for other machines is fine if it gives you the same.
+Either works. The off-host copy has nothing to schedule and nothing to forget, and with the bucket settings below it survives someone breaking into the server, not just the server dying. A tool you already run for other machines is fine if it gives you the same safety.
 
 Some guidance that isn't about tooling:
 
