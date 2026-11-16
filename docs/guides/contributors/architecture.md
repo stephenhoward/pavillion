@@ -10,11 +10,11 @@ This guide is for developers looking to submit changes to Pavillion's code and n
 
 Everything lives under `src/`, and the top-level folder tells you which application the code belongs to.
 
-- `src/server/` — the Express backend, split into domains (below). `server.ts` builds the domains and wires them together; `worker.ts` is the entry point for the background-job process.
-- `src/client/` — the authenticated web app: home to the screens calendar owners, editors and administrators use to manage calendars and the instance.
-- `src/site/` — the public web app: calendar pages anyone can browse without an account.
-- `src/widget/` — for rendering a calendar inside an iframe on someone else's website. `src/widget-sdk/` is the small script a host page loads to create that iframe.
-- `src/common/` — code shared across the apps: domain models, exceptions, routing helpers, validation and i18n setup. `src/common/ui/` holds the components and styling used by more than one frontend app.
+- **`src/server/`** — the Express backend, split into domains (below). `server.ts` builds the domains and wires them together; `worker.ts` is the entry point for the background-job process.
+- **`src/client/`** — the authenticated web app: home to the screens calendar owners, editors and administrators use to manage calendars and the instance.
+- **`src/site/`** — the public web app: calendar pages anyone can browse without an account.
+- **`src/widget/`** — for rendering a calendar inside an iframe on someone else's website. **`src/widget-sdk/`** is the small script a host page loads to create that iframe.
+- **`src/common/`** — code shared across the apps: domain models, exceptions, routing helpers, validation and i18n setup. `src/common/ui/` holds the components and styling used by more than one frontend app.
 
 Imports use the `@/` alias for `src/`, so `@/common/model/calendar` rather than a chain of `../`.
 
