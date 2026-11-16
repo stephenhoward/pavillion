@@ -1268,8 +1268,12 @@ describe('SyncService', () => {
         ownerUrl?: string | null;
         locally_edited?: boolean;
         source_fingerprint?: string | null;
+        id?: string;
+        created_at?: Date;
       }): EventImportOriginEntity {
         return makeOriginEntity({
+          ...(fields.id ? { id: fields.id } : {}),
+          ...(fields.created_at ? { created_at: fields.created_at } : {}),
           event_id: fields.event_id,
           external_uid: fields.external_uid,
           import_source_id: fields.import_source_id,
@@ -1331,6 +1335,7 @@ describe('SyncService', () => {
         expect(originUpsertStub.calledOnce).toBe(true);
         const values = originUpsertStub.firstCall.args[0] as Record<string, unknown>;
         expect(values.import_source_id).toBe(UPLOAD_SRC_ID);
+        expect(result.duplicateOriginsSkipped).toBe(0);
       });
 
       it('rule: file-source-owned → updates event and re-points origin to the uploading source', async () => {
@@ -1504,6 +1509,73 @@ describe('SyncService', () => {
         expect(result.eventsUpdated).toBe(1);
         // The uploader's own event is the one updated — not the foreign row's.
         expect(eventService.updateEvent.firstCall.args[1]).toBe('evt-own');
+        expect(result.duplicateOriginsSkipped).toBe(0);
+      });
+
+      describe('two non-uploading sources sharing a key', () => {
+        const uid = 'cal-foreign-dup@example.test';
+        const older = () => makeCalendarOrigin({
+          id: 'id-b', event_id: 'evt-older', external_uid: uid,
+          import_source_id: 'foreign-a', ownerType: 'file',
+          created_at: new Date('2026-01-01T00:00:00Z'),
+        });
+        const newer = () => makeCalendarOrigin({
+          id: 'id-a', event_id: 'evt-newer', external_uid: uid,
+          import_source_id: 'foreign-b', ownerType: 'file',
+          created_at: new Date('2026-02-01T00:00:00Z'),
+        });
+
+        for (const [label, order] of [['newer first', 'nf'], ['older first', 'of']] as const) {
+          it(`keeps the earliest-created row and counts the loser (${label})`, async () => {
+            const src = makeUploadSource();
+            const rows = order === 'nf' ? [newer(), older()] : [older(), newer()];
+            const svc = makeProcessService([makeVEvent({ uid })], rows);
+            eventService.updateEvent.resolves({ id: 'evt-older' } as never);
+
+            const result = await runCalendar(svc, src);
+
+            expect(eventService.updateEvent.firstCall.args[1]).toBe('evt-older');
+            expect(result.duplicateOriginsSkipped).toBe(1);
+          });
+        }
+
+        for (const [label, order] of [['larger id first', 'lf'], ['smaller id first', 'sf']] as const) {
+          it(`breaks a created_at tie by smaller id (${label})`, async () => {
+            const src = makeUploadSource();
+            const at = new Date('2026-01-01T00:00:00Z');
+            const small = makeCalendarOrigin({
+              id: 'id-1', event_id: 'evt-small', external_uid: uid,
+              import_source_id: 'foreign-a', ownerType: 'file', created_at: at,
+            });
+            const large = makeCalendarOrigin({
+              id: 'id-2', event_id: 'evt-large', external_uid: uid,
+              import_source_id: 'foreign-b', ownerType: 'file', created_at: at,
+            });
+            const svc = makeProcessService(
+              [makeVEvent({ uid })],
+              order === 'lf' ? [large, small] : [small, large],
+            );
+            eventService.updateEvent.resolves({ id: 'evt-small' } as never);
+
+            const result = await runCalendar(svc, src);
+
+            expect(eventService.updateEvent.firstCall.args[1]).toBe('evt-small');
+            expect(result.duplicateOriginsSkipped).toBe(1);
+          });
+        }
+
+        it('does not count a collision on a uid the upload does not contain', async () => {
+          const src = makeUploadSource();
+          const svc = makeProcessService(
+            [makeVEvent({ uid: 'cal-other@example.test' })],
+            [newer(), older()],
+          );
+          eventService.createEvent.callsFake(async () => ({ id: 'evt-new' } as never));
+
+          const result = await runCalendar(svc, src);
+
+          expect(result.duplicateOriginsSkipped).toBe(0);
+        });
       });
 
       it('records a success run without counting disappeared events for other calendar sources', async () => {

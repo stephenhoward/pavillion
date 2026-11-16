@@ -144,6 +144,15 @@ export interface SyncResult {
    */
   eventsUnchanged?: number;
   /**
+   * Calendar-wide dedup only: origin rows passed over because an uploaded event
+   * matched a (uid, recurrence) key held by more than one non-uploading source.
+   * The earliest-created row (then smaller id) is kept. Overlays events already
+   * counted in another bucket; do not add it to totals. `recordRun` always
+   * populates this (0 on the per-source path); optional so the field is
+   * additive for existing `SyncResult` literals.
+   */
+  duplicateOriginsSkipped?: number;
+  /**
    * Calendar-wide dedup only: per-event detail for the sync-managed skips,
    * carrying the owning URL source's `url` so the run summary can name which
    * sync feed owns each skipped event. `recordRun` always populates this (empty
@@ -473,6 +482,7 @@ class SyncService {
       skippedSyncManaged: 0,
       preservedLocalEdits: 0,
       unchanged: 0,
+      duplicateOriginsSkipped: 0,
     };
     // Calendar-wide dedup only: owning-source detail for each sync-managed skip.
     const skippedSyncManagedDetails: Array<{ externalUid: string; sourceUrl: string | null }> = [];
@@ -494,6 +504,8 @@ class SyncService {
         //                 source's type + url so the match rules can branch on
         //                 who owns each event (file upload refresh model).
         const existingByKey = new Map<string, EventImportOriginEntity>();
+        // Origin rows passed over per key because two non-uploading sources collided.
+        const duplicateOriginsByKey = new Map<string, number>();
         if (opts.dedupScope === 'calendar') {
           const existing = await EventImportOriginEntity.findAll({
             include: [
@@ -523,6 +535,16 @@ class SyncService {
             if (origin.import_source_id === importSourceId
               && current.import_source_id !== importSourceId) {
               existingByKey.set(key, origin);
+              duplicateOriginsByKey.delete(key);
+            }
+            else if (origin.import_source_id !== importSourceId
+              && current.import_source_id !== importSourceId) {
+              // Two foreign sources: keep the earliest-created row so the
+              // winner does not depend on database row order.
+              duplicateOriginsByKey.set(key, (duplicateOriginsByKey.get(key) ?? 0) + 1);
+              if (isEarlierOrigin(origin, current)) {
+                existingByKey.set(key, origin);
+              }
             }
           }
         }
@@ -566,6 +588,11 @@ class SyncService {
           seenKeys.add(key);
 
           const existingOrigin = existingByKey.get(key);
+          const passedOver = duplicateOriginsByKey.get(key);
+          if (passedOver) {
+            counts.duplicateOriginsSkipped += passedOver;
+            duplicateOriginsByKey.delete(key);
+          }
           try {
             if (opts.dedupScope === 'calendar') {
               // Calendar-wide match rules (file-upload refresh model):
@@ -974,6 +1001,7 @@ class SyncService {
       skippedSyncManaged?: number;
       preservedLocalEdits?: number;
       unchanged?: number;
+      duplicateOriginsSkipped?: number;
     };
     skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
     errorMessage: string | null;
@@ -1011,6 +1039,7 @@ class SyncService {
       eventsSkippedSyncManaged: input.counts.skippedSyncManaged ?? 0,
       eventsPreservedLocalEdits: input.counts.preservedLocalEdits ?? 0,
       eventsUnchanged: input.counts.unchanged ?? 0,
+      duplicateOriginsSkipped: input.counts.duplicateOriginsSkipped ?? 0,
       skippedSyncManagedDetails: input.skippedSyncManagedDetails ?? [],
       errorMessage: input.errorMessage,
     };
@@ -1050,6 +1079,19 @@ class SyncService {
  */
 export function dedupKey(externalUid: string | null | undefined, recurrenceId: string | null | undefined): string {
   return `${externalUid ?? ''}::${recurrenceId ?? ''}`;
+}
+
+/**
+ * Whether origin row `a` should win over `b` when two foreign sources share a
+ * dedup key: earliest `created_at`, then lexicographically smaller `id`.
+ */
+function isEarlierOrigin(a: EventImportOriginEntity, b: EventImportOriginEntity): boolean {
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : Number.POSITIVE_INFINITY;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : Number.POSITIVE_INFINITY;
+  if (aTime !== bTime) {
+    return aTime < bTime;
+  }
+  return a.id < b.id;
 }
 
 /**
