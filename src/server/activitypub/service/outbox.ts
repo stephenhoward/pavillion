@@ -39,6 +39,8 @@ import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 import UserActorService from "@/server/activitypub/service/user_actor";
 import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
+import { ACTOR_PROFILE_MAX_BYTES, DELIVERY_RESPONSE_MAX_BYTES } from "@/server/activitypub/helper/fetch-limits";
+import { federationRequestBounds } from "@/server/activitypub/helper/request-bounds";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
 import { sanitizePeerInboxUrl } from "@/server/activitypub/helper/url-sanitizer";
@@ -782,6 +784,9 @@ class ProcessOutboxService {
       await axios.post(inboxUrl, bodyString, {
         timeout: FEDERATION_HTTP_TIMEOUT_MS,
         maxRedirects: 0,
+        // The reply body is ignored; bound it and the total time so a hostile
+        // inbox cannot hold the drain or stream into memory.
+        ...federationRequestBounds(DELIVERY_RESPONSE_MAX_BYTES),
         headers: {
           'Content-Type': 'application/activity+json',
           ...signedHeaders,
@@ -935,6 +940,7 @@ class ProcessOutboxService {
       let response = await axios.get(profileUrl, {
         timeout: FEDERATION_HTTP_TIMEOUT_MS,
         maxRedirects: 0,
+        ...federationRequestBounds(ACTOR_PROFILE_MAX_BYTES),
       });
 
       if ( response && response.data ) {
@@ -988,6 +994,7 @@ class ProcessOutboxService {
         let response = await axios.get(webfingerUrl, {
           timeout: FEDERATION_HTTP_TIMEOUT_MS,
           maxRedirects: 0,
+          ...federationRequestBounds(ACTOR_PROFILE_MAX_BYTES),
         });
 
         if ( response && response.data && response.data.links ) {

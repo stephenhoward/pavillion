@@ -21,3 +21,11 @@
  * its own constant.
  */
 export const ACTOR_PROFILE_MAX_BYTES = 1_048_576;
+
+/**
+ * Response-body byte cap for the reply to an activity we POST to a peer's
+ * inbox. Delivery ignores the body (a typical reply is empty or a short
+ * acknowledgement), so this only has to be larger than any legitimate one and
+ * small enough that a hostile inbox cannot stream into memory through us.
+ */
+export const DELIVERY_RESPONSE_MAX_BYTES = 65_536;
