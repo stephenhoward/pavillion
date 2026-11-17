@@ -17,7 +17,8 @@
     "description": [
       "Regenerates package-lock.json weekly so in-range transitive fixes arrive without a manual bead.",
       "The window is 'on sunday' because the only Renovate run is Sunday 18:00 UTC; a schedule is a window for creating branches, not a trigger.",
-      "Not automerged: the automerge rule matches minor, patch, pin and digest only, so these PRs are reviewed by hand."
+      "Not automerged: the automerge rule matches minor, patch, pin and digest only, so these PRs are reviewed by hand.",
+      "Created ahead of other updates by the lockFileMaintenance packageRules entry (prPriority 5), because prPriority is not accepted inside this block and the concurrent PR limit would otherwise leave it rate-limited."
     ],
     "enabled": true,
     "schedule": ["on sunday"]
@@ -61,6 +62,11 @@
         "http-signature"
       ],
       "automerge": false
+    },
+    {
+      "description": "Create lock file maintenance before default-priority updates so the concurrent PR limit cannot starve it",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "prPriority": 5
     }
   ]
 }
