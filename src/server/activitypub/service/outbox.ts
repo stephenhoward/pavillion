@@ -39,7 +39,7 @@ import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 import UserActorService from "@/server/activitypub/service/user_actor";
 import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
-import { ACTOR_PROFILE_MAX_BYTES, DELIVERY_RESPONSE_MAX_BYTES } from "@/server/activitypub/helper/fetch-limits";
+import { ACTOR_PROFILE_MAX_BYTES, DELIVERY_RESPONSE_MAX_BYTES, SIGNED_DELIVERY_RESPONSE_MAX_BYTES } from "@/server/activitypub/helper/fetch-limits";
 import { federationRequestBounds } from "@/server/activitypub/helper/request-bounds";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { buildSignedHeaders } from "@/server/activitypub/service/http-signing";
@@ -218,6 +218,8 @@ class ProcessOutboxService {
       response = await axios.post(inboxUrl, bodyString, {
         timeout: FEDERATION_HTTP_TIMEOUT_MS,
         maxRedirects: 0,
+        // The caller reads the reply body, so cap it at an event document's size.
+        ...federationRequestBounds(SIGNED_DELIVERY_RESPONSE_MAX_BYTES),
         // Treat any HTTP status code (including non-2xx) as a resolved
         // response so the caller can read `status` and decide. Network/TLS/
         // timeout errors still reject and become FederationDeliveryError below.

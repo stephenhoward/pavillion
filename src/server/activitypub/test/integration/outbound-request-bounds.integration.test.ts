@@ -34,7 +34,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
-import { ACTOR_PROFILE_MAX_BYTES, DELIVERY_RESPONSE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
+import { ACTOR_PROFILE_MAX_BYTES, DELIVERY_RESPONSE_MAX_BYTES, SIGNED_DELIVERY_RESPONSE_MAX_BYTES } from '@/server/activitypub/helper/fetch-limits';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
 
 // A short deadline keeps the trickle cases fast. The idle timeout stays at its
@@ -79,6 +79,8 @@ interface StubPeer {
  *   /actor-trickle    headers, then the body a byte at a time, never finishing
  *   /inbox-ok         202, empty
  *   /inbox-big        200 with a body larger than DELIVERY_RESPONSE_MAX_BYTES
+ *   /inbox-event      200 with an event document of 128 KiB, over DELIVERY_RESPONSE_MAX_BYTES
+ *   /inbox-huge       200 with a body larger than SIGNED_DELIVERY_RESPONSE_MAX_BYTES
  *   /inbox-trickle    headers, then the body a byte at a time, never finishing
  *   /.well-known/webfinger[-big]   WebFinger pointing at /actor-big or /actor-trickle
  */
@@ -124,6 +126,14 @@ async function startStubPeer(): Promise<StubPeer> {
       case '/inbox-big':
         res.writeHead(200, { 'content-type': 'text/plain' });
         res.end('x'.repeat(DELIVERY_RESPONSE_MAX_BYTES * 2));
+        return;
+      case '/inbox-event':
+        res.writeHead(200, { 'content-type': actorType });
+        res.end(JSON.stringify({ id: `${PEER}/event`, summary: 'x'.repeat(DELIVERY_RESPONSE_MAX_BYTES * 2) }));
+        return;
+      case '/inbox-huge':
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end('x'.repeat(SIGNED_DELIVERY_RESPONSE_MAX_BYTES * 2));
         return;
       case '/inbox-trickle':
         trickle(res, url.pathname, 'text/plain');
@@ -375,6 +385,33 @@ describe('Outbound federation request bounds', () => {
       expect(response.status).toBe(500);
       expect(response.body.errorName).toBe('RemoteProfileFetchError');
       expect(peer.log.requested).not.toContain('/actor-big');
+    });
+  });
+
+  describe('signed delivery whose reply the caller reads', () => {
+    const actor = `https://${DOMAIN}/calendars/signedbounds`;
+    const activity = { type: 'Create', actor, object: { type: 'Event' } };
+    const deliver = (path: string) => outboxService().deliverActivitySigned(actor, activity, `${PEER}${path}`);
+
+    it('returns an event-sized reply that exceeds the ignored-reply cap', async () => {
+      const result = await deliver('/inbox-event');
+
+      expect(result.status).toBe(200);
+      expect(result.data.id).toBe(`${PEER}/event`);
+    });
+
+    it('rejects with a delivery error when the reply is larger than the cap', async () => {
+      await expect(deliver('/inbox-huge')).rejects.toMatchObject({ name: 'FederationDeliveryError' });
+      expect(peer.log.requested).toContain('/inbox-huge');
+    });
+
+    it('aborts at the overall deadline when the reply trickles', async () => {
+      const startedAt = Date.now();
+
+      await expect(deliver('/inbox-trickle')).rejects.toMatchObject({ name: 'FederationDeliveryError' });
+
+      expect(Date.now() - startedAt).toBeLessThan(ENDED_BY_DEADLINE_WITHIN_MS);
+      await vi.waitFor(() => expect(peer.log.cutOff).toContain('/inbox-trickle'));
     });
   });
 });

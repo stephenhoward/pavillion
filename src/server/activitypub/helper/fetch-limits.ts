@@ -29,3 +29,11 @@ export const ACTOR_PROFILE_MAX_BYTES = 1_048_576;
  * small enough that a hostile inbox cannot stream into memory through us.
  */
 export const DELIVERY_RESPONSE_MAX_BYTES = 65_536;
+
+/**
+ * Response-body byte cap for the reply to a signed delivery whose caller reads
+ * the body (a created event's document, as `createRemoteEventViaActivityPub`
+ * does). Sized as the actor-document cap: an event document with per-language
+ * content is the same order of size, and well above the ignored-reply cap.
+ */
+export const SIGNED_DELIVERY_RESPONSE_MAX_BYTES = ACTOR_PROFILE_MAX_BYTES;
