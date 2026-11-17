@@ -1,7 +1,8 @@
 # E2E Testing Configuration
 # Inherits from default.yaml with test-specific overrides
 
-# Use in-memory database for fast, isolated tests
+# Fallback only: the end-to-end test helper overrides this with a per-server
+# file-backed database through DB_STORAGE.
 database:
   dialect: sqlite
   storage: ':memory:'
