@@ -77,6 +77,7 @@ export default defineConfig({
           items: [
             { text: 'Architecture', link: '/guides/contributors/architecture' },
             { text: 'Tech stack', link: '/guides/contributors/tech-stack' },
+            { text: 'Glossary', link: '/guides/contributors/glossary' },
           ],
         },
       ],

@@ -4,7 +4,7 @@ description: How Pavillion's code is organized — the server domains and the ru
 
 # Architecture
 
-This guide is for developers looking to submit changes to Pavillion's code and need to know where those changes belong. The short version: the server is split into domains that only talk to each other through one interface class each, the database layer never leaks past a domain's services, and HTTP handlers stay thin. The rest of this page explains each of those rules and the hazards of breaking them.
+This guide is for developers looking to submit changes to Pavillion's code and need to know where those changes belong. The short version: the server is split into [domains](./glossary#domain) that only talk to each other through one interface class each, the database layer never leaks past a domain's services, and HTTP handlers stay thin. The rest of this page explains each of those rules and the hazards of breaking them.
 
 ## The parts of the application
 
