@@ -65,6 +65,8 @@ Your handle shows up in two places without you doing anything:
 - **Your instance's discovery page** at `your-instance.example/discover`, which lists the calendars on the instance with each one's handle under its name.
 - **Other calendars' event pages.** When another calendar reposts one of your events, the event's page there carries a small label with your handle. It links back to your calendar, so a visitor who found the event somewhere else can find its source.
 
+You can take your calendar off the discovery page: untick **Show on this instance's calendar list** in your calendar's General settings. That doesn't make the calendar private. It stays public at its own address, and its events stay visible there and on calendars that repost them.
+
 **The handle is for calendar owners, not visitors.** It looks like an email address but isn't one: mail sent to it goes nowhere, and pasting it into a browser's address bar doesn't open your calendar. Give it to people who run a calendar of their own and might want your events on it. Give everyone else the public URL.
 
 ## Things that trip people up
