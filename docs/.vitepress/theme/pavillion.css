@@ -98,3 +98,9 @@
 .custom-block:has(.custom-block-title .lucide) .custom-block-title ~ * {
   margin-inline-start: 1.5em;
 }
+
+/* Keep the code-block copy button visible without hovering; the default
+   theme hides it until hover or focus. Focus styling is left to the theme. */
+.vp-doc [class*='language-'] > button.copy {
+  opacity: 1;
+}
