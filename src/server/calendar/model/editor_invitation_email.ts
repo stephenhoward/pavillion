@@ -3,6 +3,7 @@ import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
 import AccountInvitation from '@/common/model/invitation';
+import { acceptInvitePath } from '@/server/common/helper/auth-links';
 
 /** Instance and inviter names resolved by the sender; kept as plain values so the model stays dumb. */
 interface InvitationEmailContext {
@@ -37,7 +38,7 @@ class EditorInvitationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const invitationUrl = publicUrl('/auth/invitation');
+    const invitationUrl = publicUrl(acceptInvitePath());
     const calendarName = this.calendar.content(language).name;
     const templateData = {
       language,

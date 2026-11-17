@@ -2,6 +2,7 @@ import { Account } from '@/common/model/account';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { resetPasswordPath } from '@/server/common/helper/auth-links';
 
 const textTemplate = compileTemplate('src/server/accounts', 'application_accepted_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'application_accepted_email.html.hbs');
@@ -17,7 +18,7 @@ class ApplicationAcceptedEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const registrationUrl = publicUrl('/auth/password');
+    const registrationUrl = publicUrl(resetPasswordPath());
 
     return {
       emailAddress: this.account.email,

@@ -2,6 +2,7 @@ import AccountApplication from '@/common/model/application';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { applyConfirmPath } from '@/server/common/helper/auth-links';
 
 const textTemplate = compileTemplate('src/server/accounts', 'application_confirmation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'application_confirmation_email.html.hbs');
@@ -17,7 +18,7 @@ class ApplicationConfirmationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const confirmationUrl = publicUrl('/auth/apply/confirm/' + this.token);
+    const confirmationUrl = publicUrl(applyConfirmPath(this.token));
 
     return {
       emailAddress: this.application.email,
