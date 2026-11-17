@@ -1,8 +1,11 @@
 import { EventEmitter } from 'events';
 import MediaService from '@/server/media/service/media';
+import type { UploadConstraints } from '@/server/media/service/media';
 import { Media } from '@/common/model/media';
 import { Account } from '@/common/model/account';
 import CalendarInterface from '@/server/calendar/interface';
+
+export type { UploadConstraints } from '@/server/media/service/media';
 
 export default class MediaInterface {
   private mediaService: MediaService;
@@ -32,5 +35,9 @@ export default class MediaInterface {
 
   async getFile(mediaId: string): Promise<{ media: Media; buffer: Buffer } | null> {
     return this.mediaService.getFileContent(mediaId);
+  }
+
+  getUploadConstraints(): UploadConstraints {
+    return this.mediaService.getUploadConstraints();
   }
 }

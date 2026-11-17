@@ -8,6 +8,8 @@ import { MediaEntity } from '@/server/media/entity/media';
 import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import config from 'config';
+import { DETECTED_IMAGE_TYPES } from '@/server/media/service/image-signature';
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
 const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
@@ -96,6 +98,44 @@ describe('MediaService', () => {
 
       expect(() => mediaService['validateFile'](largeBuffer, filename, mimeType))
         .toThrow(MediaFileTooLargeError);
+    });
+  });
+
+  describe('getUploadConstraints', () => {
+    const FIXTURES: Record<string, Buffer> = {
+      'image/png': PNG_BYTES,
+      'image/jpeg': JPEG_BYTES,
+      'image/heic': HEIC_BYTES,
+    };
+
+    it('returns the configured allowedTypes and maxFileSize', () => {
+      const mediaConfig = config.get<{ allowedTypes: string[]; maxFileSize: number }>('media');
+      const constraints = mediaService.getUploadConstraints();
+
+      expect(constraints.allowedTypes).toEqual(mediaConfig.allowedTypes);
+      expect(constraints.maxFileSize).toBe(mediaConfig.maxFileSize);
+    });
+
+    it('keys extensionByMimeType by exactly the detectable image types', () => {
+      const { extensionByMimeType } = mediaService.getUploadConstraints();
+
+      expect(Object.keys(extensionByMimeType).sort()).toEqual([...DETECTED_IMAGE_TYPES].sort());
+    });
+
+    it('yields filenames that validateFile accepts for every extension entry', () => {
+      const { extensionByMimeType } = mediaService.getUploadConstraints();
+
+      for (const [mime, ext] of Object.entries(extensionByMimeType)) {
+        expect(FIXTURES[mime], `fixture for ${mime}`).toBeDefined();
+        expect(() => mediaService['validateFile'](FIXTURES[mime], 'import-image' + ext, mime)).not.toThrow();
+      }
+    });
+
+    it('returns a copy of allowedTypes that callers cannot use to alter later calls', () => {
+      const first = mediaService.getUploadConstraints();
+      (first.allowedTypes as string[]).push('image/x-mutated');
+
+      expect(mediaService.getUploadConstraints().allowedTypes).not.toContain('image/x-mutated');
     });
   });
 

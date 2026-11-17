@@ -7,7 +7,7 @@ import { Disk } from 'flydrive';
 import { MediaEntity } from '@/server/media/entity/media';
 import { Media, MediaStatus } from '@/common/model/media';
 import { StorageConfig, createStorageDisk } from './storage-factory';
-import { detectImageType } from './image-signature';
+import { detectImageType, DetectedImageType } from './image-signature';
 import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
@@ -21,6 +21,27 @@ interface MediaConfig {
   storage: StorageConfig;
 }
 
+/**
+ * What Media accepts for upload, for other domains to read instead of
+ * restating Media's config keys.
+ */
+export type UploadConstraints = {
+  allowedTypes: readonly string[];
+  maxFileSize: number;
+  extensionByMimeType: Readonly<Record<string, string>>;
+};
+
+/**
+ * The filename extension for each recognised image type. A fixed table, not
+ * filtered by configuration: it says what a file of a type is called, while
+ * allowedTypes carries what is permitted.
+ */
+export const MIME_TYPE_EXTENSIONS: Readonly<Record<DetectedImageType, string>> = Object.freeze({
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/heic': '.heic',
+});
+
 export default class MediaService {
   private eventBus: EventEmitter;
   private config: MediaConfig;
@@ -32,6 +53,17 @@ export default class MediaService {
     this.config = config.get<MediaConfig>('media');
     this.calendarService = calendarService;
     this.initializeStorage();
+  }
+
+  /**
+   * Returns the upload policy this service enforces in validateFile.
+   */
+  getUploadConstraints(): UploadConstraints {
+    return {
+      allowedTypes: [...this.config.allowedTypes],
+      maxFileSize: this.config.maxFileSize,
+      extensionByMimeType: MIME_TYPE_EXTENSIONS,
+    };
   }
 
   /**
