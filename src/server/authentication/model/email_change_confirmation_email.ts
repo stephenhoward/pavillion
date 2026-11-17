@@ -2,6 +2,7 @@ import { Account } from '@/common/model/account';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { emailConfirmPath } from '@/server/common/helper/auth-links';
 
 const textTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/authentication', 'email_change_confirmation_email.html.hbs');
@@ -19,13 +20,13 @@ export default class EmailChangeConfirmationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    // confirmUrl is the base path; the templates append `/{{token}}` so the
-    // emitted link is `<domain>/auth/email/confirm/<token>` — the path-param
-    // form that matches the API route POST /api/auth/v1/email/confirm/:token
-    // and the client confirm route /auth/email/confirm/:token (epic pv-91a3,
-    // :token is the forward standard). Do NOT switch this back to `?code=`
-    // without realigning the route and the client page.
-    const confirmUrl = publicUrl('/auth/email/confirm');
+    // confirmUrl is the full link `<domain>/auth/email/confirm/<token>` — the
+    // path-param form that matches the API route POST
+    // /api/auth/v1/email/confirm/:token and the client confirm route
+    // /auth/email/confirm/:token (:token is the forward standard). Do NOT
+    // switch this back to `?code=` without realigning the route and the
+    // client page.
+    const confirmUrl = publicUrl(emailConfirmPath(this.token));
 
     return {
       emailAddress: this.newEmail,

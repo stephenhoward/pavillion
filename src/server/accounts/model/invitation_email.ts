@@ -2,6 +2,7 @@ import AccountInvitation from '@/common/model/invitation';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { acceptInvitePath } from '@/server/common/helper/auth-links';
 
 const textTemplate = compileTemplate('src/server/accounts', 'account_invitation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'account_invitation_email.html.hbs');
@@ -24,7 +25,7 @@ class AccountInvitationEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const invitationUrl = publicUrl('/auth/invitation');
+    const invitationUrl = publicUrl(acceptInvitePath());
 
     const templateData = {
       inviteCode: this.code,

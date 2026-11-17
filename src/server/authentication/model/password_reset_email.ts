@@ -2,6 +2,7 @@ import { Account } from '@/common/model/account';
 import { MailData } from '@/server/common/email/types';
 import { EmailMessage, compileTemplate } from '@/server/common/email/message';
 import { publicUrl } from '@/server/common/helper/public-url';
+import { resetPasswordPath } from '@/server/common/helper/auth-links';
 
 const textTemplate = compileTemplate('src/server/authentication', 'password_reset_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/authentication', 'password_reset_email.html.hbs');
@@ -17,7 +18,7 @@ export default class PasswordResetEmail extends EmailMessage {
   }
 
   buildMessage(language: string): MailData {
-    const resetUrl = publicUrl('/auth/password');
+    const resetUrl = publicUrl(resetPasswordPath());
 
     return {
       emailAddress: this.account.email,
