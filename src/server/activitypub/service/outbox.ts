@@ -332,7 +332,8 @@ class ProcessOutboxService {
    * row, an Undo with id `{rowId}/undo` (an Undo(Follow) retracts a Follow);
    * for a Create, Update or Announce, also a Delete with id `{objectId}/delete`
    * (DEC-024 rule 7). The type is matched as well as the id, as
-   * `readOutbox`'s Undo probe does.
+   * `readOutbox`'s Undo probe does. An Update is also replaced by a later
+   * Update of the same object; see {@link hasLaterUpdateOfSameObject}.
    *
    * @param message - An unprocessed outbox row
    * @returns True when the row should be skipped rather than delivered
@@ -346,7 +347,57 @@ class ProcessOutboxService {
       }
     }
     const found = await ActivityPubOutboxMessageEntity.count({ where: { [Op.or]: retractions } });
-    return found > 0;
+    if ( found > 0 ) {
+      return true;
+    }
+    return await this.hasLaterUpdateOfSameObject(message);
+  }
+
+  /**
+   * Whether a later Update of the same object, minted by `UpdateActivity`
+   * (`{objectId}/updates/…`), replaces this Update row. Both rows must carry
+   * that id shape, so a user-actor Update (`/activities/{uuid}`) never matches
+   * on either side. The later row counts when it is unprocessed or was
+   * published, not when it ended `error:`, `skipped:` or `bad message type`,
+   * since a row never published replaces nothing. The id prefix is confirmed
+   * in JS because `_` in a URL is a LIKE wildcard.
+   *
+   * @param message - An unprocessed outbox row
+   * @returns True when a later Update replaces it
+   */
+  private async hasLaterUpdateOfSameObject(message: ActivityPubOutboxMessageEntity): Promise<boolean> {
+    if ( message.type !== 'Update' ) {
+      return false;
+    }
+    const objectId = objectIdOf((message.message as Record<string, unknown> | null)?.object);
+    if ( !objectId ) {
+      return false;
+    }
+    const prefix = `${objectId}/updates/`;
+    if ( !message.id.startsWith(prefix) ) {
+      return false;
+    }
+    const escaped = prefix.replace(/[\\%_]/g, '\\$&');
+    const candidates = await ActivityPubOutboxMessageEntity.findAll({
+      attributes: ['id'],
+      where: {
+        calendar_id: message.calendar_id,
+        type: 'Update',
+        message_time: { [Op.gt]: message.message_time },
+        id: { [Op.like]: `${escaped}%` },
+        [Op.or]: [
+          { processed_time: null },
+          {
+            [Op.and]: [
+              { processed_status: { [Op.notLike]: 'error:%' } },
+              { processed_status: { [Op.notLike]: 'skipped:%' } },
+              { processed_status: { [Op.ne]: 'bad message type' } },
+            ],
+          },
+        ],
+      },
+    });
+    return candidates.some(candidate => candidate.id.startsWith(prefix));
   }
 
   /**

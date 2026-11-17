@@ -94,7 +94,7 @@ export function servedOutboxWhere(calendarId: string): WhereOptions {
     [Op.and]: [
       // A partial: delivery outcome does not affect membership; a failure
       // to process the row at all does, and so does a row the drain
-      // skipped because it was retracted before the drain delivered it.
+      // skipped because it was retracted or replaced before the drain delivered it.
       { processed_status: { [Op.notLike]: 'error:%' } },
       { processed_status: { [Op.notLike]: 'skipped:%' } },
       { processed_status: { [Op.ne]: 'bad message type' } },
