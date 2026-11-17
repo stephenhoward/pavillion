@@ -7,7 +7,9 @@
  * recognised; anything else returns null and is rejected upstream.
  */
 
-export type DetectedImageType = 'image/png' | 'image/jpeg' | 'image/heic';
+export const DETECTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/heic'] as const;
+
+export type DetectedImageType = typeof DETECTED_IMAGE_TYPES[number];
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
