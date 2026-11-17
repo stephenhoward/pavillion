@@ -1,7 +1,7 @@
 /**
  * Agent-facing CLI for `/plan --scheduled`: the deterministic half of the
- * passes. JSON to stdout, except `state-write`, `revise-note` and
- * `last-block`, which print text ready to paste.
+ * passes. JSON to stdout, except `state-write`, `state-notes`,
+ * `revise-note` and `last-block`, which print text ready to paste.
  *
  * Usage:
  *   npx tsx .agents/skills/plan-scheduled/scripts/spec.ts select <drafting|approved|revise>
@@ -12,10 +12,12 @@
  *   npx tsx .agents/skills/plan-scheduled/scripts/spec.ts revision-number <root-id>
  *   npx tsx .agents/skills/plan-scheduled/scripts/spec.ts gate-misses <root-id>
  *   npx tsx .agents/skills/plan-scheduled/scripts/spec.ts state-write <spec:label>
+ *   npx tsx .agents/skills/plan-scheduled/scripts/spec.ts state-notes <spec:label> [<notes-file>]
  *
  * Operator-facing flow: .agents/skills/plan-scheduled/SKILL.md
  */
 
+import { readFileSync } from 'node:fs';
 import {
   type Selection,
   type StateLabel,
@@ -29,6 +31,7 @@ import {
   revisionNumber,
   gateMisses,
   stateWriteArgs,
+  stateWriteNotes,
 } from './lib/spec.js';
 
 const USAGE = `usage: spec.ts <command> [args]
@@ -42,6 +45,8 @@ commands:
   revision-number <root-id>           N for the next "(revision N)" blocks (JSON)
   gate-misses <root-id>               gate misses since the last restart (JSON)
   state-write <spec:label>            bd update flags for a state write (text)
+  state-notes <spec:label> [<file>]   the write's --append-notes text: the file, then
+                                      for spec:ready a dated Spec state block (text)
 `;
 
 function fail(message: string): never {
@@ -107,6 +112,13 @@ try {
       const [label] = args;
       if (!(labelsOwnedBy('plan-scheduled') as string[]).includes(label)) fail(USAGE);
       console.log(stateWriteArgs(label as StateLabel).join(' '));
+      break;
+    }
+    case 'state-notes': {
+      // The same call's --append-notes value; a flag list cannot carry text with spaces.
+      const [label, file] = args;
+      if (!(labelsOwnedBy('plan-scheduled') as string[]).includes(label) || args.length > 2) fail(USAGE);
+      console.log(stateWriteNotes(label as StateLabel, new Date(), file ? readFileSync(file, 'utf-8') : ''));
       break;
     }
     default:

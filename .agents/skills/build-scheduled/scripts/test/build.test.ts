@@ -28,6 +28,7 @@ import {
   selectRoot,
   evaluateGates,
   parseBuildState,
+  parseSpecState,
   buildStateWriteArgs,
   stateWriteCommand,
   chainPlanInput,
@@ -61,6 +62,7 @@ import {
   runPublishPr,
   runSubmitCheck,
 } from '../lib/build.js';
+import { stateWriteNotes } from '../../../plan-scheduled/scripts/lib/spec.js';
 
 // =============================================================================
 // Fixture builders
@@ -452,6 +454,34 @@ describe('parseBuildState', () => {
 });
 
 // =============================================================================
+// Spec state
+// =============================================================================
+
+const specState = (at: string) => `## Spec state\n- spec:ready ${at}`;
+
+describe('parseSpecState', () => {
+  it('is null without a Spec state block', () => {
+    expect(parseSpecState(ANALYSED)).toBeNull();
+    expect(parseSpecState(undefined)).toBeNull();
+  });
+
+  it('reads the last spec:ready line across blocks', () => {
+    const notes = `${specState('2026-11-01T00:00:00Z')}\n\n## Other\nx\n\n${specState('2026-11-09T00:00:00Z')}`;
+    expect(parseSpecState(notes)).toBe('2026-11-09T00:00:00Z');
+  });
+
+  it('reads the block the planner\'s spec:ready write appends', () => {
+    const notes = `${ANALYSED}\n${stateWriteNotes('spec:ready', new Date('2026-11-17T22:41:24.567Z'))}`;
+    expect(parseSpecState(notes)).toBe('2026-11-17T22:41:24Z');
+  });
+
+  it('ignores a spec:ready line outside the block or inside a fence', () => {
+    expect(parseSpecState(`## Other\n- spec:ready 2026-11-01T00:00:00Z`)).toBeNull();
+    expect(parseSpecState('```\n## Spec state\n- spec:ready 2026-11-01T00:00:00Z\n```')).toBeNull();
+  });
+});
+
+// =============================================================================
 // Selection
 // =============================================================================
 
@@ -472,6 +502,36 @@ describe('selectRoot', () => {
       ready('pv-aaa', '2026-11-08T00:00:00Z'),
     ]);
     expect(t).toMatchObject({ root: 'pv-bbb', source: 'label-event' });
+  });
+
+  it('takes a higher-priority root before a lower one edited or readied earlier', () => {
+    const s = selectRoot([
+      ready('pv-p2', '2026-11-01T00:00:00Z', { priority: 2 }),
+      ready('pv-p1', '2026-11-12T00:00:00Z', { priority: 1 }),
+    ]);
+    expect(s).toMatchObject({ root: 'pv-p1', kind: 'ready', priority: 1, source: 'updated_at' });
+  });
+
+  it('orders equal priorities by time ready, not by updated_at', () => {
+    const s = selectRoot([
+      ready('pv-aaa', '2026-11-01T00:00:00Z', { notes: `${ANALYSED}\n\n${specState('2026-11-10T09:00:00Z')}` }),
+      ready('pv-bbb', '2026-11-12T00:00:00Z', { notes: `${ANALYSED}\n\n${specState('2026-11-03T09:00:00Z')}` }),
+    ]);
+    expect(s).toMatchObject({ root: 'pv-bbb', priority: 1, source: 'notes', at: '2026-11-03T09:00:00Z' });
+  });
+
+  it('takes time ready from the Spec state line in the notes when there is no label event', () => {
+    const notes = `${ANALYSED}\n\n${specState('2026-11-05T12:00:00Z')}\n\n## Later\nx`;
+    const s = selectRoot([ready('pv-a', '2026-11-14T00:00:00Z', { notes })]);
+    expect(s).toMatchObject({ root: 'pv-a', source: 'notes', at: '2026-11-05T12:00:00Z' });
+  });
+
+  it('falls back to updated_at with neither, and the gates reading says so', () => {
+    const s = selectRoot([ready('pv-a', '2026-11-14T00:00:00Z')]);
+    expect(s).toMatchObject({ root: 'pv-a', priority: 1, source: 'updated_at', at: '2026-11-14T00:00:00Z' });
+    const g = evaluateGates({ beads: [ready('pv-a', '2026-11-14T00:00:00Z')], prs: [], now: NOW, mode: 'dry' });
+    expect(g.gates.find(r => r.check === 'nothing-to-build')?.reading)
+      .toBe('selected pv-a (P1, ready 2026-11-14T00:00:00Z by updated_at)');
   });
 
   it('breaks a tie by id', () => {
@@ -547,9 +607,15 @@ describe('selectRoot', () => {
 
   it.each([
     ['an id failing the root-id pattern', ready('pv-BAD', '2026-11-01T00:00:00Z'), /root-id pattern/],
-    ['no updated_at', ready('pv-a', '2026-11-01T00:00:00Z', { updated_at: undefined }), /no updated_at/],
+    ['no time ready from any source', ready('pv-a', '2026-11-01T00:00:00Z', { updated_at: undefined }), /no time ready/],
+    ['no priority', ready('pv-a', '2026-11-01T00:00:00Z', { priority: undefined as unknown as number }), /no priority/],
     ['an unparsable updated_at', ready('pv-a', 'yesterday'), /unparsable updated_at timestamp "yesterday"/],
     ['an unparsable label-event time', ready('pv-a', '2026-11-01T00:00:00Z', { spec_ready_at: 'soon' }), /unparsable label-event/],
+    [
+      'an unparsable Spec state time',
+      ready('pv-a', '2026-11-01T00:00:00Z', { notes: `${ANALYSED}\n\n${specState('soon')}` }),
+      /unparsable notes timestamp "soon"/,
+    ],
     [
       'a malformed Build state block',
       ready('pv-a', '2026-11-01T00:00:00Z', { notes: `${ANALYSED}\n\n## Build state\nfirings: x` }),

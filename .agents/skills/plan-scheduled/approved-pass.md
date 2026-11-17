@@ -135,7 +135,15 @@ make a state write to `spec:ready`. The ANALYZE subagent's Phase 5a normally
 appends `# Bead Analysis` to the root itself; only if the root still has no
 Bead Analysis heading and the subagent returned an execution-wave summary
 this run, append it under `# Bead Analysis` in the same call — otherwise
-append nothing, as a second block would duplicate it.
+append no analysis, as a second block would duplicate it. Either way the
+write appends the `## Spec state` block (labels-and-blocks.md), so its notes
+come from `state-notes`, given the analysis file only when there is one:
+
+```bash
+bd update <id> \
+  --append-notes "$(npx tsx .agents/skills/plan-scheduled/scripts/spec.ts state-notes spec:ready [<scratchpad>/<id>-analysis.md])" \
+  $(npx tsx .agents/skills/plan-scheduled/scripts/spec.ts state-write spec:ready)
+```
 
 On a miss the root stays `spec:decomposing` for the next run. Read
 `spec.ts gate-misses <id>`, then in one call append

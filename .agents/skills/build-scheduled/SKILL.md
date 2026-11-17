@@ -51,8 +51,11 @@ take `--run <id>` and refuse another run's lock. Every exit after
 preflight, a failed gate included, ends with `release --run <id>`.
 
 `gates` prints the selection: a `spec:building` root resumes first,
-otherwise the earliest `spec:ready` root, with each skipped root and its
-reason. `build:hold` is maintainer-only. Never dispatch a `decision`-type
+otherwise the highest-priority `spec:ready` root, earliest ready among
+equals, with each skipped root and its reason. Time ready is a label-event
+time when bd supplies one, else the root's last `## Spec state` line (written
+by the planner's `spec:ready` write), else its `updated_at`; the selection and the gate reading name the pick's priority and
+which source its time came from. `build:hold` is maintainer-only. Never dispatch a `decision`-type
 `Decide:` leaf; if the only open leaves are blocked on one, note it on the
 root and in the report, and leave the root `spec:building`.
 
