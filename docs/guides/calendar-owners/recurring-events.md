@@ -53,12 +53,12 @@ Multiple schedules are also the way to express "the same meeting at two differen
 
 For a recurring event, the editor shows a <Btn>Manage cancellations</Btn> button below the schedule blocks. Click it to expand a **Cancellations** panel — a horizontal row of cards for the upcoming dates, each showing date and time. Later dates live further down the row; <Btn>Show more</Btn> appends the next batch, and <Btn>Jump to month</Btn> lets you skip ahead to a specific month.
 
-To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. The confirmation that opens has one decision worth thinking about — a **Hide from public** toggle:
+To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. A **Cancel this date?** confirmation opens, with one decision worth thinking about — a **Hide from public** toggle:
 
 - **Off (the default): show as cancelled.** The occurrence stays on the calendar. Visitors and any calendar reposting from yours still see it, but it's marked **Cancelled**. This is the right choice for an event that *was* announced and that people might be planning to attend — cancelling-but-showing tells them the meeting they had on their calendar isn't happening.
 - **On: hide from public.** The occurrence is removed from the public page and from any calendar reposting from yours. This is the right choice for occurrences that haven't been visible long enough for anyone to be planning around them — for example, a brand-new recurring event where you want to skip an upcoming holiday week before the public page has had time to surface those occurrences.
 
-Confirm with <Btn>Cancel instance</Btn>. The card now shows a **Cancelled** or **Hidden** badge, and its button changes to <Btn>Restore</Btn>. If you change your mind, click <Btn>Restore</Btn> to bring the occurrence back; that's immediate, no confirmation needed.
+Confirm with <Btn>Cancel this date</Btn>, or click <Btn>Keep it</Btn> to back out. The cancellation takes effect right away, even if you leave the editor without saving. The card now shows a **Cancelled** or **Hidden** badge, and its button changes to <Btn>Restore</Btn>. If you change your mind, click <Btn>Restore</Btn> to bring the occurrence back; that's immediate, no confirmation needed.
 
 ::: tip <Lightbulb /> A note on cancelling for the wrong reason.
 Cancellation is for an occurrence that won't happen. If the event will happen but at a different time or place, you don't want a bare cancellation — you want a one-off exception (see above) *plus* a cancellation of the original occurrence. The pair tells visitors "the regular Tuesday is off, but we're meeting Friday instead." A bare cancellation just says "no meeting."
