@@ -463,6 +463,36 @@ export default class ActivityPubService {
   }
 
   /**
+   * Whether this calendar published a public Delete for an object IRI.
+   *
+   * An existence probe for the object routes to tell a deleted object (410)
+   * from one that never existed (404). It reads the stored Delete by its
+   * deterministic id (`{objectUrl}/delete`) and returns a boolean; row content
+   * never leaves this method. It deliberately skips the served-set filter
+   * (`servedOutboxWhere`): `processed_time` is only written after delivery to
+   * every recipient finishes, and a peer that re-fetches on receiving the
+   * Delete must already see 410. A Delete marked `error:` still describes an
+   * object that is gone locally. `is_public` and `calendar_id` keep another
+   * calendar's, or a user actor's, Delete out of the answer (DEC-024).
+   *
+   * @param calendar - The calendar whose path the IRI was requested under
+   * @param objectUrl - The full object IRI (event or Note)
+   * @returns True when the calendar holds a public Delete for that IRI
+   */
+  async isObjectDeleted(calendar: Calendar, objectUrl: string): Promise<boolean> {
+    const row = await ActivityPubOutboxMessageEntity.findOne({
+      attributes: ['id'],
+      where: {
+        id: objectUrl + '/delete',
+        type: 'Delete',
+        calendar_id: calendar.id,
+        is_public: true,
+      },
+    });
+    return row !== null;
+  }
+
+  /**
    * Looks up the ActivityPub actor URI that owns a given event.
    * Returns the attributed_to field from the EventObjectEntity, which is
    * the authoritative source for the calendar actor that created/owns the event.

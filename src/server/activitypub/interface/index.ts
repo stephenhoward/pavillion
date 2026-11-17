@@ -339,6 +339,10 @@ export default class ActivityPubInterface {
     return this.serverService.readOutbox(calendarId, cursor, limit);
   }
 
+  async isObjectDeleted(calendar: Calendar, objectUrl: string): Promise<boolean> {
+    return this.serverService.isObjectDeleted(calendar, objectUrl);
+  }
+
   parseWebFingerResource(resource: string): { type: 'user' | 'calendar' | 'unknown'; name: string; domain: string } {
     return this.serverService.parseWebFingerResource(resource);
   }
