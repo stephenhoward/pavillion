@@ -93,6 +93,10 @@ The choices are **1 week**, **2 weeks**, **1 month**, **3 months**, **6 months**
 
 **Match the window to how often you publish.** A calendar with a few events a month reads as empty on a one- or two-week window, and a first-time visitor who sees an empty page rarely goes looking for the date control. A busy calendar with something every day can stay short, so the list opens on what's coming up soon rather than a long scroll.
 
+## Listing on the instance's calendar list
+
+The **Show on this instance's calendar list** checkbox is on by default, and it controls whether your calendar appears on your instance's discovery page and calendar list. Unticking it takes the calendar off that list only: an unlisted calendar is still public, and anyone with its address, or who finds its events on a calendar that reposts them, can still see it.
+
 ## Things that trip people up
 
 **Changing the calendar name doesn't change the URL handle.** Renaming the calendar from *Westside Garden* to *Maplewood Community Garden* in the name field changes the visible label everywhere, but the URL still says `/westside-garden` because the handle isn't tied to the name. Visitors with the old link still land in the right place — but the URL now disagrees with the name, and that mismatch confuses people. If a rename feels structural enough to want a new URL too, that's the case where creating a new calendar may make sense.
