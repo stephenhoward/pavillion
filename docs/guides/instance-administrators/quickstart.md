@@ -11,11 +11,19 @@ This guide takes you from a clean Linux server to a Pavillion instance that's re
 - **A domain you control.** A subdomain is fine — `events.example.org` works. The domain is your instance's identity on the federated network; once events on your server have reached a peer, you can't change it without breaking every existing federation relationship. Pick a domain you'll be comfortable with in five years.
 - **DNS that already resolves.** Point the domain's A or AAAA record at your server's public IP *before* you run the deploy. The script doesn't check, and federation handshakes won't work if other instances can't reach you at the name you claim.
 - **A Linux server with at least 1 GB of RAM.** If it's a freshly-imaged Debian or Ubuntu box, `bin/provision.sh` will install Docker, set up a deploy user, and harden SSH for you — see the [fresh server path](#fresh-server-use-the-provisioning-script) below. If you're putting Pavillion on a server you already run, you'll want Docker and Docker Compose installed and working (`docker compose version` should print a version). Podman with the compose plugin works too if your organization doesn't run Docker.
+
+  ```bash
+  docker compose version
+  ```
 - **A decision about TLS.** Either (a) you'll use the bundled standalone Caddy that ships with Pavillion's Compose file and let it get a Let's Encrypt cert automatically, or (b) you'll put your own http proxy (nginx, Caddy, etc) in front. The bundled option is simpler and right for a dedicated Pavillion server. Bring-your-own is right when your server hosts other apps and already has a proxy. The Quickstart assumes you'll use the bundled Caddy — if you're bringing your own, jump to [Reverse proxy and TLS](./reverse-proxy-and-tls) for the config snippets before continuing.
 - **Ports 80 and 443 open** on your server's firewall to the public internet. Caddy needs both — 80 for ACME HTTP-01 challenges, 443 for the actual traffic.
 
 ::: tip <Lightbulb /> A note on DNS propagation.
 DNS changes can take minutes to propagate, sometimes longer. If you've *just* added the A record, the deploy might come up green while Caddy is still failing to get a cert behind the scenes. Wait for `dig +short events.example.org` to return your server's IP from the server itself *and* from somewhere off-network before running the deploy.
+
+```bash
+dig +short events.example.org
+```
 :::
 
 ## Run the deploy
@@ -32,7 +40,15 @@ ssh -i ~/.ssh/YOUR_SSH_KEY root@YOUR_SERVER "curl -fsSL https://raw.githubuserco
 
 If you do already have the repo locally — you're upgrading another instance, or you've been hacking on Pavillion — you can pipe the local copy instead: `ssh root@your-server 'bash -s -- --standalone --domain=events.example.org' < bin/provision.sh`. Same result.
 
+```bash
+ssh root@your-server 'bash -s -- --standalone --domain=events.example.org' < bin/provision.sh
+```
+
 The script needs your SSH public key already on the server's `root` account before you run it — `ssh-copy-id root@your-server` first if it isn't there. It refuses to continue otherwise, because the next thing it does is disable root SSH and password auth. From here on, you'll log into the server as `pavillion@your-server`, not `root`.
+
+```bash
+ssh-copy-id root@your-server
+```
 
 When the script reports `Provisioning Complete`, the app containers are up, the standalone Caddy is fetching a TLS certificate, and `https://your-domain` should load within a few seconds. Drop `--standalone` if you'd rather put your own nginx, Caddy, or Traefik in front — without it the app listens on `127.0.0.1:3000` and waits for you to wire up your own proxy. See [Reverse proxy and TLS](./reverse-proxy-and-tls) for the bring-your-own snippets.
 
@@ -59,6 +75,10 @@ Type the domain you set DNS for and press Enter. The script writes `config/local
 When you see `[OK] Deploy complete.`, the app is up and the bundled Caddy is fetching a TLS certificate. Open `https://your-domain` in a browser. The first load may take a few seconds while Caddy finishes the ACME handshake.
 
 Drop the `COMPOSE_PROFILES=standalone` if you're putting your own proxy in front instead — see [Reverse proxy and TLS](./reverse-proxy-and-tls) for the config snippets.
+
+```bash
+bin/deploy.sh
+```
 
 ::: tip <Lightbulb /> A note on what gets written to disk.
 Either path writes the same files: a `.env` file (your secrets, mode 600), a `secrets/` directory (the same secrets as files, for containers that read them by path), a `.deploy-state` file (tracks which secrets have ever been provisioned, used by the upgrade path), and `config/local.yaml` (your instance-specific config). Back these up after the next step — see [Backups](./backups). Losing them is painful but does not cost you your federation identity: your calendars' signing keys live in the database, so the database backup carries them. What you lose is users' logins, your payment provider keys and moderation history, and you can't reuse the old database volume without `DB_PASSWORD`; [Backups](./backups) lists each secret and what its loss costs.
@@ -132,7 +152,16 @@ And to fill in what this guide glossed over:
 
 **Running `bin/provision.sh` without an SSH key already on `root`.** The script checks `/root/.ssh/authorized_keys` and refuses to run if it's empty, because its next move is to disable password auth and root login — if you don't have a key on file, the script would lock you out the moment it finished. Run `ssh-copy-id root@your-server` from your local machine before piping the script over.
 
+```bash
+ssh-copy-id root@your-server
+```
+
 **Dropping `--standalone` without setting up your own proxy.** Without the flag, `bin/provision.sh` leaves the app on the host's `127.0.0.1:3000` with no TLS terminator in front. The firewall opens 80 and 443 but nothing is listening on them, so `https://your-domain` will time out. If you meant to bring your own proxy, point it at `127.0.0.1:3000` next. If you didn't, re-run provisioning with `--standalone` — or, on the server, append `COMPOSE_PROFILES=standalone` to `/opt/pavillion/.env` and run `./bin/deploy.sh` again.
+
+```bash
+echo 'COMPOSE_PROFILES=standalone' >> /opt/pavillion/.env
+./bin/deploy.sh
+```
 
 **The domain you typed at the prompt is now baked in.** Federation identity is the domain — other instances cache your public key under it. Changing the domain after events have federated breaks every existing relationship. If you got the domain wrong on first install and *no events have federated yet*, the cleanest fix is the start-over path above. After federation has happened, you live with the domain you picked.
 
