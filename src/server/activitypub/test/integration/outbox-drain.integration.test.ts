@@ -23,6 +23,7 @@ import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { addToOutbox, PROCESSED_STATUS_MAX_LENGTH } from '@/server/activitypub/helper/outbox';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import FollowActivity from '@/server/activitypub/model/action/follow';
@@ -359,6 +360,110 @@ describe('Outbox drain', () => {
 
       expect((await storedRow(row.id)).processed_status).toBe('ok');
       expect(postedActivityIds(axiosPost)).toEqual([create.id]);
+    });
+
+    describe('Updates replaced by a later Update of the same object', () => {
+      function publicUpdate(calendar: Calendar, slug: string): UpdateActivity {
+        const actor = calendarActorUri(calendar);
+        return new UpdateActivity(actor, { id: `${actor}/events/${slug}`, type: 'Event', attributedTo: actor } as any)
+          .addressPublic(`${actor}/followers`) as UpdateActivity;
+      }
+
+      it('skips the older Update when a later unprocessed Update of the same event exists', async () => {
+        const calendar = await createFollowedCalendar('drainupdunproc');
+        const older = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 2000);
+        const later = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 1000);
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(older.id)).processed_status).toBe('skipped: superseded');
+        expect((await storedRow(later.id)).processed_status).toBe('ok');
+        expect(postedActivityIds(axiosPost)).toEqual([later.id]);
+      });
+
+      it('skips the older Update when the later Update was already published', async () => {
+        const calendar = await createFollowedCalendar('drainupdproc');
+        const older = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 2000);
+        const later = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 1000);
+        await later.update({ processed_time: new Date(), processed_status: 'ok' });
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(older.id)).processed_status).toBe('skipped: superseded');
+        expect(postedActivityIds(axiosPost)).toEqual([]);
+      });
+
+      it('delivers both Updates when they belong to different objects', async () => {
+        const calendar = await createFollowedCalendar('drainupddiff');
+        const a = await writeOutboxRow(calendar, publicUpdate(calendar, 'one'), 2000);
+        const b = await writeOutboxRow(calendar, publicUpdate(calendar, 'two'), 1000);
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(a.id)).processed_status).toBe('ok');
+        expect((await storedRow(b.id)).processed_status).toBe('ok');
+      });
+
+      it.each(['error: boom', 'skipped: superseded', 'bad message type'])(
+        'still delivers the older Update when the later one ended as "%s"',
+        async (status) => {
+          const calendar = await createFollowedCalendar(`drainupdlost${status.replace(/\W/g, '')}`);
+          const older = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 2000);
+          const later = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 1000);
+          await later.update({ processed_time: new Date(), processed_status: status });
+
+          await outboxService().processOutboxMessages();
+
+          expect((await storedRow(older.id)).processed_status).toBe('ok');
+          expect(postedActivityIds(axiosPost)).toEqual([older.id]);
+        },
+      );
+
+      it('delivers both Updates when their message_time is equal', async () => {
+        const calendar = await createFollowedCalendar('drainupdequal');
+        const first = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'));
+        const second = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'));
+        const when = new Date(Date.now() - 5000);
+        await ActivityPubOutboxMessageEntity.update(
+          { message_time: when },
+          { where: { id: [first.id, second.id] } },
+        );
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(first.id)).processed_status).toBe('ok');
+        expect((await storedRow(second.id)).processed_status).toBe('ok');
+      });
+
+      it('never skips a user-actor Update whose id is not an /updates/ id', async () => {
+        const calendar = await createFollowedCalendar('drainupduser');
+        const actor = calendarActorUri(calendar);
+        const objectId = `${actor}/events/ev`;
+        const userUpdate = publicUpdate(calendar, 'ev');
+        userUpdate.id = `https://${config.get('domain')}/activities/${uuidv4()}`;
+        const userRow = await writeOutboxRow(calendar, userUpdate, 2000);
+        const laterRow = await writeOutboxRow(
+          calendar,
+          new UpdateActivity(actor, { id: objectId, type: 'Event', attributedTo: actor } as any).addressPublic(`${actor}/followers`),
+          1000,
+        );
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(userRow.id)).processed_status).toBe('ok');
+        expect((await storedRow(laterRow.id)).processed_status).toBe('ok');
+      });
+
+      it('delivers a Create that a later Update follows', async () => {
+        const calendar = await createFollowedCalendar('drainupdcreate');
+        const create = await writeOutboxRow(calendar, publicCreate(calendar, 'ev'), 2000);
+        const update = await writeOutboxRow(calendar, publicUpdate(calendar, 'ev'), 1000);
+
+        await outboxService().processOutboxMessages();
+
+        expect((await storedRow(create.id)).processed_status).toBe('ok');
+        expect((await storedRow(update.id)).processed_status).toBe('ok');
+      });
     });
 
     it('is a drain rule only: live delivery of a row with a Delete still delivers it', async () => {

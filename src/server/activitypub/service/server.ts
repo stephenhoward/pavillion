@@ -431,7 +431,7 @@ export default class ActivityPubService {
    * outbox would otherwise show as a repost the calendar withdrew.
    *
    * An `error:` status means processing threw and `bad message type` means the
-   * type is unknown; neither row was published. A `skipped:` row was retracted
+   * type is unknown; neither row was published. A `skipped:` row was retracted or replaced
    * before the drain delivered it, so it stays unpublished too; the Delete or
    * Undo that retracted it is served. An unprocessed row has not
    * been validated yet. Every writer sets `processed_status` together with
