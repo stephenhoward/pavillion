@@ -91,6 +91,13 @@ export type MapperOutput = {
    * when absent.
    */
   external_url: string | null;
+  /**
+   * Candidate cover-image URL from the first RFC 7986 `IMAGE` property. Null
+   * when absent or when the first line is not a `VALUE=URI` `https:` URL.
+   * This is a candidate only: nothing is fetched, and nothing is validated
+   * beyond the scheme.
+   */
+  image_url: string | null;
 };
 
 /**
@@ -120,6 +127,47 @@ function unwrapParam<T>(value: T | { val: T; params: Record<string, string> } | 
     return (value as { val: T }).val;
   }
   return value as T;
+}
+
+/**
+ * Reads the first RFC 7986 `IMAGE` property as a candidate URL.
+ *
+ * node-ical stores it under the lowercase key `image` (ical.js:324) as a bare
+ * string, as `{ params, val }` when parameters are present, or as an array in
+ * source order when repeated (lib/ical-parser-utils.js:577-600). Only the
+ * first line is considered; if it does not qualify the result is null, with
+ * no fallback to later lines. A line qualifies when `VALUE` is absent or
+ * `URI` (case-insensitive) and the value parses as an `https:` URL. Pure: no
+ * network access, never throws.
+ */
+function extractImageUrl(vevent: VEvent): string | null {
+  const raw = (vevent as unknown as Record<string, unknown>).image;
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  if (first === undefined || first === null) {
+    return null;
+  }
+
+  let value: unknown = first;
+  if (typeof first === 'object') {
+    const wrapper = first as { val?: unknown; params?: Record<string, unknown> };
+    const valueParam = wrapper.params?.VALUE;
+    if (valueParam !== undefined
+      && (typeof valueParam !== 'string' || valueParam.toUpperCase() !== 'URI')) {
+      return null;
+    }
+    value = wrapper.val;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.href : null;
+  }
+  catch {
+    return null;
+  }
 }
 
 /**
@@ -241,8 +289,9 @@ function parseFreq(freq: string | undefined): EventFrequency | null {
  *
  * Everything else is dropped on purpose. ORGANIZER/ATTENDEE carry attendee
  * email PII (DEC-004); ATTACH carries arbitrary URLs/binaries with no target
- * field; X-ALT-DESC is HTML and would need a sanitizer Pavillion doesn't yet
- * have. Keeping these out of `x_props` keeps the stored shape safe to expose
+ * field (ATTACH stays dropped; RFC 7986 IMAGE is not an x_props entry, it is
+ * read into `image_url`); X-ALT-DESC is HTML and would need a sanitizer
+ * Pavillion doesn't yet have. Keeping these out of `x_props` keeps the stored shape safe to expose
  * to a future reader without a privacy/safety audit.
  *
  * Node-ical strips the `X-` prefix from X-* property names but does NOT
@@ -425,6 +474,10 @@ export function mapVEvent(input: MapperInput): MapperOutput {
   const urlRaw = unwrapParam(vevent.url);
   const externalUrl = (typeof urlRaw === 'string' && urlRaw.length > 0) ? urlRaw : null;
 
+  // --- IMAGE ---------------------------------------------------------------
+
+  const imageUrl = extractImageUrl(vevent);
+
   // --- x_props -------------------------------------------------------------
 
   const xProps = collectXProps(vevent);
@@ -445,5 +498,6 @@ export function mapVEvent(input: MapperInput): MapperOutput {
     source_last_modified: lastModified,
     x_props: xProps,
     external_url: externalUrl,
+    image_url: imageUrl,
   };
 }

@@ -190,6 +190,77 @@ describe('ICS mapper: mapVEvent', () => {
     });
   });
 
+  describe('IMAGE', () => {
+    function mapWithImage(image: unknown): string | null {
+      const vevent = makeVEvent({});
+      if (image !== undefined) {
+        (vevent as unknown as Record<string, unknown>).image = image;
+      }
+      return mapVEvent({ vevent, calendarPrimaryLanguage: 'en' }).image_url;
+    }
+
+    it('returns the URL for a bare https string', () => {
+      expect(mapWithImage('https://example.com/a.png')).toBe('https://example.com/a.png');
+    });
+
+    it('returns the URL when VALUE=URI', () => {
+      expect(mapWithImage({ params: { VALUE: 'URI' }, val: 'https://example.com/a.png' }))
+        .toBe('https://example.com/a.png');
+    });
+
+    it('returns the URL when DISPLAY=BADGE and VALUE=URI', () => {
+      expect(mapWithImage({ params: { DISPLAY: 'BADGE', VALUE: 'URI' }, val: 'https://example.com/a.png' }))
+        .toBe('https://example.com/a.png');
+    });
+
+    it('accepts a lowercase VALUE=uri', () => {
+      expect(mapWithImage({ params: { VALUE: 'uri' }, val: 'https://example.com/a.png' }))
+        .toBe('https://example.com/a.png');
+    });
+
+    it('returns the normalised href', () => {
+      expect(mapWithImage('HTTPS://Example.COM')).toBe('https://example.com/');
+    });
+
+    it('returns null when there is no IMAGE', () => {
+      expect(mapWithImage(undefined)).toBeNull();
+    });
+
+    it('returns null for VALUE=BINARY', () => {
+      expect(mapWithImage({ params: { VALUE: 'BINARY', ENCODING: 'BASE64' }, val: 'aGVsbG8=' })).toBeNull();
+    });
+
+    it('returns null for an http: URL', () => {
+      expect(mapWithImage('http://example.com/a.png')).toBeNull();
+    });
+
+    it('returns null for a data: URL', () => {
+      expect(mapWithImage('data:image/png;base64,aGVsbG8=')).toBeNull();
+    });
+
+    it('returns null for an unparseable value', () => {
+      expect(mapWithImage('not a url')).toBeNull();
+    });
+
+    it('returns null for a non-string value', () => {
+      expect(mapWithImage({ params: { VALUE: 'URI' }, val: 42 })).toBeNull();
+    });
+
+    it('uses the first of several IMAGE lines', () => {
+      expect(mapWithImage([
+        'https://example.com/first.png',
+        { params: { VALUE: 'URI' }, val: 'https://example.com/second.png' },
+      ])).toBe('https://example.com/first.png');
+    });
+
+    it('does not fall back to a later line when the first does not qualify', () => {
+      expect(mapWithImage([
+        { params: { VALUE: 'BINARY' }, val: 'aGVsbG8=' },
+        'https://example.com/second.png',
+      ])).toBeNull();
+    });
+  });
+
   describe('x_props allowlist', () => {
     // ---- Allowlist: each entry must be retained under a stable output key. ----
 
@@ -696,6 +767,7 @@ describe('ICS mapper: mapVEvent', () => {
       expect(a.content.name).toBe(b.content.name);
       expect(a.content.description).toBe(b.content.description);
       expect(a.external_uid).toBe(b.external_uid);
+      expect(a.image_url).toBe(b.image_url);
       expect(a.x_props).toEqual(b.x_props);
       expect(a.schedule.startDate!.toMillis()).toBe(b.schedule.startDate!.toMillis());
     });
