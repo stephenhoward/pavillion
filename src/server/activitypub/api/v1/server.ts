@@ -16,6 +16,7 @@ import FlagActivity from '@/server/activitypub/model/action/flag';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
+import { Calendar } from '@/common/model/calendar';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { isResolvableCalendarUrlName } from '@/common/validation/calendarUrlName';
 import { createLogger } from '@/server/common/helper/logger';
@@ -168,6 +169,35 @@ export default class ActivityPubServerRoutes {
   }
 
   /**
+   * Answers a request for an event or Note IRI whose live lookup found nothing.
+   *
+   * 410 Gone with a bare Tombstone when this calendar published a public
+   * Delete for the IRI (ActivityPub 6.4; Mobilizon 5.1.x removes its copy only
+   * on 410), 404 otherwise. Called only after the live lookup has failed.
+   *
+   * @param res - The response to write
+   * @param calendar - The calendar named in the request path
+   * @param eventid - The event id from the request path
+   * @param kind - Which IRI was requested
+   */
+  private async respondEventMissing(res: Response, calendar: Calendar, eventid: string, kind: 'event' | 'note'): Promise<void> {
+    const objectUrl = kind === 'event'
+      ? (await import('@/server/activitypub/model/object/event')).EventObject.eventUrl(calendar, eventid)
+      : (await import('@/server/activitypub/model/object/note')).NoteObject.noteUrl(calendar, eventid);
+
+    if (await this.service.isObjectDeleted(calendar, objectUrl)) {
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.status(410).json({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: objectUrl,
+        type: 'Tombstone',
+      });
+      return;
+    }
+    res.status(404).send('Event not found');
+  }
+
+  /**
    * Get an event object as ActivityPub JSON
    *
    * @param urlname - calendar URL name
@@ -192,13 +222,13 @@ export default class ActivityPubServerRoutes {
       }
       catch (error) {
         if (error instanceof EventNotFoundError) {
-          res.status(404).send('Event not found');
+          await this.respondEventMissing(res, calendar, eventid, 'event');
           return;
         }
         throw error;
       }
       if (!event) {
-        res.status(404).send('Event not found');
+        await this.respondEventMissing(res, calendar, eventid, 'event');
         return;
       }
 
@@ -251,13 +281,13 @@ export default class ActivityPubServerRoutes {
       }
       catch (error) {
         if (error instanceof EventNotFoundError) {
-          res.status(404).send('Event not found');
+          await this.respondEventMissing(res, calendar, eventid, 'note');
           return;
         }
         throw error;
       }
       if (!event) {
-        res.status(404).send('Event not found');
+        await this.respondEventMissing(res, calendar, eventid, 'note');
         return;
       }
 

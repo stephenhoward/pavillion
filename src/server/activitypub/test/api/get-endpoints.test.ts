@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
+import config from 'config';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from '@/common/model/events';
@@ -13,13 +14,15 @@ import CalendarInterface from '@/server/calendar/interface';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 
 describe('GET /calendars/:urlname/events/:eventid', () => {
+  const EID = '22222222-2222-4222-8222-222222222222';
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let calendarAPI: CalendarInterface;
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    const activityPubInterface = new ActivityPubInterface(eventBus);
+    activityPubInterface = new ActivityPubInterface(eventBus);
     calendarAPI = new CalendarInterface(eventBus);
     routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
   });
@@ -45,6 +48,7 @@ describe('GET /calendars/:urlname/events/:eventid', () => {
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
     // Regression: getEventById throws EventNotFoundError, not null — stub must reject (pv-ttak)
     sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError('nonexistent'));
+    sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(false);
 
     const req = { params: { urlname: 'mycal', eventid: 'nonexistent' } };
     const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
@@ -117,18 +121,80 @@ describe('GET /calendars/:urlname/events/:eventid', () => {
     expect(result.summaryMap).toBeDefined();
     expect(result.contentMap).toBeDefined();
   });
+
+  describe('deleted event', () => {
+    const expectedIri = `https://${config.get('domain')}/calendars/mycal/events/${EID}`;
+
+    function missingEvent(deleted: boolean) {
+      sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
+      sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError('gone'));
+      return sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(deleted);
+    }
+
+    it('should return 410 with a bare Tombstone when a Delete is on record', async () => {
+      const probe = missingEvent(true);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getEvent(req as any, res as any);
+
+      expect(res.status.calledWith(410)).toBe(true);
+      expect(res.setHeader.calledWith('Content-Type', 'application/activity+json')).toBe(true);
+      expect(res.json.firstCall.args[0]).toEqual({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: expectedIri,
+        type: 'Tombstone',
+      });
+      expect(probe.firstCall.args[1]).toBe(expectedIri);
+    });
+
+    it('should return 404 when no Delete is on record', async () => {
+      missingEvent(false);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getEvent(req as any, res as any);
+
+      expect(res.status.calledWith(404)).toBe(true);
+      expect(res.send.calledWith('Event not found')).toBe(true);
+      expect(res.json.called).toBe(false);
+    });
+
+    it('should not probe when the event exists', async () => {
+      const calendar = new Calendar('cal-id', 'mycal');
+      const event = new CalendarEvent(EID, 'cal-id');
+      event.addContent(new CalendarEventContent('en', 'Live', 'Still here'));
+      event.schedules = [new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00.000Z'))];
+      sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+      sandbox.stub(calendarAPI, 'getEventById').resolves(event);
+      const probe = sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(true);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getEvent(req as any, res as any);
+
+      expect(probe.called).toBe(false);
+      expect(res.status.called).toBe(false);
+      expect(res.json.calledOnce).toBe(true);
+    });
+  });
 });
 
 describe('GET /calendars/:urlname/events/:eventid/note', () => {
+  const EID = '22222222-2222-4222-8222-222222222222';
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let calendarAPI: CalendarInterface;
+  let activityPubInterface: ActivityPubInterface;
 
   const validEventId = '11111111-1111-4111-8111-111111111111';
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    const activityPubInterface = new ActivityPubInterface(eventBus);
+    activityPubInterface = new ActivityPubInterface(eventBus);
     calendarAPI = new CalendarInterface(eventBus);
     routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
   });
@@ -163,6 +229,7 @@ describe('GET /calendars/:urlname/events/:eventid/note', () => {
   it('should return 404 when event not found', async () => {
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
     sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError(validEventId));
+    sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(false);
 
     const req = { params: { urlname: 'mycal', eventid: validEventId } };
     const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
@@ -177,6 +244,7 @@ describe('GET /calendars/:urlname/events/:eventid/note', () => {
   it('should return 404 when getEventById resolves to null', async () => {
     sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
     sandbox.stub(calendarAPI, 'getEventById').resolves(null as any);
+    sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(false);
 
     const req = { params: { urlname: 'mycal', eventid: validEventId } };
     const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
@@ -217,6 +285,66 @@ describe('GET /calendars/:urlname/events/:eventid/note', () => {
       'https://w3id.org/fep/8a8e',
       { pavillion: 'https://pavillion.social/ns/activitypub#' },
     ]);
+  });
+
+  describe('deleted event', () => {
+    const expectedIri = `https://${config.get('domain')}/calendars/mycal/events/${EID}/note`;
+
+    function missingEvent(deleted: boolean) {
+      sandbox.stub(calendarAPI, 'getCalendarByName').resolves(new Calendar('cal-id', 'mycal'));
+      sandbox.stub(calendarAPI, 'getEventById').rejects(new EventNotFoundError('gone'));
+      return sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(deleted);
+    }
+
+    it('should return 410 with a bare Tombstone when a Delete is on record', async () => {
+      const probe = missingEvent(true);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getNote(req as any, res as any);
+
+      expect(res.status.calledWith(410)).toBe(true);
+      expect(res.setHeader.calledWith('Content-Type', 'application/activity+json')).toBe(true);
+      expect(res.json.firstCall.args[0]).toEqual({
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        id: expectedIri,
+        type: 'Tombstone',
+      });
+      expect(probe.firstCall.args[1]).toBe(expectedIri);
+    });
+
+    it('should return 404 when no Delete is on record', async () => {
+      missingEvent(false);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getNote(req as any, res as any);
+
+      expect(res.status.calledWith(404)).toBe(true);
+      expect(res.send.calledWith('Event not found')).toBe(true);
+      expect(res.json.called).toBe(false);
+    });
+
+    it('should not probe when the event exists', async () => {
+      const calendar = new Calendar('cal-id', 'mycal');
+      const event = new CalendarEvent(EID, 'cal-id');
+      event.addContent(new CalendarEventContent('en', 'Live', 'Still here'));
+      event.schedules = [new CalendarEventSchedule('s1', DateTime.fromISO('2026-04-15T09:00:00.000Z'))];
+      sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+      sandbox.stub(calendarAPI, 'getEventById').resolves(event);
+      const probe = sandbox.stub(activityPubInterface, 'isObjectDeleted').resolves(true);
+      const req = { params: { urlname: 'mycal', eventid: EID } };
+      const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+      res.status.returns(res);
+
+      await routes.getNote(req as any, res as any);
+
+      expect(probe.called).toBe(false);
+      expect(res.status.called).toBe(false);
+      expect(res.json.calledOnce).toBe(true);
+    });
   });
 });
 
