@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { Op, Transaction } from 'sequelize';
 import config from 'config';
+import { resolveInstanceName } from '@/server/common/helper/instance-name';
 import {
   FundingSettings,
   ProviderConfig,
@@ -120,8 +121,7 @@ export default class FundingService {
    * the instance title, or the configured domain when no title is set.
    */
   private async productName(): Promise<string> {
-    const settings = await this.configurationInterface?.getAllSettings();
-    return settings?.siteTitle || config.get<string>('domain');
+    return resolveInstanceName(this.configurationInterface);
   }
 
   /**
