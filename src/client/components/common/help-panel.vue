@@ -54,6 +54,8 @@ const emit = defineEmits<{
 </script>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins' as *;
+
 .help-panel__intro {
   font-size: var(--pav-font-size-sm);
   color: var(--pav-text-secondary);
@@ -116,6 +118,7 @@ const emit = defineEmits<{
 }
 
 .help-panel__browse-all {
+  @include compact-target;
   display: inline-flex;
   align-items: center;
   gap: var(--pav-space-1);

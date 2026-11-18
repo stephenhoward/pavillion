@@ -67,6 +67,7 @@
 
   /* Interactive Control Tokens */
   --pav-touch-target-min: 2.75rem;                       /* 44px minimum pointer target */
+  --pav-touch-target-compact: 1.5rem;                    /* 24px minimum for opted-out compact controls (WCAG 2.2 SC 2.5.8) */
   --pav-control-box-size: 1.125rem;                      /* 18px checkbox/radio control box */
 
   /* Shell Layout Tokens */

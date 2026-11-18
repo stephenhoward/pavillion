@@ -62,6 +62,8 @@ function handleActivate(event: MouseEvent) {
 }
 
 .actions-menu-item__action {
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
   display: flex;
   align-items: center;
   gap: var(--pav-space-2);

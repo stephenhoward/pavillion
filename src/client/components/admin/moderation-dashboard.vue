@@ -978,6 +978,8 @@ function goToSettings() {
   .action-link,
   .action-link-mobile {
     // A link sized like the button it replaced: centred in its touch target
+    min-block-size: var(--pav-touch-target-min);
+    min-inline-size: var(--pav-touch-target-min);
     display: inline-flex;
     align-items: center;
     justify-content: center;

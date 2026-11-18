@@ -1,0 +1,15 @@
+/**
+ * Target Size Mixins
+ *
+ * The base layer floors `button`, `[role="button"]` and `select` at 44x44
+ * (base/_accessibility.scss). A min-* floor cannot be beaten by a component's
+ * width/height, so a control that is compact on purpose opts out with this
+ * mixin, which lowers the minimum to the WCAG 2.2 SC 2.5.8 floor (24x24).
+ */
+
+// Opt a deliberately compact control out of the 44px base floor. Also gives a
+// standalone link, which the base layer does not floor, a 24px pointer target.
+@mixin compact-target {
+  min-block-size: var(--pav-touch-target-compact);
+  min-inline-size: var(--pav-touch-target-compact);
+}

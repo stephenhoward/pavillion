@@ -365,6 +365,7 @@ const handleLoadEvents = async (filters) => {
 
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins/tabs' as *;
+@use '@/client/assets/style/mixins/targets' as *;
 @use '../../../assets/style/components/calendar-admin' as *;
 @use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
@@ -438,6 +439,7 @@ const handleLoadEvents = async (filters) => {
     }
 
     .calendar-public-link {
+      @include compact-target;
       display: inline-flex;
       align-items: center;
       gap: 0.25rem;

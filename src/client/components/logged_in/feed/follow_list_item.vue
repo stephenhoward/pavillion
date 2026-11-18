@@ -117,6 +117,8 @@ const handleUnfollow = () => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins' as *;
+
 div.follow-list-item {
   display: flex;
   flex-direction: column;
@@ -183,6 +185,9 @@ div.follow-list-item {
     }
 
     a.mappings-link {
+      @include compact-target;
+      display: inline-flex;
+      align-items: center;
       font-size: 0.875rem;
       font-weight: var(--pav-font-weight-medium);
       color: var(--pav-color-interactive-primary);
