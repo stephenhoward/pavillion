@@ -10,6 +10,7 @@
  *     TRUNK, STALL_REPORT_MAX
  *   Pure: validateFlags, assertRootId, lockDecision, passingCi, queueGate,
  *     priorEpicGate, selectRoot, evaluateGates, scanNotes, parseBuildState,
+ *     parseSpecState,
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
  *     nextFiringCount, rootStillOurs, startDecision, resumePoint,
  *     formatBuildState, formatStallBlock, writeGuard, firingContext,
@@ -37,6 +38,7 @@ import { join } from 'node:path';
 import {
   type Bead,
   type StateLabel,
+  SPEC_STATE_HEADING,
   hasHeading,
   labelsOwnedBy,
   stateWriteArgs,
@@ -112,11 +114,17 @@ export interface Skip {
   reason: string;
 }
 
+/** Where a spec:ready root's time ready came from, in order of preference. */
+export type ReadySource = 'label-event' | 'notes' | 'updated_at';
+
 export interface Selection {
   root: string | null;
   kind: 'resume' | 'ready' | null;
-  /** Ordering source for a spec:ready pick; null on resume or no pick. */
-  source: 'label-event' | 'updated_at' | null;
+  /** The pick's priority (0 highest); null on resume or no pick. */
+  priority: number | null;
+  /** Source of the pick's time ready; null on resume or no pick. */
+  source: ReadySource | null;
+  /** The pick's time ready; null on resume or no pick. */
   at: string | null;
   skipped: Skip[];
 }
@@ -444,6 +452,28 @@ function parseStateBody(body: string[]): BuildStateParse {
   };
 }
 
+const SPEC_STATE = new RegExp(`^${SPEC_STATE_HEADING}$`);
+const SPEC_READY_LINE = /^- spec:ready (\S+)$/;
+
+/**
+ * The time on the last `- spec:ready <time>` line under an unfenced
+ * `## Spec state` heading — the block plan-scheduled's state write to
+ * spec:ready appends — or null when there is none. The time is returned
+ * as written; the caller decides whether it parses.
+ */
+export function parseSpecState(notes: string | undefined): string | null {
+  const { lines, headings } = scanNotes(notes ?? '');
+  let at: string | null = null;
+  for (const start of headings.filter(i => SPEC_STATE.test(lines[i]))) {
+    const end = headings.find(i => i > start) ?? lines.length;
+    for (const line of lines.slice(start + 1, end)) {
+      const m = line.match(SPEC_READY_LINE);
+      if (m) at = m[1];
+    }
+  }
+  return at;
+}
+
 // =============================================================================
 // Gates and selection
 // =============================================================================
@@ -489,9 +519,11 @@ function holdReason(b: BuildBead): string | null {
 
 /**
  * Resume first: an open spec:building root without build:hold or
- * needs-human (lowest id if several). Otherwise the open spec:ready root
- * that reached spec:ready earliest — label-event time when known, else
- * updated_at — ties by id. Every skipped candidate is named with a reason.
+ * needs-human (lowest id if several). Otherwise the highest-priority open
+ * spec:ready root, earliest ready among equals, ties by id. Time ready is
+ * the label-event time when known, else the root's last `## Spec state`
+ * line, else updated_at; an unparsable time skips the root rather than
+ * falling through. Every skipped candidate is named with a reason.
  */
 export function selectRoot(beads: BuildBead[]): Selection {
   const roots = beads.filter(b => isRoot(b) && b.status !== 'closed').sort((a, b) => a.id.localeCompare(b.id));
@@ -506,20 +538,24 @@ export function selectRoot(beads: BuildBead[]): Selection {
     else skipped.push({ id: b.id, reason: `another spec:building root (${resume}) resumes first` });
   }
 
-  const candidates: { id: string; at: string; source: 'label-event' | 'updated_at' }[] = [];
+  const candidates: { id: string; priority: number; at: string; source: ReadySource }[] = [];
   for (const b of roots.filter(r => labelsOf(r).includes('spec:ready'))) {
     const state = parseBuildState(b.notes);
+    const noted = parseSpecState(b.notes);
+    const ready: [string, ReadySource] | null = b.spec_ready_at
+      ? [b.spec_ready_at, 'label-event']
+      : noted ? [noted, 'notes'] : b.updated_at ? [b.updated_at, 'updated_at'] : null;
     const reason = holdReason(b)
       ?? (hasHeading(b.notes, 'Bead Analysis') ? null : 'no Bead Analysis heading: run /analyze-bead')
       ?? (state.ok && state.state === null ? null : 'spec:ready but already has a Build state block')
-      ?? ((b.spec_ready_at ?? b.updated_at) ? null : 'no updated_at to order by');
+      ?? (Number.isSafeInteger(b.priority) && b.priority >= 0 ? null : 'no priority to order by')
+      ?? (ready ? null : 'no time ready: no label event, Spec state line or updated_at');
     if (reason) {
       skipped.push({ id: b.id, reason });
       continue;
     }
-    const candidate = b.spec_ready_at
-      ? { id: b.id, at: b.spec_ready_at, source: 'label-event' as const }
-      : { id: b.id, at: b.updated_at as string, source: 'updated_at' as const };
+    const [at, source] = ready as [string, ReadySource];
+    const candidate = { id: b.id, priority: b.priority, at, source };
     if (Number.isNaN(Date.parse(candidate.at))) {
       skipped.push({ id: b.id, reason: `unparsable ${candidate.source} timestamp ${JSON.stringify(candidate.at)}` });
       continue;
@@ -527,11 +563,12 @@ export function selectRoot(beads: BuildBead[]): Selection {
     candidates.push(candidate);
   }
 
-  if (resume !== null) return { root: resume, kind: 'resume', source: null, at: null, skipped };
-  candidates.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id));
+  const none = { priority: null, source: null, at: null, skipped };
+  if (resume !== null) return { root: resume, kind: 'resume', ...none };
+  candidates.sort((a, b) => a.priority - b.priority || Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id));
   const pick = candidates[0];
-  if (!pick) return { root: null, kind: null, source: null, at: null, skipped };
-  return { root: pick.id, kind: 'ready', source: pick.source, at: pick.at, skipped };
+  if (!pick) return { root: null, kind: null, ...none };
+  return { root: pick.id, kind: 'ready', priority: pick.priority, source: pick.source, at: pick.at, skipped };
 }
 
 export interface GatesInput {
@@ -589,7 +626,10 @@ export function evaluateGates({ beads, prs, now, mode }: GatesInput): GatesResul
   else if (selection.root === null) {
     add({ check: 'nothing-to-build', verdict: 'fail', reading: 'no eligible spec:ready or spec:building root' });
   }
-  else add({ check: 'nothing-to-build', verdict: 'pass', reading: `selected ${selection.root} (by ${selection.source})` });
+  else {
+    const reading = `selected ${selection.root} (P${selection.priority}, ready ${selection.at} by ${selection.source})`;
+    add({ check: 'nothing-to-build', verdict: 'pass', reading });
+  }
 
   return { ok: !failed, gates, selection };
 }

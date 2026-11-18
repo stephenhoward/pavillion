@@ -66,6 +66,7 @@ revise-note <root>                  text: the maintainer's note, empty if none
 revision-number <root>              JSON {revision}: N for the next "(revision N)" blocks
 gate-misses <root>                  JSON {misses}: misses since the last restart
 state-write <spec:label>            text: the bd update flags of a state write
+state-notes <spec:label> [<file>]   text: the write's --append-notes value (file, then for spec:ready a Spec state block)
 ```
 
 A heading test ("has a Planned hierarchy heading") means `inspect`'s

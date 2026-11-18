@@ -57,8 +57,9 @@ reviewed spec in place.
 
 ## Note blocks
 
-Tooling outside this repo parses these two blocks in the root's notes,
-whatever their suffix, so their shape is a contract. Nothing else goes under
+Tooling outside this repo parses the first two blocks in the root's notes,
+whatever their suffix, so their shape is a contract; build-scheduled parses
+the third. Nothing else goes under
 a *Decisions made for you* heading: status, how a note was addressed and
 hierarchy notes go in their own blocks (`## Revision notes`,
 `## Decomposition notes`, `## Decomposition gate`).
@@ -82,6 +83,22 @@ only, in the Phase ADVISE format, and per adjustment a verdict-free line
 `- adjusted for <advisor>: <change>`. Consumers scan for `REQUEST CHANGES`,
 so it appears only as a final verdict. With no advisor applicable, the block
 is `- none applicable — <why>`.
+
+**`## Spec state`** records when a root reached `spec:ready`. The state
+write to `spec:ready` appends it in the same `bd update`, always under a
+heading of its own so the line never falls inside another block, holding one
+dated line:
+
+```
+## Spec state
+- spec:ready <YYYY-MM-DDTHH:MM:SSZ>
+```
+
+`spec.ts state-notes spec:ready [<file>]` prints that call's
+`--append-notes` value: the file's text, then the block. A write to any other
+label appends no such block. build-scheduled orders roots of equal priority
+by the last such line (`parseSpecState` in `scripts/lib/build.ts`), falling
+back to `updated_at`.
 
 **Design rulings.** Maintainer rulings on design forks, made before drafting,
 live in notes blocks with a Design ruling heading (singular) and in a

@@ -15,6 +15,7 @@ import {
   hasHeading,
   lastBlock,
   stateWriteArgs,
+  stateWriteNotes,
   selectDrafting,
   selectApproved,
   selectRevise,
@@ -156,6 +157,29 @@ describe('stateWriteArgs', () => {
 
   it('rejects an unknown label', () => {
     expect(() => stateWriteArgs('spec:nope' as never)).toThrow();
+  });
+});
+
+describe('stateWriteNotes', () => {
+  const now = new Date('2026-11-17T22:41:24.567Z');
+
+  it('appends a Spec state block with the dated line on a write to spec:ready', () => {
+    expect(stateWriteNotes('spec:ready', now)).toBe('## Spec state\n- spec:ready 2026-11-17T22:41:24Z');
+  });
+
+  it('puts the block after what the same call appends, under its own heading', () => {
+    expect(stateWriteNotes('spec:ready', now, '# Bead Analysis\n\nwaves\n')).toBe(
+      '# Bead Analysis\n\nwaves\n\n## Spec state\n- spec:ready 2026-11-17T22:41:24Z',
+    );
+  });
+
+  it.each(STATE_LABELS.filter(l => l !== 'spec:ready'))('appends nothing on a write to %s', label => {
+    expect(stateWriteNotes(label, now)).toBe('');
+    expect(stateWriteNotes(label, now, '## Advisory Review\n- x')).toBe('## Advisory Review\n- x');
+  });
+
+  it('rejects an unknown label', () => {
+    expect(() => stateWriteNotes('spec:nope' as never, now)).toThrow();
   });
 });
 

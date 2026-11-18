@@ -60,7 +60,7 @@ commands:
                                 stale once that process exits
   release --run <id>            remove the lock if this run holds it (JSON)
   gates [--queue-only]          each gate's reading and verdict, in order (JSON)
-  select                        selected root, ordering source, skipped roots (JSON)
+  select                        selected root, priority, time-ready source, skipped roots (JSON)
   build-state <root-id>         last Build state block, start decision, resume point and
                                 next_state, the next write's state file (JSON); exit 1
                                 means stall the root

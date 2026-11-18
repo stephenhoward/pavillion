@@ -4,7 +4,8 @@
  *
  * Exports:
  *   State table: STATE_LABELS, STATE_LABEL_OWNERS, labelsOwnedBy
- *   Pure helpers: hasHeading, lastBlock, stateWriteArgs, selectDrafting,
+ *   Spec state block: SPEC_STATE_HEADING, specReadyLine
+ *   Pure helpers: hasHeading, lastBlock, stateWriteArgs, stateWriteNotes, selectDrafting,
  *     selectApproved, selectRevise, unanalysedLeaves, reviseNote,
  *     revisionNumber, gateMisses, inspect
  *   CLI helpers: bdSelect, bdInspect, bdLeaves, bdNotes
@@ -161,6 +162,34 @@ export function stateWriteArgs(target: StateLabel): string[] {
   }
   args.push('--add-label', target);
   return args;
+}
+
+/**
+ * The `## Spec state` block a state write to `spec:ready` appends: the
+ * heading and one dated line. build-scheduled's `parseSpecState` reads the
+ * last such line as the root's time ready.
+ */
+export const SPEC_STATE_HEADING = '## Spec state';
+
+/** `- spec:ready <YYYY-MM-DDTHH:MM:SSZ>`, the line under SPEC_STATE_HEADING. */
+export function specReadyLine(now: Date): string {
+  return `- spec:ready ${now.toISOString().replace(/\.\d{3}Z$/, 'Z')}`;
+}
+
+/**
+ * The `--append-notes` text of a state write to `target`: `notes` (what the
+ * same call already appends, possibly empty), followed, for `spec:ready`
+ * only, by a `## Spec state` block of its own heading, so the dated line
+ * never falls inside another block. Any other target appends nothing.
+ */
+export function stateWriteNotes(target: StateLabel, now: Date, notes = ''): string {
+  if (!STATE_LABELS.includes(target)) {
+    throw new Error(`not a state label: ${target}`);
+  }
+  if (target !== 'spec:ready') return notes;
+  const block = `${SPEC_STATE_HEADING}\n${specReadyLine(now)}`;
+  const body = notes.trimEnd();
+  return body ? `${body}\n\n${block}` : block;
 }
 
 // =============================================================================
