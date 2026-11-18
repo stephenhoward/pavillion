@@ -55,7 +55,26 @@ otherwise the highest-priority `spec:ready` root, earliest ready among
 equals, with each skipped root and its reason. Time ready is a label-event
 time when bd supplies one, else the root's last `## Spec state` line (written
 by the planner's `spec:ready` write), else its `updated_at`; the selection and the gate reading name the pick's priority and
-which source its time came from. `build:hold` is maintainer-only. Never dispatch a `decision`-type
+which source its time came from.
+
+**Lanes.** `--scheduled --lane=<office>` (`product`, `engineering` or
+`operations`, at most once) restricts the run to one office's roots:
+`validate-flags` returns it as `lane`; pass the same `--lane=<office>` to
+`gates`, or to `dry-run` on `dryRun: true` (`gates --queue-only` takes
+none). Resume, the prior-epic gate and the ready order
+then see only that lane's roots, and the gates result, the selection and
+the report name the lane. A root's lane comes from its own labels: exactly
+one `office:` label names it; none puts it in the engineering lane, and the
+selection and gate reading say it was taken as unlabelled; two or more put
+it in no lane, skipped with a reason naming the labels. A root's children
+are never filtered by lane: resume, chain planning and the completion sweep
+read all of them. The queue gate stays global, the same in every lane, and
+the lock stays one run per clone, so lanes run one after another, not side
+by side. No lane is the whole queue, as before. The dry run is how an
+outside runner names the worktree for the root it will build:
+`dry-run --lane=<office>` selects exactly what `gates --lane=<office>` would.
+
+`build:hold` is maintainer-only. Never dispatch a `decision`-type
 `Decide:` leaf; if the only open leaves are blocked on one, note it on the
 root and in the report, and leave the root `spec:building`.
 
@@ -155,7 +174,9 @@ submit also runs `validate-prs <root> --text`, for the report only.
 
 `reports/spawn-bead-workers/<YYYY-MM-DD>.md`, only once the report-path
 check passes (a later run appends `## Run <HH:MM>`), created before the
-first dispatch with the preflight, gate and selection readings. Append as
+first dispatch with the lane (or "whole queue"), the preflight, gate and
+selection readings. Append as
 it happens: each submit (PR number), red gate (one-line finding), retry,
 label change, kill-switch stop, and the stop and why. Bead ids are allowed
-here, never in GitHub text.
+here, never in GitHub text, and so are `office:` labels; PR text names a
+lane by its name alone (`prTextCheck` refuses the label form).
