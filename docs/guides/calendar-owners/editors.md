@@ -6,7 +6,7 @@ description: Invite editors to your Pavillion calendar, manage their access, and
 
 Most calendars aren't run by one person. The volunteer who handles the music shows isn't the same person who handles the workshops, and neither of them wants to be the only one with the password. This guide is about adding people to the team — inviting editors, understanding what they can and can't do, removing someone when their role changes, and shaping access in ways that scale from a two-person project to a larger collective without losing track of who's allowed to do what.
 
-A short orientation before the mechanics. Pavillion's editor model is deliberately simple: a calendar has one *owner* (the account that created it) and any number of *editors* (additional accounts the owner has invited in). There are no other tiers — no "contributor," no "moderator," no "publisher-but-not-deleter."
+A note before we dig in to the details. Pavillion's editor model is deliberately simple: a calendar has one *owner* (the account that created it) and any number of *editors* (additional accounts the owner has invited in). There are no other tiers — no "contributor," no "moderator," no "publisher-but-not-deleter."
 
 That simplicity is on purpose; the cost of a richer permission model is a constant low-grade tax of "wait, can they do this?" every time a new task comes up. The trade-off is that *editor* is a role you should hand out only to people you trust roughly as much as yourself.
 
@@ -33,12 +33,12 @@ What an editor *cannot* do — these stay with the owner:
 That's the whole list. The split is roughly *content vs. identity*: editors shape what's *on* the calendar, the owner controls what the calendar *is* and who's authorized to shape it.
 
 ::: tip <Lightbulb /> A note on the report-review permission.
-A separate per-editor toggle exists to let a specific editor review reports filed against the calendar's events (the moderation queue). It's not yet exposed in the editor management UI, so for now report review stays with the owner. The moderation guide will cover this in more detail once that surface lands.
+A separate per-editor toggle exists to let a specific editor review reports filed against the calendar's events (the moderation queue). It's not yet exposed in the editor management UI, so for now report review stays with the owner. The moderation guide will cover this in more detail once that feature arrives.
 :::
 
 ## Invite an editor
 
-Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen. The first time you visit, the list is empty.
+Open **Settings → Calendar → Editors**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen. The first time you visit, the editor list is empty.
 
 Click <Btn>Add Editor</Btn>, enter the email address of the person you want to add, and submit.
 
@@ -56,7 +56,7 @@ The current invitation form doesn't offer a custom-message field, so the email a
 
 When someone steps back from the role — they've left the organization, taken a break, or you've simply realized the working pattern isn't right — open **Settings → Calendar → Editors**, find their card in the **Current Editors** list, and click <Btn>Remove</Btn>. The confirmation dialog asks once; once you confirm, their edit access ends immediately.
 
-What happens to the events they created or edited: nothing. Events belong to the *calendar*, not to the editor who created them. The events stay published, the categories they tagged stay attached, the places they added to the venue list stay there. Removing an editor removes the person's ability to make further changes; it doesn't unwind their past contributions.
+What happens to the events they created or edited: nothing. Events belong to the *calendar*, not to the editor who created them. The events stay published, the categories they tagged stay attached, the places they added to the venue list remain. Removing an editor removes the person's ability to make further changes; it doesn't unwind their past contributions.
 
 What happens to a pending invitation if you change your mind before the person accepts: open the **Pending Invitations** section of the same screen and click <Btn>Cancel</Btn> on the row. The invitation link stops working immediately, and the invited person — if they hadn't yet acted on the email — will see "this invitation is no longer valid" if they click it later.
 
@@ -98,7 +98,7 @@ Sharing one account looks easier on day one. One password to circulate, one inbo
 
 The case where a shared account is *almost* defensible is "we have one volunteer who handles the calendar and we don't want to retrain a new person every six months when the role rotates." Even there, the right move is to add the new volunteer as their own editor before the old one rotates off, let them shadow for a week, then remove the previous editor. A week of overlap costs nothing; a forgotten shared password costs the next year of "wait, who has the login?"
 
-The short version: every person who edits the calendar should have their own Pavillion account, and you should add and remove them as people rather than passing a shared identity around. The friction is small, the payoff compounds.
+In short: every person who edits the calendar should have their own Pavillion account, and you should add and remove them as people rather than passing a shared identity around. The friction is small, and the payoff compounds.
 
 ## What's next
 
