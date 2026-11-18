@@ -21,6 +21,7 @@ class CalendarRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.get('/calendars', ExpressHelper.loggedInOnly, this.listCalendars.bind(this));
+    router.get('/calendars/:urlName/can-edit', ExpressHelper.loggedInOnly, this.canEditCalendar.bind(this));
     router.post('/calendars', ExpressHelper.loggedInOnly, this.createCalendar.bind(this));
     router.patch('/calendars/:calendarId/settings', ExpressHelper.loggedInOnly, this.updateCalendarSettings.bind(this));
     app.use(routePrefix, router);
@@ -42,6 +43,37 @@ class CalendarRoutes {
       ...calendarInfo.calendar.toObject(),
       userRelationship: calendarInfo.role, // 'owner' or 'editor'
     })));
+  }
+
+  /**
+   * Whether the signed-in viewer owns or edits the calendar named by urlName.
+   *
+   * Answers only a boolean about the caller's own membership. An unknown
+   * calendar answers false with 200, so the route reveals nothing beyond what
+   * the public site already shows and is not a calendar-existence oracle.
+   */
+  async canEditCalendar(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for calendar lookup. Not logged in?",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    try {
+      const editable = await this.service.editableCalendarsWithRoleForUser(account);
+      const canEdit = editable.some((info) => info.calendar.urlName === req.params.urlName);
+      res.json({ canEdit });
+    }
+    catch (error) {
+      logger.error({ err: error }, 'Error checking calendar edit access');
+      res.status(500).json({
+        "error": "An error occurred while checking calendar access",
+      });
+    }
   }
 
   async createCalendar(req: Request, res: Response) {

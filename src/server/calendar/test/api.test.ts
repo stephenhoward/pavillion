@@ -1184,6 +1184,68 @@ describe('Calendar Settings API', () => {
   });
 });
 
+describe('Calendar can-edit API', () => {
+  let routes: CalendarRoutes;
+  let router: express.Router;
+  let calendarInterface: CalendarInterface;
+  let canEditSandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const stubRoles = (...entries: [string, 'owner' | 'editor'][]) =>
+    canEditSandbox.stub(calendarInterface, 'editableCalendarsWithRoleForUser').resolves(
+      entries.map(([urlName, role]) => ({ calendar: new Calendar(`id-${urlName}`, urlName), role })) as any,
+    );
+
+  beforeEach(() => {
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    routes = new CalendarRoutes(calendarInterface);
+    router = express.Router();
+    router.get('/calendars/:urlName/can-edit', addRequestUser, (req, res) => { routes.canEditCalendar(req, res); });
+  });
+
+  afterEach(() => {
+    canEditSandbox.restore();
+  });
+
+  it('answers true for an owner', async () => {
+    stubRoles(['mine', 'owner']);
+    const response = await request(testApp(router)).get('/calendars/mine/can-edit');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ canEdit: true });
+  });
+
+  it('answers true for an editor', async () => {
+    stubRoles(['shared', 'editor']);
+    const response = await request(testApp(router)).get('/calendars/shared/can-edit');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ canEdit: true });
+  });
+
+  it('answers false for a signed-in non-member', async () => {
+    stubRoles(['mine', 'owner']);
+    const response = await request(testApp(router)).get('/calendars/someone_else/can-edit');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ canEdit: false });
+  });
+
+  it('answers false with 200 for an unknown calendar', async () => {
+    stubRoles();
+    const response = await request(testApp(router)).get('/calendars/no_such_calendar/can-edit');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ canEdit: false });
+  });
+
+  it('refuses a request with no account and never consults the service', async () => {
+    const listStub = stubRoles(['mine', 'owner']);
+    const bare = express.Router();
+    bare.get('/calendars/:urlName/can-edit', (req, res) => { routes.canEditCalendar(req, res); });
+    const response = await request(testApp(bare)).get('/calendars/mine/can-edit');
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('AuthenticationError');
+    expect(response.body.canEdit).toBeUndefined();
+    expect(listStub.called).toBe(false);
+  });
+});
+
 describe('Calendar Creation API', () => {
   let routes: CalendarRoutes;
   let router: express.Router;

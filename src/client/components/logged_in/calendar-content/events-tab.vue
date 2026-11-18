@@ -623,6 +623,7 @@ initializeFiltersFromURL();
               <Link2Off :size="18" />
             </button>
             <button
+              v-if="event.repostStatus !== 'none'"
               type="button"
               class="report-btn btn btn--icon btn--subtle"
               @click.stop="handleReportEvent(event)"

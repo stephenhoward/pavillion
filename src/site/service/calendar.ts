@@ -39,6 +39,17 @@ export default class CalendarService {
     this.eventStore = eventStore;
   }
 
+  /**
+   * Whether the signed-in visitor owns or edits the calendar.
+   *
+   * Calls the authenticated GET /api/v1/calendars/:urlName/can-edit, which
+   * answers a bare boolean computed on the server. Callers must only use it
+   * when the visitor already holds a token; it throws on any failure.
+   */
+  async viewerCanEditCalendar(urlName: string): Promise<boolean> {
+    const result = await ModelService.getModel(`/api/v1/calendars/${encodeURIComponent(urlName)}/can-edit`);
+    return result?.canEdit === true;
+  }
 
   /**
    * List public discoverable calendars for the /discover landing page.
