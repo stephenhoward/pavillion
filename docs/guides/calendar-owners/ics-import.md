@@ -4,22 +4,20 @@ description: Migrate events into Pavillion from Google Calendar, Nextcloud, Word
 
 # Migrate from another calendar via ICS import
 
-Many new calendar owners arrive with events already living somewhere — a Google Calendar, a Nextcloud instance, a WordPress events plugin, a Gancio or Mobilizon calendar. This guide is about moving that history onto Pavillion using ICS, the standard calendar-data format that almost every calendar tool can export.
+Many new calendar owners arrive with events already living somewhere — a Google Calendar, a Nextcloud instance, a WordPress events plugin, a Gancio or Mobilizon calendar. This guide is about moving that history into Pavillion using ICS, the standard calendar-data format that almost every calendar tool can export.
 
 There are two ways in, and which one you use depends on what your old calendar can give you:
 
-- **Upload an exported file.** Export an `.ics` file from your old calendar and upload it. Pavillion imports the events right away — no verification, no DNS, no website to edit. This is the path for most people, including anyone coming from Google Calendar, Outlook, or iCloud.
+- **Upload an exported file.** Export an `.ics` file from your old calendar and upload it. Pavillion imports the events right away — no verification, no DNS, no website editing. This is the simplest path for most people, including anyone coming from Google Calendar, Outlook, or iCloud.
 - **Connect a feed URL.** Point Pavillion at an ICS feed your source publishes, prove you control the domain it's published on, and pull updates on demand with <Btn>Sync now</Btn>. This suits a self-hosted source you'll keep editing for a while during the switch-over.
-
-Either way, the goal is the migration case the tool is designed for: getting the events you already have onto your new calendar, with the edits you make on Pavillion sticking.
 
 ## What ICS import is for
 
 A bit of background on what this import process is for, before you set anything up.
 
-**Fits:** moving the events from a calendar you already run somewhere else onto your new Pavillion calendar. A community center switching from a self-hosted Nextcloud calendar. A venue migrating off a WordPress plugin. An arts group consolidating a Gancio install. In all of these you have access to the source, and the goal is one-time migration plus the option to keep nudging Pavillion to pick up edits while you wind the old system down.
+**What fits:** moving the events from a calendar you already run somewhere else onto your new Pavillion calendar. A community center switching from a self-hosted Nextcloud calendar. A venue migrating off a WordPress plugin. An arts group consolidating a Gancio install. In all of these you have access to the source, and the goal is one-time migration plus the option to keep nudging Pavillion to pick up edits while you wind the old system down.
 
-**Also fits:** a calendar kept on a hosted provider like Google Calendar, Outlook/M365, or iCloud. You can't prove you own `calendar.google.com`, so a live feed from one of those won't verify — but you don't need it to. Export an `.ics` file from the provider and upload it; see [Upload an exported file](#upload-an-exported-file) below.
+**Also fits:** a calendar kept on a hosted provider like Google Calendar, Outlook/M365, or iCloud. Export an `.ics` file from the provider and upload it; see [Upload an exported file](#upload-an-exported-file) below.
 
 **Doesn't fit:** aggregating events *from a third party you don't control* — a neighboring calendar, a regional partner, a Facebook page. Import is for moving your own events: a feed URL only syncs once you've proved you own the domain it's published on, and an uploaded file is a one-time snapshot, not a way to keep up with someone else's schedule. For pulling events from other people's calendars, see [follow-and-repost](./follow-and-repost).
 
@@ -44,7 +42,7 @@ Because of these technical decisions, an event that imports correctly will still
 
 ## Add an import source
 
-Open **Settings → Calendar → Import**, and check that it's the calendar you're importing into. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen.
+Open **Settings → Calendar → Import**, and check which calendar you're importing into. The calendar's name shows the one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen.
 
 If you haven't added an import source yet, the panel shows an empty state with one button. Click <Btn>Add Import Source</Btn>. The modal that opens has two tabs, one for each path: **From URL** and **Upload file**.
 
@@ -52,7 +50,7 @@ If you haven't added an import source yet, the panel shows an empty state with o
 
 Use the **Upload file** tab when you have an `.ics` file on your computer — the usual result of an "Export" button in Google Calendar, Outlook, iCloud, or a calendar plugin. Choose the file in the **Calendar file** field and click <Btn>Add source</Btn>.
 
-The events import immediately. There's no ownership step: you're putting your own file into a calendar you already manage, so there's no domain to prove. When the import finishes, a notification reports the result — for example, *Import complete: 47 added, 0 updated.* The file then appears in the **Import Sources** list under its filename with a **File** badge and the time it was imported.
+The events import immediately. There's no ownership step: you're putting your own file into a calendar you already manage. When the import finishes, a notification reports the result — for example, *Import complete: 47 added, 0 updated.* The file then appears in the **Import Sources** list under its filename with a **File** badge and the time it was imported.
 
 The limits on a file:
 
@@ -60,7 +58,7 @@ The limits on a file:
 - **Up to 10,000 events.** A larger file is rejected outright rather than half-imported; split the export by date range and upload the pieces.
 - **At least one event.** A calendar file with no events in it is rejected, and nothing is added to your list.
 
-A file is a snapshot, not a connection. It has no <Btn>Sync now</Btn> button, because there's nothing for Pavillion to go back and check. If the old calendar changes while you're still winding it down, export it again and upload the new file — see [What happens when you re-import](#what-happens-when-you-re-import) for how that lands.
+A file is a snapshot, not a connection. It has no <Btn>Sync now</Btn> button, because there's nothing for Pavillion to go back and check. If the old calendar changes while you're still winding it down, export it again and upload the new file — see [What happens when you re-import](#what-happens-when-you-re-import) for how that works.
 
 ## Connect a feed URL
 
@@ -76,8 +74,8 @@ A calendar can connect **up to 10 feed URLs** by default. Uploaded files don't c
 
 Click <Btn>Add source</Btn>. The new source appears in the list, and the verify-ownership wizard opens automatically — you can't sync a feed until you've proved the source is yours.
 
-::: tip <Lightbulb /> A note on the calendar URL field.
-The URL you paste here is the URL of the ICS *feed* — the dynamic file your source generates with all the events in it — not the URL of the source's web page. They're usually different. If you paste a page URL by accident, the first sync will fail with a parse error; just open the row and re-create the source with the right URL.
+::: tip <Lightbulb /> A reminder about the calendar URL field.
+The URL you paste here is the URL of the ICS *feed* — the dynamic file your source generates with all the events in it — not the URL of the source's web page. They're usually different. If you paste a page URL by accident, the first sync will fail with an error; just open the row and re-create the source with the right URL.
 :::
 
 ## Verify ownership of a feed
@@ -88,14 +86,14 @@ The wizard offers two methods. Pick whichever you can publish on the source doma
 
 **An HTML link on a page.** Pavillion shows you an HTML snippet (`<a rel="me" href="...">`) and a field to enter the URL of a page where you've published it. Paste the snippet into any page on the same domain as the feed — the homepage, an "about" page, a hidden test page — it doesn't matter as long as it's publicly fetchable and on the same hostname — then put that page's URL in the field and click <Btn>Verify</Btn>. This is the best option if you can edit pages on the site but don't have DNS access.
 
-**A DNS TXT record.** Pavillion shows you a record name (`_pavillion-challenge.your-source-domain.example`) and a record value (`pavillion-verify=v1:your-instance:a-long-token`). Copy them into your DNS provider's control panel as a new TXT record on that name, save, wait a minute for DNS to propagate, then click <Btn>Verify</Btn>. This is an option if you have access to the DNS provider for the source domain.
+**A DNS TXT record.** Pavillion shows you a record name (`_pavillion-challenge.your-source-domain.example`) and a record value (`pavillion-verify=v1:your-instance:a-long-token`). Copy them into your DNS provider's control panel as a new TXT record on that domain, save, wait a minute for DNS to propagate, then click <Btn>Verify</Btn>. This is an option if you have access to the DNS provider for the source domain.
 
 Either method proves the same thing, just through a different file you control. There's no difference in what you can do afterward.
 
 Verification doesn't last forever — the record needs to stay published so Pavillion can re-check it periodically. If the verification expires (the TXT record gets cleaned up, the page you put the snippet on is deleted), syncs keep working for a 14-day grace window so you have time to notice and republish. Past that window, the source goes back to unverified and syncing stops until you re-verify.
 
 ::: tip <Lightbulb /> A note on DNS that won't verify.
-DNS changes are usually quick but not instant — most providers propagate in under a minute, some take longer. If a verify attempt says the record wasn't found and you just published it, wait a minute and try again before assuming something's wrong with the record itself. If repeated tries still fail, double-check the record name (it must be exactly `_pavillion-challenge.` followed by the source's hostname, no extras) and that you saved the record as a TXT record specifically — not a CNAME, not an A record.
+DNS changes are usually quick but not instant — most providers propagate in under a minute, but some take longer. If a verify attempt says the record wasn't found and you just published it, wait a minute and try again before assuming something's wrong with the record itself. If repeated tries still fail, double-check the record name (it must be exactly `_pavillion-challenge.` followed by the source's hostname, no extras) and that you saved the record as a TXT record specifically — not a CNAME, not an A record.
 :::
 
 ## Run a "Sync now" pull

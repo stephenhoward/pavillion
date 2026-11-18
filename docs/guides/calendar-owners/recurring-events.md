@@ -8,13 +8,13 @@ Most calendars have at least one event that repeats — a weekly board meeting, 
 
 ## When recurrence is the right tool
 
-Recurrence is for the same event happening on a predictable schedule, with mostly the same details each time: the board meeting on the third Wednesday at 7pm in the same room, the Tuesday-night open mic at the same coffee shop, the weekly community garden workday from 9 to noon.
+Use recurrence when the same event happens on a predictable schedule, with mostly the same details each time: the board meeting on the third Wednesday at 7pm in the same room, or the Tuesday-night open mic at the same coffee shop, for example.
 
-If the events you're planning vary in ways that matter — different topics, different presenters, different titles — the right tool is probably a series, not recurrence. There's a short decision aid further down.
+If the events you're planning vary in ways that matter — different topics, different presenters, different titles — the right tool is probably a series, not recurrence. There's a short decision aid further down this page.
 
 ## Set up a schedule
 
-Open the event editor — creating a new event or editing an existing one. Find the **Date & Time** section, where each event has at least one **Schedule 1** block with date, time, end date, end time, and timezone fields. Fill those in for the *first* occurrence of the event. Then click <Btn>Add recurrence</Btn> below the timezone field.
+Open the event editor — either by creating a new event or by editing an existing one. Find the **Date & Time** section, where each event has at least one **Schedule** block with date, time, end date and time, and timezone fields. Fill those in for the *first* occurrence of the event. Then click <Btn>Add recurrence</Btn> below the timezone field.
 
 A panel slides in titled **Recurrence**.
 
@@ -34,7 +34,7 @@ Click <Btn>Done</Btn> to close the panel. Back in the editor, the schedule now s
 Save the event. Pavillion fills in the repeating dates from the schedule — you don't enter each one.
 
 ::: tip <Lightbulb /> A note on the start date.
-The schedule's **Date** field — the one outside the recurrence panel — is the *first* occurrence, not just a "starting from" reference. A weekly schedule with a start date of Tuesday January 7th will repeat on January 7th, 14th, 21st, and so on. If your start date is on a Tuesday but you've only checked Monday in the recurrence panel, the first occurrence won't be until the *following* Monday, January 13th — the Tuesday is skipped. Easier to keep the start date and the weekday selection consistent.
+The schedule's **Date** field — the one outside the recurrence panel — is the *first* occurrence, not just a "starting from" reference. A weekly schedule with a start date of Tuesday January 7th will repeat on January 7th, 14th, 21st, and so on. If your start date is on a Tuesday but you've only checked Monday in the recurrence panel, the first occurrence won't be until the *following* Monday, January 13th — the Tuesday is skipped. It's easier to keep the start date and the weekday selection consistent.
 :::
 
 ## Add a one-off exception
@@ -51,24 +51,24 @@ Multiple schedules are also the way to express "the same meeting at two differen
 
 ## Cancel a single occurrence
 
-For a recurring event, the editor shows a <Btn>Manage cancellations</Btn> button below the schedule blocks. Click it to expand a **Cancellations** panel — a horizontal row of cards for the upcoming dates, each showing date and time. Later dates live further down the row; <Btn>Show more</Btn> appends the next batch, and <Btn>Jump to month</Btn> lets you skip ahead to a specific month.
+For a recurring event, the editor shows a <Btn>Manage cancellations</Btn> button below the schedule blocks. Click it to expand a **Cancellations** panel — a horizontal row of cards for the upcoming dates, each showing date and time. Later dates live further along the row; <Btn>Show more</Btn> appends the next batch, and <Btn>Jump to month</Btn> lets you skip ahead to a specific month.
 
-To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. A **Cancel this date?** confirmation opens, with one decision worth thinking about — a **Hide from public** toggle:
+To cancel one occurrence, find its card and click <Btn>Cancel</Btn>. A **Cancel this date?** confirmation opens, with one decision to consider — a **Hide from public** toggle:
 
-- **Off (the default): show as cancelled.** The occurrence stays on the calendar. Visitors and any calendar reposting from yours still see it, but it's marked **Cancelled**. This is the right choice for an event that *was* announced and that people might be planning to attend — cancelling-but-showing tells them the meeting they had on their calendar isn't happening.
-- **On: hide from public.** The occurrence is removed from the public page and from any calendar reposting from yours. This is the right choice for occurrences that haven't been visible long enough for anyone to be planning around them — for example, a brand-new recurring event where you want to skip an upcoming holiday week before the public page has had time to surface those occurrences.
+- **Off (the default): show as cancelled.** The occurrence stays on the calendar. Visitors and any calendar reposting from yours still see it, but it's marked **Cancelled**. This is the right choice for an event that *was* announced and that people might be planning to attend — this lets them know the meeting they had on their calendar isn't happening.
+- **On: hide from public.** The occurrence is removed from the public page and from any calendar reposting from yours. This is the right choice for occurrences that haven't been visible long enough for anyone to be planning around them — for example, a brand-new recurring event where you want to skip an upcoming holiday week before the public page has had time to surface the schedule.
 
 Confirm with <Btn>Cancel this date</Btn>, or click <Btn>Keep it</Btn> to back out. The cancellation takes effect right away, even if you leave the editor without saving. The card now shows a **Cancelled** or **Hidden** badge, and its button changes to <Btn>Restore</Btn>. If you change your mind, click <Btn>Restore</Btn> to bring the occurrence back; that's immediate, no confirmation needed.
 
-::: tip <Lightbulb /> A note on cancelling for the wrong reason.
-Cancellation is for an occurrence that won't happen. If the event will happen but at a different time or place, you don't want a bare cancellation — you want a one-off exception (see above) *plus* a cancellation of the original occurrence. The pair tells visitors "the regular Tuesday is off, but we're meeting Friday instead." A bare cancellation just says "no meeting."
+::: tip <Lightbulb /> Cancellation is for an occurrence that won't happen.
+If the event will happen but at a different time or place, you don't want a bare cancellation — you want a one-off exception (see above) *plus* a cancellation of the original occurrence. The pair tells visitors "the regular Tuesday is off, but we're meeting Friday instead." A bare cancellation just says "no meeting."
 :::
 
 ## End the recurrence
 
 When a recurring program runs its course — the eight-week class wraps, the seasonal series ends — wind it down by setting an end on the schedule rather than deleting the event. Click <Btn>Edit recurrence</Btn> on the schedule. In the **ends** section, switch from *never* to either *after [N] occurrences* or *on [date]*. Click <Btn>Done</Btn> and save the event.
 
-Past occurrences stay on the calendar as history. No new dates appear after the end. People who attended in the past — and any calendar that reposted from yours — see the same record they always did; nothing rewrites the past.
+Past occurrences stay on the calendar as history. No new dates appear after the end. People who attended in the past — and any calendar that reposted from yours — see the same record they always did.
 
 ::: tip <Lightbulb /> A note on shortening the end of a recurrence.
 If you set the end date earlier than what's already been published, occurrences past that new end date disappear from the public page and from reposting calendars. People who had those occurrences on their personal calendar may end up confused. If the recurrence is being shortened because plans changed, consider cancelling the affected occurrences with a "show as cancelled" instead — visitors get to see *that* the dates were dropped rather than have them quietly vanish.
@@ -78,7 +78,7 @@ If you set the end date earlier than what's already been published, occurrences 
 
 A short decision aid: if the events you're planning share an *identity* — the same name, the same place, the same time, the same audience — and differ mostly in *date*, recurrence fits. If they share a *program* but differ in their substance — different speakers, different topics, different titles — a series is the better tool. A "Fall Lecture Series" with a different speaker each Thursday isn't one recurring event; it's seven distinct events grouped under a series name.
 
-The quick test: would the title field be the same on every occurrence? If yes, recurrence. If you'd want to change the title — even slightly — for each occurrence, the recurrence editor will fight you, and a series is what you actually want.
+The quick test: would the title field be the same on every occurrence? If yes, use recurrence. If you'd want to change the title — even slightly — for each occurrence, the recurrence editor will fight you, and a series is what you actually want.
 
 ## Things that trip people up
 
@@ -89,5 +89,3 @@ A short list of the most common stumbles.
 **Picking a weekday that doesn't include the start date.** A weekly schedule that starts on a Tuesday but only checks Monday in the recurrence panel will skip the first Tuesday entirely — the first occurrence won't be until the following Monday. Either set the start date to a Monday, or add Tuesday to the weekday selection if you want the first Tuesday to count.
 
 **"Show as cancelled" on an event nobody was attending yet.** If you skip an occurrence on a brand-new recurring event before anyone's seen the public page, the **Cancelled** badge is just noise. Use **Hide from public** instead so the occurrence quietly drops out.
-
-**Setting an end date earlier than the start date.** If the schedule's end date is before its start date, the event won't show any dates on the calendar. The editor allows this combination — it just means an empty schedule. Double-check both fields if a recurring event isn't appearing.
