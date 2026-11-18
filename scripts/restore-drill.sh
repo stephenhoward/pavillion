@@ -278,10 +278,11 @@ normalize_list() {
 
 # Builds the docker run volume argument for the backup source. The default
 # mounts the named compose volume rather than its host path: the host bind
-# (/opt/pavillion/backups) is mode 0750 owned by the container user, so a host
-# path approach would need sudo, and would break for an operator who repointed
-# the volume at non-bind storage. Mounting the volume keeps the only filesystem
-# assumption to the volume name, which docker-compose.yml pins.
+# (the BACKUP_HOST_DIR path, /opt/pavillion/backups by default) is owned by the
+# container user and closed to other users, so a host path approach would need
+# sudo, and would break for an operator who repointed the volume at non-bind
+# storage. Mounting the volume keeps the only filesystem assumption to the
+# volume name, which docker-compose.yml pins.
 backup_mount_spec() {
   if [[ -n "${BACKUP_DIR}" ]]; then
     # A relative path passes the -d test below and then fails inside Docker

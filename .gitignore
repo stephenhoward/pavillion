@@ -42,6 +42,10 @@ docker/federation/ssl/*.key
 .env
 config/local.yaml
 
+# Backups directory in the clone (a BACKUP_HOST_DIR placed here); ignored so
+# it never leaves the working tree dirty and blocks the next upgrade.
+/backups/
+
 # Per-instance deploy state managed by bin/deploy.sh
 # Lists secrets ever provisioned on this instance. Not for version control.
 .deploy-state

@@ -33,6 +33,7 @@ build
 # Local storage and logs
 storage
 logs
+backups/
 *.log
 
 # Documentation and misc
