@@ -39,6 +39,16 @@ export default class CalendarService {
     this.eventStore = eventStore;
   }
 
+  /**
+   * The urlNames of the calendars the signed-in visitor owns or edits.
+   *
+   * Calls the authenticated GET /api/v1/calendars. Callers must only use it
+   * when the visitor already holds a token; it throws on any failure.
+   */
+  async listEditableCalendarUrlNames(): Promise<string[]> {
+    const result = await ModelService.listModels('/api/v1/calendars');
+    return result.items.map((row: Record<string, any>) => row.urlName);
+  }
 
   /**
    * List public discoverable calendars for the /discover landing page.

@@ -11,6 +11,7 @@ import NotFound from './not-found.vue';
 import ReportEvent from './report-event.vue';
 import EventDetailBody from '@/site/components/EventDetailBody.vue';
 import { useLocale } from '@/site/composables/useLocale';
+import { useViewerEditsCalendar } from '@/site/composables/useViewerEditsCalendar';
 import { formatInstanceSlug, parseInstanceSlug } from '@/common/utils/instance-slug';
 import { calendarPath, eventPath, seriesPath } from '@/common/routing/public-paths';
 import type { EventCategory } from '@/common/model/event_category';
@@ -32,6 +33,7 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+const viewerEditsCalendar = useViewerEditsCalendar(() => state.calendar?.urlName);
 
 /**
  * Opens the report event modal dialog.
@@ -193,6 +195,7 @@ onBeforeMount(async () => {
         >{{ localizedContent(state.instance.event.series).name }}</a>
       </div>
       <button
+        v-if="!(viewerEditsCalendar && state.instance.event.repostStatus === 'none')"
         type="button"
         class="report-link"
         @click="openReportModal"

@@ -13,6 +13,7 @@ import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import LinkifiedText from './LinkifiedText.vue';
 import { useLocale } from '@/site/composables/useLocale';
+import { useViewerEditsCalendar } from '@/site/composables/useViewerEditsCalendar';
 import { URL_PROMPT_VALUES, type UrlPrompt } from '@/common/model/events';
 import { calendarPath, seriesPath } from '@/common/routing/public-paths';
 import { parseInstanceSlug } from '@/common/utils/instance-slug';
@@ -33,6 +34,7 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+const viewerEditsCalendar = useViewerEditsCalendar(() => state.calendar?.urlName);
 
 // Transient one-shot notices travel in router state, durable view state in
 // the query. event-instance.vue replaces an outdated dated link with this
@@ -367,6 +369,7 @@ function closeReportModal() {
           >{{ localizedContent(state.event.series).name }}</a>
         </div>
         <button
+          v-if="!(viewerEditsCalendar && state.event.repostStatus === 'none')"
           type="button"
           class="report-link"
           @click="openReportModal"
