@@ -286,6 +286,39 @@ describe('SyncService', () => {
       expect(params).not.toHaveProperty('xProps');
     });
 
+    it('buildEventParamsForCreate includes mediaId only when supplied', () => {
+      const src = makeSourceEntity();
+      const withMedia = buildEventParamsForCreate(src, buildFakeMapperOutput(), 'media-1') as Record<string, unknown>;
+      const without = buildEventParamsForCreate(src, buildFakeMapperOutput()) as Record<string, unknown>;
+
+      expect(withMedia.mediaId).toBe('media-1');
+      expect(without).not.toHaveProperty('mediaId');
+    });
+
+    it('buildEventParamsForUpdate sets the mediaId key only when supplied', () => {
+      const src = makeSourceEntity();
+      const withMedia = buildEventParamsForUpdate(src, buildFakeMapperOutput(), 'media-1') as Record<string, unknown>;
+      const without = buildEventParamsForUpdate(src, buildFakeMapperOutput()) as Record<string, unknown>;
+
+      expect(withMedia.mediaId).toBe('media-1');
+      expect(Object.prototype.hasOwnProperty.call(without, 'mediaId')).toBe(false);
+    });
+
+    it('builders leave imageAlt empty when a media id is supplied', () => {
+      const src = makeSourceEntity();
+      const mapped = mapVEvent({
+        vevent: makeVEvent({ uid: 'feed-uid-3@example.test' }),
+        calendarPrimaryLanguage: 'en',
+      });
+      for (const params of [
+        buildEventParamsForCreate(src, mapped, 'media-1'),
+        buildEventParamsForUpdate(src, mapped, 'media-1'),
+      ]) {
+        const content = (params as { content: Record<string, { imageAlt?: string }> }).content.en;
+        expect(content.imageAlt ?? '').toBe('');
+      }
+    });
+
     it('buildEventParamsForUpdate sends the mapped positive schedule with no id', () => {
       const src = makeSourceEntity();
       const mapped = mapVEvent({

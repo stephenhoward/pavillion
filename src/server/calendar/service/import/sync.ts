@@ -1147,6 +1147,7 @@ export function importFingerprint(mapped: MapperOutput): string {
 export function buildEventParamsForCreate(
   source: ImportSourceEntity,
   mapped: MapperOutput,
+  mediaId?: string,
 ): Record<string, unknown> {
   const lang = mapped.content.language || 'en';
   const schedules = [mapped.schedule.toObject(), ...mapped.exclusions.map(e => e.toObject())];
@@ -1157,6 +1158,7 @@ export function buildEventParamsForCreate(
     },
     schedules,
     externalUrl: mapped.external_url,
+    ...(mediaId ? { mediaId } : {}),
   };
 }
 
@@ -1166,10 +1168,14 @@ export function buildEventParamsForCreate(
  * Origin-provenance fields are NOT passed through updateEvent — they live on
  * the sibling EventImportOriginEntity and are refreshed by stampImportOrigin
  * in the same transaction immediately after updateEvent returns.
+ *
+ * `mediaId` is set only when supplied; the key is otherwise absent so
+ * updateEvent leaves existing media untouched (import never clears media).
  */
 export function buildEventParamsForUpdate(
   source: ImportSourceEntity,
   mapped: MapperOutput,
+  mediaId?: string,
 ): Record<string, unknown> {
   const lang = mapped.content.language || 'en';
   const schedules = [mapped.schedule.toObject(), ...mapped.exclusions.map(e => e.toObject())];
@@ -1180,6 +1186,7 @@ export function buildEventParamsForUpdate(
     },
     schedules,
     externalUrl: mapped.external_url,
+    ...(mediaId ? { mediaId } : {}),
   };
 }
 
