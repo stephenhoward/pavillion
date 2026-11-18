@@ -59,6 +59,8 @@ export default class CalendarInterface {
   private categoryMappingService: CategoryMappingService;
   private seriesService: SeriesService;
   private importSourceService: ImportSourceService;
+  private sharedSyncService: SyncService;
+  private mediaInterface?: MediaInterface;
 
   constructor(
     eventBus: EventEmitter,
@@ -82,11 +84,11 @@ export default class CalendarInterface {
     // A single shared SyncService instance is constructed here so the
     // per-source in-memory rate limiter has stable state across invocations,
     // and injected directly into ImportSourceService via its constructor.
-    const sharedSyncService = new SyncService({
+    this.sharedSyncService = new SyncService({
       eventService: this.eventService,
       calendarService: this.calendarService,
     });
-    this.importSourceService = new ImportSourceService(this.calendarService, sharedSyncService);
+    this.importSourceService = new ImportSourceService(this.calendarService, this.sharedSyncService);
   }
 
   /**
@@ -112,6 +114,7 @@ export default class CalendarInterface {
     return new SyncService({
       eventService: this.eventService,
       calendarService: this.calendarService,
+      mediaInterface: this.mediaInterface,
       ...overrides,
     });
   }
@@ -125,6 +128,8 @@ export default class CalendarInterface {
   setMediaInterface(mediaInterface: MediaInterface): void {
     this.eventService.setMediaInterface(mediaInterface);
     this.seriesService.setMediaInterface(mediaInterface);
+    this.mediaInterface = mediaInterface;
+    this.sharedSyncService.setMediaInterface(mediaInterface);
   }
 
   /**
