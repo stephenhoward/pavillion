@@ -39,7 +39,7 @@ Click <Btn>Follow</Btn>. Once the source server accepts the request (usually imm
 To disconnect entirely, find the row in the **Following** tab and click <Btn>Unfollow</Btn>. This removes their events from your feed and forgets any auto-repost rules you chose.
 
 ::: tip <Lightbulb /> A note on the optional category-matching step.
-Right after a successful connection, a second step in the dialog offers to match the source calendar's categories to your own — *their* `Live Music` to *your* `Concerts`, for example. Setting these up now means any event you repost from this calendar — by hand or by rule — lands in the right category on yours without re-tagging. Saving matching rules also updates the events you have already reposted from this calendar, so its okay if the first batch of events repost before you finish this step. You can skip the step and configure it later from the **Match categories** link on the calendar's row in your Following tab; the category-matching guide covers the details.
+Right after a successful connection, a second step in the dialog offers to match the source calendar's categories to your own — *their* `Live Music` to *your* `Concerts`, for example. Setting these up now means any event you repost from this calendar — by hand or by rule — lands in the right category on yours without re-tagging. Saving matching rules also updates the events you have already reposted from this calendar, so it's okay if the first batch of events repost before you finish this step. You can skip the step and configure it later from the **Match categories** link on the calendar's row in your Following tab; the category-matching guide covers the details.
 :::
 
 ## What lands in your feed

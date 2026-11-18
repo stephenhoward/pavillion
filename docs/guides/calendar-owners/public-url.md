@@ -51,7 +51,7 @@ The prefix sets the language of the page contents around your events. Your event
 For print, write out the public URL in full. It's short because the handle is short, and a reader can type `arts.example/riverbend-folk` off a poster. Leave off the `https://`, which browsers fill in, and leave off any filters or language prefix unless the flyer is for that audience in particular.
 
 ::: tip <Lightbulb /> A note on where to put the link.
-It's handy to it in places people will see over and over again: your organization's website, your email signature, the description on your social accounts, the pinned post in your group chat. Each one quietly sends people to the calendar every time they look. Spend your effort there before announcing the link once in a busy chat thread, where it scrolls out of sight by the end of the week.
+It's handy to put it in places people will see over and over again: your organization's website, your email signature, the description on your social accounts, the pinned post in your group chat. Each one quietly sends people to the calendar every time they look. Spend your effort there before announcing the link once in a busy chat thread, where it scrolls out of sight by the end of the week.
 :::
 
 ## Your federation handle
