@@ -149,3 +149,85 @@ test.describe('Checkbox and radio target size', () => {
     assertControlsAreWellSized(await measureControls(page), 'the recurrence editor');
   });
 });
+
+/**
+ * The base layer floors only controls (`button`, `[role="button"]`, `select`)
+ * at 44x44; links are exempt, so a component's declared size is what renders.
+ * The AA bar is WCAG 2.2 SC 2.5.8 (24x24), so every visible control must clear
+ * that on a full screen, and the few places that opt out or opt in are pinned
+ * individually.
+ */
+async function measureSmallControls(page: import('@playwright/test').Page) {
+  return page.evaluate((min) => {
+    return [...document.querySelectorAll<HTMLElement>('button, [role="button"], select')]
+      .filter((el) => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (style.opacity === '0' || style.pointerEvents === 'none') return false;
+        // Visually hidden skip links are clipped to 1x1 on purpose.
+        if (el.closest('.sr-only') || el.classList.contains('sr-only')) return false;
+        return el.getBoundingClientRect().width > 0;
+      })
+      .map((el) => {
+        const box = el.getBoundingClientRect();
+        return {
+          el: `${el.tagName.toLowerCase()}.${el.className}`.slice(0, 80),
+          text: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30),
+          width: Math.round(box.width * 10) / 10,
+          height: Math.round(box.height * 10) / 10,
+        };
+      })
+      .filter((c) => c.width < min || c.height < min);
+  }, MIN_TARGET_SIZE);
+}
+
+test.describe('Control and link target size', () => {
+  test.beforeAll(async () => {
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    if (env?.cleanup) {
+      await env.cleanup();
+    }
+  });
+
+  test('a self-declared link keeps a 44px target on the login page', async ({ page }) => {
+    await page.goto(env.baseURL + '/auth/login');
+    const link = page.locator('a.forgot').first();
+    await link.waitFor({ state: 'visible' });
+    const box = await link.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test('a standalone link is no longer floored but clears the 24px minimum', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    const link = page.locator('.calendar-public-link').first();
+    await link.waitFor({ state: 'visible' });
+    const box = await link.boundingBox();
+    expect(box!.height).toBeLessThan(44);
+    expect(box!.height).toBeGreaterThanOrEqual(MIN_TARGET_SIZE);
+  });
+
+  test('a select keeps the 44px floor', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    await page.goto(env.baseURL + '/event');
+    await page.getByRole('button', { name: 'Add recurrence' }).click();
+    const select = page.locator('select.frequency-select');
+    await select.waitFor({ state: 'visible' });
+    const box = await select.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test('every control on the calendar page and event editor clears 24x24', async ({ page }) => {
+    await loginAsAdmin(page, env.baseURL);
+    await page.locator('.event-list').first().waitFor({ state: 'visible' });
+    expect(await measureSmallControls(page), 'undersized controls on the calendar page')
+      .toEqual([]);
+
+    await page.goto(env.baseURL + '/event');
+    await page.getByRole('button', { name: 'Add recurrence' }).click();
+    expect(await measureSmallControls(page), 'undersized controls on the event editor')
+      .toEqual([]);
+  });
+});

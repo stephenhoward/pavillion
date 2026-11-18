@@ -52,6 +52,8 @@
 a.forgot,
 button.forgot {
   display: inline-block;
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
   margin-top: 1.25rem; /* 20px */
   font-size: 1rem; /* 16px */
   color: var(--pav-color-brand-primary);

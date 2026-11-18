@@ -103,6 +103,8 @@
 // Icon button pattern (edit/delete action buttons)
 @mixin admin-icon-button {
   display: inline-flex;
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
   align-items: center;
   justify-content: center;
   padding: var(--pav-space-2);

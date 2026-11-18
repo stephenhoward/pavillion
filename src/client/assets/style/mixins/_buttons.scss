@@ -13,6 +13,10 @@
 // `.btn` class). Pair with a variant mixin (e.g. `btn-ghost`) for color.
 @mixin btn-base {
   display: inline-flex;
+  // A link styled as a button is not floored by the base layer, so the
+  // button target is declared here and covers both elements.
+  min-block-size: var(--pav-touch-target-min);
+  min-inline-size: var(--pav-touch-target-min);
   align-items: center;
   justify-content: center;
   padding: var(--pav-space-2) var(--pav-space-4);

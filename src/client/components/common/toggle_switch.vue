@@ -59,6 +59,8 @@ const handleKeydown = (event: KeyboardEvent) => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins' as *;
+
 div.toggle-switch-container {
   display: flex;
   flex-direction: column;
@@ -81,7 +83,7 @@ div.toggle-switch-container {
       position: relative;
       width: 44px;
       height: 24px;
-      min-height: 24px;
+      @include compact-target;
       background: var(--pav-color-border-secondary);
       border: none;
       border-radius: 12px;

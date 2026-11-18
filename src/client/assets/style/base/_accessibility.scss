@@ -1,7 +1,8 @@
 /**
  * Accessibility Base Styles
  * Focus management, screen reader support, and accessibility enhancements
- * Follows WCAG 2.1 AA guidelines and modern accessibility best practices
+ * Follows WCAG 2.2 AA (target size: SC 2.5.8, 24x24 CSS px) and modern
+ * accessibility best practices
  */
 
 /* ===== FOCUS MANAGEMENT ===== */
@@ -118,32 +119,29 @@ select:focus-visible,
 /*
  * Minimum pointer target, for controls whose own box is the target.
  *
- * 44x44 is WCAG 2.1 SC 2.5.5, a AAA criterion this rule reaches for; the AA bar
- * the project holds itself to asks for no target size at all, and WCAG 2.2 SC
- * 2.5.8 sets the AA minimum at 24x24. It is an aspiration, not the compliance
- * floor, which is why it yields to a control's own design below.
+ * The bar the project holds itself to is WCAG 2.2 AA, SC 2.5.8 Target Size
+ * (Minimum): 24x24 CSS px. WCAG 2.1 AA has no target-size criterion. 44x44 is
+ * SC 2.5.5, a AAA criterion, kept here as a protective default for the
+ * elements that are controls: `button`, `[role="button"]` and `select`.
  *
- * Checkbox and radio are deliberately absent. A min-* floor cannot be overridden
- * by a component's width/height at any specificity, so listing them here held
- * every checkbox and radio in the client open at 44x44 — roughly 2.5x their
- * designed box. Their target comes from the label instead (see below), which is
- * where it belongs for a control whose painted box is meant to stay small.
+ * Links are not floored. An inline link is exempt under WCAG, and a component
+ * that wants a link to be a 44px target declares that itself. This rule sits in
+ * @layer base, so a component's own declaration wins over it for everything
+ * but a min-* floor: a min-* floor is not overridable by width/height at any
+ * specificity. A control that is compact on purpose opts out with the
+ * `compact-target` mixin (mixins/_targets.scss), which lowers the minimum to
+ * 24px, so a forgotten opt-in fails visibly in review rather than silently.
+ *
+ * Checkbox and radio are deliberately absent. Listing them here held every
+ * checkbox and radio in the client open at 44x44, roughly 2.5x their designed
+ * box. Their target comes from the label instead (see below), which is where it
+ * belongs for a control whose painted box is meant to stay small.
  */
 button,
 [role="button"],
-a,
-[role="link"],
 select {
   min-block-size: var(--pav-touch-target-min);
   min-inline-size: var(--pav-touch-target-min);
-}
-
-/* Exception for inline links */
-p a,
-span a,
-li a {
-  min-block-size: auto;
-  min-inline-size: auto;
 }
 
 /*
