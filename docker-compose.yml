@@ -328,10 +328,13 @@ volumes:
     # Operators can configure this volume to use different backing storage:
     # - NFS share: Use driver: local with type: nfs
     # - Cloud-backed filesystem: Use appropriate volume driver
+    # It binds the BACKUP_HOST_DIR path, /opt/pavillion/backups by default.
+    # Leaving BACKUP_HOST_DIR unset keeps an existing install's volume
+    # configuration unchanged, so Compose does not ask to recreate it.
     driver: local
     driver_opts:
       type: none
-      device: /opt/pavillion/backups
+      device: ${BACKUP_HOST_DIR:-/opt/pavillion/backups}
       o: bind
 
 # Docker secrets configuration

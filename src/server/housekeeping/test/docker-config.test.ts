@@ -1,6 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
+import { execFileSync, spawnSync } from 'child_process';
+
+/**
+ * Whether `docker compose` can run here. npm test also runs on machines
+ * without Docker, so the tests that ask Compose to resolve the file are
+ * skipped there; the string assertions on the raw YAML always run.
+ */
+const dockerComposeAvailable =
+  spawnSync('docker', ['compose', 'version'], { stdio: 'ignore' }).status === 0;
+
+/**
+ * Returns the pavillion-backups device as `docker compose config` resolves it.
+ *
+ * Compose reads the shell environment before any env file, so BACKUP_HOST_DIR
+ * is removed from (or set on) the child environment explicitly. `-f` and
+ * `--env-file /dev/null` keep a developer's .env or docker-compose.override.yml
+ * from changing the answer.
+ */
+function resolvedBackupsDevice(backupHostDir: string | undefined): string {
+  const env = { ...process.env };
+  delete env.BACKUP_HOST_DIR;
+  if (backupHostDir !== undefined) {
+    env.BACKUP_HOST_DIR = backupHostDir;
+  }
+
+  const output = execFileSync(
+    'docker',
+    ['compose', '-f', 'docker-compose.yml', '--env-file', '/dev/null', 'config'],
+    { env, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  return parseYaml(output).volumes['pavillion-backups'].driver_opts.device;
+}
 
 /**
  * Test suite for Docker configuration files.
@@ -84,6 +116,24 @@ describe('Docker Configuration', () => {
 
       expect(config.volumes).toBeDefined();
       expect(config.volumes['pavillion-backups']).toBeDefined();
+    });
+
+    it('should back pavillion-backups with BACKUP_HOST_DIR, defaulting to /opt/pavillion/backups', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      expect(config.volumes['pavillion-backups'].driver_opts.device)
+        .toBe('${BACKUP_HOST_DIR:-/opt/pavillion/backups}');
+    });
+
+    describe.skipIf(!dockerComposeAvailable)('resolved by docker compose config', () => {
+      it('should resolve the backups device to /opt/pavillion/backups when BACKUP_HOST_DIR is unset', () => {
+        expect(resolvedBackupsDevice(undefined)).toBe('/opt/pavillion/backups');
+      });
+
+      it('should resolve the backups device to BACKUP_HOST_DIR when it is set', () => {
+        expect(resolvedBackupsDevice('/srv/pavillion-backups')).toBe('/srv/pavillion-backups');
+      });
     });
   });
 
