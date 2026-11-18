@@ -2,6 +2,7 @@ import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 import config from 'config';
+import { resolveInstanceName } from '@/server/common/helper/instance-name';
 import { Op, Transaction } from 'sequelize';
 
 import { Account } from "@/common/model/account";
@@ -702,9 +703,8 @@ export default class AccountService {
       throw new Error('Calendar not found for invitation');
     }
 
-    const settings = await this.configurationInterface.getAllSettings();
     const context = {
-      instanceName: settings?.siteTitle || config.get<string>('domain'),
+      instanceName: await resolveInstanceName(this.configurationInterface),
       inviterName: inviter.displayName?.trim() || inviter.username || '',
     };
 
