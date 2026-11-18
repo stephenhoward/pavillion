@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router, RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { setActivePinia, createPinia, Pinia } from 'pinia';
-import { DateTime, Settings } from 'luxon';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
