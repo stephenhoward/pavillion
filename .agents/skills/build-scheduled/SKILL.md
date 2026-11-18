@@ -80,7 +80,9 @@ stop there, write nothing more, and add one report line.
 ## Build state
 
 `## Build state` is append-only; readers take the last one outside fenced
-text, and a malformed last block stalls the root with no fallback. It is
+text, and a malformed last block stalls the root with no fallback. Text
+appended to a root's notes after a Build state block starts with its own `##`
+heading, so it never extends the block. It is
 written with `spec:building`, after each level is submitted, and at every
 stop, from a `--state-file`: the `next_state` that `build-state` prints,
 with `chains` and `stopped` edited. `write` derives `firings`, `restart`

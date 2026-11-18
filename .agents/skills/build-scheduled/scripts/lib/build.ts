@@ -489,23 +489,49 @@ function isRoot(b: BuildBead): boolean {
 /**
  * Gate 2: fails if any open PR is recorded in the last Build state block of
  * a spec:built root, open or closed. A missing or malformed block fails
- * closed: a spec:built root without its PR record is a missing field.
+ * closed: a spec:built root without its PR record is a missing field. A
+ * malformed last block still gives up the PR numbers on its `chain <k>:`
+ * lines (read leniently, this gate only); the malformation stays in the
+ * reading. Only a block with no readable PR number fails closed.
  */
 export function priorEpicGate(beads: BuildBead[], openPrs: Set<number>): Reading {
   const check = 'prior-epic-in-review';
   const built = beads.filter(b => isRoot(b) && labelsOf(b).includes('spec:built'));
   const hits: string[] = [];
+  const malformed: string[] = [];
   for (const root of built) {
     const parsed = parseBuildState(root.notes);
-    if (!parsed.ok) return { check, verdict: 'fail', reading: `${root.id}: ${parsed.stall}` };
+    if (!parsed.ok) {
+      const bodies = stateBodies(root.notes ?? '');
+      const recorded = lenientPrs(bodies[bodies.length - 1] ?? []);
+      if (!recorded.length) return { check, verdict: 'fail', reading: `${root.id}: ${parsed.stall}` };
+      malformed.push(`${root.id}: ${parsed.stall}`);
+      const open = recorded.filter(n => openPrs.has(n));
+      if (open.length) hits.push(`${root.id} has open PR ${open.map(n => `#${n}`).join(', ')}`);
+      continue;
+    }
     if (parsed.state === null) {
       return { check, verdict: 'fail', reading: `spec:built root ${root.id} has no Build state block` };
     }
     const open = parsed.state.prs.filter(n => openPrs.has(n));
     if (open.length) hits.push(`${root.id} has open PR ${open.map(n => `#${n}`).join(', ')}`);
   }
-  if (hits.length) return { check, verdict: 'fail', reading: hits.join('; ') };
-  return { check, verdict: 'pass', reading: `${built.length} spec:built root(s), none with an open recorded PR` };
+  if (hits.length) {
+    const tail = malformed.length ? ` (PRs read leniently from a malformed block: ${malformed.join('; ')})` : '';
+    return { check, verdict: 'fail', reading: hits.join('; ') + tail };
+  }
+  const note = malformed.length ? `; PRs read leniently from a malformed block (${malformed.join('; ')})` : '';
+  return { check, verdict: 'pass', reading: `${built.length} spec:built root(s), none with an open recorded PR${note}` };
+}
+
+/** PR numbers on the `chain <k>:` lines of a block body, however malformed the rest of it is. */
+function lenientPrs(body: string[]): number[] {
+  const out: number[] = [];
+  for (const line of body) {
+    if (!/^chain \d+:/.test(line)) continue;
+    for (const m of line.matchAll(/→ #(\d+)/g)) out.push(Number(m[1]));
+  }
+  return out;
 }
 
 function holdReason(b: BuildBead): string | null {

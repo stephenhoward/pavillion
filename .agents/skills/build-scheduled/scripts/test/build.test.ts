@@ -679,6 +679,36 @@ describe('priorEpicGate', () => {
   });
 });
 
+describe('priorEpicGate with a malformed last block', () => {
+  const PROSE = 'Everything above merged; nothing further to do here.';
+  const notes = `${ANALYSED}\n\n${GOOD_BLOCK}\n${PROSE}`;
+  const root = bead({ id: 'pv-gmwe', status: 'closed', labels: ['spec:built'], notes });
+
+  it('is still malformed to parseBuildState', () => {
+    expect(parseBuildState(notes).ok).toBe(false);
+  });
+
+  it('passes when every recorded PR is merged, naming the root and the malformation', () => {
+    const r = priorEpicGate([root], new Set([500]));
+    expect(r.verdict).toBe('pass');
+    expect(r.reading).toContain('pv-gmwe');
+    expect(r.reading).toContain('malformed Build state block');
+  });
+
+  it('fails naming a recorded PR that is still open', () => {
+    const r = priorEpicGate([root], new Set([102]));
+    expect(r.verdict).toBe('fail');
+    expect(r.reading).toContain('pv-gmwe has open PR #102');
+    expect(r.reading).toContain('malformed Build state block');
+  });
+
+  it('fails closed when the malformed block has no readable PR number', () => {
+    const bare = stateBlock(['firings: 1', 'chain 1: -; next: done', 'stopped: none']);
+    const r = priorEpicGate([bead({ id: 'pv-x', labels: ['spec:built'], notes: `${ANALYSED}\n\n${bare}\nprose` })], new Set());
+    expect(r.verdict).toBe('fail');
+  });
+});
+
 describe('evaluateGates', () => {
   const beads = [ready('pv-r', '2026-11-01T00:00:00Z')];
 
