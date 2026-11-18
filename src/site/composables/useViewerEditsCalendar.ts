@@ -27,9 +27,9 @@ export function useViewerEditsCalendar(getUrlName: () => string | null | undefin
       return;
     }
     requested = true;
-    new CalendarService().listEditableCalendarUrlNames()
-      .then((urlNames) => {
-        viewerEdits.value = urlNames.includes(urlName);
+    new CalendarService().viewerCanEditCalendar(urlName)
+      .then((canEdit) => {
+        viewerEdits.value = canEdit;
       })
       .catch(() => {
         viewerEdits.value = false;

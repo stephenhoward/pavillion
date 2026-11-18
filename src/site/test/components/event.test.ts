@@ -83,7 +83,7 @@ let mockSourceCalendar: {
 // Mutable externalUrl / urlPrompt so tests can inject external CTA data
 // Report-control gating (viewer-edits lookup)
 let mockRepostStatus: 'none' | 'manual' | 'auto' = 'none';
-const mockListEditable = vi.fn();
+const mockCanEdit = vi.fn();
 let mockExternalUrl: string | null = null;
 let mockUrlPrompt: string | null = null;
 
@@ -105,7 +105,7 @@ vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(function () {
       return {
-        listEditableCalendarUrlNames: mockListEditable,
+        viewerCanEditCalendar: mockCanEdit,
         getCalendarByUrlName: vi.fn().mockResolvedValue({
           urlName: 'test_calendar',
           content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
@@ -1504,12 +1504,12 @@ describe('EventDetail - report control for calendar editors', () => {
   beforeEach(() => {
     mockLocalizedPath.mockReset();
     mockRepostStatus = 'none';
-    mockListEditable.mockReset();
-    mockListEditable.mockResolvedValue([]);
+    mockCanEdit.mockReset();
+    mockCanEdit.mockResolvedValue(false);
   });
 
   it('hides the report link from an editor viewing an owned event', async () => {
-    mockListEditable.mockResolvedValue(['test_calendar']);
+    mockCanEdit.mockResolvedValue(true);
     const wrapper = await mountEvent(path, (p) => p, signedIn);
     expect(wrapper.find('.report-link').exists()).toBe(false);
     wrapper.unmount();
@@ -1518,19 +1518,19 @@ describe('EventDetail - report control for calendar editors', () => {
   it('keeps the report link for an anonymous visitor and makes no lookup', async () => {
     const wrapper = await mountEvent(path, (p) => p);
     expect(wrapper.find('.report-link').exists()).toBe(true);
-    expect(mockListEditable).not.toHaveBeenCalled();
+    expect(mockCanEdit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
   it('keeps the report link when the visitor is signed out', async () => {
     const wrapper = await mountEvent(path, (p) => p, { isLoggedIn: () => false });
     expect(wrapper.find('.report-link').exists()).toBe(true);
-    expect(mockListEditable).not.toHaveBeenCalled();
+    expect(mockCanEdit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
   it('keeps the report link for a signed-in visitor who does not edit the calendar', async () => {
-    mockListEditable.mockResolvedValue(['other_calendar']);
+    mockCanEdit.mockResolvedValue(false);
     const wrapper = await mountEvent(path, (p) => p, signedIn);
     expect(wrapper.find('.report-link').exists()).toBe(true);
     wrapper.unmount();
@@ -1538,21 +1538,21 @@ describe('EventDetail - report control for calendar editors', () => {
 
   it('keeps the report link on a repost shown on the editor\'s calendar', async () => {
     mockRepostStatus = 'manual';
-    mockListEditable.mockResolvedValue(['test_calendar']);
+    mockCanEdit.mockResolvedValue(true);
     const wrapper = await mountEvent(path, (p) => p, signedIn);
     expect(wrapper.find('.report-link').exists()).toBe(true);
     wrapper.unmount();
   });
 
   it('keeps the report link when the lookup fails', async () => {
-    mockListEditable.mockRejectedValue(new Error('401'));
+    mockCanEdit.mockRejectedValue(new Error('401'));
     const wrapper = await mountEvent(path, (p) => p, signedIn);
     expect(wrapper.find('.report-link').exists()).toBe(true);
     wrapper.unmount();
   });
 
   it('keeps the report link while the lookup never settles', async () => {
-    mockListEditable.mockReturnValue(new Promise(() => {}));
+    mockCanEdit.mockReturnValue(new Promise(() => {}));
     const wrapper = await mountEvent(path, (p) => p, signedIn);
     expect(wrapper.find('.report-link').exists()).toBe(true);
     wrapper.unmount();
