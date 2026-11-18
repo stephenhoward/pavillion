@@ -2,31 +2,27 @@
 description: Customize the public identity of your Pavillion calendar — name, description, languages, URL handle, default event image, and default date filter.
 ---
 
-# Customize your calendar's identity
+# Customize your calendar
 
-Your calendar has a public face. Visitors see it when they land on your page; other calendar owners see it when they're deciding whether to follow you or repost from your events. This guide is about the settings you have to shape that presence deliberately — what to put in each field, and what gets harder to change later.
+This guide covers the settings you have to alter how yoru calendar appears for the public and for other calendar owners looking for your events — what to put in each field, and what gets harder to change later.
 
 Everything this guide covers is under **Settings → Calendar → General**. The calendar's name shows which one you're working on; click it to switch. On a computer it sits above the screen title; on a phone it is the title of the **Calendar** screen.
 
 ## Who sees your identity, and where
 
-Three views to keep in mind as you fill in the basics:
+Three audiences to keep in mind as you fill in the basics:
 
-- **A visitor lands on your public page.** They may have found you from a link a friend sent them. They see your calendar's name in the header, your description below it, and your list of upcoming events. They form an impression in about five seconds.
+- **A visitor lands who on your public page.** They may have found you from a link a friend sent them. They see your calendar's name in the header, your description below it, and your list of upcoming events. They form an impression in about five seconds.
 - **Another calendar owner finds you to follow.** They've heard you're a good source for, say, Westside neighborhood events. They look up your handle, open a preview, and read your calendar description to decide whether to follow you. Your description is the thing standing between "this looks right" and "this looks generic — skip it."
 - **A visitor whose preferred language isn't your calendar's primary one.** They see your name and description in their language if you've translated those fields, and in your primary language if you haven't.
-
-Your identity settings serve all three views at once.
 
 ## The URL handle
 
 Your calendar's URL handle is the short, lowercase, URL-safe name that identifies it across the network. It shows up in two places: the public address `your-instance.example/<handle>` that visitors paste into a chat, and the social handle `<handle>@your-instance.example` that other Pavillion calendars use to follow you.
 
-Because that public address puts your handle at the root of the domain, it can't be a name the instance already routes there — `admin` or `login`, say — or a language code like `es`. The form you name a calendar in won't accept one, so you find out while you're choosing.
-
 You picked a handle when you created the calendar. **Right now, the handle is fixed when you create your calendar.** There's no rename button in the settings panel. If you've outgrown the handle — your "westside-2026" calendar is still going strong in 2027 — the practical move today is to create a new calendar with the new handle and migrate. That's expensive: every link, every bookmark, every reposting calendar's rule, every email signature pointing at the old handle becomes stale. So it's worth picking a handle that ages well *now*.
 
-A short version of the advice — the longer version is in the [Quickstart](./quickstart):
+Brief advice on choosing a handle — the longer version is in the [Quickstart](./quickstart):
 
 - **Tie the name to the community, not to the moment.** `riverbend-folk` ages better than `riverbend-2026-season`. `westside-garden` ages better than `summer-projects`.
 - **Recognizable out of context.** A neighbor pasting your handle into a chat shouldn't need a sentence of context for the recipient to know what it is. `mutual-aid` is too generic. `maplewood-mutual-aid` reads as itself.
@@ -45,11 +41,11 @@ The General screen gives you one text field for the name, per language. Editing 
 
 **The name is your name, not a tagline.** The name should *identify*, not *pitch*.
 
-**Names that age.** This is the same advice as the URL handle, but with fewer restrictions — you can change the name freely, so the cost of getting it wrong is small. Still, names tied to a year, an organizing committee, or a momentary branding choice will stop being accurate before the calendar stops existing.
+**Names that age well.** This is the same advice as the URL handle, but with fewer restrictions — you can change the name freely, so the cost of getting it wrong is small. Still, names tied to a year, an organizing committee, or a momentary branding choice will stop being accurate before the calendar stops existing.
 
 ## Your description
 
-The description is one or two sentences. It appears under the calendar name on the public page and in the previews that other calendars see when someone looks yours up. After the calendar's name, it's the highest-leverage text you'll write for your calendar's identity, because every audience reads it and they're all making a decision when they do.
+The description should be one or two sentences. It appears under the calendar name on the public page and in the previews that other calendars see when someone looks yours up. After the calendar's name, it's the highest-leverage text you'll write for your calendar's identity.
 
 The General screen gives you a small free-text area, per language. The first language you write in is the primary description; visitors browsing in another language see that language's version if you've translated it, or fall back to the primary if you haven't.
 
@@ -65,19 +61,19 @@ The people who run other calendars read your description with one question in mi
 
 ## Languages
 
-Pavillion treats your calendar as multilingual from the start. The first language you write in is the primary, and you can add more from the language tabs at the top of the name and description fields.
+Pavillion treats your calendar as multilingual from the start. You can add more languages from the  tabs at the top of the name and description fields.
 
-**The languages you add determine what's translatable.** With one language, the editor shows simple text fields. Add a second, and tabs appear above the field — one tab per language. Each tab holds an independent version of the text. The same applies to event titles, descriptions, category names, place names, and accessibility notes throughout the calendar. Adding a language opens the option to translate everything; it doesn't translate anything by itself.
+**The languages you add determine what's translatable.** With one language, the editor shows simple text fields. Add a second, and tabs appear above the field — one tab per language. Each tab holds an independent version of the text. The same applies to event titles, descriptions, category names, place names, and accessibility notes throughout the calendar. Adding a language gives you the option to translate everything, but it doesn't translate anything by itself.
 
-**Don't add a language you can't sustain.** A French tab that contains the English text — or worse, a single half-translated event from a year ago — is a worse signal than no French tab at all. It tells visitors that French content exists and is then immediately stale. If you're not sure you can maintain a language, don't add it; you can add it later.
+**Don't add a language you can't sustain.** A French tab that contains English text, or a single half-translated event from a year ago, is worse than no French tab at all. If you're not sure you can maintain a language, don't add it; you can add it later.
 
-For the rules of what's translatable, how visitors land on the right language version, and what happens when a visitor's preferred language isn't available, see [Publish in multiple languages](./multilingual). The General screen is where the calendar-level decision happens; the per-event mechanics live in that guide.
+For information on what's translatable, how visitors land on the right language version, and what happens when a visitor's preferred language isn't available, see [Publish in multiple languages](./multilingual).
 
 ## The default event image
 
-The default event image is an image that fills in for any event you publish without uploading one specifically for it. It appears in two places. The first is the event cards in your calendar's list — your public calendar page and your embedded widget's list — for any event without an image of its own. The second is the link preview: when someone pastes a link to one of your calendar's event pages into a chat or a social post and the event has no image of its own, the preview shows your default. The event's own page shows only an image uploaded for that event, so a visitor who follows that link and opens an event that relies on the default sees no image there. In a list, reposts never show a default in either direction: when another calendar reposts your event, its list shows only the event's own image, and events you repost from other calendars don't pick up your default in your list either. A link preview works differently: for an event without its own image, it shows the default of the calendar whose page the link points to — so a link to an event you reposted, on your calendar, previews with your default.
+The default event image is an image that fills in for any event you publish without uploading one specifically for it. It appears in two places. The first is the event cards in your calendar's list — your public calendar page and your embedded widget's list. The second is a link preview: when someone pastes a link to one of your calendar's event pages into a chat or a social post and the event has no image of its own, the preview shows your default image. The event's own page shows only an image uploaded for that event, so a visitor who follows that link and opens an event that relies on the default sees no image there. In a list, reposts never show a default in either direction: when another calendar reposts your event, its list shows only the event's own image, and events you repost from other calendars don't pick up your default in your list either. A link preview works differently: for an event without its own image, it shows the default of the calendar whose page the link points to — so a link to an event you reposted, on your calendar, previews with your default.
 
-The General screen lets you upload one image. Uploading replaces it; removing it leaves events without their own image to show no image at all.
+The General screen lets you upload one image. Uploading again replaces it; removing it leaves events without their own image to show no image at all.
 
 Once the default is uploaded, the same **Image description for screen readers** choice the event editor offers appears beneath it: **Skip description** hides the image from screen readers, **Add a description** gives you an **Image description** box for the language tab you're on. A screen reader reads the description in place of the image, and wherever the default stands in for an event's own image, it reads the default's description. Write it once per calendar language, and write it about the image — *The Maplewood Community Garden logo* — rather than about any one event, because it will sit beside all of them. If the default is purely decorative, skip it. Removing the image clears its descriptions, so a new default starts undescribed. The description saves when you click or tab away from it, like the rest of the General screen.
 

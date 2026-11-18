@@ -10,8 +10,8 @@ Once your calendar has events on it , the next job is getting it in front of the
 
 Your calendar's public address is different from where you log in to manage it:
 
-- **Your public URL** — `your-instance.example/your-handle`. Anyone can open it, with no account and no login. This is the one to share. Your handle is the short name you picked when you created the calendar. The handle can't be changed after creation, so the URL can't either. [Customize your calendar's identity](./identity#the-url-handle) has the advice on picking one that ages well.
-- **The address you work at** — `your-instance.example/`, the screen where you and your editors add events. It only works for people signed in with access to your calendar. Anyone else who opens it gets a login page, not your events.
+- **Your public URL** — `your-instance.example/your-handle`. This is the one to share. Anyone can visit it, with no account and no login.  Your handle is the short name you picked when you created the calendar. The handle can't be changed after creation, so the URL won't change. [Customize your calendar's identity](./identity#the-url-handle) has advice on picking one that ages well.
+- **The address you work at** — `your-instance.example/`, the screen where you and your editors add events. It only works for people signed in with access to your calendar. Anyone else who visits it gets a login page, not your events.
 
 ## Finding your public URL
 
@@ -19,16 +19,16 @@ To find your public URL, open your calendar in Pavillion. On the screen where yo
 
 ### What visitors see
 
-Opening your public URL shows what anyone on the internet sees:
+Opening your public URL shows visitors:
 
 - Your calendar's **name** and **description** at the top, in the visitor's language if you've translated them.
-- Your **upcoming events**, as a list grouped by day. The list covers the window you set as your calendar's [default date filter](./identity#the-default-date-filter), two weeks unless you've changed it.
+- Your **upcoming events**, as a list grouped by day. The list covers the window you set as your calendar's [default date range](./identity#the-default-date-filter).
 - A **search box**, **category filters**, and a **date control**, so visitors can narrow the list or look further ahead.
 - A choice of **list, week, or month view**.
 
-Every event has its own page with the full details: place, time, description, and accessibility notes. Each occurrence's page also has an option to add that date to the visitor's own calendar app. Visitors don't need an account for any of this, and Pavillion doesn't track them.
+Every event has its own page with the full details: place, time, description, and accessibility notes. One-time and recurring events' pages also have an option to add them to the visitor's own calendar app. Visitors don't need an account for any of this, and Pavillion doesn't track them.
 
-Your public page also shows events you've reposted from other calendars, and each one's page links back to the calendar it came from.
+Your public page also shows events you've reposted from other calendars. Each of these reposted events provide a link back to the calendar it came from.
 
 ### Links to one event, a series, or a filtered view
 
@@ -36,22 +36,22 @@ The calendar's address isn't the only thing you can share. Every page under it h
 
 - **One event** — `your-instance.example/your-handle/events/…`. Share this when you're promoting a specific thing: the spring plant sale, not the whole garden calendar.
 - **A series** — `your-instance.example/your-handle/series/summer-concerts`. See [Group related events into a series](./series).
-- **A filtered view** — after a visitor (or you) picks a category, types a search, or switches to the month view, the address bar updates to match. Copy it then, and the person you send it to lands on the same view. A neighborhood calendar can hand the youth soccer league a link that opens on *Sports* only.
+- **A filtered view** — after a visitor (or you) picks a category, types a search, or switches to the month view, the address bar updates to match. Copy it then, and the person you send it to lands on the same view. A neighborhood calendar can hand the youth soccer league a link that opens on *Sports* only, for example.
 
 **Share an event link when you want a preview.** When you paste an event's link into a chat app or social post, the preview card shows the event's title, description, and image. A link to the calendar page itself previews as a plain link — no calendar name, no description, no image. For a group chat where the preview is most of what people see, a link to your next event usually does more than a link to the whole calendar.
 
-### Addresses in other languages
+### Share links in other languages
 
 If your instance offers more than one language, every public page has a version for each one. Put the language code in front of the handle: `your-instance.example/fr/your-handle` for French, `your-instance.example/es/your-handle` for Spanish. English, Pavillion's default, has no prefix. Use the prefixed version when you're writing *to* a particular language community: the link in a Spanish-language newsletter should be the `/es/` one, so readers don't land on the English interface first.
 
-The prefix sets the language of the page contents around your events. Your events and your calendar's name and description appear in that language only where you've translated them, and in your primary language where you haven't.
+The prefix sets the language of the page contents around your events. Your events and your calendar's name and description appear in that language only if you've translated them yourself, and in your primary language where you haven't.
 
 ### Sharing it
 
 For print, write out the public URL in full. It's short because the handle is short, and a reader can type `arts.example/riverbend-folk` off a poster. Leave off the `https://`, which browsers fill in, and leave off any filters or language prefix unless the flyer is for that audience in particular.
 
-::: tip <Lightbulb /> A note on where you put the link.
-The places that keep working are the ones you set once and leave: your organization's website, your email signature, the description of your social accounts, the pinned post in your group chat. Each one quietly sends people to the calendar every time they look. Spend your effort there before announcing the link once in a busy chat thread, where it scrolls out of sight by the end of the week.
+::: tip <Lightbulb /> A note on where to put the link.
+It's handy to put it in places people will see over and over again: your organization's website, your email signature, the description on your social accounts, the pinned post in your group chat. Each one quietly sends people to the calendar every time they look. Spend your effort there before announcing the link once in a busy chat thread, where it scrolls out of sight by the end of the week.
 :::
 
 ## Your federation handle
@@ -60,7 +60,7 @@ Your handle has a second form that isn't a web address: `your-handle@your-instan
 
 The handle is built from the same two parts as your public URL, in a different order. If your public URL is `https://arts.example/riverbend-folk`, your handle is `riverbend-folk@arts.example`. You saw it once already: the form you created the calendar in showed the domain after the name field, in exactly this shape.
 
-Your handle shows up in two places without you doing anything:
+Your handle shows up in two places:
 
 - **Your instance's discovery page** at `your-instance.example/discover`, which lists the calendars on the instance with each one's handle under its name.
 - **Other calendars' event pages.** When another calendar reposts one of your events, the event's page there carries a small label with your handle. It links back to your calendar, so a visitor who found the event somewhere else can find its source.
