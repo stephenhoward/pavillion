@@ -40,6 +40,7 @@
  * @see epic pv-1qcp DESIGN
  */
 
+import type MediaInterface from '@/server/media/interface';
 import type { CalendarResponse, VEvent } from 'node-ical';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -247,6 +248,12 @@ export interface SyncDependencies {
   fetcher?: Fetcher;
   rateLimiter?: SyncRateLimiter;
   parseICS?: IcsParseFn;
+  /**
+   * Optional MediaInterface for cross-domain media access. Injected after
+   * construction via {@link SyncService.setMediaInterface} on the shared
+   * instance, because the Media domain does not exist yet when it is built.
+   */
+  mediaInterface?: MediaInterface;
   /** Override of `Date.now()` for tests. */
   now?: () => Date;
 }
@@ -258,9 +265,11 @@ class SyncService {
   private readonly rateLimiter: SyncRateLimiter;
   private readonly parseICS: IcsParseFn;
   private readonly nowFn: () => Date;
+  private mediaInterface: MediaInterface | undefined;
 
   constructor(deps: SyncDependencies) {
     this.eventService = deps.eventService;
+    this.mediaInterface = deps.mediaInterface;
     this.calendarService = deps.calendarService;
     this.fetcher = deps.fetcher ?? new Fetcher();
     this.rateLimiter = deps.rateLimiter ?? new SyncRateLimiter();
@@ -272,6 +281,16 @@ class SyncService {
       return icalMod.sync.parseICS(body);
     });
     this.nowFn = deps.now ?? (() => new Date());
+  }
+
+  /**
+   * Injects MediaInterface after construction, replacing any value passed to
+   * the constructor.
+   *
+   * @param mediaInterface - The MediaInterface instance from the media domain
+   */
+  setMediaInterface(mediaInterface: MediaInterface): void {
+    this.mediaInterface = mediaInterface;
   }
 
   /**
