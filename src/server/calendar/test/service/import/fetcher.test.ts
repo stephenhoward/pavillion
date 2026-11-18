@@ -7,12 +7,16 @@ import {
   MAX_REDIRECTS,
   MAX_BODY_BYTES,
   USER_AGENT,
+  ICS_FETCH_POLICY,
+  IMAGE_FETCH_CONTENT_TYPES,
+  createImageFetchPolicy,
   type RequestFn,
   type RequestResponse,
   type AgentFactory,
   type DnsLookupFn,
   type IpValidatorFn,
 } from '@/server/calendar/service/import/fetcher';
+import type { UploadConstraints } from '@/server/media/interface';
 import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
 import {
   ImportSourceFetchError,
@@ -602,6 +606,152 @@ describe('Fetcher', () => {
 
       const result = await buildFetcher().fetch({ url: 'https://localhost.test/cal.ics' });
       expect(result.outcome).toBe('ok');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-call fetch policy
+  // -------------------------------------------------------------------------
+
+  describe('fetch policy', () => {
+    const constraints: UploadConstraints = {
+      allowedTypes: ['image/png', 'image/jpeg', 'image/heic', 'image/webp'],
+      maxFileSize: 1024,
+      extensionByMimeType: {},
+    };
+    const imagePolicy = createImageFetchPolicy(constraints);
+    const IMG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+
+    async function reasonOf(promise: Promise<unknown>): Promise<string | undefined> {
+      try {
+        await promise;
+      }
+      catch (err) {
+        expect(err).toBeInstanceOf(ImportSourceFetchError);
+        return ((err as ImportSourceFetchError).details as { reason?: string }).reason;
+      }
+      expect.fail('Expected ImportSourceFetchError');
+    }
+
+    it('reports the normalised content type on an ICS fetch', async () => {
+      (request as sinon.SinonStub).resolves(
+        makeResponse(200, { 'content-type': 'Text/Calendar; charset=utf-8' }, [VCAL_OK]),
+      );
+      const r = await buildFetcher().fetch({ url: 'https://a.example/cal.ics' });
+      expect(r.outcome === 'ok' && r.contentType).toBe('text/calendar');
+    });
+
+    it('exposes ICS_FETCH_POLICY with the ICS cap and allowlist', () => {
+      expect(ICS_FETCH_POLICY.maxBodyBytes).toBe(MAX_BODY_BYTES);
+      expect(ICS_FETCH_POLICY.allowedContentTypes.has('text/calendar')).toBe(true);
+      expect(ICS_FETCH_POLICY.signatureCheck).not.toBeNull();
+    });
+
+    it.each(['image/png', 'image/jpeg', 'image/heic'])('accepts %s under the image policy', async (ct) => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': ct }, [IMG]));
+      const r = await buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy);
+      expect(r.outcome).toBe('ok');
+      expect(r.outcome === 'ok' && r.contentType).toBe(ct);
+    });
+
+    it('accepts Image/JPEG; charset=binary and reports image/jpeg', async () => {
+      (request as sinon.SinonStub).resolves(
+        makeResponse(200, { 'content-type': 'Image/JPEG; charset=binary' }, [IMG]),
+      );
+      const r = await buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy);
+      expect(r.outcome === 'ok' && r.contentType).toBe('image/jpeg');
+    });
+
+    it('rejects text/html under the image policy as rejected_content_type', async () => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': 'text/html' }, [IMG]));
+      expect(await reasonOf(buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy)))
+        .toBe('rejected_content_type');
+    });
+
+    it.each(['text/calendar', 'image/webp'])('rejects %s under the image policy', async (ct) => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': ct }, [IMG]));
+      expect(await reasonOf(buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy)))
+        .toBe('disallowed_content_type');
+    });
+
+    it('rejects a missing Content-Type under the image policy but not under ICS', async () => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, {}, [IMG]));
+      expect(await reasonOf(buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy)))
+        .toBe('disallowed_content_type');
+
+      (request as sinon.SinonStub).resolves(makeResponse(200, {}, [VCAL_OK]));
+      const r = await buildFetcher().fetch({ url: 'https://a.example/cal.ics' });
+      expect(r.outcome).toBe('ok');
+    });
+
+    it('enforces the policy byte cap', async () => {
+      (request as sinon.SinonStub).resolves(
+        makeHugeResponse(200, { 'content-type': 'image/png' }, 1025),
+      );
+      expect(await reasonOf(buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy)))
+        .toBe('body_too_large');
+    });
+
+    it('does not sniff for BEGIN:VCALENDAR under the image policy', async () => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': 'image/png' }, [IMG]));
+      const r = await buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy);
+      expect(r.outcome).toBe('ok');
+    });
+
+    it('sends exactly user-agent and accept under the image policy', async () => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': 'image/png' }, [IMG]));
+      await buildFetcher().fetch({ url: 'https://a.example/i' }, imagePolicy);
+      const headers = (request as sinon.SinonStub).firstCall.args[1].headers as Record<string, string>;
+      expect(Object.keys(headers).sort()).toEqual(['accept', 'user-agent']);
+      expect(headers['accept']).toBe(imagePolicy.accept);
+      expect(headers['accept']).toContain('image/png');
+    });
+
+    it('still sends the ICS accept header with no policy', async () => {
+      (request as sinon.SinonStub).resolves(makeResponse(200, { 'content-type': 'text/calendar' }, [VCAL_OK]));
+      await buildFetcher().fetch({ url: 'https://a.example/cal.ics' });
+      const headers = (request as sinon.SinonStub).firstCall.args[1].headers as Record<string, string>;
+      expect(headers['accept']).toBe(ICS_FETCH_POLICY.accept);
+      expect(headers['accept']).toContain('text/calendar');
+    });
+
+    it('rejects a private-IP resolution under the image policy with the same error class as ICS', async () => {
+      (isPrivateIp as sinon.SinonStub).returns(true);
+      const errorOf = async (policy?: typeof imagePolicy) => {
+        try {
+          await buildFetcher().fetch({ url: 'https://a.example/x' }, policy);
+        }
+        catch (err) {
+          return err;
+        }
+      };
+      const icsErr = await errorOf();
+      const imgErr = await errorOf(imagePolicy);
+      expect(icsErr).toBeInstanceOf(ImportSourceSsrfBlockedError);
+      expect(imgErr).toBeInstanceOf(ImportSourceSsrfBlockedError);
+      expect((request as sinon.SinonStub).called).toBe(false);
+    });
+
+    describe('createImageFetchPolicy', () => {
+      it('intersects the fixed constant with the media allowlist, never widening it', () => {
+        const p = createImageFetchPolicy({
+          ...constraints,
+          allowedTypes: ['image/png', 'image/jpeg', 'image/heic', 'image/svg+xml', 'image/webp'],
+        });
+        expect([...p.allowedContentTypes].sort()).toEqual(['image/heic', 'image/jpeg', 'image/png']);
+        expect([...IMAGE_FETCH_CONTENT_TYPES].sort()).toEqual(['image/heic', 'image/jpeg', 'image/png']);
+      });
+
+      it('narrows when media allows fewer types, but keeps accept at the fixed list', () => {
+        const p = createImageFetchPolicy({ ...constraints, allowedTypes: ['image/png'] });
+        expect([...p.allowedContentTypes]).toEqual(['image/png']);
+        expect(p.accept).toContain('image/jpeg');
+      });
+
+      it('takes the cap from the constraints and has no signature check', () => {
+        expect(imagePolicy.maxBodyBytes).toBe(1024);
+        expect(imagePolicy.signatureCheck).toBeNull();
+      });
     });
   });
 });

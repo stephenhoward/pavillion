@@ -51,6 +51,7 @@ import {
 } from '@/server/common/helper/test-ssrf-gate';
 import { createPinnedAgent } from '@/server/common/helper/pinned-agent';
 import type { UrlValidatorFn } from '@/server/calendar/service/import/types';
+import type { UploadConstraints } from '@/server/media/interface';
 
 const logger = createLogger('calendar.import.fetcher');
 
@@ -90,6 +91,54 @@ const REJECTED_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'text/html',
   'application/xhtml+xml',
 ]);
+
+/**
+ * What a fetch accepts: the response content types, body cap, optional
+ * body signature check and Accept header. The policy touches only the header
+ * and response-body steps; URL validation, DNS and private-IP checks, pinning,
+ * redirects and timeouts never read it, so the SSRF defence is shared by every
+ * policy. `REJECTED_CONTENT_TYPES` applies to all policies.
+ */
+export interface FetchPolicy {
+  allowedContentTypes: ReadonlySet<string>;
+  maxBodyBytes: number;
+  /** Returns false to reject the body; null skips the check. */
+  signatureCheck: ((body: Buffer) => boolean) | null;
+  /** Error reason used when `signatureCheck` returns false. */
+  signatureFailureReason: string;
+  accept: string;
+}
+
+/** The ICS import policy: the behaviour of the fetcher before policies existed. */
+export const ICS_FETCH_POLICY: FetchPolicy = {
+  allowedContentTypes: ALLOWED_CONTENT_TYPES,
+  maxBodyBytes: MAX_BODY_BYTES,
+  signatureCheck: hasVcalendarSignature,
+  signatureFailureReason: 'missing_vcalendar_signature',
+  accept: 'text/calendar, text/x-calendar, application/calendar;q=0.9, */*;q=0.1',
+};
+
+/**
+ * Image types automated ingestion may fetch. Fixed on purpose: widening
+ * Media's general upload allowlist must not widen what is fetched from feeds.
+ */
+export const IMAGE_FETCH_CONTENT_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/heic'];
+
+/**
+ * Build the policy for fetching images: the fixed image types intersected with
+ * Media's allowed types, capped at Media's max file size. Magic-byte checks stay
+ * in Media's file validation, so there is no signature check here.
+ */
+export function createImageFetchPolicy(constraints: UploadConstraints): FetchPolicy {
+  const permitted = new Set(constraints.allowedTypes);
+  return {
+    allowedContentTypes: new Set(IMAGE_FETCH_CONTENT_TYPES.filter(t => permitted.has(t))),
+    maxBodyBytes: constraints.maxFileSize,
+    signatureCheck: null,
+    signatureFailureReason: 'invalid_image_signature',
+    accept: IMAGE_FETCH_CONTENT_TYPES.join(', '),
+  };
+}
 
 /**
  * True when the buffer's leading bytes begin with `BEGIN:VCALENDAR`, allowing a
@@ -144,6 +193,8 @@ export interface FetcherOk {
   contentHash: string;
   etag?: string;
   bytesReceived: number;
+  /** Response media type: parameter-stripped, trimmed, lowercased; '' when absent. */
+  contentType: string;
 }
 
 export interface FetcherNotModified {
@@ -270,7 +321,7 @@ export class Fetcher {
    * allowlist, and signature sniff. Handles redirect chains manually with
    * a fresh pinned Agent per hop.
    */
-  async fetch(input: FetcherInput): Promise<FetcherResult> {
+  async fetch(input: FetcherInput, policy: FetchPolicy = ICS_FETCH_POLICY): Promise<FetcherResult> {
     const { importSourceId, etag } = input;
     let currentUrl = input.url;
     let previousUrl: URL | null = null;
@@ -327,7 +378,7 @@ export class Fetcher {
         //    redirects.
         const headers: Record<string, string> = {
           'user-agent': USER_AGENT,
-          'accept': 'text/calendar, text/x-calendar, application/calendar;q=0.9, */*;q=0.1',
+          'accept': policy.accept,
         };
         if (hop === 0 && etag) {
           headers['if-none-match'] = etag;
@@ -412,18 +463,21 @@ export class Fetcher {
           await drainBody(response.body);
           throw new ImportSourceFetchError({ reason: 'rejected_content_type', contentType });
         }
-        if (contentType && !ALLOWED_CONTENT_TYPES.has(contentType)) {
+        // A missing type passes only when a signature check can identify the
+        // body; without one an untyped response is refused before it is read.
+        const typeMissingOk = !contentType && policy.signatureCheck !== null;
+        if (!typeMissingOk && !policy.allowedContentTypes.has(contentType)) {
           await drainBody(response.body);
           throw new ImportSourceFetchError({ reason: 'disallowed_content_type', contentType });
         }
 
         // 7. Stream body with hard cap enforced at 10 MiB pre-decompression.
         //    `Content-Length` is not trusted.
-        const body = await readBodyCapped(response.body, MAX_BODY_BYTES);
+        const body = await readBodyCapped(response.body, policy.maxBodyBytes);
 
-        // 8. Signature sniff (BOM / leading whitespace tolerant).
-        if (!hasVcalendarSignature(body)) {
-          throw new ImportSourceFetchError({ reason: 'missing_vcalendar_signature' });
+        // 8. Signature check, when the policy has one (ICS: BOM / whitespace tolerant).
+        if (policy.signatureCheck && !policy.signatureCheck(body)) {
+          throw new ImportSourceFetchError({ reason: policy.signatureFailureReason });
         }
 
         const contentHash = createHash('sha256').update(body).digest('hex');
@@ -441,6 +495,7 @@ export class Fetcher {
           contentHash,
           etag: responseEtag,
           bytesReceived: body.length,
+          contentType,
         };
       }
 
