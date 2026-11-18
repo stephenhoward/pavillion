@@ -7,8 +7,9 @@
  *
  * Exports:
  *   Constants: QUEUE_GATE, GH_PR_LIMIT, MAX_FIRINGS, ROOT_ID, RUN_ID, REPORT_DIR, LOCK_PATH,
- *     TRUNK, STALL_REPORT_MAX
- *   Pure: validateFlags, assertRootId, lockDecision, passingCi, queueGate,
+ *     TRUNK, STALL_REPORT_MAX, LANES, UNLABELLED_LANE
+ *   Pure: validateFlags, parseLane, laneArgs, assertRootId, lockDecision,
+ *     passingCi, queueGate, laneOf, filterLane,
  *     priorEpicGate, selectRoot, evaluateGates, scanNotes, parseBuildState,
  *     parseSpecState,
  *     buildStateWriteArgs, stateWriteCommand, chainPlanInput,
@@ -127,6 +128,10 @@ export interface Selection {
   /** The pick's time ready; null on resume or no pick. */
   at: string | null;
   skipped: Skip[];
+  /** The lane selected from; present only when a lane was given. */
+  lane?: Lane;
+  /** Whether the pick carries no office label; present only when a lane was given. */
+  unlabelled?: boolean;
 }
 
 export interface Failure {
@@ -147,21 +152,73 @@ export type Runner = (cmd: string, args: string[]) => RunResult;
 // Flags and ids
 // =============================================================================
 
+/** The offices a scheduled run can be restricted to, one lane each. */
+export const LANES = ['product', 'engineering', 'operations'] as const;
+export type Lane = typeof LANES[number];
+
+/** The lane of a root that carries no office label. */
+export const UNLABELLED_LANE: Lane = 'engineering';
+
+const LANE_FLAG = '--lane';
+const LANE_PREFIX = `${LANE_FLAG}=`;
+
+function isLaneToken(token: string): boolean {
+  return token === LANE_FLAG || token.startsWith(LANE_PREFIX);
+}
+
+/** A `--lane=<office>` token's lane, or why it is refused. A bare `--lane` takes no value. */
+export function parseLane(token: string): { ok: true; lane: Lane } | { ok: false; error: string } {
+  const allowed = `one of ${LANES.join(', ')}`;
+  if (!token.startsWith(LANE_PREFIX)) {
+    return { ok: false, error: `${LANE_FLAG} takes its value as ${LANE_PREFIX}<office>, ${allowed}` };
+  }
+  const value = token.slice(LANE_PREFIX.length);
+  if (!(LANES as readonly string[]).includes(value)) {
+    return { ok: false, error: `${LANE_FLAG} value ${JSON.stringify(value)} is not ${allowed}` };
+  }
+  return { ok: true, lane: value as Lane };
+}
+
+/**
+ * The lane among `args`, which may hold nothing but at most one
+ * `--lane=<office>` token: the `gates`, `select` and `dry-run` argument rule.
+ */
+export function laneArgs(args: string[]): { ok: true; lane: Lane | undefined } | { ok: false; error: string } {
+  if (args.length > 1) return { ok: false, error: `expected at most one ${LANE_PREFIX}<office>` };
+  if (args.length === 0) return { ok: true, lane: undefined };
+  if (!isLaneToken(args[0])) return { ok: false, error: `unexpected argument ${args[0]}` };
+  return parseLane(args[0]);
+}
+
 export type FlagCheck =
-  | { ok: true; scheduled: boolean; dryRun: boolean }
+  | { ok: true; scheduled: boolean; dryRun: boolean; lane?: Lane }
   | { ok: false; error: string };
 
 /**
  * `--scheduled` takes no epic id and none of `--only`, `--sequential`,
- * `--resume`: selection is the whole input and resume is automatic.
- * Attended argv is the command's business and passes through.
+ * `--resume`: selection is the whole input and resume is automatic. It
+ * takes at most one `--lane=<office>`, returned as `lane`; no lane is the
+ * whole queue. The lane is scheduled-only. Other attended argv is the
+ * command's business and passes through.
  */
 export function validateFlags(argv: string[]): FlagCheck {
   const scheduled = argv.includes('--scheduled');
   const dryRun = argv.includes('--dry-run');
-  if (!scheduled) return { ok: true, scheduled, dryRun };
+  if (!scheduled) {
+    const lane = argv.find(isLaneToken);
+    if (lane !== undefined) return { ok: false, error: `${lane} is scheduled-only: it needs --scheduled` };
+    return { ok: true, scheduled, dryRun };
+  }
+  let lane: Lane | undefined;
   for (const token of argv) {
     if (token === '--scheduled' || token === '--dry-run') continue;
+    if (isLaneToken(token)) {
+      const parsed = parseLane(token);
+      if (!parsed.ok) return { ok: false, error: `--scheduled refuses ${token}: ${parsed.error}` };
+      if (lane !== undefined) return { ok: false, error: `--scheduled takes ${LANE_FLAG} at most once` };
+      lane = parsed.lane;
+      continue;
+    }
     if (token === '--only' || token.startsWith('--only=')) {
       return { ok: false, error: '--scheduled refuses --only: selection is the whole input' };
     }
@@ -173,7 +230,7 @@ export function validateFlags(argv: string[]): FlagCheck {
     }
     return { ok: false, error: `--scheduled refuses an epic id (${token}): selection picks the root` };
   }
-  return { ok: true, scheduled, dryRun };
+  return lane === undefined ? { ok: true, scheduled, dryRun } : { ok: true, scheduled, dryRun, lane };
 }
 
 export function assertRootId(id: string): void {
@@ -486,15 +543,92 @@ function isRoot(b: BuildBead): boolean {
   return b.parent == null;
 }
 
+const OFFICE_LABELS = LANES.map(lane => `office:${lane}`);
+
+/**
+ * A root's lane, from its own office labels only: exactly one names it,
+ * none puts it in UNLABELLED_LANE, two or more put it in no lane at all.
+ */
+export function laneOf(b: BuildBead): { lane: Lane; unlabelled: boolean } | { conflict: string[] } {
+  const offices = labelsOf(b).filter(l => OFFICE_LABELS.includes(l));
+  if (offices.length > 1) return { conflict: offices };
+  if (offices.length === 0) return { lane: UNLABELLED_LANE, unlabelled: true };
+  return { lane: offices[0].slice('office:'.length) as Lane, unlabelled: false };
+}
+
+/** A root the selection reads: open, spec:ready or spec:building. */
+function selectable(b: BuildBead): boolean {
+  return b.status !== 'closed' && (labelsOf(b).includes('spec:ready') || labelsOf(b).includes('spec:building'));
+}
+
+/** A root the prior-epic gate reads: spec:built, open or closed. */
+function gated(b: BuildBead): boolean {
+  return labelsOf(b).includes('spec:built');
+}
+
+/** The skips among `skipped` whose root `reads` would have read. */
+function skipsReadBy(beads: BuildBead[], skipped: Skip[], reads: (b: BuildBead) => boolean): Skip[] {
+  const ids = new Set(beads.filter(reads).map(b => b.id));
+  return skipped.filter(s => ids.has(s.id));
+}
+
+export interface LaneFilter {
+  /** Every non-root bead, untouched, and the roots of the lane. */
+  beads: BuildBead[];
+  /** Roots with two or more office labels that the build would otherwise read. */
+  skipped: Skip[];
+  /** Ids of the lane's roots that carry no office label. */
+  unlabelled: Set<string>;
+}
+
+/**
+ * The bead list as one lane sees it. Only roots are filtered: a root's
+ * children pass through whatever their labels, so resume, chain planning
+ * and the completion sweep read every child as before.
+ */
+export function filterLane(beads: BuildBead[], lane: Lane): LaneFilter {
+  const kept: BuildBead[] = [];
+  const skipped: Skip[] = [];
+  const unlabelled = new Set<string>();
+  for (const b of beads) {
+    if (!isRoot(b)) {
+      kept.push(b);
+      continue;
+    }
+    const of = laneOf(b);
+    if ('conflict' in of) {
+      if (selectable(b) || gated(b)) skipped.push({ id: b.id, reason: `in no lane: carries ${of.conflict.join(' and ')}` });
+      continue;
+    }
+    if (of.lane !== lane) continue;
+    kept.push(b);
+    if (of.unlabelled) unlabelled.add(b.id);
+  }
+  skipped.sort((a, b) => a.id.localeCompare(b.id));
+  return { beads: kept, skipped, unlabelled };
+}
+
+const UNLABELLED_NOTE = `taken as unlabelled into the ${UNLABELLED_LANE} lane`;
+
 /**
  * Gate 2: fails if any open PR is recorded in the last Build state block of
  * a spec:built root, open or closed. A missing or malformed block fails
  * closed: a spec:built root without its PR record is a missing field. A
  * malformed last block still gives up the PR numbers on its `chain <k>:`
  * lines (read leniently, this gate only); the malformation stays in the
- * reading. Only a block with no readable PR number fails closed.
+ * reading. Only a block with no readable PR number fails closed. With a
+ * lane, only that lane's spec:built roots count, and the reading names it.
  */
-export function priorEpicGate(beads: BuildBead[], openPrs: Set<number>): Reading {
+export function priorEpicGate(beads: BuildBead[], openPrs: Set<number>, lane?: Lane): Reading {
+  if (lane === undefined) return priorEpicReading(beads, openPrs);
+  const filtered = filterLane(beads, lane);
+  const r = priorEpicReading(filtered.beads, openPrs);
+  const skipped = skipsReadBy(beads, filtered.skipped, gated);
+  const tail = skipped.length ? `; not counted, ${skipped.map(s => `${s.id} ${s.reason}`).join('; ')}` : '';
+  return { ...r, reading: `${lane} lane: ${r.reading}${tail}` };
+}
+
+function priorEpicReading(beads: BuildBead[], openPrs: Set<number>): Reading {
   const check = 'prior-epic-in-review';
   const built = beads.filter(b => isRoot(b) && labelsOf(b).includes('spec:built'));
   const hits: string[] = [];
@@ -550,10 +684,21 @@ function holdReason(b: BuildBead): string | null {
  * the label-event time when known, else the root's last `## Spec state`
  * line, else updated_at; an unparsable time skips the root rather than
  * falling through. Every skipped candidate is named with a reason.
+ *
+ * With a lane, only that lane's roots are candidates (filterLane): a root
+ * of another lane neither resumes nor blocks, a root with two office labels
+ * is skipped, and the selection names the lane and whether the pick was
+ * taken as unlabelled.
  */
-export function selectRoot(beads: BuildBead[]): Selection {
+export function selectRoot(beads: BuildBead[], lane?: Lane): Selection {
+  if (lane === undefined) return selectFrom(beads, []);
+  const filtered = filterLane(beads, lane);
+  const s = selectFrom(filtered.beads, skipsReadBy(beads, filtered.skipped, selectable));
+  return { ...s, lane, unlabelled: s.root !== null && filtered.unlabelled.has(s.root) };
+}
+
+function selectFrom(beads: BuildBead[], skipped: Skip[]): Selection {
   const roots = beads.filter(b => isRoot(b) && b.status !== 'closed').sort((a, b) => a.id.localeCompare(b.id));
-  const skipped: Skip[] = [];
 
   const building = roots.filter(b => labelsOf(b).includes('spec:building'));
   let resume: string | null = null;
@@ -602,12 +747,16 @@ export interface GatesInput {
   prs: PrRow[] | Failure;
   now: Date;
   mode: Mode;
+  /** Restricts resume, the prior-epic gate and selection to one lane's roots. */
+  lane?: Lane;
 }
 
 export interface GatesResult {
   ok: boolean;
   gates: Reading[];
   selection: Selection | null;
+  /** The lane the gates read; present only when a lane was given. */
+  lane?: Lane;
 }
 
 function isFailure<T>(value: T | Failure): value is Failure {
@@ -617,9 +766,10 @@ function isFailure<T>(value: T | Failure): value is Failure {
 /**
  * The four gates, in order. A real run evaluates none after the first
  * failure (`not-run`); a dry run evaluates all of them. Resume skips gates 2
- * and 4 and keeps the queue gate.
+ * and 4 and keeps the queue gate. A lane narrows gates 1, 2 and 4 to its
+ * roots; the queue gate stays global.
  */
-export function evaluateGates({ beads, prs, now, mode }: GatesInput): GatesResult {
+export function evaluateGates({ beads, prs, now, mode, lane }: GatesInput): GatesResult {
   const gates: Reading[] = [];
   let failed = false;
   const add = (reading: Reading): void => {
@@ -629,19 +779,25 @@ export function evaluateGates({ beads, prs, now, mode }: GatesInput): GatesResul
   const halted = (): boolean => mode === 'run' && failed;
   const notRun = (check: string): Reading => ({ check, verdict: 'not-run', reading: 'an earlier check failed' });
 
-  const selection = isFailure(beads) ? null : selectRoot(beads);
+  const selection = isFailure(beads) ? null : selectRoot(beads, lane);
   const resuming = selection?.kind === 'resume';
+  const inLane = lane === undefined ? '' : ` in the ${lane} lane`;
+  const unlabelled = selection?.unlabelled ? `, ${UNLABELLED_NOTE}` : '';
 
   add(isFailure(beads)
     ? { check: 'resume-first', verdict: 'fail', reading: beads.error }
-    : { check: 'resume-first', verdict: 'pass', reading: resuming ? `resume ${selection.root}` : 'no resumable spec:building root' });
+    : {
+      check: 'resume-first',
+      verdict: 'pass',
+      reading: resuming ? `resume ${selection.root}${inLane}${unlabelled}` : `no resumable spec:building root${inLane}`,
+    });
 
   if (halted()) add(notRun('prior-epic-in-review'));
   else if (resuming) add({ check: 'prior-epic-in-review', verdict: 'skipped', reading: 'resuming' });
   else if (isFailure(beads) || isFailure(prs)) {
     add({ check: 'prior-epic-in-review', verdict: 'fail', reading: (isFailure(beads) ? beads : prs as Failure).error });
   }
-  else add(priorEpicGate(beads, new Set(prs.map(p => p.number))));
+  else add(priorEpicGate(beads, new Set(prs.map(p => p.number)), lane));
 
   if (halted()) add(notRun('queue'));
   else add(isFailure(prs) ? { check: 'queue', verdict: 'fail', reading: prs.error } : queueGate(prs, now));
@@ -650,14 +806,14 @@ export function evaluateGates({ beads, prs, now, mode }: GatesInput): GatesResul
   else if (resuming) add({ check: 'nothing-to-build', verdict: 'skipped', reading: 'resuming' });
   else if (selection === null) add({ check: 'nothing-to-build', verdict: 'fail', reading: 'no bead reading' });
   else if (selection.root === null) {
-    add({ check: 'nothing-to-build', verdict: 'fail', reading: 'no eligible spec:ready or spec:building root' });
+    add({ check: 'nothing-to-build', verdict: 'fail', reading: `no eligible spec:ready or spec:building root${inLane}` });
   }
   else {
-    const reading = `selected ${selection.root} (P${selection.priority}, ready ${selection.at} by ${selection.source})`;
+    const reading = `selected ${selection.root}${inLane} (P${selection.priority}, ready ${selection.at} by ${selection.source})${unlabelled}`;
     add({ check: 'nothing-to-build', verdict: 'pass', reading });
   }
 
-  return { ok: !failed, gates, selection };
+  return lane === undefined ? { ok: !failed, gates, selection } : { ok: !failed, gates, selection, lane };
 }
 
 // =============================================================================
@@ -1436,8 +1592,8 @@ export function releaseLock(lock: LockStore, run: string): Reading {
   return { check, verdict: 'pass', reading: `released (run ${run})` };
 }
 
-export function runGates(runner: Runner, now: Date, mode: Mode): GatesResult {
-  return evaluateGates({ beads: attempt(() => readBeads(runner)), prs: attempt(() => readOpenPrs(runner)), now, mode });
+export function runGates(runner: Runner, now: Date, mode: Mode, lane?: Lane): GatesResult {
+  return evaluateGates({ beads: attempt(() => readBeads(runner)), prs: attempt(() => readOpenPrs(runner)), now, mode, lane });
 }
 
 /** Gate 3 alone, re-read before every new level. */
@@ -1453,16 +1609,19 @@ export interface DryRunResult {
   chain_plan: unknown;
   /** The `bd` argv the run would write, or why it writes no label. */
   labels: string[] | string;
+  /** The lane of the run; present only when a lane was given. */
+  lane?: Lane;
 }
 
 /**
  * Everything a real run would read before its first write, and nothing
  * written: preflight and gate readings with verdicts, the selection, the
- * chain plan from `stack.ts plan`, and the label write it would make.
+ * chain plan from `stack.ts plan`, and the label write it would make. With
+ * a lane it selects exactly what `gates` with that lane would.
  */
-export function runDryRun(runner: Runner, now: Date): DryRunResult {
+export function runDryRun(runner: Runner, now: Date, lane?: Lane): DryRunResult {
   const preflight = runPreflight(runner, null);
-  const gates = runGates(runner, now, 'dry');
+  const gates = runGates(runner, now, 'dry', lane);
   const selection = gates.selection;
   let chainPlan: unknown = null;
   let labels: string[] | string = 'none: nothing selected';
@@ -1476,7 +1635,8 @@ export function runDryRun(runner: Runner, now: Date): DryRunResult {
       ? 'none: root already carries spec:building'
       : ['bd', ...stateWriteCommand(root, 'spec:building')];
   }
-  return { preflight, gates: gates.gates, selection, chain_plan: chainPlan, labels };
+  const result = { preflight, gates: gates.gates, selection, chain_plan: chainPlan, labels };
+  return lane === undefined ? result : { lane, ...result };
 }
 
 /** The kill switch over a fresh read of the root: closed, held or relabelled stops the run. */

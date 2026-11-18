@@ -8,14 +8,14 @@
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-flags <argv…>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts preflight --owner-pid <pid>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts release --run <id>
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts gates [--queue-only]
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts select
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts gates [--lane=<office> | --queue-only]
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts select [--lane=<office>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts build-state <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts still-ours <root-id>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts validate-prs <root-id> [--text]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts write <root-id> --run <id> [--label <spec:label>] [--state-file <json>] [--firing <kind>] [--stall-step <step> --stall-file <file>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts state-write <spec:building|spec:built|spec:stalled>
- *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run
+ *   npx tsx .agents/skills/build-scheduled/scripts/build.ts dry-run [--lane=<office>]
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts pr-text-check <file|->
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts submit-check <root-id> --leaf <id> --base <branch>
  *   npx tsx .agents/skills/build-scheduled/scripts/build.ts publish-pr <root-id> <pr> --leaf <id> --title-file <f> --body-file <f>
@@ -32,8 +32,10 @@ import { dirname, resolve } from 'node:path';
 import {
   type LockStore,
   LOCK_PATH,
+  type Lane,
   buildStateWriteArgs,
   execRunner,
+  laneArgs,
   readBeads,
   releaseLock,
   runBuildState,
@@ -59,8 +61,11 @@ commands:
                                 this run's id as "run" (JSON). Pass $PPID: the lock goes
                                 stale once that process exits
   release --run <id>            remove the lock if this run holds it (JSON)
-  gates [--queue-only]          each gate's reading and verdict, in order (JSON)
-  select                        selected root, priority, time-ready source, skipped roots (JSON)
+  gates [--lane=<office> | --queue-only]
+                                each gate's reading and verdict, in order (JSON).
+                                --lane= restricts resume, the prior-epic gate and
+                                selection to one office's roots; the queue gate stays global
+  select [--lane=<office>]      selected root, priority, time-ready source, skipped roots (JSON)
   build-state <root-id>         last Build state block, start decision, resume point and
                                 next_state, the next write's state file (JSON); exit 1
                                 means stall the root
@@ -81,7 +86,8 @@ commands:
                                 firing-limit, sweep, text-check, or
                                 chain <k> level <n> implement|audit|build-gate|submit
   state-write <spec:label>      the bd update flags for spec:building, spec:built or spec:stalled
-  dry-run                       preflight, gates, selection, chain plan, label write; writes nothing (JSON)
+  dry-run [--lane=<office>]     preflight, gates, selection, chain plan, label write; writes nothing (JSON).
+                                With --lane= it selects exactly what gates with that lane would
   pr-text-check <file|->        a candidate PR title, body, branch name or commit log (- reads
                                 stdin) against the publication patterns (JSON); exit 1 = publish nothing
   submit-check <root-id> --leaf <id> --base <branch>
@@ -94,6 +100,9 @@ commands:
                                 PR checks, text check over title, body, branch and commits,
                                 kill switch, then gh pr edit (JSON); exit 1 = nothing edited,
                                 "hold": true = stall the level unsubmitted
+
+<office> is one of product, engineering, operations. A root's lane is its one office
+label; a root with none is in the engineering lane, one with two or more in no lane.
 `;
 
 function fail(message: string): never {
@@ -173,6 +182,13 @@ function flagPairs(args: string[], allowed: string[]): Map<string, string> {
   return flags;
 }
 
+/** The lane of `gates`, `select` and `dry-run`: nothing, or one valid `--lane=<office>`. */
+function laneOrFail(args: string[]): Lane | undefined {
+  const parsed = laneArgs(args);
+  if (!parsed.ok) fail(`${parsed.error}\n\n${USAGE}`);
+  return parsed.lane;
+}
+
 /** Relative file paths are the caller's, resolved before the chdir to the repo root. */
 const callerCwd = process.cwd();
 
@@ -214,20 +230,18 @@ try {
       break;
     }
     case 'gates': {
-      if (args.length > 1 || (args.length === 1 && args[0] !== '--queue-only')) fail(USAGE);
-      if (args[0] === '--queue-only') {
+      if (args.length === 1 && args[0] === '--queue-only') {
         const reading = runQueueGate(execRunner, now);
         json(reading);
         process.exit(reading.verdict === 'pass' ? 0 : 1);
       }
-      const result = runGates(execRunner, now, 'run');
+      const result = runGates(execRunner, now, 'run', laneOrFail(args));
       json(result);
       process.exit(result.ok ? 0 : 1);
       break;
     }
     case 'select': {
-      if (args.length) fail(USAGE);
-      json(selectRoot(readBeads(execRunner)));
+      json(selectRoot(readBeads(execRunner), laneOrFail(args)));
       break;
     }
     case 'build-state': {
@@ -295,8 +309,7 @@ try {
       break;
     }
     case 'dry-run': {
-      if (args.length) fail(USAGE);
-      json(runDryRun(execRunner, now));
+      json(runDryRun(execRunner, now, laneOrFail(args)));
       break;
     }
     case 'submit-check': {

@@ -19,7 +19,11 @@ import {
   QUEUE_GATE,
   GH_PR_LIMIT,
   MAX_FIRINGS,
+  LANES,
   validateFlags,
+  laneArgs,
+  laneOf,
+  filterLane,
   assertRootId,
   lockDecision,
   passingCi,
@@ -205,6 +209,49 @@ describe('validateFlags', () => {
     const result = validateFlags(argv);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(message);
+  });
+
+  it.each(LANES)('accepts --scheduled --lane=%s and returns the lane', lane => {
+    expect(validateFlags(['--scheduled', `--lane=${lane}`])).toEqual({ ok: true, scheduled: true, dryRun: false, lane });
+    expect(validateFlags(['--scheduled', '--dry-run', `--lane=${lane}`]))
+      .toEqual({ ok: true, scheduled: true, dryRun: true, lane });
+  });
+
+  it.each([
+    [['--scheduled', '--lane=other'], /"other" is not one of product, engineering, operations/],
+    [['--scheduled', '--lane='], /"" is not one of product, engineering, operations/],
+    [['--scheduled', '--lane'], /--lane=<office>, one of product, engineering, operations/],
+    [['--scheduled', '--lane', 'product'], /--lane=<office>/],
+    [['--scheduled', '--lane=product', '--lane=product'], /at most once/],
+    [['--scheduled', '--lane=product', '--lane=operations'], /at most once/],
+    [['--lane=product'], /scheduled-only/],
+    [['pv-abc', '--lane=engineering'], /scheduled-only/],
+  ])('refuses %j', (argv, message) => {
+    const result = validateFlags(argv);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(message);
+  });
+
+  it('still reads a bare value as an epic id, lane or not', () => {
+    const result = validateFlags(['--scheduled', '--lane=product', 'product']);
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/epic id \(product\)/) });
+  });
+});
+
+describe('laneArgs', () => {
+  it('takes nothing or one valid --lane=<office>', () => {
+    expect(laneArgs([])).toEqual({ ok: true, lane: undefined });
+    expect(laneArgs(['--lane=operations'])).toEqual({ ok: true, lane: 'operations' });
+  });
+
+  it.each([
+    [['--lane=product', '--lane=product'], /at most one/],
+    [['--lane=nope'], /not one of/],
+    [['--lane'], /--lane=<office>/],
+    [['--queue-only'], /unexpected argument --queue-only/],
+    [['--queue-only', '--lane=product'], /at most one/],
+  ])('refuses %j', (args, message) => {
+    expect(laneArgs(args)).toEqual({ ok: false, error: expect.stringMatching(message) });
   });
 });
 
@@ -754,6 +801,157 @@ describe('evaluateGates', () => {
 });
 
 // =============================================================================
+// Lanes
+// =============================================================================
+
+describe('lanes', () => {
+  const office = (lane: string) => `office:${lane}`;
+  const inLane = (lane: string, labels: string[]) => [...labels, office(lane)];
+  const building = (id: string, lane: string) => bead({ id, labels: inLane(lane, ['spec:building']) });
+  const readyIn = (id: string, lane: string, at = '2026-11-01T00:00:00Z') =>
+    ready(id, at, { labels: inLane(lane, ['spec:ready']) });
+  const builtIn = (id: string, lane: string, notes = GOOD_BLOCK) =>
+    bead({ id, labels: inLane(lane, ['spec:built']), notes: `${ANALYSED}\n\n${notes}` });
+
+  describe('laneOf', () => {
+    it('reads the one office label, else the unlabelled lane, else a conflict', () => {
+      expect(laneOf(readyIn('pv-a', 'product'))).toEqual({ lane: 'product', unlabelled: false });
+      expect(laneOf(ready('pv-a', '2026-11-01T00:00:00Z'))).toEqual({ lane: 'engineering', unlabelled: true });
+      expect(laneOf(bead({ id: 'pv-a', labels: [office('product'), office('operations')] })))
+        .toEqual({ conflict: [office('product'), office('operations')] });
+    });
+
+    it('ignores labels that name no lane', () => {
+      expect(laneOf(bead({ id: 'pv-a', labels: [office('legal'), 'officer:x'] }))).toEqual({ lane: 'engineering', unlabelled: true });
+    });
+  });
+
+  describe('selection', () => {
+    it('neither resumes nor is blocked by another lane\'s spec:building root', () => {
+      const beads = [building('pv-a', 'operations'), readyIn('pv-b', 'product')];
+      const s = selectRoot(beads, 'product');
+      expect(s).toMatchObject({ root: 'pv-b', kind: 'ready', lane: 'product', unlabelled: false, skipped: [] });
+      expect(selectRoot(beads)).toMatchObject({ root: 'pv-a', kind: 'resume' });
+    });
+
+    it('still resumes this lane\'s spec:building root first', () => {
+      const beads = [readyIn('pv-a', 'product'), building('pv-z', 'product'), building('pv-b', 'operations')];
+      expect(selectRoot(beads, 'product')).toMatchObject({ root: 'pv-z', kind: 'resume', lane: 'product' });
+    });
+
+    it('never filters a root\'s children: they pass through whatever their labels', () => {
+      const root = readyIn('pv-r', 'product');
+      const children = [
+        bead({ id: 'pv-r.1', parent: 'pv-r', issue_type: 'task', labels: [office('operations')] }),
+        bead({ id: 'pv-r.2', parent: 'pv-r', issue_type: 'task' }),
+      ];
+      const filtered = filterLane([root, ...children], 'product');
+      expect(filtered.beads.map(b => b.id)).toEqual(['pv-r', 'pv-r.1', 'pv-r.2']);
+      expect(selectRoot([root, ...children], 'product')).toMatchObject({ root: 'pv-r', skipped: [] });
+    });
+
+    it('skips a root with two office labels in every lane, naming both labels', () => {
+      const both = ready('pv-two', '2026-10-01T00:00:00Z', { labels: ['spec:ready', office('product'), office('engineering')] });
+      for (const lane of LANES) {
+        const s = selectRoot([both, readyIn('pv-ok', lane)], lane);
+        expect(s.root).toBe('pv-ok');
+        expect(s.skipped).toEqual([{ id: 'pv-two', reason: `in no lane: carries ${office('product')} and ${office('engineering')}` }]);
+      }
+    });
+
+    it('names only two-label roots the selection would read, not a spec:built one', () => {
+      const labels = [office('product'), office('engineering')];
+      const s = selectRoot([
+        bead({ id: 'pv-built', labels: ['spec:built', ...labels], notes: GOOD_BLOCK }),
+        bead({ id: 'pv-closed', status: 'closed', labels: ['spec:ready', ...labels] }),
+        bead({ id: 'pv-plain', labels }),
+      ], 'product');
+      expect(s).toMatchObject({ root: null, skipped: [] });
+    });
+
+    it('takes a root with no office label in the engineering lane only, and says so', () => {
+      const bare = ready('pv-bare', '2026-11-01T00:00:00Z');
+      expect(selectRoot([bare], 'product').root).toBeNull();
+      expect(selectRoot([bare], 'operations').root).toBeNull();
+      expect(selectRoot([bare], 'engineering')).toMatchObject({ root: 'pv-bare', lane: 'engineering', unlabelled: true });
+
+      const g = evaluateGates({ beads: [bare], prs: [], now: NOW, mode: 'dry', lane: 'engineering' });
+      expect(g.lane).toBe('engineering');
+      expect(g.gates.find(r => r.check === 'nothing-to-build')?.reading).toBe(
+        'selected pv-bare in the engineering lane (P1, ready 2026-11-01T00:00:00Z by updated_at), '
+        + 'taken as unlabelled into the engineering lane',
+      );
+    });
+
+    it('says so on a resumed unlabelled root too', () => {
+      const g = evaluateGates({ beads: [bead({ id: 'pv-b', labels: ['spec:building'] })], prs: [], now: NOW, mode: 'dry', lane: 'engineering' });
+      expect(g.gates[0].reading).toBe('resume pv-b in the engineering lane, taken as unlabelled into the engineering lane');
+    });
+
+    it('names the lane when nothing in it is buildable', () => {
+      const g = evaluateGates({ beads: [readyIn('pv-a', 'product')], prs: [], now: NOW, mode: 'dry', lane: 'operations' });
+      expect(g.gates.map(r => r.reading)).toEqual([
+        'no resumable spec:building root in the operations lane',
+        expect.stringMatching(/^operations lane: 0 spec:built/),
+        expect.any(String),
+        'no eligible spec:ready or spec:building root in the operations lane',
+      ]);
+    });
+  });
+
+  describe('priorEpicGate', () => {
+    it('ignores an open recorded PR on another lane\'s spec:built root', () => {
+      const r = priorEpicGate([builtIn('pv-x', 'operations')], new Set([102]), 'product');
+      expect(r).toMatchObject({ verdict: 'pass', reading: expect.stringMatching(/^product lane: 0 spec:built/) });
+    });
+
+    it('fails on an open recorded PR on this lane\'s spec:built root', () => {
+      const r = priorEpicGate([builtIn('pv-x', 'operations'), builtIn('pv-y', 'product')], new Set([102]), 'product');
+      expect(r).toMatchObject({ verdict: 'fail', reading: 'product lane: pv-y has open PR #102' });
+    });
+
+    it('counts an unlabelled spec:built root in the engineering lane only', () => {
+      const root = bead({ id: 'pv-x', labels: ['spec:built'], notes: `${ANALYSED}\n\n${GOOD_BLOCK}` });
+      expect(priorEpicGate([root], new Set([102]), 'engineering').verdict).toBe('fail');
+      expect(priorEpicGate([root], new Set([102]), 'product').verdict).toBe('pass');
+    });
+
+    it('names a spec:built root with two office labels as not counted', () => {
+      const root = bead({ id: 'pv-x', labels: ['spec:built', office('product'), office('operations')], notes: GOOD_BLOCK });
+      const r = priorEpicGate([root], new Set([102]), 'product');
+      expect(r.verdict).toBe('pass');
+      expect(r.reading).toContain(`not counted, pv-x in no lane: carries ${office('product')} and ${office('operations')}`);
+    });
+
+    it('is the gate evaluateGates runs for the lane', () => {
+      const beads = [builtIn('pv-x', 'operations'), readyIn('pv-r', 'product')];
+      const theirs = evaluateGates({ beads, prs: [pr(102, 1)], now: NOW, mode: 'run', lane: 'operations' });
+      const ours = evaluateGates({ beads, prs: [pr(102, 1)], now: NOW, mode: 'run', lane: 'product' });
+      expect(theirs.gates[1].verdict).toBe('fail');
+      expect(ours).toMatchObject({ ok: true, lane: 'product', selection: { root: 'pv-r' } });
+    });
+  });
+
+  describe('queue gate', () => {
+    it('reads the same open PRs and fails the same way in every lane', () => {
+      const beads = LANES.map((lane, i) => readyIn(`pv-${lane}`, lane, `2026-11-0${i + 1}T00:00:00Z`));
+      const readings = LANES.map(lane => evaluateGates({ beads, prs: prs(QUEUE_GATE.open), now: NOW, mode: 'dry', lane })
+        .gates.find(g => g.check === 'queue'));
+      const whole = evaluateGates({ beads, prs: prs(QUEUE_GATE.open), now: NOW, mode: 'dry' }).gates.find(g => g.check === 'queue');
+      for (const reading of readings) expect(reading).toEqual({ ...whole, verdict: 'fail' });
+    });
+  });
+
+  it('leaves the result shapes as they were with no lane', () => {
+    const g = evaluateGates({ beads: [readyIn('pv-a', 'product')], prs: [], now: NOW, mode: 'dry' });
+    expect(g).not.toHaveProperty('lane');
+    expect(g.selection).not.toHaveProperty('lane');
+    expect(g.selection).not.toHaveProperty('unlabelled');
+    expect(g.selection?.root).toBe('pv-a');
+  });
+});
+
+// =============================================================================
 // State write
 // =============================================================================
 
@@ -1045,6 +1243,35 @@ describe('runDryRun', () => {
     expect(r.selection?.root).toBe('pv-r');
     expect(r.chain_plan).toEqual(plan);
     expectReadOnly(runner.calls);
+  });
+
+  describe('with a lane', () => {
+    const beads = [
+      ready('pv-a', '2026-10-01T00:00:00Z', { labels: ['spec:ready', 'office:operations'] }),
+      ready('pv-r', '2026-11-01T00:00:00Z', { labels: ['spec:ready', 'office:product'] }),
+      bead({ id: 'pv-b', labels: ['spec:building', 'office:operations'] }),
+    ];
+    // The lane's root's children carry another lane's label, or none.
+    const mixed = [
+      bead({ id: 'pv-r.1', parent: 'pv-r', issue_type: 'task', labels: ['office:operations'] }),
+      bead({ id: 'pv-r.2', parent: 'pv-r', issue_type: 'task', dependencies: [{ issue_id: 'pv-r.2', depends_on_id: 'pv-r.1', type: 'blocks' }] }),
+    ];
+
+    it('names the lane, selects what gates with that lane would, and plans every child', () => {
+      const runner = runnerFor(beads, [['bd children pv-r', ok(JSON.stringify(mixed))]]);
+      const r = runDryRun(runner, NOW, 'product');
+      const gates = runGates(runnerFor(beads), NOW, 'run', 'product');
+      expect(r.lane).toBe('product');
+      expect(r.selection).toEqual(gates.selection);
+      expect(r.selection).toMatchObject({ root: 'pv-r', kind: 'ready', lane: 'product' });
+      const planCall = runner.calls.find(c => c.includes('plan'))!;
+      expect(JSON.parse(planCall[planCall.length - 1]).beads).toEqual(['pv-r.1', 'pv-r.2']);
+      expectReadOnly(runner.calls);
+    });
+
+    it('keeps today\'s keys with no lane', () => {
+      expect(runDryRun(runnerFor(beads), NOW)).not.toHaveProperty('lane');
+    });
   });
 });
 

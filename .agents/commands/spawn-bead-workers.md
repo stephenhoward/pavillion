@@ -183,6 +183,8 @@ An interrupted scheduled run needs no `--resume`: the next `--scheduled` firing 
 ```
 /spawn-bead-workers --scheduled
 /spawn-bead-workers --scheduled --dry-run
+/spawn-bead-workers --scheduled --lane=<office>
+/spawn-bead-workers --scheduled --lane=<office> --dry-run
 ```
 
 See "Scheduled mode" below.
@@ -195,6 +197,16 @@ run. The whole mode is the
 follow it; the phases above apply only as its Overrides list says.
 `--scheduled --dry-run` prints what a run would read and write, and changes
 nothing.
+
+`--lane=<office>` (`product`, `engineering` or `operations`, at most once,
+scheduled-only) restricts resume, the prior-epic gate and selection to that
+office's roots; the run passes it to `build.ts gates` and `build.ts dry-run`.
+A root with no office label is in the engineering lane, reported as taken
+as unlabelled; one with two or more is in no lane and is skipped with the
+labels named. A root's children are never filtered by lane. The queue gate
+stays global, and the lock stays one run per clone. Without `--lane` the run
+reads the whole queue. Details: [`build-scheduled`](../skills/build-scheduled/SKILL.md)
+"Preflight, gates and selection".
 
 ## Acceptance / Manual Verification
 
