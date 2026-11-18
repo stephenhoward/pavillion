@@ -126,7 +126,7 @@
     "@stylistic/eslint-plugin": "^5.0.0",
     "@stylistic/stylelint-plugin": "^5.0.0",
     "@types/cls-hooked": "^4.3.9",
-    "@types/config": "^3.3.5",
+    "@types/config": "^4.0.0",
     "@types/express": "^5.0.0",
     "@types/he": "^1.2.3",
     "@types/http-signature": "^1.4.0",
