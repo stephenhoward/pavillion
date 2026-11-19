@@ -1,7 +1,7 @@
 # Documentation Voice and Structure Principles
 
-> Version: 1.0.0
-> Last Updated: 2026-05-10
+> Version: 1.1.0
+> Last Updated: 2026-11-18
 
 This file covers voice, structure, and scope standards for Pavillion user-facing documentation in `docs/guides/`. These standards extend the marketing-site voice (pavillion.social) into reference material — same reader, same values, more depth.
 
@@ -13,7 +13,11 @@ From `docs/guides/calendar-owners/index.md`:
 
 > These guides are for the people running calendars on Pavillion — community organizers, venue staff, neighborhood associations, regional councils, anyone whose job it is to publish events that other people can find.
 
-**Apply this:** Specificity matters. "Users" is a category that doesn't exist in the world. "The neighborhood association down the street" does. Name the reader before the second paragraph of any guide.
+**Apply this:** Specificity matters. "Users" is a category that doesn't exist in the world. "The neighborhood association down the street" does.
+
+The section index names the reader. A guide inside the section opens with what it covers, and names its reader only when its audience is narrower than the section's. From `docs/guides/contributors/tech-stack.md`:
+
+> This guide covers what Pavillion is built on.
 
 ## What the guides are trying to do
 
@@ -31,15 +35,15 @@ The second goal lives *inside* the first, anchored to specific moments of action
 
 Second person, present tense. "Your calendar," "your community." Match the marketing site's "you put real work into your events" register.
 
-> A calendar that nobody finds is a calendar that doesn't exist.
+> Most calendars aren't run by one person.
 
-> Most calendars worth running aren't run by one person.
+> If your community already has a website — an organization page, a venue site, a project landing page — you can put your Pavillion calendar directly on it instead of asking visitors to click through to a separate URL.
 
 ### Lead with the conclusion, then explain
 
 The reader is usually scanning to solve a specific problem. The conclusion goes first; the explanation supports it.
 
-> Almost always the right call is to cancel — that leaves an audit trail, tells anyone who was planning to attend that the event isn't happening, and propagates correctly to any calendar that's reposting from yours. Deletion is for a smaller, more specific set of cases.
+> Nearly always the right call is to cancel — that tells anyone who was planning to attend that the event isn't happening, and that information propagates correctly to any calendar that's reposting from yours. Deletion is useful for a smaller, more specific set of cases.
 
 ### Be concrete
 
@@ -51,7 +55,7 @@ Specific examples beat abstract principles. "Riverbend-folk ages better than riv
 
 Pavillion does some things, doesn't do others, has rough edges. Pretending otherwise undermines trust and wastes the reader's time.
 
-> Past events show the venue's current state, not the state it was in on the day the event happened.
+> **Right now, the handle is fixed when you create your calendar.** There's no rename button in the settings panel.
 
 > If you want a permanent snapshot of the original address ... copy that detail somewhere outside Pavillion (the event description, an external doc) before the venue changes. This is rarely worth doing, but worth knowing.
 
@@ -59,9 +63,9 @@ Pavillion does some things, doesn't do others, has rough edges. Pretending other
 
 Federation isn't ActivityPub. It's *follow*, *share*, *repost*. The protocol is internal vocabulary; the reader doesn't need it to use the feature.
 
-> The mechanism underneath is ActivityPub federation, but you don't have to think in those terms. Most of the time the right words are *follow*, *share*, *connect*, and *repost*.
-
 > Pavillion uses ActivityPub the way email uses SMTP — you don't need to know the protocol to send a message.
+
+Once you have picked the reader's word for something, keep using it. [One term per concept](#one-term-per-concept) lists the terms the guides have settled on.
 
 The same rule applies to internal Pavillion vocabulary that doesn't match what the reader thinks about. The codebase says "funding plan" instead of "subscription" because the latter means a different thing in a federated system; the guides should make that boundary visible without requiring the reader to learn the why.
 
@@ -76,6 +80,105 @@ Not: "It's important to choose names responsibly." The first sentence is advice;
 ### Use warmth without slickness
 
 Conversational and confident, not breezy or branded. The marketing site's "ready to give your community a calendar it deserves?" works there because it's the close. Inside the guides, warmth shows up as treating the reader like a colleague: "you'll know your community's actual buckets better than any generic list."
+
+## Sentence-level rules
+
+The voice principles decide what a guide says. These rules decide how each sentence says it. In the examples, "draft" is a sentence that was edited out of a guide and "edited" is what replaced it.
+
+### Use plain words
+
+Write the word a calendar owner would use in conversation. Words borrowed from software teams, and figures of speech standing in for a plain verb, make the reader translate.
+
+| Draft | Edited |
+|---|---|
+| once that surface lands | once that feature arrives |
+| a short orientation before the mechanics | a note before we dig in to the details |
+| a domain folder has the same shape every time | each domain folder uses the same structure |
+| once events have flown | once events on your server have reached a peer |
+| if your shop doesn't run Docker | if your organization doesn't run Docker |
+| see … for how that lands | see … for how that works |
+| these guides don't teach it | that is outside the scope of these guides |
+| It starts as Pavillion's orange. | The default is Pavillion's orange. |
+
+Check a draft for *surface*, *lands*, *shape*, *mechanics*, *shop*, and *teach* said of a guide.
+
+### End on the fact
+
+Cut aphorisms, slogans, and sentences that restate why something matters. If a paragraph is complete without its last sentence or clause, remove it.
+
+| Draft | Edited |
+|---|---|
+| A backup you haven't tested isn't a backup. This is the most-skipped piece of admin work… | Backups are the most-skipped piece of admin work… |
+| …see the same record they always did; nothing rewrites the past. | …see the same record they always did. |
+| If it is, embed — the calendar meets people where they are. | If it is, embed. |
+| `## Two steps, on purpose` | `## Two steps` |
+
+### Say what a thing is
+
+State the positive fact. A sentence built as "not X but Y", or "closer to Y than to X", makes the reader take in something untrue before reaching what is true.
+
+| Draft | Edited |
+|---|---|
+| closer to how public radio funds itself than to a paywall | similar to how public radio funds itself through volunteer contributions |
+| If an event just isn't a fit for your calendar, don't report it; not publishing it is the right response. | If an event just isn't a fit for your calendar, just pass it by. |
+
+Keep a contrast when the reader is likely to arrive with the wrong idea. "A file is a snapshot, not a connection" stays in the ICS import guide, because a reader who has just used a feed expects a file to sync too.
+
+### Leave out what the reader won't run into
+
+Tell the reader what to do and what happens next. Leave out how Pavillion works underneath, the reason a form refuses an input the reader had no cause to try, and a trailing clause that repeats the sentence before it.
+
+- Cut: "Because that public address puts your handle at the root of the domain, it can't be a name the instance already routes there…" The form refuses those names, so the reader finds out while choosing.
+- Cut: "You can't prove you own `calendar.google.com`, so a live feed from one of those won't verify — but you don't need it to." The next sentence already tells the reader to export a file.
+- "…that publishes it again, overriding the prior unpublish, and the event is back on your calendar" became "…that publishes it again, overriding the prior unpublish."
+
+### Write whole sentences
+
+Give each sentence its subject and verb. Join clauses with *and* or *but* where a draft uses only a comma or a semicolon. Where a sentence tells the reader when to use something, write it as an instruction.
+
+| Draft | Edited |
+|---|---|
+| If yes, recurrence. | If yes, use recurrence. |
+| Easier to keep the start date and the weekday selection consistent. | It's easier to keep the start date and the weekday selection consistent. |
+| The friction is small, the payoff compounds. | The friction is small, and the payoff compounds. |
+| Recurrence is for the same event happening on a predictable schedule | Use recurrence when the same event happens on a predictable schedule |
+| You need to own the calendar. | To start a funding plan for a calendar, you need to be the calendar owner. |
+
+### Name the noun
+
+When a sentence refers back to something, say what it is.
+
+| Draft | Edited |
+|---|---|
+| The first time you visit, the list is empty. | The first time you visit, the editor list is empty. |
+| the preview shows your default | the preview shows your default image |
+| fine if it gives you the same | fine if it gives you the same safety |
+| There's a short decision aid further down. | There's a short decision aid further down this page. |
+
+### One term per concept
+
+Pick one word for each thing and use it every time. A second word reads as a second thing. Where the screen has a label, use that label, in headings as well as prose: the section "Publish an event by hand" became "Repost an event by hand" because the button says **Repost**.
+
+| Use | Not | For |
+|---|---|---|
+| follow | track | Your calendar's relationship with another calendar |
+| repost | publish | Putting a followed calendar's event on your own calendar. "Publish" stays the word for your own events. |
+| feature | surface | A part of the product |
+| default date range | default date filter | The window of dates your public page lists |
+
+`follow-and-repost.md` still says "publish" for reposting in places. Use "repost" in new and revised text.
+
+Spelling is US English: *gray*, not *grey*. Prefer terms that don't assume a gender: the backup rotation is *grandparent-parent-child*, not *grandfather-father-son*.
+
+### State what you have checked
+
+Open the app and confirm each label, position and default before writing it down. Leave out a default the guide would have to keep in step with the code, absolute words such as *forever* unless the code guarantees them, and general claims you have no evidence for.
+
+- "A live preview beside them" was corrected to "below them".
+- "**Schedule 1** block" was corrected to "**Schedule** block".
+- Cut: "once you create the first one, the route returns 404 forever."
+- Cut: "two weeks unless you've changed it."
+- Cut: "Most review feedback on first pull requests comes back to one of those rules."
 
 ## Patterns we use
 
@@ -142,7 +245,7 @@ The second still tells the reader what to look for. It doesn't pretend the butto
 
 ### Saying the same thing twice
 
-The decision aid for series-vs-recurrence used to appear three times across two files. Once is enough; cross-link the rest. If you find yourself restating something already covered, link instead.
+The decision aid for series-vs-recurrence used to appear three times across two files. Once is enough; cross-link the rest. If you find yourself restating something already covered, link instead. The same applies inside a paragraph — see [Leave out what the reader won't run into](#leave-out-what-the-reader-wont-run-into).
 
 ### Hypothetical hedging
 
@@ -163,7 +266,7 @@ The guides should read like the same project wrote them, with the register adjus
 - **Specific reader.** Marketing names "a nonprofit, a local business, a church, a neighborhood group." Guides name "community organizers, venue staff, neighborhood associations." Same person.
 - **Anti-extractive framing.** Marketing: "isn't a product." Guides treat federation as something the reader controls, not something done to them.
 - **Effort respected.** Marketing: "you put real work into your events." Guides assume competence and seriousness.
-- **Practical outcomes.** Marketing: "more people see your events, with less standing in the way." Guides: "a calendar that nobody finds is a calendar that doesn't exist."
+- **Practical outcomes.** Marketing: "more people see your events, with less standing in the way." Guides: "the next job is getting it in front of the people it's for."
 
 Where they differ:
 
@@ -195,7 +298,11 @@ A stub that telegraphs the planned scope of a guide-to-be-written is better than
 
 Before claiming a guide is ready, run through these:
 
-- [ ] Does the first paragraph name the reader and the topic?
+- [ ] Does the first paragraph say what the guide covers, and does the section index name the reader?
+- [ ] Would a calendar owner use every word in conversation?
+- [ ] Does each paragraph end on a fact, not a slogan?
+- [ ] Is each concept called by one term, matching the label on the screen?
+- [ ] Has every label, position and default been checked against the app?
 - [ ] Does each major section answer a specific question the reader would actually ask?
 - [ ] Is every UI walk-through earning its detail, or is the reader going to figure that out from the screen?
 - [ ] Are decision points called out explicitly, with a quick test?
