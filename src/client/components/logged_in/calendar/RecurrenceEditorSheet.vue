@@ -3,7 +3,7 @@ import { reactive, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import Sheet from '@/client/components/common/sheet.vue';
-import { CalendarEventSchedule } from '@/common/model/events';
+import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 
 const props = defineProps({
   schedule: {
@@ -55,11 +55,22 @@ const initMonthlyWeekdayCheckboxes = (): Record<string, boolean> => {
 };
 
 /**
+ * Whether the schedule already carried a recurrence rule when the sheet
+ * opened. A one-off event's endDate mirrors its eventEndTime (set by
+ * event_recurrence.vue), so it is read as a recurrence end only when a
+ * frequency was set.
+ */
+const hadRuleAtMount = Boolean(props.schedule.frequency);
+
+/**
  * Determines the end-type string from existing schedule data.
  * Used to restore the correct radio button state when editing or duplicating
  * a recurring event that already has count or endDate set.
  */
 const initEndType = (): string => {
+  if (!hadRuleAtMount) {
+    return 'none';
+  }
   if (props.schedule.count && props.schedule.count > 0) {
     return 'after';
   }
@@ -78,18 +89,57 @@ const scheduleZone = () => props.schedule.startDate?.zone ?? 'local';
 const state = reactive({
   frequency: (props.schedule.frequency as string) || '',
   endType: initEndType(),
-  endDate: props.schedule.endDate?.setZone(scheduleZone()).toISODate() ?? '',
+  endDate: hadRuleAtMount
+    ? props.schedule.endDate?.setZone(scheduleZone()).toISODate() ?? ''
+    : '',
+  count: props.schedule.count >= 1 ? props.schedule.count : 1,
   weekdays: initWeekdays(),
   monthlyWeekdayCheckboxes: initMonthlyWeekdayCheckboxes(),
 });
 
 /**
+ * state.weekdays keys indexed by luxon weekday (1 = Monday … 7 = Sunday).
+ */
+const LUXON_WEEKDAY_KEYS = ['', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+/**
+ * Ticks the start date's weekday, read in the schedule zone, when no weekday
+ * is ticked yet. Never overwrites a weekday choice already made.
+ */
+const tickStartWeekday = () => {
+  const startDate = props.schedule.startDate;
+  if (!startDate || Object.values(state.weekdays).some(Boolean)) {
+    return;
+  }
+  state.weekdays[LUXON_WEEKDAY_KEYS[startDate.setZone(scheduleZone()).weekday]] = true;
+};
+
+/**
  * Handles frequency selector changes. Syncs the local state.frequency
  * value to props.schedule.frequency and triggers recurrence compilation.
+ *
+ * The first frequency choice on a one-off event starts from "never", so the
+ * event recurs without an end the owner did not pick. Later changes (e.g.
+ * daily to weekly) keep the owner's end settings. Going back to none
+ * restores the one-off endDate mirror of eventEndTime.
  */
 const onFrequencyChange = () => {
-  props.schedule.frequency = state.frequency || null;
+  const isFirstChoice = !props.schedule.frequency;
+  props.schedule.frequency = (state.frequency as EventFrequency) || null;
+
+  if (isFirstChoice && props.schedule.frequency) {
+    state.endType = 'none';
+    state.endDate = '';
+  }
+  if (props.schedule.frequency === EventFrequency.WEEKLY) {
+    tickStartWeekday();
+  }
+
   compileRecurrence();
+
+  if (!props.schedule.frequency) {
+    props.schedule.endDate = props.schedule.eventEndTime;
+  }
 };
 
 /**
@@ -99,7 +149,7 @@ const onFrequencyChange = () => {
  */
 const compileRecurrence = () => {
   props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
-  props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;
+  props.schedule.count = props.schedule.frequency && state.endType == 'after' ? state.count : 0;
 
   props.schedule.byDay = props.schedule.frequency == 'weekly'
     ? Object.keys(state.weekdays).filter((day) => state.weekdays[day])
@@ -181,7 +231,8 @@ const compileRecurrence = () => {
                  @change="compileRecurrence()" />
           {{ t('after') }}
           <input type="number"
-                 v-model="props.schedule.count"
+                 v-model.number="state.count"
+                 min="1"
                  :aria-label="t('occurrences')"
                  @change="state.endType = 'after'; compileRecurrence()" />
           {{ t('occurrences') }}
