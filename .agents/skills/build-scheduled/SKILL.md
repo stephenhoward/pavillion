@@ -121,7 +121,11 @@ last block, never the local checkout. On top of it:
 1. `validate-prs <root>` before any checkout, push or edit of a recorded
    PR. Exit 1 stalls the root (step `validate-prs`) and touches no PR. This
    includes a `next` branch already on origin: a cut between submit and the
-   block write. `sync_first` means run `stack.ts sync` first.
+   block write. A recorded PR may be merged when nothing will stack on it
+   unrestacked: any level of a chain at `next: done` (a join stop waits
+   for exactly those merges), or a level below an unfinished chain's top.
+   A merged top of an unfinished chain stalls. `sync_first` means a
+   recorded PR merged: run `stack.ts sync` first.
 2. `gh stack checkout <pr>` on each chain's `top` PR, each chain in its own
    checkout (`git-workflow/stacking.md` "Worktree mode").
 3. Redo each leaf in `redo`. The only discard is a local reset or delete
