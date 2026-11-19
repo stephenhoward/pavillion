@@ -13,8 +13,8 @@ Pavillion documentation has a dual purpose: **teach the software well enough tha
 
 | Source | What it gives you |
 |--------|-------------------|
-| [./principles.md](./principles.md) | The substantive standards: voice principles, patterns, anti-patterns, length and scope rules, pre-publish checklist |
-| `docs/guides/calendar-owners/categories.md` and `places.md` | The most-developed exemplars of the voice in practice — verbatim quotes in `principles.md` are excerpted from these |
+| [./principles.md](./principles.md) | The substantive standards: voice principles, sentence-level rules, patterns, anti-patterns, length and scope rules, pre-publish checklist |
+| `docs/guides/calendar-owners/categories.md` and `places.md` | The most-developed exemplars of the voice in practice. The quotes in `principles.md` are taken verbatim from the guides in `docs/guides/`. |
 | https://pavillion.social/ | The marketing-site voice these guides extend into reference material |
 
 ## Routing Guide
@@ -22,16 +22,16 @@ Pavillion documentation has a dual purpose: **teach the software well enough tha
 | If you are... | Read these sections of principles.md |
 |---------------|--------------------------------------|
 | Writing a new guide from scratch | All sections |
-| Adding a section to an existing guide | Voice principles + Patterns we use + Things we avoid |
-| Reviewing a draft | Things we avoid + Checklist |
+| Adding a section to an existing guide | Voice principles + Sentence-level rules + Patterns we use + Things we avoid |
+| Reviewing or copy-editing a draft | Sentence-level rules + Things we avoid + Checklist |
 | Deciding whether a topic deserves a full guide or a stub | Notes on length and scope |
 | Calibrating tone before writing the first sentence | Voice principles + Continuity with the marketing site |
 
 ## Instructions
 
 1. Read [./principles.md](./principles.md) for the standards.
-2. Skim at least one developed exemplar (`docs/guides/calendar-owners/categories.md` or `places.md`) to see the voice in practice — the verbatim quotes in `principles.md` come from these.
-3. Apply the voice principles when drafting; apply the anti-patterns and checklist when reviewing the result.
+2. Skim at least one developed exemplar (`docs/guides/calendar-owners/categories.md` or `places.md`) to see the voice in practice.
+3. Apply the voice principles and sentence-level rules when drafting; apply the anti-patterns and checklist when reviewing the result.
 4. When the dual-purpose layer (organizer judgment alongside mechanics) doesn't fit naturally for a topic, prefer omitting it over forcing it. Not every guide needs to read like `categories.md`.
 5. A stub that telegraphs planned scope (`> Status: stub. Full guide coming before launch.` followed by bulleted scope) is better than a thin half-guide.
 
