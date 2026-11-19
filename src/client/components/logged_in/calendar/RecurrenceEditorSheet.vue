@@ -137,6 +137,7 @@ const onFrequencyChange = () => {
 
   compileRecurrence();
 
+  // After compileRecurrence(), which nulls endDate whenever endType is not 'on'.
   if (!props.schedule.frequency) {
     props.schedule.endDate = props.schedule.eventEndTime;
   }
@@ -149,6 +150,8 @@ const onFrequencyChange = () => {
  */
 const compileRecurrence = () => {
   props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
+  // A cleared input gives '' through v-model.number; the count is never below 1.
+  state.count = Math.max(1, Math.trunc(Number(state.count)) || 1);
   props.schedule.count = props.schedule.frequency && state.endType == 'after' ? state.count : 0;
 
   props.schedule.byDay = props.schedule.frequency == 'weekly'

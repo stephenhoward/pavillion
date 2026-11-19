@@ -325,7 +325,7 @@ describe('RecurrenceEditorSheet.vue — defaults that produce a recurring event'
     wrapper.unmount();
   });
 
-  it('shows at least 1 in the "after" input', async () => {
+  it('shows 1 in the "after" input by default', async () => {
     const schedule = oneOffSchedule();
     const wrapper = mountSheet(schedule);
 
@@ -333,7 +333,34 @@ describe('RecurrenceEditorSheet.vue — defaults that produce a recurring event'
 
     const countInput = wrapper.find('input[type="number"][min="1"]');
     expect(countInput.exists()).toBe(true);
-    expect(Number((countInput.element as HTMLInputElement).value)).toBeGreaterThanOrEqual(1);
+    expect((countInput.element as HTMLInputElement).value).toBe('1');
+    wrapper.unmount();
+  });
+
+  it.each(['', '0'])('saves a count of 1 when the "after" input is set to %j', async (value) => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+    await wrapper.find('input[type="number"][min="1"]').setValue('5');
+    await wrapper.find('input[type="number"][min="1"]').setValue(value);
+
+    expect(radio(wrapper, 'after').checked).toBe(true);
+    expect(schedule.count).toBe(1);
+    wrapper.unmount();
+  });
+
+  it('opens an existing rule with no count and no end date on "never"', () => {
+    const schedule = oneOffSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['WE'];
+    schedule.count = 0;
+    schedule.endDate = null;
+    const wrapper = mountSheet(schedule);
+
+    expect(radio(wrapper, 'none').checked).toBe(true);
+    expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe('');
     wrapper.unmount();
   });
 

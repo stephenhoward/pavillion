@@ -110,6 +110,7 @@ test.describe('Recurring Event Management', () => {
     // Select Monday and Wednesday. The sheet pre-ticks the start date's
     // weekday, so click a label only when its box is not already checked;
     // a plain click would untick it on a run that falls on that weekday.
+    // check() on the input times out: the chip hides it (opacity 0).
     const mondayLabel = weekParams.locator('label').filter({ hasText: /Monday|Mon/i });
     if (await mondayLabel.count() > 0
       && !(await mondayLabel.first().locator('input[type="checkbox"]').isChecked())) {
