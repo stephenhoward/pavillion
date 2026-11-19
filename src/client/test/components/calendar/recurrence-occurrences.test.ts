@@ -115,5 +115,28 @@ describe('hasFewerThanTwoOccurrences', () => {
       expect(hasFewerThanTwoOccurrences(endsOn(lateDaily, '2026-03-12'))).toBe(false);
       expect(hasFewerThanTwoOccurrences(endsOn(lateDaily, '2026-03-11'))).toBe(true);
     });
+
+    it('steps wall-clock time across a daylight-saving change', () => {
+      // Clocks spring forward on 2026-03-08. Wall-clock stepping gives 03-07
+      // 23:30 and 03-08 23:30, both before 03-09 00:00. Stepping 24 absolute
+      // hours would give 03-09 00:30 PDT, after the until, and warn.
+      const dstDaily = { frequency: 'daily', startDate: start('2026-03-07T23:30') };
+      expect(hasFewerThanTwoOccurrences(endsOn(dstDaily, '2026-03-09'))).toBe(false);
+    });
+
+    it('is false with no start date, since there is nothing to expand from', () => {
+      expect(hasFewerThanTwoOccurrences(endsOn({ startDate: null }, '2026-03-11'))).toBe(false);
+    });
+
+    it('is false for an unparseable end date, treating it as no end chosen', () => {
+      expect(hasFewerThanTwoOccurrences(endsOn({}, 'not-a-date'))).toBe(false);
+    });
+  });
+
+  it('warns for endType after with count 0, a state the sheet never shows (it keeps a minimum of 1)', () => {
+    expect(hasFewerThanTwoOccurrences({
+      frequency: 'daily', interval: 1, byDay: [], startDate: start('2026-03-03T10:00'),
+      endType: 'after', count: 0, endDate: '',
+    })).toBe(true);
   });
 });
