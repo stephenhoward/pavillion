@@ -15,6 +15,8 @@ assert_contains "$output" "deploy.sh" "help output mentions the script name"
 assert_contains "$output" "--non-interactive" "help output mentions --non-interactive"
 assert_contains "$output" "--skip-git-pull" "help output lists --skip-git-pull"
 assert_contains "$output" "--domain" "help output lists --domain"
+assert_contains "$output" "--health-timeout" "help output lists --health-timeout, the flag after the settings text"
+assert_contains "$output" "never sourced or evaled" "help output states the .env parsing rule"
 
 echo "test: unknown flag exits non-zero"
 output=$("${DEPLOY}" --bogus 2>&1; echo "EXIT:$?") || true
@@ -446,5 +448,188 @@ exit_code="${output##*EXIT:}"
 assert_eq "4" "$exit_code" "health-check timeout exits with code 4"
 
 # tmp4 (and its shim state files) is cleaned up by mktemp_dir's EXIT trap.
+
+# ---- helper table tests (deploy.sh sourced; main is guarded) ----
+
+# with_deploy <root> [NAME=value ...] <function> [args...]
+# Sources deploy.sh in a subshell rooted at <root>, exports each leading
+# NAME=value into the shell environment, and calls <function>. The settings
+# deploy.sh resolves are unset first, since a developer's shell may export them.
+with_deploy() {
+  local root="$1"
+  shift
+  (
+    unset DOMAIN APP_PORT COMPOSE_PROFILES BACKUP_HOST_DIR
+    # shellcheck source=../deploy.sh
+    source "${DEPLOY}"
+    REPO_ROOT="$root"
+    ENV_FILE="${root}/.env"
+    while [[ "${1:-}" == [A-Z_]*=* ]]; do
+      export "$1"
+      shift
+    done
+    "$@"
+  )
+}
+
+# outcome <command...> -> prints "yes" if the command succeeds, "no" otherwise
+outcome() {
+  if "$@" >/dev/null 2>&1; then echo yes; else echo no; fi
+}
+
+ws_helpers=$(mktemp_dir)
+
+echo "test: standalone_active reads COMPOSE_PROFILES as a comma list"
+while IFS='|' read -r profiles expected label; do
+  printf 'COMPOSE_PROFILES=%s\n' "$profiles" > "${ws_helpers}/.env"
+  assert_eq "$expected" "$(outcome with_deploy "$ws_helpers" standalone_active)" "standalone_active: ${label}"
+done <<'TABLE'
+standalone|yes|standalone alone
+foo,standalone|yes|standalone among others
+standalone-x|no|a name that only starts with standalone
+|no|empty value
+TABLE
+printf 'COMPOSE_PROFILES=foo\n' > "${ws_helpers}/.env"
+assert_eq "yes" "$(outcome with_deploy "$ws_helpers" COMPOSE_PROFILES=standalone standalone_active)" \
+  "standalone_active: shell value wins over .env"
+printf 'COMPOSE_PROFILES=standalone\n' > "${ws_helpers}/.env"
+assert_eq "no" "$(outcome with_deploy "$ws_helpers" COMPOSE_PROFILES=foo standalone_active)" \
+  "standalone_active: shell value without standalone wins over .env with it"
+
+echo "test: local_yaml_domain reads the top-level domain key"
+mkdir -p "${ws_helpers}/config"
+while IFS='|' read -r content expected label; do
+  printf '%b' "$content" > "${ws_helpers}/config/local.yaml"
+  assert_eq "$expected" "$(with_deploy "$ws_helpers" local_yaml_domain)" "local_yaml_domain: ${label}"
+done <<'TABLE'
+# comment\ndomain: "events.example.org"\n|events.example.org|quoted
+domain: events.example.org\n|events.example.org|unquoted
+domain: 'events.example.org' # note\n|events.example.org|single-quoted with a trailing comment
+db:\n  host: x\n||absent
+federation:\n  domain: "nested.example.org"\n||indented under a nested key
+TABLE
+rm -f "${ws_helpers}/config/local.yaml"
+assert_eq "" "$(with_deploy "$ws_helpers" local_yaml_domain)" "local_yaml_domain: no file prints nothing"
+
+echo "test: env_get parses .env without sourcing it"
+cat > "${ws_helpers}/.env" <<'ENVEOF'
+DQ="double quoted"
+SQ='single quoted'
+MIXED="unmatched'
+TWICE=first
+TWICE=second
+COMMENTED=x.example.org # note
+EMPTY=
+INJECT=$(touch injected)
+ENVEOF
+while IFS='|' read -r name expected label; do
+  assert_eq "$expected" "$(with_deploy "$ws_helpers" env_get "${ws_helpers}/.env" "$name")" "env_get: ${label}"
+done <<'TABLE'
+DQ|double quoted|double quotes removed
+SQ|single quoted|single quotes removed
+MIXED|"unmatched'|unmatched quotes kept
+TWICE|second|last of two lines wins
+COMMENTED|x.example.org|unquoted inline comment stripped, as Compose does
+EMPTY||empty value
+MISSING||missing name prints nothing
+INJECT|$(touch injected)|command substitution is returned literally
+TABLE
+if [[ ! -e "${ws_helpers}/injected" ]]; then
+  echo "  PASS: env_get never evaluates a value"
+  _TESTS=$((_TESTS+1))
+else
+  fail "env_get evaluated a value"
+fi
+
+echo "test: resolve_setting precedence is shell, then .env, then default"
+printf 'APP_PORT=9000\n' > "${ws_helpers}/.env"
+assert_eq "8080" "$(with_deploy "$ws_helpers" APP_PORT=8080 resolve_setting APP_PORT 3000)" "resolve_setting: shell value wins"
+assert_eq "9000" "$(with_deploy "$ws_helpers" resolve_setting APP_PORT 3000)" "resolve_setting: .env value next"
+assert_eq "3000" "$(with_deploy "$ws_helpers" APP_PORT= resolve_setting APP_PORT 3000)" \
+  "resolve_setting: a variable exported empty wins over .env and falls to the default"
+: > "${ws_helpers}/.env"
+assert_eq "3000" "$(with_deploy "$ws_helpers" resolve_setting APP_PORT 3000)" "resolve_setting: default last"
+printf 'APP_PORT=\n' > "${ws_helpers}/.env"
+assert_eq "3000" "$(with_deploy "$ws_helpers" resolve_setting APP_PORT 3000)" "resolve_setting: an empty .env value is absent"
+rm -f "${ws_helpers}/.env"
+assert_eq "3000" "$(with_deploy "$ws_helpers" resolve_setting APP_PORT 3000)" "resolve_setting: no .env falls to the default"
+
+echo "test: env_append keeps a last line that has no trailing newline"
+printf 'JWT_SECRET=abc' > "${ws_helpers}/.env"
+with_deploy "$ws_helpers" env_append "${ws_helpers}/.env" DOMAIN events.example.org
+assert_eq "$(printf 'JWT_SECRET=abc\nDOMAIN=events.example.org')" "$(cat "${ws_helpers}/.env")" \
+  "env_append writes a newline before appending to an unterminated file"
+with_deploy "$ws_helpers" env_append "${ws_helpers}/.env" APP_PORT 8080
+assert_eq "$(printf 'JWT_SECRET=abc\nDOMAIN=events.example.org\nAPP_PORT=8080')" "$(cat "${ws_helpers}/.env")" \
+  "env_append adds no blank line to a terminated file"
+rm -f "${ws_helpers}/.env"
+with_deploy "$ws_helpers" env_append "${ws_helpers}/.env" DOMAIN events.example.org
+assert_eq "DOMAIN=events.example.org" "$(cat "${ws_helpers}/.env")" "env_append creates a missing file with no leading blank line"
+if [[ "$(uname)" == "Darwin" ]]; then
+  perms=$(stat -f "%Lp" "${ws_helpers}/.env")
+else
+  perms=$(stat -c "%a" "${ws_helpers}/.env")
+fi
+assert_eq "600" "$perms" "env_append creates a missing .env with mode 600"
+
+echo "test: validate_domain applies the lowercase RFC 1123 rule"
+label63=$(printf 'a%.0s' $(seq 1 63))
+label64=$(printf 'a%.0s' $(seq 1 64))
+too_long="${label63}.${label63}.${label63}.${label63}"
+while IFS='|' read -r value expected label; do
+  assert_eq "$expected" "$(outcome with_deploy "$ws_helpers" validate_domain "$value")" "validate_domain: ${label}"
+done <<TABLE
+events.example.org|yes|accepts a normal subdomain
+a-b.example.org|yes|accepts an interior hyphen
+${label63}.example.org|yes|accepts a 63-character label
+https://events.example.org|no|rejects a scheme
+events.example.org:443|no|rejects a port
+events.example.org/path|no|rejects a path
+admin@events.example.org|no|rejects userinfo
+Events.example.org|no|rejects uppercase letters
+events example.org|no|rejects a space
+${too_long}|no|rejects input over 253 characters
+${label64}.example.org|no|rejects a label over 63 characters
+-events.example.org|no|rejects a leading hyphen in a label
+events-.example.org|no|rejects a trailing hyphen in a label
+events.example.org.|no|rejects a trailing dot
+events..example.org|no|rejects an empty label
+203.0.113.10|no|rejects an all-numeric name
+|no|rejects empty input
+TABLE
+
+echo "test: validate_app_port accepts a port or address:port"
+while IFS='|' read -r value expected label; do
+  assert_eq "$expected" "$(outcome with_deploy "$ws_helpers" validate_app_port "$value")" "validate_app_port: ${label}"
+done <<'TABLE'
+8080|yes|accepts a bare port
+127.0.0.1:3000|yes|accepts address:port
+|no|rejects empty input
+abc|no|rejects letters
+127.0.0.1:|no|rejects a missing port
+:3000|no|rejects a missing address
+localhost:3000|no|rejects a hostname
+8080 |no|rejects trailing whitespace
+3000/tcp|no|rejects a protocol suffix
+TABLE
+
+echo "test: an exported DOMAIN reaches child processes unchanged"
+tmp5=$(mktemp_dir)
+setup_workspace "$tmp5" "${FIXTURES}/env_complete"
+mkdir -p "${tmp5}/shim"
+cat > "${tmp5}/shim/docker" <<EOF
+#!/usr/bin/env bash
+echo "DOMAIN=\${DOMAIN-<unset>}" >> "${tmp5}/docker_env.log"
+exit 0
+EOF
+printf '#!/usr/bin/env bash\nexit 0\n' > "${tmp5}/shim/curl"
+chmod +x "${tmp5}/shim/docker" "${tmp5}/shim/curl"
+(cd "$tmp5" && DOMAIN=operator.example.org PATH="${tmp5}/shim:${PATH}" \
+  bash bin/deploy.sh --non-interactive --domain=flag.example.org --docker-only --health-timeout=5 >/dev/null 2>&1)
+assert_eq "DOMAIN=operator.example.org" "$(head -n1 "${tmp5}/docker_env.log")" "--domain does not clobber an exported DOMAIN"
+rm -f "${tmp5}/docker_env.log"
+(cd "$tmp5" && unset DOMAIN && PATH="${tmp5}/shim:${PATH}" \
+  bash bin/deploy.sh --non-interactive --domain=flag.example.org --docker-only --health-timeout=5 >/dev/null 2>&1)
+assert_eq "DOMAIN=<unset>" "$(head -n1 "${tmp5}/docker_env.log")" "--domain is never exported as DOMAIN"
 
 report_results

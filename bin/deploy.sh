@@ -21,6 +21,14 @@
 #   --help
 #       Print this help and exit 0.
 #
+# Settings:
+#   .env is parsed line by line, never sourced or evaled: a value is the
+#   text after NAME= on the last line naming it, with one pair of matching
+#   quotes removed. The script only ever appends to .env; it never edits a
+#   line in place. A setting resolves as Compose resolves it: the shell
+#   environment first (an exported empty value falls to the default), then
+#   .env, then the default.
+#
 # Exit codes:
 #   0  success (including "nothing to do")
 #   1  generic failure
@@ -34,10 +42,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/manifest.sh"
 
-# Defaults
+# Defaults. No script-level variable may be named after a setting Compose
+# reads (DOMAIN, APP_PORT, COMPOSE_PROFILES, BACKUP_HOST_DIR): an operator's
+# exported value must reach docker compose unchanged. Read those through
+# resolve_setting.
 NON_INTERACTIVE=0
 SKIP_GIT_PULL=0
-DOMAIN=""
+DOMAIN_ARG=""
 HEALTH_TIMEOUT=120
 MANIFEST="${REPO_ROOT}/bin/deploy-manifest.tsv"
 ENV_FILE="${REPO_ROOT}/.env"
@@ -78,7 +89,7 @@ parse_args() {
     case "$arg" in
       --non-interactive) NON_INTERACTIVE=1 ;;
       --skip-git-pull)   SKIP_GIT_PULL=1 ;;
-      --domain=*)        DOMAIN="${arg#*=}" ;;
+      --domain=*)        DOMAIN_ARG="${arg#*=}" ;;
       --health-timeout=*) HEALTH_TIMEOUT="${arg#*=}" ;;
       --diff-only)       DEBUG_DIFF=1 ;;
       --generate=*)      DEBUG_GENERATE="${arg#*=}" ;;
@@ -144,7 +155,10 @@ env_names() {
   grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$file" | cut -d'=' -f1
 }
 
-# env_append <env_file> <name> <value>
+# env_append <env_file> <name> <value> — the only writer of .env. Appends,
+# creating a missing file with mode 600, and never edits a line in place. A
+# hand-edited file whose last line has no newline gets one first, so the new
+# assignment does not merge into that line.
 env_append() {
   local file="$1"
   local name="$2"
@@ -153,7 +167,123 @@ env_append() {
     touch "$file"
     chmod 600 "$file"
   fi
+  if [[ -s "$file" && -n "$(tail -c1 "$file")" ]]; then
+    echo "" >> "$file"
+  fi
   echo "${name}=${value}" >> "$file"
+}
+
+# unquote_value <raw> -> stdout: <raw> trimmed of surrounding whitespace with
+# one pair of matching surrounding quotes removed. A whitespace-led '#'
+# comment after the value is dropped, as Compose drops one from .env.
+unquote_value() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  local quote="${value:0:1}"
+  if [[ "$quote" == '"' || "$quote" == "'" ]]; then
+    local rest="${value:1}"
+    if [[ "$rest" == *"$quote"* ]]; then
+      local after="${rest#*"$quote"}"
+      after="${after#"${after%%[![:space:]]*}"}"
+      if [[ -z "$after" || "$after" == "#"* ]]; then
+        printf '%s\n' "${rest%%"$quote"*}"
+        return 0
+      fi
+    fi
+  fi
+  value="${value%%[[:space:]]#*}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s\n' "$value"
+}
+
+# env_get <env_file> <name> -> stdout: the value on the last NAME= line, or
+# nothing. Parsed, never sourced or evaled. Use ! env_has to test "absent".
+env_get() {
+  local file="$1"
+  local name="$2"
+  [[ -f "$file" ]] || return 0
+  local line
+  line=$(grep -E "^${name}=" "$file" | tail -n1 || true)
+  [[ -n "$line" ]] || return 0
+  unquote_value "$(printf '%s' "$line" | cut -d= -f2-)"
+}
+
+# resolve_setting <name> <default> -> stdout: the setting as Compose resolves
+# it — the shell environment, then .env, then <default>. printenv sees only
+# exported variables and tells unset from empty; a variable exported empty
+# wins over .env and then falls to <default>, as it does in Compose.
+resolve_setting() {
+  local name="$1"
+  local default="$2"
+  local value
+  if value=$(printenv "$name"); then
+    printf '%s\n' "${value:-$default}"
+  elif env_has "$ENV_FILE" "$name"; then
+    env_get "$ENV_FILE" "$name"
+  else
+    printf '%s\n' "$default"
+  fi
+}
+
+# standalone_active -> exit 0 if the resolved COMPOSE_PROFILES, split on
+# commas, contains exactly 'standalone'.
+standalone_active() {
+  local profiles
+  profiles=$(resolve_setting COMPOSE_PROFILES "")
+  [[ -n "$profiles" ]] || return 1
+  local -a names
+  IFS=',' read -r -a names <<< "$profiles"
+  local profile
+  for profile in "${names[@]}"; do
+    [[ "$profile" == "standalone" ]] && return 0
+  done
+  return 1
+}
+
+# local_yaml_domain -> stdout: the top-level domain: of config/local.yaml with
+# quotes stripped, or nothing if the file or key is absent. Indented keys
+# never match.
+local_yaml_domain() {
+  local file="${REPO_ROOT}/config/local.yaml"
+  [[ -f "$file" ]] || return 0
+  local line
+  line=$(grep -E '^domain:' "$file" | tail -n1 || true)
+  [[ -n "$line" ]] || return 0
+  unquote_value "${line#domain:}"
+}
+
+# ---- Validation ----
+# Each validator reports pass (0) or fail (1) and prints nothing; the caller
+# decides whether a failure is fatal and what to log.
+
+# validate_domain <value>: lowercase RFC 1123 hostname. Labels of a-z, 0-9
+# and '-', 1-63 characters, neither starting nor ending with '-', joined by
+# dots, 253 characters at most. No trailing dot, scheme, port, path,
+# userinfo or whitespace, and not all-numeric (an IPv4-shaped name cannot
+# get an ACME hostname certificate). Character classes are spelled out so
+# the locale cannot widen them.
+validate_domain() {
+  local value="$1"
+  local chars='abcdefghijklmnopqrstuvwxyz0123456789'
+  local label_re="^[${chars}]([${chars}-]{0,61}[${chars}])?\$"
+  local numeric_re='^[0123456789.]+$'
+  [[ -n "$value" && ${#value} -le 253 ]] || return 1
+  [[ "$value" =~ $numeric_re ]] && return 1
+  local rest="$value"
+  local label
+  while :; do
+    label="${rest%%.*}"
+    [[ "$label" =~ $label_re ]] || return 1
+    [[ "$rest" == *.* ]] || return 0
+    rest="${rest#*.}"
+  done
+}
+
+# validate_app_port <value>: a bare port or address:port, as APP_PORT is
+# published by docker-compose.yml.
+validate_app_port() {
+  local port_re='^([0123456789.]+:)?[0123456789]+$'
+  [[ "$1" =~ $port_re ]]
 }
 
 # write_secret_file <name> <value>
@@ -320,12 +450,12 @@ resolve_missing() {
 
 # ---- Install-mode helpers ----
 
-# prompt_domain: emit the desired domain on stdout. If DOMAIN is set
+# prompt_domain: emit the desired domain on stdout. If DOMAIN_ARG is set
 # (via --domain=), use it. Otherwise prompt interactively, or fail in
 # non-interactive mode.
 prompt_domain() {
-  if [[ -n "$DOMAIN" ]]; then
-    echo "$DOMAIN"
+  if [[ -n "$DOMAIN_ARG" ]]; then
+    echo "$DOMAIN_ARG"
     return 0
   fi
   if [[ $NON_INTERACTIVE -eq 1 ]]; then
@@ -533,4 +663,8 @@ main() {
   log_success "Deploy complete."
 }
 
-main "$@"
+# Run main only when executed, not when sourced — bin/test/deploy_test.sh
+# sources this file to table-test the helpers.
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+  main "$@"
+fi
