@@ -262,3 +262,180 @@ describe('RecurrenceEditorSheet.vue — end date in the schedule zone', () => {
     wrapper.unmount();
   });
 });
+
+describe('RecurrenceEditorSheet.vue — defaults that produce a recurring event', () => {
+  // A zone fixed in the test, never the runner's: Wednesday 22:00 here is
+  // already Thursday in UTC, so a weekday read outside the zone yields TH.
+  const ZONE = 'America/Los_Angeles';
+
+  /**
+   * A one-off event as event_recurrence.vue leaves it once the dates are
+   * filled: no frequency, and endDate mirroring eventEndTime.
+   */
+  function oneOffSchedule(): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule();
+    schedule.startDate = DateTime.fromISO('2026-11-18T22:00:00', { zone: ZONE });
+    schedule.eventEndTime = DateTime.fromISO('2026-11-18T23:00:00', { zone: ZONE });
+    schedule.endDate = schedule.eventEndTime;
+    return schedule;
+  }
+
+  function radio(wrapper: ReturnType<typeof mountSheet>, value: string): HTMLInputElement {
+    return wrapper.find(`input[type="radio"][value="${value}"]`).element as HTMLInputElement;
+  }
+
+  function checkedWeekdays(wrapper: ReturnType<typeof mountSheet>): string[] {
+    return wrapper.findAll('.week-parameters label')
+      .filter(label => (label.find('input[type="checkbox"]').element as HTMLInputElement).checked)
+      .map(label => label.text());
+  }
+
+  it('opens a one-off event on "never" when Weekly is chosen', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+
+    expect(radio(wrapper, 'none').checked).toBe(true);
+    expect(schedule.endDate).toBeNull();
+    expect(schedule.count).toBe(0);
+    wrapper.unmount();
+  });
+
+  it('ticks the start date\'s weekday in the schedule zone when Weekly is chosen', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+
+    expect(checkedWeekdays(wrapper)).toEqual(['Wednesday']);
+    expect(schedule.byDay).toEqual(['WE']);
+    wrapper.unmount();
+  });
+
+  it('opens a one-off event on "never" when Daily is chosen', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('daily');
+
+    expect(radio(wrapper, 'none').checked).toBe(true);
+    expect(schedule.endDate).toBeNull();
+    expect(schedule.count).toBe(0);
+    wrapper.unmount();
+  });
+
+  it('shows 1 in the "after" input by default', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+
+    const countInput = wrapper.find('input[type="number"][min="1"]');
+    expect(countInput.exists()).toBe(true);
+    expect((countInput.element as HTMLInputElement).value).toBe('1');
+    wrapper.unmount();
+  });
+
+  it.each(['', '0'])('saves a count of 1 when the "after" input is set to %j', async (value) => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+    await wrapper.find('input[type="number"][min="1"]').setValue('5');
+    await wrapper.find('input[type="number"][min="1"]').setValue(value);
+
+    expect(radio(wrapper, 'after').checked).toBe(true);
+    expect(schedule.count).toBe(1);
+    wrapper.unmount();
+  });
+
+  it('opens an existing rule with no count and no end date on "never"', () => {
+    const schedule = oneOffSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['WE'];
+    schedule.count = 0;
+    schedule.endDate = null;
+    const wrapper = mountSheet(schedule);
+
+    expect(radio(wrapper, 'none').checked).toBe(true);
+    expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe('');
+    wrapper.unmount();
+  });
+
+  it('restores the one-off end date when frequency goes back to none', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+    await wrapper.find('select.frequency-select').setValue('');
+
+    expect(schedule.frequency).toBeNull();
+    expect(schedule.count).toBe(0);
+    expect(schedule.byDay).toEqual([]);
+    expect(schedule.endDate).toBe(schedule.eventEndTime);
+    wrapper.unmount();
+  });
+
+  it('opens an existing rule with an end date on "on" and compiles back the same end date', async () => {
+    const schedule = oneOffSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['WE'];
+    schedule.endDate = DateTime.fromISO('2026-12-31T00:00:00', { zone: ZONE });
+    const wrapper = mountSheet(schedule);
+
+    expect(radio(wrapper, 'on').checked).toBe(true);
+    expect((wrapper.find('input[type="date"]').element as HTMLInputElement).value).toBe('2026-12-31');
+
+    await wrapper.find('input[type="number"]').setValue('2');
+
+    expect(schedule.endDate!.toISO()).toBe('2026-12-31T00:00:00.000-08:00');
+    wrapper.unmount();
+  });
+
+  it('opens an existing rule with a count on "after N"', () => {
+    const schedule = oneOffSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['WE'];
+    schedule.endDate = null;
+    schedule.count = 7;
+    const wrapper = mountSheet(schedule);
+
+    expect(radio(wrapper, 'after').checked).toBe(true);
+    expect((wrapper.find('input[type="number"][min="1"]').element as HTMLInputElement).value).toBe('7');
+    wrapper.unmount();
+  });
+
+  it('does not overwrite existing weekdays when the sheet recompiles', async () => {
+    const schedule = oneOffSchedule();
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['MO', 'FR'];
+    schedule.endDate = null;
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('weekly');
+
+    expect(checkedWeekdays(wrapper)).toEqual(['Monday', 'Friday']);
+    expect(schedule.byDay).toEqual(['MO', 'FR']);
+    wrapper.unmount();
+  });
+
+  it('keeps "after 5" when frequency changes from Daily to Weekly', async () => {
+    const schedule = oneOffSchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('select.frequency-select').setValue('daily');
+    await wrapper.find('input[type="number"][min="1"]').setValue('5');
+    await wrapper.find('select.frequency-select').setValue('weekly');
+
+    expect(radio(wrapper, 'after').checked).toBe(true);
+    expect((wrapper.find('input[type="number"][min="1"]').element as HTMLInputElement).value).toBe('5');
+    expect(schedule.count).toBe(5);
+    expect(schedule.endDate).toBeNull();
+    wrapper.unmount();
+  });
+});
