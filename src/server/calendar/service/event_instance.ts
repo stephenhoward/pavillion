@@ -315,6 +315,11 @@ const FREQUENCY_MAP: Record<EventFrequency, number> = {
 /**
  * The rrule a recurring schedule expands by, stepping in `frame`; null when
  * the schedule has no mapped frequency (a one-off date).
+ *
+ * The recurrence sheet's `hasFewerThanTwoOccurrences()`
+ * (`src/client/components/logged_in/calendar/recurrence-occurrences.ts`)
+ * mirrors these options to predict the occurrence count before save. Change
+ * the two together.
  */
 function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFrame): InstanceType<typeof RRule> | null {
   const frequency = schedule.frequency !== null
