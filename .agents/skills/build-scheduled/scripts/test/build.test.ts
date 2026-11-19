@@ -1583,12 +1583,20 @@ describe('writeGuard', () => {
 // =============================================================================
 
 describe('recordedPrExpectations', () => {
-  it('expects each level on the trunk or its predecessor, merged allowed below the top', () => {
-    const parsed = parseBuildState(GOOD_BLOCK);
+  it('expects each level on the trunk or its predecessor, merged allowed in a done chain and below an unfinished chain\'s top', () => {
+    const parsed = parseBuildState(stateBlock([
+      'firings: 1',
+      'restart: none',
+      'chain 1: feat.alpha-one → #101, feat.alpha-two → #102; next: done',
+      'chain 2: fix.beta-one → #103, fix.beta-two → #104; next: fix.beta-three',
+      'stopped: none',
+    ]));
     if (!parsed.ok || !parsed.state) throw new Error('fixture');
     expect(recordedPrExpectations(parsed.state)).toEqual([
-      { pr: 101, branch: 'feat.alpha-one', predecessor: null, lowerLevel: true },
-      { pr: 102, branch: 'feat.alpha-two', predecessor: 'feat.alpha-one', lowerLevel: false },
+      { pr: 101, branch: 'feat.alpha-one', predecessor: null, mergeAllowed: true },
+      { pr: 102, branch: 'feat.alpha-two', predecessor: 'feat.alpha-one', mergeAllowed: true },
+      { pr: 103, branch: 'fix.beta-one', predecessor: null, mergeAllowed: true },
+      { pr: 104, branch: 'fix.beta-two', predecessor: 'fix.beta-one', mergeAllowed: false },
     ]);
   });
 });
@@ -1604,8 +1612,9 @@ describe('validateRecordedPr', () => {
     autoMergeRequest: null,
     ...overrides,
   });
-  const top = { pr: 102, branch: 'feat.alpha-two', predecessor: 'feat.alpha-one', lowerLevel: false };
-  const lower = { pr: 101, branch: 'feat.alpha-one', predecessor: null, lowerLevel: true };
+  const top = { pr: 102, branch: 'feat.alpha-two', predecessor: 'feat.alpha-one', mergeAllowed: false };
+  const doneTop = { ...top, mergeAllowed: true };
+  const lower = { pr: 101, branch: 'feat.alpha-one', predecessor: null, mergeAllowed: true };
 
   it('accepts an open PR on its predecessor or, once that merged, on the trunk', () => {
     expect(validateRecordedPr(view(), top, 'maint')).toEqual({ ok: true, merged: false });
@@ -1617,14 +1626,29 @@ describe('validateRecordedPr', () => {
     expect(validateRecordedPr(pr, lower, 'maint')).toEqual({ ok: true, merged: true });
   });
 
+  it('accepts a merged top level of a chain recorded next: done', () => {
+    expect(validateRecordedPr(view({ state: 'MERGED', baseRefName: 'main' }), doneTop, 'maint')).toEqual({ ok: true, merged: true });
+  });
+
+  it('rejects a merged top level of an unfinished chain, naming the top level', () => {
+    const r = validateRecordedPr(view({ state: 'MERGED' }), top, 'maint');
+    expect(r).toEqual({ ok: false, reason: '#102: state MERGED on the chain\'s top submitted level' });
+  });
+
+  it.each([
+    ['an unfinished chain\'s top', view({ state: 'CLOSED' }), top],
+    ['a done chain\'s top', view({ state: 'CLOSED' }), doneTop],
+    ['a lower level', view({ number: 101, state: 'CLOSED', headRefName: 'feat.alpha-one', baseRefName: 'main' }), lower],
+  ])('rejects a closed unmerged PR at %s', (_name, pr, expected) => {
+    expect(validateRecordedPr(pr, expected, 'maint')).toEqual({ ok: false, reason: `#${expected.pr}: state CLOSED` });
+  });
+
   it.each([
     ['another author', view({ author: { login: 'mallory' } }), top, /author/],
     ['a fork', view({ isCrossRepository: true }), top, /fork/],
     ['a mismatched head', view({ headRefName: 'feat.other' }), top, /head/],
     ['a mismatched base', view({ baseRefName: 'feat.other' }), top, /base/],
     ['a level-1 PR on a branch base', view({ number: 101, headRefName: 'feat.alpha-one', baseRefName: 'feat.x' }), lower, /base/],
-    ['a closed unmerged PR', view({ state: 'CLOSED' }), top, /CLOSED/],
-    ['a merged top level', view({ state: 'MERGED' }), top, /MERGED/],
     ['another number', view({ number: 7 }), top, /#7/],
     ['auto-merge set', view({ autoMergeRequest: { enabledAt: '2026-11-12T00:00:00Z' } }), top, /auto-merge/],
     ['no auto-merge reading', (({ autoMergeRequest: _a, ...rest }) => rest)(view()), top, /autoMergeRequest/],
@@ -2016,6 +2040,36 @@ describe('runValidatePrs', () => {
   it('fails on any mismatch or unreadable PR', () => {
     expect(runValidatePrs(fakeRunner(routes(view(102, { author: { login: 'mallory' } }))), 'pv-r').ok).toBe(false);
     expect(runValidatePrs(fakeRunner(routes(failed('not found'))), 'pv-r').ok).toBe(false);
+  });
+
+  it('accepts merged tops of done chains while other chains have not started', () => {
+    const block = stateBlock([
+      'firings: 1',
+      'restart: none',
+      'chain 1: feat.alpha-one → #101, feat.alpha-two → #102; next: done',
+      'chain 2: fix.beta-one → #103; next: done',
+      'chain 3: -; next: docs.gamma-one',
+      'chain 4: -; next: refactor.delta-one',
+      'stopped: none',
+    ]);
+    const merged = (n: number, head: string, base: string) => view(n, { state: 'MERGED', headRefName: head, baseRefName: base });
+    const runner = fakeRunner([
+      ['bd show pv-r', ok(JSON.stringify([bead({ id: 'pv-r', labels: ['spec:building'], notes: `${ANALYSED}\n\n${block}` })]))],
+      ['gh api user', ok('maint')],
+      ['gh pr view 101', merged(101, 'feat.alpha-one', 'main')],
+      ['gh pr view 102', merged(102, 'feat.alpha-two', 'main')],
+      ['gh pr view 103', merged(103, 'fix.beta-one', 'main')],
+      ['git ls-remote', { stdout: '', stderr: '', exitCode: 2 }],
+    ]);
+    const r = runValidatePrs(runner, 'pv-r');
+    expect(r).toMatchObject({
+      ok: true,
+      sync_first: true,
+      next: [{ branch: 'docs.gamma-one', ok: true }, { branch: 'refactor.delta-one', ok: true }],
+    });
+    expect(r.prs).toEqual([101, 102, 103].map(pr => ({ pr, ok: true, merged: true })));
+    expect(runner.calls).toContainEqual(['git', 'ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/docs.gamma-one']);
+    expect(runner.calls).toContainEqual(['git', 'ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/refactor.delta-one']);
   });
 
   it('says no sync is needed when every recorded PR is open', () => {

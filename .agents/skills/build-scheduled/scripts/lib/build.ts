@@ -1183,8 +1183,12 @@ export interface PrExpectation {
   branch: string;
   /** The level below in the same chain, or null for a chain's first level. */
   predecessor: string | null;
-  /** Below the chain's top submitted level: the maintainer may have merged it. */
-  lowerLevel: boolean;
+  /**
+   * The maintainer may have merged it: a merged PR passes when nothing will
+   * stack on it unrestacked. True below the chain's top submitted level, or
+   * at every level of a chain recorded `next: done`.
+   */
+  mergeAllowed: boolean;
 }
 
 /** What every PR the block records must look like on GitHub. */
@@ -1193,7 +1197,7 @@ export function recordedPrExpectations(state: BuildState): PrExpectation[] {
     pr: level.pr,
     branch: level.branch,
     predecessor: i === 0 ? null : c.levels[i - 1].branch,
-    lowerLevel: i < c.levels.length - 1,
+    mergeAllowed: c.next === 'done' || i < c.levels.length - 1,
   })));
 }
 
@@ -1223,7 +1227,7 @@ function prIdentity(view: unknown, pr: number, ghLogin: string): { ok: true; p: 
 /**
  * A recorded PR before any checkout, push or edit of it, over `gh pr view
  * --json` PR_VIEW_FIELDS: every field present, prIdentity, then open, or
- * merged for a lower level (then `stack.ts sync` runs first); head on the
+ * merged where mergeAllowed (then `stack.ts sync` runs first); head on the
  * recorded branch; base on the trunk or the recorded predecessor.
  */
 export function validateRecordedPr(
@@ -1248,7 +1252,7 @@ export function validateRecordedPr(
   const identity = prIdentity(p, expected.pr, ghLogin);
   if (!identity.ok) return identity;
   const merged = p.state === 'MERGED';
-  if (!(p.state === 'OPEN' || (merged && expected.lowerLevel))) {
+  if (!(p.state === 'OPEN' || (merged && expected.mergeAllowed))) {
     return no(`state ${p.state}${merged ? ' on the chain\'s top submitted level' : ''}`);
   }
   if (p.headRefName !== expected.branch) return no(`head ${p.headRefName} is not ${expected.branch}`);
@@ -1712,7 +1716,7 @@ export function runWrite(runner: Runner, input: WriteInput, lock: Pick<LockStore
 export interface PrsValidation {
   ok: boolean;
   reading: string;
-  /** A lower level merged: run `stack.ts sync` before any checkout. */
+  /** A recorded PR merged: run `stack.ts sync` before any checkout. */
   sync_first: boolean;
   prs: ({ pr: number; ok: true; merged: boolean } | { pr: number; ok: false; reason: string })[];
   /** Each unfinished chain's `next` branch: on origin already means a cut between submit and the block write. */
