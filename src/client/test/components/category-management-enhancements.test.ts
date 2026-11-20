@@ -286,6 +286,37 @@ describe('Category Management Enhancements - Frontend UI', () => {
       expect(optionTexts.some((text: string) => text.includes('Arts'))).toBe(true);
     });
 
+    it('names the migration dropdown by the visible migrate option title', async () => {
+      mockCategoryService.loadCategories.mockResolvedValue([
+        createTestCategory('cat-1', 'Music', 15),
+        createTestCategory('cat-2', 'Sports', 3),
+      ]);
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.categories.length > 0;
+      }, { timeout: 1000 });
+
+      await wrapper.findAll('.icon-button--danger')[0].trigger('click');
+      await nextTick();
+      await wrapper.find('input[value="migrate"]').setValue(true);
+      await nextTick();
+
+      const dropdown = wrapper.find('select.migration-target');
+      expect(dropdown.exists()).toBe(true);
+      // The select sits inside the migrate radio's label, which names the
+      // radio only, so the select needs its own reference to visible text.
+      expect(dropdown.attributes('aria-label')).toBeUndefined();
+      const labelledBy = dropdown.attributes('aria-labelledby');
+      expect(labelledBy).toBeTruthy();
+      const title = wrapper.find(`#${labelledBy}`);
+      expect(title.exists()).toBe(true);
+      expect(title.classes()).toContain('option-title');
+      expect(title.text().trim()).not.toBe('');
+    });
+
     it('should call deleteCategory API with correct parameters', async () => {
       const mockCategories = [
         createTestCategory('cat-1', 'Music', 15),

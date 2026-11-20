@@ -173,9 +173,10 @@ onMounted(() => {
           :key="lang"
           class="language-field"
         >
-          <label class="language-label">{{ languageDisplayName(lang, i18next.language) }}:</label>
+          <label :for="`category-name-${lang}`" class="language-label">{{ languageDisplayName(lang, i18next.language) }}:</label>
           <div class="language-input-wrapper">
             <input
+              :id="`category-name-${lang}`"
               type="text"
               class="language-input"
               v-model="localCategory.content(lang).name"

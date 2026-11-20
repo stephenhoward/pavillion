@@ -634,6 +634,30 @@ describe('EditPlaceView', () => {
       expect(optionTexts).not.toContain('Pacific Room');
     });
 
+    it('reassign dialog dropdown is named by the visible "different room or space" text', async () => {
+      mockGetLocationById.mockResolvedValueOnce(
+        createMockLocation('loc-1', 'Community Center', [
+          createMockSpace('space-1', 'loc-1', [{ language: 'en', name: 'Pacific Room' }], 3),
+          createMockSpace('space-2', 'loc-1', [{ language: 'en', name: 'Atlantic Room' }], 0),
+        ]),
+      );
+      const wrapper = await createWrapper('place_edit', { placeId: 'loc-1' });
+
+      await wrapper.find('.space-item .delete-space-button').trigger('click');
+      await flushPromises();
+
+      const select = wrapper.find('.reassign-space-modal select');
+      expect(select.exists()).toBe(true);
+      // The name comes from visible text beside the select, never an
+      // invisible aria-label or the placeholder.
+      expect(select.attributes('aria-label')).toBeUndefined();
+      const labelledBy = select.attributes('aria-labelledby');
+      expect(labelledBy).toBeTruthy();
+      const nameSource = wrapper.find(`.reassign-space-modal #${labelledBy}`);
+      expect(nameSource.exists()).toBe(true);
+      expect(nameSource.text().trim()).toBe('A different room or space:');
+    });
+
     it('whole-venue selection drops the Space without staging a reassign', async () => {
       mockGetLocationById.mockResolvedValueOnce(
         createMockLocation('loc-1', 'Community Center', [

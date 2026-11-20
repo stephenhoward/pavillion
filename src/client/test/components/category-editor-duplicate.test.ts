@@ -203,3 +203,39 @@ describe('CategoryEditor — language removal wiring', () => {
     wrapper.unmount();
   });
 });
+
+describe('CategoryEditor — name field labels', () => {
+  beforeAll(async () => {
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: {
+          categories: CATEGORY_TRANSLATIONS,
+        },
+      },
+    });
+  });
+
+  it('associates each language label with its name input, without relying on the placeholder', async () => {
+    const wrapper = mountEditor(createBilingualCategory());
+    await flushPromises();
+
+    const fields = wrapper.findAll('.language-field');
+    expect(fields).toHaveLength(2);
+
+    const ids = fields.map((field) => {
+      const label = field.find('label.language-label');
+      const input = field.find('input.language-input');
+      const id = input.attributes('id');
+      expect(id).toBeTruthy();
+      expect(label.attributes('for')).toBe(id);
+      // The name comes from the label's visible text, not the placeholder.
+      expect(label.text().replace(/:$/, '').trim()).not.toBe('');
+      expect(label.text()).not.toContain('Category name');
+      return id;
+    });
+    expect(new Set(ids).size).toBe(ids.length);
+
+    wrapper.unmount();
+  });
+});

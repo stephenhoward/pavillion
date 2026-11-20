@@ -148,10 +148,11 @@
               name="delete-action"
             />
             <div class="option-content">
-              <span class="option-title">{{ t('delete_option_migrate') }}</span>
+              <span id="delete-option-migrate-title" class="option-title">{{ t('delete_option_migrate') }}</span>
               <p class="option-description">Move all events to a different category</p>
               <select
                 v-if="state.deleteAction === 'migrate'"
+                aria-labelledby="delete-option-migrate-title"
                 v-model="state.deleteMigrationTarget"
                 class="migration-target"
                 @click.stop
