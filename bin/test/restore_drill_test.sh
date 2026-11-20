@@ -473,7 +473,7 @@ done
 DRILL_TIMEOUT="90" DRILL_IMAGE="ghcr.io/example/postgres:17-alpine" validate_drill_settings >/dev/null 2>&1
 assert_exit_code "0" "$?" "an ordinary registry reference passes validation"
 
-echo "test: validate_drill_settings rejects an app container name that would parse as an option"
+echo "test: validate_drill_settings rejects an worker container name that would parse as an option"
 # PAVILLION_CONTAINER lands in the option-parsing region of record_drill_result's
 # `docker exec` — the region holding --privileged, --user and --env — which is
 # the same hazard PAVILLION_DRILL_IMAGE is guarded for, one command over. The
@@ -481,12 +481,12 @@ echo "test: validate_drill_settings rejects an app container name that would par
 # Docker's naming rules mean no such container can exist, but that is incidental
 # and undocumented protection rather than a check.
 for bad_container in '-v/:/host' '--privileged'; do
-  err_out=$(DRILL_TIMEOUT="90" DRILL_IMAGE="postgres:17" APP_CONTAINER="${bad_container}" \
+  err_out=$(DRILL_TIMEOUT="90" DRILL_IMAGE="postgres:17" WORKER_CONTAINER="${bad_container}" \
     validate_drill_settings 2>&1; echo "EXIT:$?")
-  assert_exit_code "1" "${err_out##*EXIT:}" "app container '${bad_container}' is rejected"
+  assert_exit_code "1" "${err_out##*EXIT:}" "worker container '${bad_container}' is rejected"
   assert_contains "$err_out" "PAVILLION_CONTAINER" "the error names the variable the operator set"
 done
-DRILL_TIMEOUT="90" DRILL_IMAGE="postgres:17" APP_CONTAINER="pavillion-app-1" \
+DRILL_TIMEOUT="90" DRILL_IMAGE="postgres:17" WORKER_CONTAINER="pavillion-worker" \
   validate_drill_settings >/dev/null 2>&1
 assert_exit_code "0" "$?" "an ordinary container name passes validation"
 
@@ -1047,7 +1047,7 @@ CONTAINER_NAME=""
 # --- Recording the drill outcome ---------------------------------------------
 #
 # The recording is one INSERT into the live database — the drill's only write to
-# it — made through the app container's CLI once the drill is over. Every
+# it — made through the worker container's CLI once the drill is over. Every
 # property that makes that acceptable is a property of the script's text, so the
 # assertions are source-level like the docker-run ones above, and each was shown
 # to fail against a mutated script before being kept.
@@ -1089,11 +1089,11 @@ on_exit_body=$(printf '%s\n' "${drill_logical}" | sed -n '/^on_exit() {/,/^}/p')
 # function name.
 record_calls=$(printf '%s\n' "${drill_logical}" | grep -E '^[[:space:]]*record_drill_result ')
 
-echo "test: the recording goes to the app container, not the scratch container"
-assert_contains "$record_code" 'docker exec "${APP_CONTAINER}"' \
-  "the recording execs against the app container"
-assert_contains "$(cat "${DRILL}")" 'APP_CONTAINER="${PAVILLION_CONTAINER:-pavillion-app-1}"' \
-  "the app container name reuses the PAVILLION_CONTAINER variable scripts/backup.sh documents"
+echo "test: the recording goes to the worker container, not the scratch container"
+assert_contains "$record_code" 'docker exec "${WORKER_CONTAINER}"' \
+  "the recording execs against the worker container"
+assert_contains "$(cat "${DRILL}")" 'WORKER_CONTAINER="${PAVILLION_CONTAINER:-pavillion-worker}"' \
+  "the worker container name reuses the PAVILLION_CONTAINER variable scripts/backup.sh documents"
 # drill_exec targets the --network none scratch container, which holds no
 # Pavillion code and cannot reach the database. Reusing it here would be a silent
 # no-op dressed as a recording.
@@ -1106,13 +1106,13 @@ assert_contains "$(cat "${DRILL}")" '#   PAVILLION_CONTAINER' \
 
 echo "test: a failed recording cannot change the drill's verdict or exit code"
 # The documented exit contract is 0/1/3/130 and operators' cron monitors consume
-# it. A `return 1` anywhere in here would turn an unreachable app container into
+# it. A `return 1` anywhere in here would turn an unreachable worker container into
 # a failed backup.
 assert_absent "$record_code" 'return 1' "the recording path never returns a failure"
 assert_eq "2" "$(printf '%s\n' "${record_code}" | grep -c 'return 0')" \
   "both recording bail-outs return success (container absent, and exec failed)"
 # Counted, not merely present: there are two ways the recording can fail to
-# happen (no app container, and an exec that errored) and a silent one is
+# happen (no worker container, and an exec that errored) and a silent one is
 # indistinguishable from a recorded drill until the staleness signal fires weeks
 # later.
 assert_eq "2" "$(printf '%s\n' "${record_code}" | grep -c 'err "WARNING')" \
@@ -1164,7 +1164,7 @@ assert_absent "$record_calls_literal" '`' \
 # see a polarity change. Two mutants — each of them exactly what a dropped `!`
 # produces in a refactor — survived the whole source-level set:
 #
-#   if docker exec "${APP_CONTAINER}" ... ; then   (warns on success)
+#   if docker exec "${WORKER_CONTAINER}" ... ; then   (warns on success)
 #   if docker ps ... | grep -q ... ; then          (skips when the container IS there)
 #
 # Both invert the property the recording exists for: record when the container is
@@ -1173,13 +1173,13 @@ assert_absent "$record_calls_literal" '`' \
 # probes above shadow it, and judged on what it does — the argv it hands Docker,
 # what reaches stderr, and the status it returns.
 EXEC_LOG="${WORK}/docker-exec-argv"
-DOCKER_APP_PRESENT=1
+DOCKER_WORKER_PRESENT=1
 DOCKER_EXEC_STATUS=0
 docker() {
   case "$1" in
     ps)
       # The existence probe: `docker ps --format '{{.Names}}'`.
-      if (( DOCKER_APP_PRESENT == 1 )); then printf '%s\n' "${APP_CONTAINER}"; fi
+      if (( DOCKER_WORKER_PRESENT == 1 )); then printf '%s\n' "${WORKER_CONTAINER}"; fi
       return 0
       ;;
     exec)
@@ -1195,33 +1195,33 @@ docker() {
   esac
   return 0
 }
-APP_CONTAINER="pavillion-app-probe"
+WORKER_CONTAINER="pavillion-worker-probe"
 
-echo "test: record_drill_result skips the recording, and says so, when the app container is absent"
+echo "test: record_drill_result skips the recording, and says so, when the worker container is absent"
 # The laptop case the function documents: PAVILLION_BACKUP_DIR pointed at dumps
 # on a host where the stack is not up. Nothing may be exec'd, and the operator
 # must be told the drill went unrecorded — a silent skip is indistinguishable
 # from a recorded drill until the staleness signal fires weeks later.
-DOCKER_APP_PRESENT=0
+DOCKER_WORKER_PRESENT=0
 : > "${EXEC_LOG}"
 absent_out=$(record_drill_result "pavillion_20260315_020000_scheduled.dump" pass 2>&1; echo "EXIT:$?")
-assert_exit_code "0" "${absent_out##*EXIT:}" "an absent app container is not a failed drill"
-assert_contains "$absent_out" "WARNING: the app container pavillion-app-probe is not running" \
+assert_exit_code "0" "${absent_out##*EXIT:}" "an absent worker container is not a failed drill"
+assert_contains "$absent_out" "WARNING: the worker container pavillion-worker-probe is not running" \
   "the skipped recording is reported and names the container it looked for"
 assert_contains "$absent_out" "PAVILLION_CONTAINER" "the warning names the variable that fixes it"
-assert_eq "" "$(cat "${EXEC_LOG}")" "nothing is exec'd when the app container is absent"
+assert_eq "" "$(cat "${EXEC_LOG}")" "nothing is exec'd when the worker container is absent"
 
-echo "test: record_drill_result records through the app container's CLI when it is running"
-DOCKER_APP_PRESENT=1
+echo "test: record_drill_result records through the worker container's CLI when it is running"
+DOCKER_WORKER_PRESENT=1
 DOCKER_EXEC_STATUS=0
 : > "${EXEC_LOG}"
 ok_out=$(record_drill_result "pavillion_20260315_020000_scheduled.dump" pass 2>&1; echo "EXIT:$?")
 assert_exit_code "0" "${ok_out##*EXIT:}" "a recorded drill returns success"
 assert_absent "$ok_out" "WARNING" "a recording that worked says nothing"
-assert_eq "$(printf '%s\n' '[pavillion-app-probe]' '[node]' '[/app/bin/pavillion]' '[backup]' \
+assert_eq "$(printf '%s\n' '[pavillion-worker-probe]' '[node]' '[/app/bin/pavillion]' '[backup]' \
   '[record-drill]' '[--file]' '[pavillion_20260315_020000_scheduled.dump]' '[--result]' '[pass]')" \
   "$(cat "${EXEC_LOG}")" \
-  "the exec targets the app container and runs the CLI's record-drill, one element per argument"
+  "the exec targets the worker container and runs the CLI's record-drill, one element per argument"
 
 echo "test: a failure detail reaches the CLI as a single argv element"
 : > "${EXEC_LOG}"
@@ -1246,6 +1246,6 @@ assert_contains "$failed_rec" "WARNING: could not record this drill's outcome" \
 assert_contains "$failed_rec" "The verdict above stands" \
   "the operator is told the verdict is unaffected"
 unset -f docker
-APP_CONTAINER="pavillion-app-1"
+WORKER_CONTAINER="pavillion-worker"
 
 report_results
