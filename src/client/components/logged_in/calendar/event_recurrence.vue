@@ -113,7 +113,7 @@
 <template>
   <div class="recurrence-rule">
     <div class="schedule-header">
-      <span>{{ tEventEditor('recurrence.schedule_header', { n: props.index + 1 }) }}</span>
+      <span :id="headerId">{{ tEventEditor('recurrence.schedule_header', { n: props.index + 1 }) }}</span>
       <button
         v-if="props.canRemove"
         type="button"
@@ -126,10 +126,11 @@
     </div>
 
     <!-- Date/Time Grid -->
-    <div class="schedule-grid">
+    <div class="schedule-grid" role="group" :aria-labelledby="headerId">
       <div class="grid-field">
-        <label class="grid-label">{{ t('start_date_label') }}</label>
+        <label class="grid-label" :for="startDateId">{{ t('start_date_label') }}</label>
         <input type="date"
+               :id="startDateId"
                v-model="state.date"
                @input="onStartDateChange()"
                class="grid-input"
@@ -137,8 +138,9 @@
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">{{ t('start_time_label') }}</label>
+        <label class="grid-label" :for="startTimeId">{{ t('start_time_label') }}</label>
         <input type="time"
+               :id="startTimeId"
                ref="startTimeInput"
                v-model="state.time"
                @input="updateStartDate(); recheckTimeInput('start')"
@@ -154,16 +156,18 @@
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">{{ t('end_date_label') }}</label>
+        <label class="grid-label" :for="endDateId">{{ t('end_date_label') }}</label>
         <input type="date"
+               :id="endDateId"
                v-model="state.eventEndDate"
                @input="onEndDateManualChange()"
                class="grid-input" />
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">{{ t('end_time_label') }}</label>
+        <label class="grid-label" :for="endTimeId">{{ t('end_time_label') }}</label>
         <input type="time"
+               :id="endTimeId"
                ref="endTimeInput"
                v-model="state.eventEndTime"
                @input="syncScheduleFromDateTime(); recheckTimeInput('end')"
@@ -181,8 +185,11 @@
       </div>
 
       <div class="grid-field grid-field--full">
-        <label class="grid-label">{{ t('timezone_label') }}</label>
-        <select v-model="state.timezone" @change="syncScheduleFromDateTime()" class="grid-input">
+        <label class="grid-label" :for="timezoneId">{{ t('timezone_label') }}</label>
+        <select :id="timezoneId"
+                v-model="state.timezone"
+                @change="syncScheduleFromDateTime()"
+                class="grid-input">
           <option v-for="tz in timezones" :key="tz" :value="tz">
             {{ formatTimezone(tz) }}
           </option>
@@ -424,6 +431,12 @@ const endTimeInput = ref<HTMLInputElement | null>(null);
 const timeInputs = { start: startTimeInput, end: endTimeInput };
 
 const fieldIdBase = useId();
+const headerId = `${fieldIdBase}-header`;
+const startDateId = `${fieldIdBase}-start-date`;
+const startTimeId = `${fieldIdBase}-start-time`;
+const endDateId = `${fieldIdBase}-end-date`;
+const endTimeId = `${fieldIdBase}-end-time`;
+const timezoneId = `${fieldIdBase}-timezone`;
 const startTimeErrorId = `${fieldIdBase}-start-time-error`;
 const endTimeErrorId = `${fieldIdBase}-end-time-error`;
 const endBeforeStartErrorId = `${fieldIdBase}-end-before-start-error`;
