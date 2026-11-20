@@ -16,11 +16,12 @@ import AccountsInterface from '../accounts/interface/index.js';
 import * as readline from 'readline';
 import Table from 'cli-table3';
 import { DateTime } from 'luxon';
-import { exec } from 'child_process';
+import { formatRestoreTarget, pgRestoreInvocation, resolveRestoreConnection } from './restore.js';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Lazily-constructed housekeeping interface — the boundary the CLI uses for all
@@ -228,8 +229,17 @@ async function handleBackupStatus() {
 
 /**
  * Handles backup restore command.
+ *
+ * Interactive only: the confirmation must come from a person at a terminal,
+ * never from text piped in (`echo yes | docker exec -i ...`), so a non-TTY
+ * stdin is refused before anything is touched.
  */
 async function handleBackupRestore(backupId: string) {
+  if (!process.stdin.isTTY) {
+    console.error(chalk.red('[Restore] Restore must be run from an interactive terminal; refusing to read confirmation from piped input.'));
+    process.exit(1);
+  }
+
   try {
     await initDatabase();
 
@@ -244,6 +254,9 @@ async function handleBackupRestore(backupId: string) {
     console.log(chalk.bold('\n⚠️  Database Restore Warning\n'));
     console.log('This operation will replace the current database with the selected backup.');
     console.log(chalk.red('ALL CURRENT DATA WILL BE LOST!\n'));
+
+    const conn = resolveRestoreConnection(config.get('database'));
+    console.log(formatRestoreTarget(conn) + '\n');
 
     const date = DateTime.fromJSDate(backup.createdAt).toFormat('yyyy-MM-dd HH:mm:ss');
     console.log(chalk.cyan('Backup Details:'));
@@ -269,19 +282,11 @@ async function handleBackupRestore(backupId: string) {
     console.log(chalk.blue('\n[Restore] Starting database restore...'));
 
     const backupPath = path.join(backup.storageLocation, backup.filename);
-    const dbConfig: any = config.get('database');
 
-    // Build pg_restore command
-    const host = dbConfig.host || 'localhost';
-    const port = dbConfig.port || 5432;
-    const database = dbConfig.database;
-    const username = dbConfig.username || dbConfig.user || 'postgres';
-    const password = dbConfig.password || '';
-
-    // Clean database first, then restore
-    const command = `PGPASSWORD="${password}" pg_restore -c -h ${host} -p ${port} -U ${username} -d ${database} ${backupPath}`;
-
-    await execAsync(command);
+    // Clean database first, then restore. No shell: the password goes in the
+    // child's environment, never in its arguments.
+    const { args, env } = pgRestoreInvocation(conn, backupPath);
+    await execFileAsync('pg_restore', args, { env });
 
     console.log(chalk.green('\n[Restore] ✓ Database restored successfully'));
     console.log('\n' + chalk.yellow('Please restart the application for changes to take effect.'));

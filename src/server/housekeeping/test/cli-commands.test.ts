@@ -14,6 +14,7 @@ import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
 import { formatDrillStatus } from '@/server/cli/drill-status';
+import { pgRestoreInvocation, formatRestoreTarget, resolveRestoreConnection } from '@/server/cli/restore';
 
 /**
  * CLI Commands Test Suite
@@ -22,7 +23,9 @@ import { formatDrillStatus } from '@/server/cli/drill-status';
  * The CLI (src/server/cli/index.ts) routes every backup / job-queue operation
  * through this interface rather than reaching into housekeeping services or
  * entities directly (DEC-003 domain boundary), so these tests stand in for the
- * CLI command logic without spawning a process.
+ * CLI command logic without spawning a process. Two guards that live above the
+ * interface (the record-drill verdict allowlist and the interactive-only
+ * restore) are exercised through a spawned CLI instead.
  */
 describe('CLI Commands (HousekeepingInterface)', () => {
   let sandbox: sinon.SinonSandbox;
@@ -259,7 +262,8 @@ describe('CLI Commands (HousekeepingInterface)', () => {
     });
 
     /**
-     * The one test in this file that spawns the CLI.
+     * One of the two tests in this file that spawn the CLI (the other is the
+     * non-interactive restore refusal).
      *
      * The `--result` allowlist lives in handleBackupRecordDrill, above the
      * interface — commander accepts any string for `--result <result>`, so the
@@ -340,5 +344,91 @@ describe('CLI Commands (HousekeepingInterface)', () => {
 
       expect(backup).toBeNull();
     });
+
+    const dbConfig = {
+      host: 'db.internal',
+      port: 6543,
+      database: 'pavillion_prod',
+      username: 'pavillion',
+      password: 's3cr3t"; rm -rf / #',
+    };
+
+    it('should build pg_restore as an argument array with the password only in env', () => {
+      const conn = resolveRestoreConnection(dbConfig);
+      const { args, env } = pgRestoreInvocation(conn, '/backups/pavillion_20260112_140530_manual.dump');
+
+      expect(args).toEqual([
+        '-c',
+        '-h', 'db.internal',
+        '-p', '6543',
+        '-U', 'pavillion',
+        '-d', 'pavillion_prod',
+        '--', '/backups/pavillion_20260112_140530_manual.dump',
+      ]);
+      expect(env.PGPASSWORD).toBe(dbConfig.password);
+      expect(args.some((arg) => arg.includes('s3cr3t'))).toBe(false);
+    });
+
+    it('should keep the rest of the process environment when setting PGPASSWORD', () => {
+      const { env } = pgRestoreInvocation(resolveRestoreConnection(dbConfig), '/backups/x.dump');
+
+      expect(env.PATH).toBe(process.env.PATH);
+    });
+
+    it('should fall back to default connection settings when config omits them', () => {
+      const conn = resolveRestoreConnection({ database: 'pavillion', user: 'alt' });
+
+      expect(conn).toEqual({
+        host: 'localhost',
+        port: 5432,
+        database: 'pavillion',
+        username: 'alt',
+        password: '',
+      });
+    });
+
+    it('should name the target database and host without the password', () => {
+      const line = stripVTControlCharacters(formatRestoreTarget(resolveRestoreConnection(dbConfig)));
+
+      expect(line).toContain('Target database: pavillion_prod on db.internal');
+      expect(line).not.toContain('s3cr3t');
+      expect(line).not.toContain('pavillion@');
+    });
+
+    /**
+     * Restore is interactive-only: piping "yes" into `docker exec -i` must not
+     * satisfy the confirmation. The test process's stdin pipe is not a TTY, so
+     * the spawned CLI sees exactly that situation. The refusal fires before
+     * initDatabase, so no connection is opened and pg_restore cannot run.
+     */
+    it('should refuse a restore when stdin is not a terminal, before touching the database', async () => {
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
+        (resolve) => {
+          const child = execFile(
+            path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
+            [
+              path.join('src', 'server', 'cli', 'index.ts'),
+              'backup', 'restore', '123e4567-e89b-12d3-a456-426614174000',
+            ],
+            { cwd: repoRoot },
+            (error, stdout, stderr) => {
+              resolve({
+                code: error ? ((error as NodeJS.ErrnoException & { code?: number }).code ?? 1) as number : 0,
+                stdout,
+                stderr,
+              });
+            },
+          );
+          child.stdin?.end('yes\n');
+        },
+      );
+
+      expect(result.code).toBe(1);
+      expect(stripVTControlCharacters(result.stderr)).toContain('interactive terminal');
+      expect(result.stdout).not.toContain('Database connected');
+      expect(result.stdout).not.toContain('Starting database restore');
+    }, 60000);
   });
 });
