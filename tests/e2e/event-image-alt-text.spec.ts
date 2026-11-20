@@ -139,7 +139,7 @@ test.describe('Event image alt text', () => {
     // Adding a language selects it, so the fields below switch to French.
     await page.getByRole('button', { name: 'Add language' }).click();
     await expect(page.getByRole('heading', { name: 'Select a Language' })).toBeVisible();
-    await page.getByRole('searchbox', { name: /search for a language/i }).fill('French');
+    await page.getByRole('searchbox', { name: 'Search languages' }).fill('French');
     await page.getByRole('button', { name: /^Français\s+French$/ }).click();
 
     await expect(page.getByRole('tab', { name: 'Edit French content' })).toHaveAttribute('aria-selected', 'true');

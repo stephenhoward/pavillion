@@ -80,7 +80,7 @@ test.describe('Category Translation Management', () => {
     await expect(page.locator('dialog[open] h2:has-text("Select a Language")')).toBeVisible();
 
     // Verify language picker has a search box
-    const searchBox = page.getByRole('searchbox', { name: /search for a language/i });
+    const searchBox = page.getByRole('searchbox', { name: 'Search languages' });
     await expect(searchBox).toBeVisible();
 
     // Close the language picker (we've verified it works)
@@ -160,7 +160,7 @@ test.describe('Category Translation Management', () => {
       const addLanguageButton = page.getByRole('button', { name: /add language/i });
       await addLanguageButton.click();
 
-      const searchBox = page.getByRole('searchbox', { name: /search for a language/i });
+      const searchBox = page.getByRole('searchbox', { name: 'Search languages' });
       await searchBox.fill('Portuguese');
 
       // Wait for search to filter
@@ -304,7 +304,7 @@ test.describe('Category Translation Management', () => {
     await expect(page.locator('dialog[open] h2:has-text("Select a Language")')).toBeVisible();
 
     // Count all language buttons in the picker (any button within the language picker dialog)
-    const searchBox = page.getByRole('searchbox', { name: /search for a language/i });
+    const searchBox = page.getByRole('searchbox', { name: 'Search languages' });
 
     // Search for a specific language that's likely to exist and filter the list
     await searchBox.fill('Jap');
@@ -414,7 +414,7 @@ test.describe('Category Translation Management', () => {
     await expect(page.locator('dialog[open] h2:has-text("Select a Language")')).toBeVisible();
 
     // Verify search box works
-    const searchBox = page.getByRole('searchbox', { name: /search for a language/i });
+    const searchBox = page.getByRole('searchbox', { name: 'Search languages' });
     await searchBox.fill('test');
     await expect(searchBox).toHaveValue('test');
 

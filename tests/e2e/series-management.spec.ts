@@ -206,7 +206,7 @@ test.describe('Series management', () => {
     await editor.locator('#name-en').fill(seriesName);
     await editor.getByRole('button', { name: 'Add language' }).click();
     await expect(page.getByRole('heading', { name: 'Select a Language' })).toBeVisible();
-    await page.getByRole('searchbox', { name: /search for a language/i }).fill('French');
+    await page.getByRole('searchbox', { name: 'Search languages' }).fill('French');
     await page.getByRole('button', { name: /^Français\s+French$/ }).click();
     await expect(frenchTab).toHaveAttribute('aria-selected', 'true');
     await editor.locator('#name-fr').fill(frenchName);
