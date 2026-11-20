@@ -317,9 +317,10 @@ test.describe('Event Location Management End-to-End', () => {
     await expect(pickerDialog).toHaveAttribute('aria-modal', 'true');
     await expect(pickerDialog).toHaveAttribute('aria-labelledby', /.+/);
 
-    // Check search input has proper label
+    // Check search input is named by its visible label
     const searchInput = page.locator('.search-input');
-    await expect(searchInput).toHaveAttribute('aria-label', 'Search locations');
+    await expect(searchInput).toHaveAccessibleName('Search locations');
+    await expect(page.locator('label', { hasText: 'Search locations' })).toBeVisible();
 
     // Test keyboard navigation - ESC should close modal (native dialog behavior)
     await page.keyboard.press('Escape');
@@ -345,16 +346,15 @@ test.describe('Event Location Management End-to-End', () => {
     await expect(createDialog).toHaveAttribute('aria-modal', 'true');
     await expect(createDialog).toHaveAttribute('aria-labelledby', /.+/);
 
-    // Check form inputs have proper labels
+    // Check form inputs are named by their visible labels
     const nameInput = page.locator('input[placeholder="Location name *"]');
-    await expect(nameInput).toHaveAttribute('aria-label', /location name/i);
+    await expect(nameInput).toHaveAccessibleName('Location name');
 
     const addressInput = page.locator('input[placeholder="Street address"]');
-    await expect(addressInput).toHaveAttribute('aria-label', 'Street address');
+    await expect(addressInput).toHaveAccessibleName('Street address');
 
-    // Check accessibility textarea has language-specific label
     const accessibilityTextarea = page.locator('textarea[placeholder*="Accessibility"]');
-    await expect(accessibilityTextarea).toHaveAttribute('aria-label');
+    await expect(accessibilityTextarea).toHaveAccessibleName('Accessibility information');
   });
 
   // pv-ibpm.3.2: Inline place + room creation; new room appears in picker and is selectable.
@@ -393,8 +393,8 @@ test.describe('Event Location Management End-to-End', () => {
 
     // EditSpace inline editor opens. Its "Name" field is labeled by the
     // calendars.places.space.field_name key (rendered as a real <label for>).
-    // The create-location-form's location-name input uses aria-label
-    // "Location name (required)", not "Name", so this match is unambiguous.
+    // The create-location-form's location-name input is labelled
+    // "Location name", not "Name", so this exact match is unambiguous.
     const roomNameInput = page.getByRole('textbox', { name: 'Name', exact: true });
     await expect(roomNameInput).toBeVisible();
     await roomNameInput.fill('Pacific Room');

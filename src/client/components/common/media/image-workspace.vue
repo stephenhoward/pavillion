@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Crosshair, ZoomIn, ZoomOut, RefreshCw, Trash2 } from 'lucide-vue-next';
 
 const { t } = useTranslation('media');
+
+const zoomSliderId = `image-zoom-${useId()}`;
 
 interface ImageData {
   url: string;
@@ -143,16 +145,17 @@ function onZoomInput(e: Event): void {
 
     <!-- Zoom slider -->
     <div class="zoom-row">
+      <label :for="zoomSliderId" class="zoom-label">{{ t('workspace.zoom_label') }}</label>
       <ZoomOut :size="18"
                class="zoom-icon"
                aria-hidden="true" />
-      <input type="range"
+      <input :id="zoomSliderId"
+             type="range"
              class="zoom-slider"
              min="1"
              max="2"
              step="0.05"
              :value="image.mediaZoom"
-             :aria-label="t('accessibility.zoom_slider')"
              @input="onZoomInput" />
       <ZoomIn :size="18"
               class="zoom-icon"
@@ -280,6 +283,13 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   align-items: center;
   gap: 0.75rem;
   padding: 0 0.25rem;
+}
+
+.zoom-label {
+  flex-shrink: 0;
+  font-size: var(--pav-font-size-xs);
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-text-secondary);
 }
 
 .zoom-icon {

@@ -945,8 +945,9 @@ describe('LocationPickerModal', () => {
     it('announces the named search field ahead of the location list', async () => {
       const phrases = await walk({ selectedLocationId: null, selectedSpaceId: null });
 
-      expect(phrases.slice(0, 4)).toEqual([
+      expect(phrases.slice(0, 5)).toEqual([
         'heading, Select Location, level 2',
+        'Search locations',
         'textbox, Search locations, placeholder Search locations...',
         'list',
         'listitem, level 1, position 1, set size 3',
@@ -993,6 +994,30 @@ describe('LocationPickerModal', () => {
 
       expect(phrases).toContain('button, Remove location, not disabled');
       expect(phrases).toContain('button, Create New, not disabled');
+    });
+  });
+
+  describe('accessible names', () => {
+    it('names the search field with a visible, associated label', () => {
+      const wrapper = mount(LocationPickerModal, { ...SHEET_GLOBAL, attachTo: document.body, props: {
+        locations: mockLocations,
+        selectedLocationId: null,
+        selectedSpaceId: null,
+      },
+      });
+
+      try {
+        const search = wrapper.find('.search-input').element as HTMLInputElement;
+        const labels = Array.from(search.labels ?? []);
+        expect(labels).toHaveLength(1);
+        expect(labels[0].textContent?.trim()).toBe('Search locations');
+        // The visible label is the name; the placeholder never is.
+        expect(search.hasAttribute('aria-label')).toBe(false);
+        expect(search.hasAttribute('aria-labelledby')).toBe(false);
+      }
+      finally {
+        wrapper.unmount();
+      }
     });
   });
 });

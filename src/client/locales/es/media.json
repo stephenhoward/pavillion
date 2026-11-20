@@ -60,8 +60,7 @@
     "replace_file": "Reemplazar el archivo seleccionado",
     "dismiss_error": "Descartar error de subida",
     "image_workspace": "Espacio de trabajo de imagen con ajuste del punto focal",
-    "focal_point_marker": "Marcador del punto focal. Arrastra para reposicionar.",
-    "zoom_slider": "Nivel de zoom de la imagen"
+    "focal_point_marker": "Marcador del punto focal. Arrastra para reposicionar."
   },
   "display": {
     "processing_image": "La imagen se está procesando",
@@ -75,6 +74,7 @@
     "drag_drop_instructions_single": "Arrastra un solo archivo o haz clic para explorar"
   },
   "workspace": {
+    "zoom_label": "Zoom",
     "focal_hint": "Arrastra en cualquier lugar para establecer el punto focal",
     "focal_explanation": "El punto focal determina cómo se recorta tu imagen en las visualizaciones de tarjeta y banner.",
     "replace_image": "Reemplazar imagen",

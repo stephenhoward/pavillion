@@ -7,6 +7,14 @@
 }
 
 .search-section {
+  .search-label {
+    display: block;
+    margin-bottom: var(--pav-space-2);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-text-secondary);
+  }
+
   .search-input-wrapper {
     position: relative;
 
@@ -124,6 +132,7 @@
     >
       <!-- Search -->
       <div class="search-section">
+        <label :for="searchInputId" class="search-label">{{ t('search_language_label') }}</label>
         <div class="search-input-wrapper">
           <svg
             class="search-icon"
@@ -139,6 +148,7 @@
             />
           </svg>
           <input
+            :id="searchInputId"
             type="search"
             :placeholder="t('search_language')"
             v-model="state.searchString"
@@ -172,7 +182,7 @@
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue';
+import { reactive, computed, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
@@ -183,6 +193,8 @@ const emit = defineEmits(['close', 'select']);
 const { t } = useTranslation('system', {
   keyPrefix: 'language_picker',
 });
+
+const searchInputId = `language-search-${useId()}`;
 
 const props = defineProps({
   languages: Array,

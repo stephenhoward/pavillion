@@ -60,8 +60,7 @@
     "replace_file": "Replace selected file",
     "dismiss_error": "Dismiss upload error",
     "image_workspace": "Image workspace with focal point adjustment",
-    "focal_point_marker": "Focal point marker. Drag to reposition.",
-    "zoom_slider": "Image zoom level"
+    "focal_point_marker": "Focal point marker. Drag to reposition."
   },
   "display": {
     "processing_image": "Image is being processed",
@@ -75,6 +74,7 @@
     "drag_drop_instructions_single": "Drag a single file or click to browse"
   },
   "workspace": {
+    "zoom_label": "Zoom",
     "focal_hint": "Drag anywhere to set the focal point",
     "focal_explanation": "The focal point determines how your image is cropped across card and banner displays.",
     "replace_image": "Replace image",

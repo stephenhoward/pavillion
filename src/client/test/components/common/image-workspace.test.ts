@@ -114,4 +114,24 @@ describe('ImageWorkspace', () => {
     expect(removeBtn!.classes()).toContain('btn--pill');
     expect(removeBtn!.classes()).toContain('btn--ghost');
   });
+
+  it('names the zoom slider with a visible, associated label', () => {
+    const router: Router = createRouter({ history: createMemoryHistory(), routes: [] });
+    const wrapper = mountComponent(ImageWorkspace, router, {
+      props: { image: { ...defaultImage } },
+      attachTo: document.body,
+    });
+
+    try {
+      const slider = wrapper.find('.zoom-slider').element as HTMLInputElement;
+      const labels = Array.from(slider.labels ?? []);
+      expect(labels).toHaveLength(1);
+      expect(labels[0].textContent?.trim()).toBe('Zoom');
+      // The visible label is the name; no aria-label overrides it.
+      expect(slider.hasAttribute('aria-label')).toBe(false);
+    }
+    finally {
+      wrapper.unmount();
+    }
+  });
 });

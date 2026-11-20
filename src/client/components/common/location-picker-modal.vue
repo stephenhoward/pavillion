@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { Search, MapPin, DoorOpen, Check } from 'lucide-vue-next';
 import DoorPlus from '@/client/components/common/icons/door-plus.vue';
@@ -12,6 +12,8 @@ const { t } = useTranslation('event_editor', { keyPrefix: 'location_picker' });
 // Separate handle for the calendars/places namespace where the new
 // place.format.with_space and place.picker.whole_venue_suffix keys live.
 const { t: tPlaces } = useTranslation('calendars', { keyPrefix: 'places' });
+
+const searchInputId = `location-search-${useId()}`;
 
 /**
  * LocationPickerModal Component
@@ -245,14 +247,15 @@ defineExpose({ close, sheetRef });
     <div class="location-picker-body">
       <!-- Search Input -->
       <div class="search-section">
+        <label :for="searchInputId" class="search-label">{{ t('search_label') }}</label>
         <div class="search-input-wrapper">
           <Search :size="20" class="search-icon" />
           <input
+            :id="searchInputId"
             v-model="searchQuery"
             type="text"
             class="search-input"
             :placeholder="t('search_placeholder')"
-            :aria-label="t('aria_search_label')"
           />
         </div>
       </div>
@@ -367,6 +370,14 @@ defineExpose({ close, sheetRef });
 }
 
 .search-section {
+  .search-label {
+    display: block;
+    margin-bottom: var(--pav-space-2);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-text-secondary);
+  }
+
   .search-input-wrapper {
     @include pill-search-input;
 

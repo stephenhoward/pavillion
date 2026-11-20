@@ -10,6 +10,7 @@
   },
   "powered_by": "Powered by Pavillion",
   "language_picker": {
+    "search_language_label": "Search languages",
     "search_language": "Search for a language",
     "select_language": "Select a Language",
     "close": "Close",

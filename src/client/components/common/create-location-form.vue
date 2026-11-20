@@ -141,6 +141,9 @@ const handleSubmit = () => {
         <h3 class="section-title">{{ t('basic_info_section') }}</h3>
 
         <div class="form-field">
+          <label for="create-location-name" class="form-label">
+            {{ t('name_label') }} <span class="required-indicator" aria-hidden="true">*</span>
+          </label>
           <input
             id="create-location-name"
             v-model="formData.name"
@@ -148,7 +151,6 @@ const handleSubmit = () => {
             class="form-input"
             :class="{ 'form-input--error': props.fieldErrors?.name }"
             :placeholder="t('name_placeholder')"
-            :aria-label="t('name_aria_label')"
             :aria-invalid="props.fieldErrors?.name ? 'true' : undefined"
             :aria-describedby="props.fieldErrors?.name ? 'create-location-name-error' : undefined"
             required
@@ -165,37 +167,47 @@ const handleSubmit = () => {
         </div>
 
         <div class="form-field">
+          <label for="create-location-address" class="form-label">{{ t('address_label') }}</label>
           <input
+            id="create-location-address"
             v-model="formData.address"
             type="text"
             class="form-input"
             :placeholder="t('address_placeholder')"
-            :aria-label="t('address_placeholder')"
           />
         </div>
 
         <div class="form-row">
-          <input
-            v-model="formData.city"
-            type="text"
-            class="form-input"
-            :placeholder="t('city_placeholder')"
-            :aria-label="t('city_placeholder')"
-          />
-          <input
-            v-model="formData.state"
-            type="text"
-            class="form-input form-input--state"
-            :placeholder="t('state_placeholder')"
-            :aria-label="t('state_placeholder')"
-          />
-          <input
-            v-model="formData.postalCode"
-            type="text"
-            class="form-input form-input--zip"
-            :placeholder="t('postal_code_placeholder')"
-            :aria-label="t('postal_code_placeholder')"
-          />
+          <div class="form-row__field">
+            <label for="create-location-city" class="form-label">{{ t('city_label') }}</label>
+            <input
+              id="create-location-city"
+              v-model="formData.city"
+              type="text"
+              class="form-input"
+              :placeholder="t('city_placeholder')"
+            />
+          </div>
+          <div class="form-row__field form-row__field--state">
+            <label for="create-location-state" class="form-label">{{ t('state_label') }}</label>
+            <input
+              id="create-location-state"
+              v-model="formData.state"
+              type="text"
+              class="form-input"
+              :placeholder="t('state_placeholder')"
+            />
+          </div>
+          <div class="form-row__field form-row__field--zip">
+            <label for="create-location-postal-code" class="form-label">{{ t('postal_code_label') }}</label>
+            <input
+              id="create-location-postal-code"
+              v-model="formData.postalCode"
+              type="text"
+              class="form-input"
+              :placeholder="t('postal_code_placeholder')"
+            />
+          </div>
         </div>
       </section>
 
@@ -215,11 +227,14 @@ const handleSubmit = () => {
           :aria-labelledby="accessibilityLangTabs?.tabId(lang.currentLanguage.value)"
           class="form-field"
         >
+          <label :for="`create-location-accessibility-${lang.currentLanguage.value}`" class="form-label">
+            {{ t('accessibility_label') }}
+          </label>
           <textarea
+            :id="`create-location-accessibility-${lang.currentLanguage.value}`"
             v-model="accessibilityInfo[lang.currentLanguage.value]"
             class="form-textarea"
             :placeholder="t('accessibility_placeholder')"
-            :aria-label="t('accessibility_aria_label', { language: lang.currentLanguage.value })"
             rows="4"
           />
         </div>
@@ -290,20 +305,24 @@ const handleSubmit = () => {
   margin-bottom: var(--pav-space-md);
 }
 
+.form-label {
+  display: block;
+  margin-bottom: var(--pav-space-2);
+  font-size: var(--pav-font-size-xs);
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-text-secondary);
+}
+
+.required-indicator {
+  margin-inline-start: var(--pav-space-1);
+}
+
 .form-input {
   @include form-input-rounded;
   width: 100%;
 
   &--error {
     border-color: var(--pav-color-error);
-  }
-
-  &--state {
-    width: 6rem;
-  }
-
-  &--zip {
-    width: 8rem;
   }
 }
 
@@ -312,13 +331,16 @@ const handleSubmit = () => {
   gap: var(--pav-space-sm);
   margin-bottom: var(--pav-space-md);
 
-  .form-input {
+  &__field {
     flex: 1;
     min-width: 0;
 
-    &--state,
+    &--state {
+      flex: 0 0 6rem;
+    }
+
     &--zip {
-      flex: 0 0 auto;
+      flex: 0 0 8rem;
     }
   }
 }

@@ -58,6 +58,39 @@ const SpacesEditorStub = {
   `,
 };
 
+/**
+ * Returns a form control's accessible name from its associated labels,
+ * aria-labelledby or aria-label. Placeholder and title are deliberately not
+ * consulted: they are not acceptable names for these controls.
+ */
+const accessibleName = (el: HTMLElement): string => {
+  const labelledBy = el.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    return labelledBy.split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .join(' ')
+      .trim();
+  }
+  const ariaLabel = el.getAttribute('aria-label')?.trim();
+  if (ariaLabel) {
+    return ariaLabel;
+  }
+  const labels = (el as HTMLInputElement).labels;
+  if (labels && labels.length > 0) {
+    return Array.from(labels).map((label) => label.textContent?.trim() ?? '').join(' ').trim();
+  }
+  return '';
+};
+
+const unnamedControls = (root: HTMLElement): string[] => {
+  const controls = root.querySelectorAll<HTMLElement>(
+    'input:not([type=hidden]), select, textarea',
+  );
+  return Array.from(controls)
+    .filter((el) => accessibleName(el) === '')
+    .map((el) => el.id || el.getAttribute('name') || el.outerHTML.slice(0, 80));
+};
+
 describe('CreateLocationForm', () => {
   beforeEach(async () => {
     await i18next.init({
@@ -558,6 +591,40 @@ describe('CreateLocationForm', () => {
       // No submission error element — only name error is absent too
       const alerts = wrapper.findAll('[role="alert"]');
       expect(alerts.length).toBe(0);
+    });
+  });
+
+  describe('accessible names', () => {
+    it('names every field with a visible, associated label', () => {
+      const wrapper = mountWithI18n({
+        props: { languages: ['en'] },
+        attachTo: document.body,
+      });
+
+      try {
+        const expected: Array<[string, string]> = [
+          ['input[placeholder="Location name *"]', 'Location name'],
+          ['input[placeholder="Street address"]', 'Street address'],
+          ['input[placeholder="City"]', 'City'],
+          ['input[placeholder="State"]', 'State'],
+          ['input[placeholder="Postal code"]', 'Postal code'],
+          ['textarea', 'Accessibility information'],
+        ];
+        for (const [selector, labelText] of expected) {
+          const control = wrapper.find(selector).element as HTMLInputElement;
+          const labels = Array.from(control.labels ?? []);
+          expect(labels, selector).toHaveLength(1);
+          expect(labels[0].textContent?.trim(), selector).toContain(labelText);
+          expect(labels[0].classList.contains('sr-only'), selector).toBe(false);
+          // The visible label is the name: no aria-label overrides it.
+          expect(control.hasAttribute('aria-label'), selector).toBe(false);
+        }
+
+        expect(unnamedControls(wrapper.element as HTMLElement)).toEqual([]);
+      }
+      finally {
+        wrapper.unmount();
+      }
     });
   });
 });

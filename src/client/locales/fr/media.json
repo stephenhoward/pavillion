@@ -60,8 +60,7 @@
     "replace_file": "Remplacer le fichier sélectionné",
     "dismiss_error": "Ignorer l'erreur de téléversement",
     "image_workspace": "Espace de travail d'image avec ajustement du point focal",
-    "focal_point_marker": "Marqueur du point focal. Glissez pour repositionner.",
-    "zoom_slider": "Niveau de zoom de l'image"
+    "focal_point_marker": "Marqueur du point focal. Glissez pour repositionner."
   },
   "display": {
     "processing_image": "L'image est en cours de traitement",
@@ -75,6 +74,7 @@
     "drag_drop_instructions_single": "Glissez un seul fichier ou cliquez pour parcourir"
   },
   "workspace": {
+    "zoom_label": "Zoom",
     "focal_hint": "Glissez n'importe où pour définir le point focal",
     "focal_explanation": "Le point focal détermine la façon dont votre image est recadrée dans les affichages de carte et de bannière.",
     "replace_image": "Remplacer l'image",
