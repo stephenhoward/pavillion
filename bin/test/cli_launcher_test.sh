@@ -53,6 +53,10 @@ run_launcher backup "${META}"
 assert_contains "$(cat "${OUT}" 2>/dev/null)" "arg=${META}" \
   "an argument holding a space and metacharacters arrives literally"
 
+first_arg="$(sed -n 's/^arg=//p' "${OUT}" 2>/dev/null | head -n 1)"
+assert_eq "src/server/cli/index.ts" "${first_arg}" \
+  "the child's first argument is the CLI entry point"
+
 echo "working directory"
 run_launcher status
 assert_contains "$(cat "${OUT}" 2>/dev/null)" "cwd=${APP_REAL}" \
@@ -60,6 +64,9 @@ assert_contains "$(cat "${OUT}" 2>/dev/null)" "cwd=${APP_REAL}" \
 
 # ── Exit status ─────────────────────────────────────────────────────────────
 echo "exit status"
+STUB_MODE=exit STUB_EXIT=0 run_launcher status
+assert_exit_code 0 "${RC}" "a zero child exit gives exit 0"
+
 STUB_MODE=exit STUB_EXIT=7 run_launcher status
 assert_exit_code 7 "${RC}" "a non-zero child exit passes through"
 
@@ -103,5 +110,26 @@ assert_contains "${ERR}" "DB_PASSWORD_FILE" "a missing file warns naming the var
 assert_eq no "${printed}" "the missing-file warning prints no value"
 [[ -f "${OUT}" ]] && ran=yes || ran=no
 assert_eq yes "${ran}" "the child still runs after a missing-file warning"
+
+NUL_SECRET="${ELSEWHERE}/nul_secret"
+printf 'nul-head\0nul-tail\n' > "${NUL_SECRET}"
+DB_PASSWORD_FILE="${NUL_SECRET}" run_launcher status
+assert_contains "${ERR}" "DB_PASSWORD_FILE" "a NUL-byte file warns naming the variable"
+[[ -f "${OUT}" ]] && ran=yes || ran=no
+assert_eq yes "${ran}" "the child still runs after a NUL-byte warning"
+[[ "${ERR}" == *nul-head* || "${ERR}" == *nul-tail* ]] && printed=yes || printed=no
+assert_eq no "${printed}" "the NUL-byte warning prints none of the file's contents"
+
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "  SKIP: unreadable-file checks (root reads any file)"
+else
+  LOCKED="${ELSEWHERE}/locked_secret"
+  printf 'locked-secret\n' > "${LOCKED}"
+  chmod 000 "${LOCKED}"
+  DB_PASSWORD_FILE="${LOCKED}" run_launcher status
+  assert_contains "${ERR}" "DB_PASSWORD_FILE" "an unreadable file warns naming the variable"
+  [[ -f "${OUT}" ]] && ran=yes || ran=no
+  assert_eq yes "${ran}" "the child still runs after an unreadable-file warning"
+fi
 
 report_results

@@ -29,37 +29,51 @@ const tsx = path.join(root, 'node_modules', '.bin', 'tsx');
 /**
  * Builds the child's environment: for each non-empty <NAME>_FILE naming a
  * regular file, <NAME> is set to the file's contents with trailing newlines
- * stripped (as `$(cat ...)` does), overriding any existing <NAME>. A missing
- * or non-regular file is a warning naming the variable, never its value.
+ * stripped (as `$(cat ...)` does), overriding any existing <NAME>. A file
+ * that is missing, unreadable, not a regular file, or holds a NUL byte (which
+ * spawnSync would reject, echoing the value) is a warning naming the
+ * variable, never its path or value, and the CLI still runs.
  */
 function loadFileSecrets(env) {
   const childEnv = { ...env };
   for (const [key, file] of Object.entries(env)) {
     const name = key.slice(0, -'_FILE'.length);
     if (!key.endsWith('_FILE') || !name || !file) continue;
-    let isFile = false;
+    let value = null;
     try {
-      isFile = statSync(file).isFile();
+      if (statSync(file).isFile()) {
+        value = readFileSync(file, 'utf8').replace(/\n+$/, '');
+      }
     }
     catch {
-      isFile = false;
+      value = null;
     }
-    if (isFile) {
-      childEnv[name] = readFileSync(file, 'utf8').replace(/\n+$/, '');
+    if (value === null) {
+      console.error(`Warning: secret file for ${key} is missing, unreadable or not a regular file; ${name} not loaded`);
+    }
+    else if (value.includes('\0')) {
+      console.error(`Warning: secret file for ${key} contains a NUL byte; ${name} not loaded`);
     }
     else {
-      console.error(`Warning: secret file for ${key} not found; ${name} not loaded`);
+      childEnv[name] = value;
     }
   }
   return childEnv;
 }
 
-const result = spawnSync(tsx, ['src/server/cli/index.ts', ...process.argv.slice(2)], {
-  cwd: root,
-  env: loadFileSecrets(process.env),
-  stdio: 'inherit',
-  shell: false,
-});
+let result;
+try {
+  result = spawnSync(tsx, ['src/server/cli/index.ts', ...process.argv.slice(2)], {
+    cwd: root,
+    env: loadFileSecrets(process.env),
+    stdio: 'inherit',
+    shell: false,
+  });
+}
+catch (err) {
+  console.error(`Failed to start CLI (${err.code}): ${tsx}`);
+  process.exit(1);
+}
 
 if (result.error) {
   console.error(`Failed to start CLI (${result.error.code}): ${tsx}`);
