@@ -156,7 +156,7 @@ Use your cloud provider's Docker volume driver (e.g., AWS EFS, Google Cloud File
 **Disk space alerts not sending:**
 - Verify SMTP configuration in `config/local.yaml`
 - Check worker logs for email sending errors
-- Test email configuration using CLI: `docker exec pavillion-worker pavillion backup status`
+- Check backup health: `scripts/backup.sh status`
 
 **Log files growing too large:**
 - Adjust `max-size` in docker-compose.yml logging configuration

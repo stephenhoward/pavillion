@@ -29,10 +29,9 @@ The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02
 
 Old dumps are pruned on a grandparent-parent-child schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
 
-Run the commands below from the Pavillion directory. `scripts/backup.sh` runs the Pavillion CLI inside a container. It looks for one named `pavillion-app-1` unless you set `PAVILLION_CONTAINER`, and the container in the shipped `docker-compose.yml` is named `pavillion-app`, so set the variable:
+Run the commands below from the Pavillion directory; [Run a backup by hand](#run-a-backup-by-hand) lists them all:
 
 ```bash
-export PAVILLION_CONTAINER=pavillion-app
 ./scripts/backup.sh create    # queue a backup now; the worker performs it
 ./scripts/backup.sh list      # every backup Pavillion knows about
 ./scripts/backup.sh status    # storage use, last backup, retention, last restore drill
@@ -58,6 +57,22 @@ Some guidance that isn't about tooling:
 - Not on the same disk as the instance, and not in the same region if your provider is your only redundancy.
 - Encrypted at rest. A dump is your whole community's data, including account email addresses and the private keys your calendars sign federation traffic with. Treat it like the secrets below.
 - Frequency follows how fast events get created. For most community instances the nightly dump plus a nightly copy is enough. If losing a day of edits would be painful, copy more often, or run `./scripts/backup.sh create` before risky changes like upgrades.
+
+## Run a backup by hand
+
+Run these from the Pavillion directory (`/opt/pavillion` if you used `bin/provision.sh`):
+
+```bash
+./scripts/backup.sh create          # queue a backup now; the worker performs it
+./scripts/backup.sh list            # every backup Pavillion knows about, with its ID
+./scripts/backup.sh status          # storage use, last backup, retention, last restore drill
+./scripts/backup.sh restore <id>    # replace the database with backup <id>
+./scripts/housekeeping.sh           # scheduled jobs, their settings and next run times
+```
+
+Both scripts run the Pavillion CLI inside the `pavillion-worker` container, the only one that can see the backup files. Set `PAVILLION_CONTAINER` to point them at a different container.
+
+`restore` replaces the current database: everything written since that backup is gone. It asks you to confirm first, and it needs a terminal to ask in, so it refuses input piped from another command or a script. It rolls a running instance back to an earlier backup; it does not recover a lost server or an empty database. For those, see [Restoring for real](#restoring-for-real).
 
 ## Copy backups off the server
 
@@ -207,7 +222,6 @@ With neither key set, the worker uses whatever credentials its environment provi
 3. Make a backup now:
 
    ```bash
-   export PAVILLION_CONTAINER=pavillion-app
    ./scripts/backup.sh create
    ```
 
@@ -554,13 +568,13 @@ For anyone running the drill from a script or monitor:
 Pavillion ships a restore command, with limits:
 
 ```bash
-PAVILLION_CONTAINER=pavillion-worker ./scripts/backup.sh restore <backup-id>
+./scripts/backup.sh restore <backup-id>
 ```
 
 It runs `pg_restore -c` against the configured database after a confirmation prompt. `-c` drops existing objects first, so **all current data is replaced**. Restart the app afterward. Two limits to know about:
 
 - It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist.
-- It reads the dump from the backup directory, which only the `worker` container mounts, hence the `pavillion-worker` above. The default `pavillion-app` container can't see the files. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
+- It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
 
 To recover onto a fresh server, the repository does not ship a procedure. The outline, using plain PostgreSQL tooling:
 
