@@ -29,15 +29,7 @@ The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02
 
 Old dumps are pruned on a grandparent-parent-child schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
 
-Run the commands below from the Pavillion directory; [Run a backup by hand](#run-a-backup-by-hand) lists them all:
-
-```bash
-./scripts/backup.sh create    # queue a backup now; the worker performs it
-./scripts/backup.sh list      # every backup Pavillion knows about
-./scripts/backup.sh status    # storage use, last backup, retention, last restore drill
-```
-
-`create` only queues the job. Check `list` or `status` for the result.
+To make a backup now, or to see the ones Pavillion has made, use the commands in [Run a backup by hand](#run-a-backup-by-hand).
 
 ### "Verified" is a low bar
 
@@ -70,9 +62,11 @@ Run these from the Pavillion directory (`/opt/pavillion` if you used `bin/provis
 ./scripts/housekeeping.sh           # scheduled jobs, their settings and next run times
 ```
 
-Both scripts run the Pavillion CLI inside the `pavillion-worker` container, the only one that can see the backup files. Set `PAVILLION_CONTAINER` to point them at a different container.
+`create` only queues the job. Check `list` or `status` for the result.
 
-`restore` replaces the current database: everything written since that backup is gone. It asks you to confirm first, and it needs a terminal to ask in, so it refuses input piped from another command or a script. It rolls a running instance back to an earlier backup; it does not recover a lost server or an empty database. For those, see [Restoring for real](#restoring-for-real).
+`scripts/backup.sh` and `scripts/housekeeping.sh` run the Pavillion CLI inside the `pavillion-worker` container, the only one that can see the backup files. Set `PAVILLION_CONTAINER` to point them at a different container. If you followed an earlier version of this guide, which had you export `PAVILLION_CONTAINER=pavillion-app`, run `unset PAVILLION_CONTAINER` and remove that line from your shell profile: the app container can't see the backup files, so a restore sent there fails.
+
+`restore` replaces the current database: everything written since that backup is gone. Before it does, it names the database and host it will replace and asks you to confirm; check that they are this instance's before you answer. It needs a terminal to ask in, so it refuses input piped from another command or a script. Afterward, restart the app with `docker compose restart app`. It rolls a running instance back to an earlier backup; it does not recover a lost server or an empty database. For those, see [Restoring for real](#restoring-for-real).
 
 ## Copy backups off the server
 
