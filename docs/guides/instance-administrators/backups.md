@@ -349,7 +349,7 @@ It restores the dump into a throwaway Postgres container with no network access 
 
 It prints row counts, then deletes the container. The drill needs Docker on the host. By default it reads the `pavillion-backups` volume; set `PAVILLION_BACKUP_DIR` to point it at a directory of dumps instead, for example a dump you pulled back from your off-host copy, which also tests that copy. It uses the `postgres:17` image to match the deployed database; override with `PAVILLION_DRILL_IMAGE` if you changed that.
 
-When it finishes it records the outcome in your database, through the container named by `PAVILLION_CONTAINER`. The drill doesn't yet default to a container the shipped `docker-compose.yml` creates, so set it: `PAVILLION_CONTAINER=pavillion-worker ./scripts/restore-drill.sh`. `./scripts/backup.sh status` then shows the last successful drill. If the app container isn't running the result isn't recorded, but the verdict is unaffected. Don't call `backup record-drill` yourself; a hand-entered row would claim a drill passed when none did.
+When it finishes it records the outcome in your database, through the `pavillion-worker` container, like the other scripts; set `PAVILLION_CONTAINER` to point it at a different container. `./scripts/backup.sh status` then shows the last successful drill. If the worker isn't running the result isn't recorded, but the verdict is unaffected. Don't call `backup record-drill` yourself; a hand-entered row would claim a drill passed when none did.
 
 Exit codes: `0` all checks passed; `1` a check failed or something was missing; `3` the checks passed but the scratch container couldn't be removed and is still holding an unencrypted copy of your database, so remove the container named in the warning by hand.
 
