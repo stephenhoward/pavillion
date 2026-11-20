@@ -181,7 +181,7 @@ async function createCalendar() {
         <div id="calendar-title-help" class="help-text">{{ t('calendar_title_help') }}</div>
       </div>
       <div class="calendar-url" :class="{ 'calendar-url--error': state.errorMessage }">
-        <label for="calendar-name" class="sr-only">{{ t('label_calendar_name') }}</label>
+        <label for="calendar-name" class="calendar-name-label">{{ t('label_calendar_name') }}</label>
         <input
           id="calendar-name"
           type="text"
@@ -216,16 +216,17 @@ async function createCalendar() {
 <style scoped lang="scss">
 @use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
+.calendar-title-field label,
+.calendar-name-label {
+  display: block;
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-color-text-primary);
+  margin-block-end: var(--pav-space-xs);
+}
+
 .calendar-title-field {
   margin-block-end: var(--pav-space-md);
-
-  label {
-    display: block;
-    font-size: var(--pav-font-size-body);
-    font-weight: var(--pav-font-weight-medium);
-    color: var(--pav-color-text-primary);
-    margin-block-end: var(--pav-space-xs);
-  }
 
   .title-input {
     width: 100%;

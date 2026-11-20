@@ -21,7 +21,10 @@ const routes: RouteRecordRaw[] = [
   { path: '/settings/calendar/:calendar', component: {}, name: 'calendar_management' },
 ];
 
-const createWrapper = async (props: Record<string, unknown> = {}) => {
+const createWrapper = async (
+  props: Record<string, unknown> = {},
+  options: { attachTo?: Element } = {},
+) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes,
@@ -30,6 +33,7 @@ const createWrapper = async (props: Record<string, unknown> = {}) => {
 
   const wrapper = mountComponent(CreateCalendarForm, router, {
     props,
+    attachTo: options.attachTo,
     provide: {
       site_config: { settings: () => ({ domain: 'pavillion.dev' }) },
     },
@@ -96,6 +100,59 @@ describe('CreateCalendarForm name pre-check', () => {
     expect(createStub.calledOnce).toBe(true);
     expect(createStub.firstCall.args[0]).toBe('community-events');
     expect(wrapper.find('#calendar-error').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+});
+
+/**
+ * The control's accessible name from the sources that count as a label:
+ * aria-labelledby, a <label for>, a wrapping <label>, then aria-label.
+ * Placeholder and title are deliberately ignored — they are not names.
+ */
+function labelledName(control: HTMLElement): string {
+  const doc = control.ownerDocument;
+  const labelledBy = control.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    return labelledBy.split(/\s+/)
+      .map(id => doc.getElementById(id)?.textContent?.trim() ?? '')
+      .join(' ')
+      .trim();
+  }
+  if (control.id) {
+    const forLabel = doc.querySelector(`label[for="${control.id}"]`);
+    if (forLabel?.textContent?.trim()) return forLabel.textContent.trim();
+  }
+  const wrapping = control.closest('label');
+  if (wrapping?.textContent?.trim()) return wrapping.textContent.trim();
+  return control.getAttribute('aria-label')?.trim() ?? '';
+}
+
+describe('CreateCalendarForm calendar name label', () => {
+  it('shows a visible label associated with the name input', async () => {
+    const { wrapper } = await createWrapper({}, { attachTo: document.body });
+
+    const input = wrapper.find('#calendar-name');
+    const label = wrapper.find('label.calendar-name-label');
+
+    expect(label.exists()).toBe(true);
+    expect(label.classes()).not.toContain('sr-only');
+    expect(label.attributes('for')).toBe(input.attributes('id'));
+    expect(label.text()).toBe(message('label_calendar_name'));
+    expect(label.text()).not.toContain('pavillion.dev');
+    expect(labelledName(input.element as HTMLElement)).toBe(message('label_calendar_name'));
+
+    wrapper.unmount();
+  });
+
+  it('names every form control without relying on a placeholder', async () => {
+    const { wrapper } = await createWrapper({}, { attachTo: document.body });
+
+    const controls = wrapper.findAll('input, select, textarea');
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) {
+      expect(labelledName(control.element as HTMLElement), `control #${control.attributes('id')}`).not.toBe('');
+    }
 
     wrapper.unmount();
   });
