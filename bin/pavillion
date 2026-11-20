@@ -2,11 +2,71 @@
 /**
  * Pavillion CLI Tool
  *
- * Management interface for backup operations and housekeeping status.
- * Designed to be run inside Docker container via docker exec or wrapper scripts.
+ * Management interface for backup operations and housekeeping status, run
+ * inside the production container as `node /app/bin/pavillion <verb>` (by
+ * docker exec or the wrapper scripts).
+ *
+ * The production image runs TypeScript sources directly, so this launcher
+ * spawns the installed tsx (`<root>/node_modules/.bin/tsx`, never one from
+ * PATH) on src/server/cli/index.ts as a child process, with the app root as
+ * cwd so config/ and tsconfig.json resolve from anywhere. bin/pavillion-dev
+ * instead registers tsx in-process with register('tsx', ...); that loader
+ * hook is not the form proven in the image, and the child process is — do
+ * not "fix" this launcher back to the in-process variant.
+ *
+ * Before spawning, every <NAME>_FILE variable is read into <NAME> for the
+ * child only, as bin/entrypoint.sh's file_env does for the app.
  */
 
-import('../dist/server/cli/index.js').catch((err) => {
-  console.error('Failed to load CLI:', err);
-  process.exit(1);
+import { spawnSync } from 'node:child_process';
+import { readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const tsx = path.join(root, 'node_modules', '.bin', 'tsx');
+
+/**
+ * Builds the child's environment: for each non-empty <NAME>_FILE naming a
+ * regular file, <NAME> is set to the file's contents with trailing newlines
+ * stripped (as `$(cat ...)` does), overriding any existing <NAME>. A missing
+ * or non-regular file is a warning naming the variable, never its value.
+ */
+function loadFileSecrets(env) {
+  const childEnv = { ...env };
+  for (const [key, file] of Object.entries(env)) {
+    const name = key.slice(0, -'_FILE'.length);
+    if (!key.endsWith('_FILE') || !name || !file) continue;
+    let isFile = false;
+    try {
+      isFile = statSync(file).isFile();
+    }
+    catch {
+      isFile = false;
+    }
+    if (isFile) {
+      childEnv[name] = readFileSync(file, 'utf8').replace(/\n+$/, '');
+    }
+    else {
+      console.error(`Warning: secret file for ${key} not found; ${name} not loaded`);
+    }
+  }
+  return childEnv;
+}
+
+const result = spawnSync(tsx, ['src/server/cli/index.ts', ...process.argv.slice(2)], {
+  cwd: root,
+  env: loadFileSecrets(process.env),
+  stdio: 'inherit',
+  shell: false,
 });
+
+if (result.error) {
+  console.error(`Failed to start CLI (${result.error.code}): ${tsx}`);
+  process.exit(1);
+}
+if (result.signal) {
+  console.error(`CLI terminated by ${result.signal}: ${tsx}`);
+  process.exit(1);
+}
+process.exit(result.status);
