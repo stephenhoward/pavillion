@@ -58,6 +58,15 @@ import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stri
  */
 
 /**
+ * The price on the captured customer.subscription.updated: $5.00 a month, in
+ * millicents. A plan seeded to receive that capture carries the same billing
+ * terms, so the delivery reads as Pavillion's own echo. A plan that differed
+ * would make the service re-read the subscription from Stripe (the billing
+ * cycle and amount sync), which the mocked SDK here cannot answer.
+ */
+const CAPTURED_MONTHLY_AMOUNT = 500000;
+
+/**
  * Create a parseWebhookEvent function that matches StripeAdapter behavior.
  * Used by test mocks so the webhook handler can delegate parsing to the adapter.
  */
@@ -420,7 +429,7 @@ describe('Webhook Handling', () => {
         plan.provider_customer_id = 'cus_fk_test_456';
         plan.status = 'active';
         plan.billing_cycle = 'monthly';
-        plan.amount = 1000000;
+        plan.amount = CAPTURED_MONTHLY_AMOUNT;
         plan.currency = 'USD';
         plan.current_period_start = new Date();
         plan.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -518,7 +527,7 @@ describe('Webhook Handling', () => {
           provider_customer_id: 'cus_VAAjKPe5TGoA44',
           status: 'active',
           billing_cycle: 'monthly',
-          amount: 1000000,
+          amount: CAPTURED_MONTHLY_AMOUNT,
           currency: 'USD',
           current_period_start: new Date(1788025820 * 1000),
           current_period_end: periodEnd,
@@ -533,7 +542,7 @@ describe('Webhook Handling', () => {
           id: uuidv4(),
           funding_plan_id: plan.id,
           calendar_id: uuidv4(),
-          amount: 1000000,
+          amount: CAPTURED_MONTHLY_AMOUNT,
           end_time: null,
         });
         await allocation.save();

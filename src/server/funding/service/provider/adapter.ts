@@ -62,6 +62,17 @@ export interface ProviderSubscription {
   amount: number; // in millicents
   currency: string;
   /**
+   * Billing interval of the subscription, set only when `amount` is
+   * trustworthy as the plan's total for one billing cycle of that interval.
+   *
+   * Pavillion creates single-item, quantity-1 subscriptions billed every
+   * month or every year. An adapter leaves this undefined for anything else
+   * (several items, a quantity above one, an interval count above one, an
+   * interval Pavillion never creates), and a consumer must not sync a plan's
+   * billing terms from a subscription without it.
+   */
+  interval?: 'month' | 'year';
+  /**
    * When a scheduled cancellation takes effect, or null if none is scheduled.
    *
    * Separate from `status` because a provider reports a subscription that is
@@ -75,6 +86,22 @@ export interface ProviderSubscription {
    * must not collapse the two.
    */
   cancelAt?: Date | null;
+}
+
+/**
+ * A provider call failed in a way that may succeed if retried: the provider
+ * was unreachable, rate limited the request, or answered with a server error.
+ *
+ * Adapters throw this so the service can tell a failure worth redelivering a
+ * webhook for from one that will fail the same way every time (a malformed
+ * subscription, a key that may not read it). Any other error from an adapter
+ * is to be treated as permanent. The original error is kept as `cause`.
+ */
+export class ProviderTransientError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ProviderTransientError';
+  }
 }
 
 /**
@@ -95,6 +122,15 @@ export interface WebhookEvent {
   status?: 'active' | 'past_due' | 'suspended' | 'cancelled';
   currentPeriodStart?: Date;
   currentPeriodEnd?: Date;
+  /**
+   * Billing interval of the subscription's price, as this event reports it.
+   *
+   * `undefined` means this event carries no price, and the plan's billing
+   * cycle and amount are left alone. When set, `amount` and `currency` are set
+   * from the same price. The service treats these as a trigger only: it
+   * re-reads the subscription from the provider before writing anything.
+   */
+  interval?: 'month' | 'year';
   amount?: number; // in millicents
   currency?: string;
   /**

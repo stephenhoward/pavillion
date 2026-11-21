@@ -7,10 +7,11 @@ import Stripe from 'stripe';
 // drift; ordinary invoices that carry no subscription must stay at debug or
 // the warning stops meaning anything. vi.hoisted lets the stubs be shared
 // between the mock factory and the assertions.
-const { warnStub, debugStub } = vi.hoisted(() => {
+const { warnStub, debugStub, errorStub } = vi.hoisted(() => {
   return {
     warnStub: vi.fn(),
     debugStub: vi.fn(),
+    errorStub: vi.fn(),
   };
 });
 
@@ -19,7 +20,7 @@ vi.mock('@/server/common/helper/logger', () => ({
     warn: warnStub,
     debug: debugStub,
     info: vi.fn(),
-    error: vi.fn(),
+    error: errorStub,
   }),
   default: {
     warn: warnStub,
@@ -32,6 +33,7 @@ vi.mock('@/server/common/helper/logger', () => ({
 import { StripeAdapter } from '../service/provider/stripe';
 import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stripe';
 import { buildProviderIdempotencyKey } from '../service/provider/idempotency';
+import { ProviderTransientError } from '../service/provider/adapter';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
 import { ProviderFactory } from '../service/provider/factory';
@@ -123,6 +125,10 @@ describe('Payment Provider Adapters', () => {
           sessions: {
             create: sandbox.stub(),
           },
+          configurations: {
+            list: sandbox.stub().returns({ autoPagingToArray: sandbox.stub().resolves([]) }),
+            create: sandbox.stub().resolves({ id: 'bpc_created' }),
+          },
         },
         webhooks: {
           constructEvent: sandbox.stub(),
@@ -137,6 +143,7 @@ describe('Payment Provider Adapters', () => {
 
       warnStub.mockClear();
       debugStub.mockClear();
+      errorStub.mockClear();
 
       // Create adapter
       const credentials = { apiKey: 'sk_test_123' };
@@ -636,6 +643,53 @@ describe('Payment Provider Adapters', () => {
 
           expect(event.status).toBeUndefined();
           expect(warnStub).toHaveBeenCalled();
+        });
+
+        it('should carry the interval, amount and currency of a captured monthly price', () => {
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          expect(fixture.data.object.items.data[0].price.unit_amount).toBe(500);
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.interval).toBe('month');
+          expect(event.amount).toBe(500000);
+          expect(event.currency).toBe('USD');
+        });
+
+        it('should carry a yearly interval and the price amount in millicents', () => {
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.items.data[0].price.recurring.interval = 'year';
+          fixture.data.object.items.data[0].price.unit_amount = 12000;
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.interval).toBe('year');
+          expect(event.amount).toBe(12000000);
+          expect(event.currency).toBe('USD');
+        });
+
+        it('should leave interval, amount and currency undefined for a price with no recurring interval', () => {
+          // Never 0 or 'USD': a default here would read as a real price and
+          // trigger a sync against a plan nothing has changed.
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          delete (fixture.data.object.items.data[0].price as Record<string, unknown>).recurring;
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.interval).toBeUndefined();
+          expect(event.amount).toBeUndefined();
+          expect(event.currency).toBeUndefined();
+        });
+
+        it('should leave interval, amount and currency undefined for a subscription with no items', () => {
+          const fixture = capturedStripeEvent('customer.subscription.updated');
+          fixture.data.object.items.data = [];
+
+          const event = stripeAdapter.parseWebhookEvent(JSON.stringify(fixture));
+
+          expect(event.interval).toBeUndefined();
+          expect(event.amount).toBeUndefined();
+          expect(event.currency).toBeUndefined();
         });
 
         it('should parse a captured customer.subscription.deleted as cancelled', () => {
@@ -1141,6 +1195,418 @@ describe('Payment Provider Adapters', () => {
         await expect(stripeAdapter.getSubscription('sub_no_period')).rejects.toThrow(
           'has no billing period',
         );
+      });
+
+      /** A subscription whose only item is billed as Pavillion bills a plan. */
+      function singleItemSubscription(itemOverrides: Record<string, unknown> = {}, items?: unknown[]) {
+        const start = Math.floor(Date.now() / 1000);
+        const end = start + 365 * 24 * 60 * 60;
+        const item = {
+          id: 'si_plan',
+          quantity: 1,
+          current_period_start: start,
+          current_period_end: end,
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+          ...itemOverrides,
+        };
+        return {
+          id: 'sub_plan',
+          customer: 'cus_plan',
+          status: 'active',
+          cancel_at: null,
+          items: { data: items ?? [item] },
+        };
+      }
+
+      it('should report the interval of a single quantity-1 item billed every year', async () => {
+        mockStripe.subscriptions.retrieve.resolves(singleItemSubscription());
+
+        const subscription = await stripeAdapter.getSubscription('sub_plan');
+
+        expect(subscription.interval).toBe('year');
+        expect(subscription.amount).toBe(12000000);
+        expect(subscription).not.toHaveProperty('itemCount');
+      });
+
+      it.each([
+        ['has two items', () => {
+          const item = singleItemSubscription().items.data[0];
+          return singleItemSubscription({}, [item, { ...item, id: 'si_other' }]);
+        }],
+        ['has a quantity of 2', () => singleItemSubscription({ quantity: 2 })],
+        ['bills every three months', () => singleItemSubscription({
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'month', interval_count: 3 } },
+        })],
+        ['bills weekly', () => singleItemSubscription({
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'week', interval_count: 1 } },
+        })],
+      ])('should report no interval for a subscription that %s', async (_label, build) => {
+        // The first item's unit amount is not the plan total for one cycle,
+        // so the service must not take its terms for the plan's.
+        mockStripe.subscriptions.retrieve.resolves(build());
+
+        const subscription = await stripeAdapter.getSubscription('sub_plan');
+
+        expect(subscription.interval).toBeUndefined();
+      });
+
+      it.each([
+        ['a connection failure', () => new Stripe.errors.StripeConnectionError({ message: 'socket hang up' } as any)],
+        ['a rate limit', () => new Stripe.errors.StripeRateLimitError({ message: 'too many requests' } as any)],
+        ['a Stripe API error', () => new Stripe.errors.StripeAPIError({ message: 'api error' } as any)],
+        ['a 5xx of another type', () => Object.assign(
+          new Stripe.errors.StripeUnknownError({ message: 'bad gateway' } as any),
+          { statusCode: 502 },
+        )],
+      ])('should report %s as transient', async (_label, build) => {
+        const cause = build();
+        mockStripe.subscriptions.retrieve.rejects(cause);
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error).toBeInstanceOf(ProviderTransientError);
+        expect(error.cause).toBe(cause);
+      });
+
+      it.each([
+        ['a permission error', () => new Stripe.errors.StripePermissionError({ message: 'no subscription read' } as any)],
+        ['an invalid request', () => new Stripe.errors.StripeInvalidRequestError({
+          message: 'No such subscription', code: 'resource_missing',
+        } as any)],
+      ])('should throw %s as it is, not as transient', async (_label, build) => {
+        const cause = build();
+        mockStripe.subscriptions.retrieve.rejects(cause);
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error).toBe(cause);
+        expect(error).not.toBeInstanceOf(ProviderTransientError);
+      });
+
+      it('should not report an unconvertible subscription as transient', async () => {
+        mockStripe.subscriptions.retrieve.resolves({ ...singleItemSubscription(), items: { data: [] } });
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error.message).toContain('has no billing period');
+        expect(error).not.toBeInstanceOf(ProviderTransientError);
+      });
+    });
+
+    describe('getBillingPortalUrl', () => {
+      const options = { idempotencyKey: 'pavillion:billing-portal:plan-1:nonce-1' };
+
+      /** A configuration carrying exactly the settings Pavillion pins. */
+      function pinnedConfiguration(overrides: Record<string, unknown> = {}) {
+        return {
+          id: 'bpc_pinned',
+          object: 'billing_portal.configuration',
+          active: true,
+          created: 1790000000,
+          metadata: { pavillion_portal_config: 'v1' },
+          features: {
+            subscription_update: { enabled: false },
+            subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'none' },
+            payment_method_update: { enabled: true },
+            invoice_history: { enabled: true },
+            customer_update: { enabled: true, allowed_updates: ['name', 'email', 'address', 'phone'] },
+          },
+          ...overrides,
+        };
+      }
+
+      function givenConfigurations(configurations: unknown[]) {
+        mockStripe.billingPortal.configurations.list.returns({
+          autoPagingToArray: sandbox.stub().resolves(configurations),
+        });
+      }
+
+      function permissionError() {
+        return new Stripe.errors.StripePermissionError({
+          message: 'The provided key does not have the required permissions for this endpoint',
+          type: 'invalid_request_error',
+        } as any);
+      }
+
+      beforeEach(() => {
+        mockStripe.billingPortal.sessions.create.resolves({ url: 'https://billing.stripe.com/p/session/test' });
+      });
+
+      it('should open every session on the pinned configuration', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+
+        const url = await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(url).toBe('https://billing.stripe.com/p/session/test');
+        const params = mockStripe.billingPortal.sessions.create.firstCall.args[0];
+        expect(params).toHaveProperty('configuration');
+        expect(params.configuration).toBe('bpc_pinned');
+        expect(params.customer).toBe('cus_1');
+        expect(params.return_url).toBe('https://example.com/return');
+      });
+
+      it('should list only active configurations', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.firstCall.args[0]).toMatchObject({ active: true });
+      });
+
+      it('should reuse an existing pinned configuration without creating one', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.create.called).toBe(false);
+      });
+
+      it('should use the newest of two pinned configurations', async () => {
+        // A cross-process first-create race can leave two; either is correct,
+        // and picking the newest keeps every process on the same one.
+        givenConfigurations([
+          pinnedConfiguration({ id: 'bpc_older', created: 1790000000 }),
+          pinnedConfiguration({ id: 'bpc_newer', created: 1790000500 }),
+          pinnedConfiguration({ id: 'bpc_oldest', created: 1789000000 }),
+        ]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0].configuration).toBe('bpc_newer');
+      });
+
+      it.each([
+        ['plan switching enabled', { subscription_update: { enabled: true } }],
+        ['immediate cancellation', { subscription_cancel: { enabled: true, mode: 'immediately', proration_behavior: 'none' } }],
+        ['prorated cancellation', { subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'create_prorations' } }],
+        ['cancellation disabled', { subscription_cancel: { enabled: false, mode: 'at_period_end', proration_behavior: 'none' } }],
+        ['payment method updates disabled', { payment_method_update: { enabled: false } }],
+      ])('should ignore a tagged configuration with %s and create a new one', async (_label, featureOverride) => {
+        // The tag is a convenience, not a trust boundary: anyone with
+        // Dashboard access can edit a tagged configuration.
+        const tampered = pinnedConfiguration({ id: 'bpc_tampered' });
+        tampered.features = { ...tampered.features, ...featureOverride } as any;
+        givenConfigurations([tampered]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.create.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0].configuration).toBe('bpc_created');
+      });
+
+      it('should ignore a configuration tagged with an older version, or not tagged at all', async () => {
+        givenConfigurations([
+          pinnedConfiguration({ id: 'bpc_v0', metadata: { pavillion_portal_config: 'v0' } }),
+          pinnedConfiguration({ id: 'bpc_untagged', metadata: {} }),
+        ]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.create.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0].configuration).toBe('bpc_created');
+      });
+
+      it('should create a configuration with exactly the pinned settings when none exists', async () => {
+        givenConfigurations([]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.create.calledOnce).toBe(true);
+        const [params, requestOptions] = mockStripe.billingPortal.configurations.create.firstCall.args;
+        expect(params.metadata).toEqual({ pavillion_portal_config: 'v1' });
+        expect(params.features).toEqual({
+          subscription_update: { enabled: false },
+          subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'none' },
+          payment_method_update: { enabled: true },
+          invoice_history: { enabled: true },
+          customer_update: { enabled: true, allowed_updates: ['name', 'email', 'address', 'phone'] },
+        });
+        // The pinned API version has no portal pause feature to send.
+        expect(params.features).not.toHaveProperty('subscription_pause');
+        expect(requestOptions.idempotencyKey).toBe('pavillion:billing-portal:plan-1:nonce-1:portal-config');
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0].configuration).toBe('bpc_created');
+      });
+
+      it('should resolve the configuration once per adapter and reuse it across calls', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+        await stripeAdapter.getBillingPortalUrl('cus_2', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_pinned');
+      });
+
+      it('should share one create between concurrent first calls', async () => {
+        givenConfigurations([]);
+
+        await Promise.all([
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+          stripeAdapter.getBillingPortalUrl('cus_2', 'https://example.com/return', options),
+          stripeAdapter.getBillingPortalUrl('cus_3', 'https://example.com/return', options),
+        ]);
+
+        expect(mockStripe.billingPortal.configurations.list.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.configurations.create.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.callCount).toBe(3);
+      });
+
+      it('should resolve again on a new adapter instance', async () => {
+        // ProviderFactory builds a new adapter when the provider config
+        // changes, so a key swap lands on that account's configuration.
+        givenConfigurations([pinnedConfiguration()]);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        const second = new StripeAdapter({ apiKey: 'sk_test_456' }, 'whsec_test_secret');
+        (second as any).stripe = mockStripe;
+        await second.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+      });
+
+      it('should open the session without a configuration when the key may not manage portal configurations', async () => {
+        // An operator's restricted key without billing-portal write. Owners
+        // can still cancel and fix a card; the operator's Dashboard default
+        // decides what else the portal shows.
+        mockStripe.billingPortal.configurations.list.returns({
+          autoPagingToArray: sandbox.stub().rejects(permissionError()),
+        });
+
+        const url = await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(url).toBe('https://billing.stripe.com/p/session/test');
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0]).not.toHaveProperty('configuration');
+        expect(errorStub).toHaveBeenCalledOnce();
+        expect(errorStub.mock.calls[0][0]).toEqual({
+          providerType: 'stripe',
+          errorType: 'StripePermissionError',
+          code: undefined,
+        });
+      });
+
+      it('should log the permission error once per adapter and retry resolution on the next call', async () => {
+        mockStripe.billingPortal.configurations.list.returns({
+          autoPagingToArray: sandbox.stub().rejects(permissionError()),
+        });
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+        expect(errorStub).toHaveBeenCalledOnce();
+
+        // A fixed key returns to the pinned path.
+        givenConfigurations([pinnedConfiguration()]);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.sessions.create.thirdCall.args[0].configuration).toBe('bpc_pinned');
+      });
+
+      it('should open the session without a configuration when creating one is not permitted', async () => {
+        givenConfigurations([]);
+        mockStripe.billingPortal.configurations.create.rejects(permissionError());
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0]).not.toHaveProperty('configuration');
+      });
+
+      it.each([
+        ['list', 'rate limited'],
+        ['create', 'network down'],
+      ])('should propagate a non-permission %s failure and open no session', async (step, message) => {
+        // Falling back to the Dashboard default on a transient error would
+        // hand out a portal Pavillion has not vetted.
+        if (step === 'list') {
+          mockStripe.billingPortal.configurations.list.returns({
+            autoPagingToArray: sandbox.stub().rejects(new Stripe.errors.StripeRateLimitError({ message } as any)),
+          });
+        }
+        else {
+          givenConfigurations([]);
+          mockStripe.billingPortal.configurations.create.rejects(new Stripe.errors.StripeConnectionError({ message } as any));
+        }
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+        ).rejects.toThrow(message);
+        expect(mockStripe.billingPortal.sessions.create.called).toBe(false);
+      });
+
+      it('should forget a configuration Stripe no longer has, without retrying in the same call', async () => {
+        // Deleted in the Dashboard after it was resolved. The next open
+        // resolves again instead of failing forever on a stale id.
+        givenConfigurations([pinnedConfiguration()]);
+        mockStripe.billingPortal.sessions.create.onFirstCall().rejects(new Stripe.errors.StripeInvalidRequestError({
+          message: 'No such configuration',
+          code: 'resource_missing',
+          param: 'configuration',
+        } as any));
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+        ).rejects.toThrow('No such configuration');
+        expect(mockStripe.billingPortal.sessions.create.calledOnce).toBe(true);
+
+        givenConfigurations([pinnedConfiguration({ id: 'bpc_replacement' })]);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_replacement');
+      });
+
+      it('should forget a configuration Stripe refuses as inactive', async () => {
+        // Deactivated in the Dashboard: an invalid request on the
+        // configuration parameter rather than a missing resource.
+        givenConfigurations([pinnedConfiguration()]);
+        mockStripe.billingPortal.sessions.create.onFirstCall().rejects(new Stripe.errors.StripeInvalidRequestError({
+          message: 'This configuration is inactive',
+          param: 'configuration',
+        } as any));
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+        ).rejects.toThrow('inactive');
+
+        givenConfigurations([pinnedConfiguration({ id: 'bpc_replacement' })]);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_replacement');
+      });
+
+      it('should keep the configuration when the missing resource is the customer', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+        mockStripe.billingPortal.sessions.create.onFirstCall().rejects(new Stripe.errors.StripeInvalidRequestError({
+          message: 'No such customer',
+          code: 'resource_missing',
+          param: 'customer',
+        } as any));
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_gone', 'https://example.com/return', options),
+        ).rejects.toThrow('No such customer');
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_pinned');
+      });
+
+      it('should never log the session URL or the customer id', async () => {
+        mockStripe.billingPortal.configurations.list.returns({
+          autoPagingToArray: sandbox.stub().rejects(permissionError()),
+        });
+
+        await stripeAdapter.getBillingPortalUrl('cus_secret_customer', 'https://example.com/return', options);
+
+        const logged = JSON.stringify([
+          ...errorStub.mock.calls,
+          ...warnStub.mock.calls,
+          ...debugStub.mock.calls,
+        ]);
+        expect(logged).not.toContain('cus_secret_customer');
+        expect(logged).not.toContain('billing.stripe.com');
       });
     });
 
