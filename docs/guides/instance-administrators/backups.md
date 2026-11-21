@@ -319,27 +319,235 @@ Restore the media before you start the app, or images will be broken until you d
 
 ## The restore drill
 
-The first time you try to restore should not be the day after a disk failure. `scripts/restore-drill.sh` proves a dump can be restored without touching your live database.
+The restore drill answers one question: if you had to restore your newest database backup today, would it work?
+
+Run it from the Pavillion directory once a month, and again after any upgrade:
 
 ```bash
-./scripts/restore-drill.sh                      # drill the newest dump
-./scripts/restore-drill.sh pavillion_20260315_020000_scheduled.dump   # a specific one
-./scripts/restore-drill.sh --help
+cd /opt/pavillion
+./scripts/restore-drill.sh
 ```
 
-It restores the dump into a throwaway Postgres container with no network access and the backup volume mounted read-only, then checks that:
+You can run it on the production server while the instance is busy. The throwaway database the drill restores into has no network access, so it can't reach your real database even by mistake, and it mounts the backups read-only. It's removed when the drill ends, whether the drill passed, failed or was interrupted, and if removing it fails, the drill tells you [how to remove it yourself](#if-the-drill-leaves-its-container-behind). The one thing the drill writes to your live database is a single row recording that it ran and what it found.
 
-- the Pavillion tables are present,
-- the applied migrations match the migration files in this checkout, and
-- the core tables (`account`, `calendar`, `event`) are not empty.
+### What the drill does
 
-It prints row counts, then deletes the container. The drill needs Docker on the host. By default it reads the `pavillion-backups` volume; set `PAVILLION_BACKUP_DIR` to point it at a directory of dumps instead, for example a dump you pulled back from your off-host copy, which also tests that copy. It uses the `postgres:17` image to match the deployed database; override with `PAVILLION_DRILL_IMAGE` if you changed that.
+The drill picks the newest of the [nightly dumps](#what-pavillion-does-for-you), starts a throwaway database in its own container, restores the dump into it, and checks three things about the result:
 
-When it finishes it records the outcome in your database, through the app container, using the same `PAVILLION_CONTAINER` variable as above. `./scripts/backup.sh status` then shows the last successful drill. If the app container isn't running the result isn't recorded, but the verdict is unaffected. Don't call `backup record-drill` yourself; a hand-entered row would claim a drill passed when none did.
+- **Schema present.** The tables every Pavillion database has are there: accounts, calendars, events, and the record of which upgrades have been applied.
+- **Migrations consistent.** The backup was taken from the same version of Pavillion as the code on this server. Every upgrade that changes the database ships a *migration*, and the drill compares the backup's list of applied migrations with the `migrations/` folder in `/opt/pavillion`.
+- **Core tables non-empty.** The backup holds at least one account, one calendar and one event.
 
-Exit codes: `0` all checks passed; `1` a check failed or something was missing; `3` the checks passed but the scratch container couldn't be removed and is still holding an unencrypted copy of your database, so remove the container named in the warning by hand.
+Then it prints row counts, deletes the throwaway container, and records the result. A pass ends like this:
 
-Run it after setting up your backups, and again after upgrades and every few months. The drill covers the database only. It says nothing about your media or secrets.
+```
+Checking the restored database...
+  PASS  schema present
+  PASS  migrations consistent (52 migrations)
+  PASS  core tables non-empty
+
+Row counts:
+  account      14
+  calendar     9
+  event        1203
+
+RESTORE DRILL PASSED for pavillion_20261101_020000_scheduled.dump
+
+Note: this drill covers the database only. Pavillion's backup system
+runs pg_dump and produces no media archive, so media backup remains
+an operator-owned volume snapshot and is not verified here.
+```
+
+Read the row counts as well as the verdict. If you know your instance has around a thousand events and the drill restored twelve, the drill passed and your backup is still wrong.
+
+### What a pass does not tell you
+
+A passing drill means your newest database backup is a complete backup of this instance, and it restores. It doesn't mean you can survive losing the server, and it says nothing about your images.
+
+**It is not a disaster-recovery test.** The drill runs on the server it protects, using the dumps on that server's disk, and a server that dies usually takes its disk with it. The drill doesn't use your [off-host copy](#copy-backups-off-the-server) unless you point it there, and it doesn't use the `.env` file and `secrets/` folder a rebuilt server needs, set up a new machine, or move your domain's DNS. The rehearsal that covers those is the fresh-server recovery in [Restoring for real](#restoring-for-real), run on a spare machine.
+
+**It does not check media.** Pavillion's automatic backups are database-only, and the drill never looks at the [media](#media) volume or bucket. A drill on a server whose media has never been backed up passes every month until the disk fails, and then you have every event and none of the pictures.
+
+### Two commands that look alike
+
+`scripts/backup.sh` also has a `restore` command. It is not the drill, and running it by mistake replaces your live database.
+
+| | `./scripts/restore-drill.sh` | `./scripts/backup.sh restore <backup-id>` |
+|---|---|---|
+| What it restores into | A throwaway database it creates and deletes | **Your live database** |
+| Your instance's data | Untouched | **Deleted and replaced** with the backup's contents |
+| When to run it | Monthly, and after upgrades | Only when you are recovering from a loss |
+| What it takes | Nothing, or a backup's filename | A backup's ID from `./scripts/backup.sh list` |
+
+The restore command asks you to confirm once, then drops and recreates every table in the backup. Anything written to the instance since that backup was taken is gone: new events, new accounts, federation activity. If you want to know whether your backup works, run the drill.
+
+### Drilling a different backup
+
+To drill a specific backup instead of the newest, pass its filename:
+
+```bash
+./scripts/restore-drill.sh pavillion_20261025_020000_scheduled.dump
+```
+
+Give the filename only. The drill refuses a path. To see the filenames, list the backups through the worker container:
+
+```bash
+docker compose exec worker ls -1 /backups
+```
+
+To drill a dump that lives somewhere else, such as one you pulled back from your [off-host copy](#restoring-from-the-bucket), point `PAVILLION_BACKUP_DIR` at the folder holding it, as an absolute path. That also tests the copy:
+
+```bash
+PAVILLION_BACKUP_DIR=/home/you/restored-backups ./scripts/restore-drill.sh
+```
+
+The drill compares the dump with the `migrations/` folder of the checkout you run it from, so on another machine, run it from a Pavillion checkout at the version that made the dump.
+
+`./scripts/restore-drill.sh --help` lists every setting the drill reads. Two others matter on some servers:
+
+- `PAVILLION_DRILL_IMAGE` is the database image the throwaway container runs, `postgres:17` by default. It must match the `db` service in your `docker-compose.yml`. If you've changed that, set this to the same image.
+- `PAVILLION_CONTAINER` is the app container the drill records its result through. It's the same variable `backup.sh` reads, so set it to `pavillion-app` as described in [What Pavillion does for you](#what-pavillion-does-for-you). If it's unset, the drill looks for a container named `pavillion-app-1`, finds none, and warns that the app container isn't running.
+
+### When to run it
+
+**Once your first backup exists.** Until a drill passes, nothing has shown that your backups restore.
+
+**Monthly.** Nothing runs the drill for you. Put it on a calendar, or have your monitor alert when `pavillion_restore_drill_last_success_timestamp_seconds` is more than a month old (see [Monitoring and logs](./monitoring-and-logs)).
+
+**After every upgrade that changes the database.** Unless the release notes say otherwise, assume every upgrade does. Wait for the first backup taken *after* the upgrade before you drill: the next nightly backup, or one you start yourself with `./scripts/backup.sh create` and see appear in `./scripts/backup.sh list`. A backup taken before the upgrade fails the migrations check, correctly: the upgraded code can't run that database without migrating it again.
+
+### When did it last pass?
+
+Each drill records its result in your instance's database. To see the most recent pass:
+
+```bash
+./scripts/backup.sh status
+```
+
+The status report has a section for it:
+
+```
+Last Successful Restore Drill:
+  Date: 2026-11-01 04:12:09
+  Restored backup: pavillion_20261101_020000_scheduled.dump
+  ("Verified" on a backup means its file was written; only a drill proves it restores)
+```
+
+If it says *No successful restore drill recorded*, no backup on this instance has ever been shown to restore. Fix that first.
+
+This section shows passes only. A failed drill is recorded too, but the drill's own output at the time is where to read why it failed.
+
+If the app container isn't running when the drill finishes, the drill warns that the result wasn't recorded. The verdict it printed still stands. Don't run `backup record-drill` yourself: a row entered by hand would claim a drill passed when none did.
+
+### Reading a failure
+
+A failed drill means one of two things: something is wrong with the backup, or something on the server stopped the drill from testing it. Work out which first. The messages below are grouped that way.
+
+When the backup restores but fails a check, the drill runs the remaining checks too, and ends with a line naming every check that failed:
+
+```
+RESTORE DRILL FAILED: 2 check(s) failed: migrations consistent core tables non-empty
+```
+
+#### The backup doesn't restore
+
+```
+FAIL: pg_restore could not restore pavillion_20261101_020000_scheduled.dump into the scratch database.
+      The dump is corrupt, truncated, or not a pg_dump -Fc archive.
+      pg_restore reported:
+        pg_restore: error: input file does not appear to be a valid archive (too short?)
+```
+
+This is the failure the drill exists to catch. That backup file can't be restored, and on the day you need it, it won't be.
+
+Drill the backup before it by name. If the older one passes, the problem is that one file. The most common cause is the backup disk filling up partway through writing it, so check the free space in `./scripts/backup.sh status`. If every recent backup fails the same way, the nightly backup job itself is broken, and the worker's log is the place to look: `docker compose logs worker`.
+
+Some error lines end in `[redacted]`. That's deliberate. A database error can quote the contents of the row it failed on, and the drill's output often ends up in a log file or a support request, so the drill keeps the operation and the table name and cuts the rest. The output names tables and counts, never what's in a row, so it's safe to paste into a support request.
+
+#### The backup restores but isn't what you think it is
+
+```
+FAIL: restored schema is missing expected tables: SequelizeMeta account calendar event
+```
+
+The file restored, but it isn't a full backup of a Pavillion database. Either it's a backup of some other database, or it holds only part of one. If you set `PAVILLION_BACKUP_DIR`, check that it points at the folder you meant.
+
+```
+FAIL: core tables are empty or unreadable in the restored database: event
+      An empty event table in a live instance's backup means the
+      dump does not hold the data the operator expects.
+```
+
+The backup holds a Pavillion database with nothing in that table: a backup of a different instance, or one taken right after a reinstall. Compare the row counts with what you know is on your instance.
+
+On a brand-new instance with no events yet, `event` is empty and this check fails. Once your first event is in a nightly backup, it passes.
+
+#### The backup and the code disagree about the version
+
+The migrations check fails in one of two directions, and the drill tells you which.
+
+```
+FAIL: migration mismatch between the dump and migrations/
+      Applied in migrations/ but absent from the dump (dump predates this checkout):
+        0052_add_source_fingerprint_to_event_import_origin.ts
+```
+
+**The backup is older than the code.** If you've just upgraded, that's expected: the backup was taken before the upgrade. Take a fresh one and drill again (see [When to run it](#when-to-run-it)). If you *haven't* upgraded recently, look at the date of the last backup in `./scripts/backup.sh status`. Backups that stopped running weeks ago look like this too.
+
+```
+FAIL: migration mismatch between the dump and migrations/
+      Present in the dump but absent from migrations/ (dump is newer than this checkout):
+        0053_add_some_newer_feature.ts
+```
+
+**The backup is newer than the code.** Restoring it on this server would quietly take your database back a version. The usual cause is the server: the code in `/opt/pavillion` is behind the version you're running. Run `git status` and `git log -1` in `/opt/pavillion` and bring the checkout up to date before you conclude anything about the backup.
+
+#### The drill couldn't test a backup at all
+
+These messages say nothing about your backups. Fix the cause and run the drill again.
+
+- **`Error: no backup files found in the backup source.`** Either no backup has ever been taken, or the drill is looking in the wrong place. `./scripts/backup.sh status` shows the last backup. If there isn't one, the worker isn't taking them. If there is, check `PAVILLION_BACKUP_DIR` or `PAVILLION_BACKUP_VOLUME`, if you set either.
+- **`Error: backup file not found in the backup source: <name>`** The filename you passed is misspelled, or the retention schedule has since deleted that backup.
+- **`Error: PAVILLION_BACKUP_VOLUME must be a docker volume name, not a path`** You set the volume setting to a folder, usually `/opt/pavillion/backups`. Use `PAVILLION_BACKUP_DIR` for a folder.
+- **`FAIL: could not start the scratch database container.`** or **`Error: docker is not on PATH.`** Docker isn't running, the database image couldn't be downloaded, or your user can't run Docker commands.
+- **`FAIL: the scratch database did not accept connections within 90s.`** The server is slow or busy. Run the drill again with a longer wait, for example `PAVILLION_DRILL_TIMEOUT=300 ./scripts/restore-drill.sh`. The drill refuses a wait over 3600 seconds, because the throwaway container holds a full copy of your database for as long as it waits.
+
+### If the drill leaves its container behind
+
+```
+WARNING: the drill container pavillion-restore-drill-41827-20311 could not be removed.
+         It still holds a full copy of the restored database. Remove it with:
+           docker rm -fv pavillion-restore-drill-41827-20311
+```
+
+Run the command it gives you, now. The container is a running database holding an unencrypted copy of everything on your instance, and it stays there until you remove it.
+
+If every check passed, the drill still says `RESTORE DRILL PASSED` and the backup is fine. It exits with code 3 instead of 0, so that a script watching the exit code doesn't record a clean pass while the container is still running.
+
+If you interrupt the drill with Ctrl-C, it removes its container before it stops, and warns you if it couldn't. To check that nothing was left behind:
+
+```bash
+docker ps -a --filter name=pavillion-restore-drill
+```
+
+If it prints only the column headings, nothing is left.
+
+### Exit codes
+
+For anyone running the drill from a script or monitor:
+
+| Code | Meaning |
+|---|---|
+| `0` | Every check passed and the throwaway container was removed |
+| `1` | A check failed, or the drill couldn't run; the reason is in the error output |
+| `3` | Every check passed, but the throwaway container couldn't be removed and needs removing by hand |
+| `130` | Interrupted. The drill tried to clean up; read the error output to learn whether it did |
+
+### Things that trip people up
+
+**`ls /opt/pavillion/backups` says *Permission denied*.** The folder belongs to the user the containers run as, uid 1001, which is the `pavillion` user if you used `bin/provision.sh`. Logged in as anyone else, it looks as if your backups are missing. The drill reads them through Docker, so it doesn't need that access, and `docker compose exec worker ls -1 /backups` lists them.
+
+**Drilling the morning after an upgrade.** The newest backup is from before the upgrade, so the migrations check fails. Nothing is wrong with your backups. Wait for the next one.
 
 ## Restoring for real
 

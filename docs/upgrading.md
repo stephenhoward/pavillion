@@ -61,6 +61,15 @@ docker run --rm -v pavillion-media:/data -v "$(pwd):/backup" alpine \
   tar czf /backup/media-backup-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
+## After the upgrade
+
+Run the
+[restore drill](/guides/instance-administrators/backups#the-restore-drill)
+on the first backup taken after the upgrade: the next nightly backup, or
+one you start with `./scripts/backup.sh create`. A backup taken before an
+upgrade that changes the database fails the drill's migrations check, so
+drill a backup only once it postdates the upgrade.
+
 ## Flags
 
 ```
