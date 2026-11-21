@@ -1592,7 +1592,7 @@ describe('Payment Provider Adapters', () => {
         // Verify session was created with correct params
         expect(mockStripe.checkout.sessions.create.calledOnce).toBe(true);
         const createArgs = mockStripe.checkout.sessions.create.firstCall.args[0];
-        expect(createArgs.ui_mode).toBe('embedded');
+        expect(createArgs.ui_mode).toBe('embedded_page');
         expect(createArgs.mode).toBe('subscription');
         expect(createArgs.line_items[0].price).toBe('price_existing_123');
         expect(createArgs.line_items[0].quantity).toBe(1);

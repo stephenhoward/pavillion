@@ -210,7 +210,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
     // ProviderFactory caches one adapter per provider config, so this single
     // client serves every call path.
     this.stripe = new Stripe(apiKey, {
-      apiVersion: '2026-02-25.clover',
+      apiVersion: '2026-11-18.endive',
       timeout: 8000,
       maxNetworkRetries: 0,
     });
@@ -970,7 +970,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Create a checkout session for Stripe embedded checkout
    *
-   * Uses ui_mode: 'embedded' and mode: 'subscription'. For fixed pricing,
+   * Uses ui_mode: 'embedded_page' and mode: 'subscription'. For fixed pricing,
    * uses the provided priceId directly. For PWYC pricing, creates a price
    * on the fly using the provided amount.
    *
@@ -1022,7 +1022,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     // Create the embedded checkout session
     const session = await this.stripe.checkout.sessions.create({
-      ui_mode: 'embedded',
+      ui_mode: 'embedded_page',
       mode: 'subscription',
       redirect_on_completion: 'if_required',
       line_items: [
