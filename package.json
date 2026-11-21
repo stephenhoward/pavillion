@@ -167,7 +167,7 @@
     "terser": "^5.44.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.0",
     "typescript-eslint": "^8.32.0",
     "vite": "^8.0.0",
     "vite-tsconfig-paths": "^6.0.0",
