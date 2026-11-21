@@ -47,7 +47,7 @@ case for — are:
 | `customer.subscription.updated` | `id`, `customer`, `status`, `items.data[0].current_period_start`/`_end` |
 | `customer.subscription.deleted` | `id`, `customer` |
 
-The adapter pins `apiVersion: '2026-02-25.clover'` for its own outbound calls.
+The adapter pins `apiVersion: '2026-11-18.endive'` for its own outbound calls.
 Webhook payloads are serialized with the API version configured on the
 *endpoint*, which an instance administrator sets independently, so the parser
 also honours the legacy shapes as fallbacks. Both paths need fixtures.

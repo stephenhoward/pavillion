@@ -10,7 +10,7 @@ import invoicePaymentSucceeded from './invoice-payment-succeeded.json';
  *
  * Every JSON file beside this one is a complete, unedited event envelope that
  * Stripe actually delivered to a Pavillion sandbox endpoint on 2026-08-29,
- * serialized at api_version 2026-02-25.clover — the version StripeAdapter pins.
+ * serialized at api_version 2026-02-25.clover, the version StripeAdapter pinned then.
  * Hand-written fixtures defeat the purpose of these files: they encode whatever
  * shape the author believed Stripe uses, which is exactly the belief that
  * drifted and broke subscription resolution before pv-jdot.2.1. Do not
