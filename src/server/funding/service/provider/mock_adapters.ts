@@ -146,7 +146,6 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
       amount: 1000000, // $10.00
       currency: 'USD',
       interval: 'month',
-      itemCount: 1,
     };
   }
 
@@ -341,8 +340,6 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
       currentPeriodEnd: periodEnd,
       amount: 1000000, // $10.00
       currency: 'USD',
-      interval: 'month',
-      itemCount: 1,
     };
   }
 

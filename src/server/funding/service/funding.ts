@@ -30,6 +30,7 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
   ProviderSubscription,
+  ProviderTransientError,
   CreateCheckoutSessionParams,
   CheckoutSessionResult,
   CheckoutSessionStatus,
@@ -2003,7 +2004,7 @@ export default class FundingService {
       }
 
       if (liveTerms && previousStatus !== 'cancelled') {
-        this.applyLiveSubscriptionTerms(fundingPlanRecord, liveTerms, event);
+        await this.applyLiveSubscriptionTerms(fundingPlanRecord, liveTerms, event, t);
       }
 
       await fundingPlanRecord.save({ transaction: t });
@@ -2031,10 +2032,16 @@ export default class FundingService {
    * transaction; applyLiveSubscriptionTerms then writes only if the locked row
    * still holds what was read here.
    *
+   * A re-read that fails transiently (ProviderTransientError) propagates, so
+   * the webhook fails and the provider redelivers. Any other failure would
+   * fail every redelivery the same way and take the rest of the event (its
+   * status, period and cancellation) with it, so it is logged and the sync
+   * alone is skipped.
+   *
    * @param event - Webhook event data
    * @param providerConfigId - Provider configuration ID
    * @returns The live terms, or null when there is nothing to sync
-   * @throws Whatever the provider read throws, so the webhook is redelivered
+   * @throws ProviderTransientError when the re-read may succeed on redelivery
    * @private
    */
   private async readLiveSubscriptionTerms(
@@ -2066,14 +2073,31 @@ export default class FundingService {
       return null;
     }
 
-    const live = await ProviderFactory.getAdapter(providerEntity).getSubscription(plan.provider_subscription_id);
+    const logContext = {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      fundingPlanId: plan.id,
+    };
+
+    let live: ProviderSubscription;
+    try {
+      live = await ProviderFactory.getAdapter(providerEntity).getSubscription(plan.provider_subscription_id);
+    }
+    catch (err) {
+      if (err instanceof ProviderTransientError) {
+        throw err;
+      }
+      logger.warn({
+        ...logContext,
+        errorType: err instanceof Error ? err.constructor.name : 'unknown',
+      }, 'Could not re-read the provider subscription; not syncing the funding plan billing cycle or amount');
+      return null;
+    }
 
     const invalidReason = this.liveSubscriptionProblem(live, plan);
     if (invalidReason) {
       logger.warn({
-        eventId: event.eventId,
-        eventType: event.eventType,
-        fundingPlanId: plan.id,
+        ...logContext,
         reason: invalidReason,
       }, 'Provider subscription failed validation; not syncing the funding plan billing cycle or amount');
       return null;
@@ -2088,8 +2112,11 @@ export default class FundingService {
   }
 
   /**
-   * Check that a re-read subscription is the plan's own and has a shape
-   * whose amount is the plan total
+   * Check that a re-read subscription is the plan's own and that its terms
+   * can stand for the plan's
+   *
+   * Whether the amount is the plan total at all is the adapter's call: it
+   * reports no interval when it is not (see ProviderSubscription.interval).
    *
    * @param live - Subscription as the provider reports it
    * @param plan - Plan it was read for
@@ -2103,8 +2130,8 @@ export default class FundingService {
     if (live.providerCustomerId !== plan.provider_customer_id) {
       return 'customer_mismatch';
     }
-    if (live.itemCount !== 1) {
-      return 'not_single_item';
+    if (live.currency !== plan.currency) {
+      return 'currency_mismatch';
     }
     if (live.interval !== 'month' && live.interval !== 'year') {
       return 'unknown_interval';
@@ -2116,22 +2143,29 @@ export default class FundingService {
   }
 
   /**
-   * Write re-read billing terms to the locked plan row
+   * Write re-read billing terms to the locked plan row and its allocations
    *
    * Skipped when the row no longer holds what readLiveSubscriptionTerms saw:
    * a local write (addCalendarToFundingPlan pushing a new total) landed in
    * between, and its value wins. A later provider event resyncs if needed.
    *
+   * The plan total Pavillion pushes to the provider is the sum of the open
+   * allocation rows, recomputed on every add and remove, so syncing the plan
+   * row alone would be undone by the next one. The open rows are therefore
+   * rescaled to sum to the live amount too (rescaleOpenAllocations).
+   *
    * @param fundingPlanRecord - Plan row, locked FOR UPDATE
    * @param terms - Terms from readLiveSubscriptionTerms
    * @param event - Event that triggered the sync, for logging
+   * @param tx - Transaction holding the plan row lock
    * @private
    */
-  private applyLiveSubscriptionTerms(
+  private async applyLiveSubscriptionTerms(
     fundingPlanRecord: FundingPlanEntity,
     terms: LiveSubscriptionTerms,
     event: WebhookEvent,
-  ): void {
+    tx: Transaction,
+  ): Promise<void> {
     if (fundingPlanRecord.billing_cycle !== terms.readCycle || fundingPlanRecord.amount !== terms.readAmount) {
       return;
     }
@@ -2156,6 +2190,56 @@ export default class FundingService {
     if (terms.amount !== fundingPlanRecord.amount) {
       logger.info(logContext, 'Funding plan amount changed at the provider; syncing it');
       fundingPlanRecord.amount = terms.amount;
+    }
+
+    await this.rescaleOpenAllocations(fundingPlanRecord.id, terms.amount, tx);
+  }
+
+  /**
+   * Rescale a plan's open allocations so they sum exactly to a new total
+   *
+   * Each row keeps its share of the old total, rounded down to whole
+   * millicents; the remainder goes to the row with the lowest id, so the
+   * result is the same however the rows were read. Rows with no share to
+   * keep (an old total of zero) split the new total evenly. Closed rows are
+   * history and are not touched. The same rule applies on fixed-price and
+   * pay-what-you-can instances: either way the provider is billing the new
+   * total, and the rows have to add up to it.
+   *
+   * Arithmetic is in BigInt, since a share times a total can pass 2^53.
+   *
+   * @param fundingPlanId - Plan whose allocations to rescale
+   * @param newTotal - Total the open rows must sum to, in millicents
+   * @param tx - Transaction holding the plan row lock
+   * @private
+   */
+  private async rescaleOpenAllocations(fundingPlanId: string, newTotal: number, tx: Transaction): Promise<void> {
+    const rows = await CalendarFundingPlanEntity.findAll({
+      where: {
+        funding_plan_id: fundingPlanId,
+        end_time: { [Op.is]: null as any },
+      },
+      order: [['id', 'ASC']],
+      transaction: tx,
+    });
+
+    const oldTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+    if (rows.length === 0 || oldTotal === newTotal) {
+      return;
+    }
+
+    const target = BigInt(newTotal);
+    const shares = oldTotal > 0
+      ? rows.map((row) => (BigInt(row.amount) * target) / BigInt(oldTotal))
+      : rows.map(() => target / BigInt(rows.length));
+    shares[0] += target - shares.reduce((sum, share) => sum + share, 0n);
+
+    for (const [index, row] of rows.entries()) {
+      const amount = Number(shares[index]);
+      if (row.amount !== amount) {
+        row.amount = amount;
+        await row.save({ transaction: tx });
+      }
     }
   }
 

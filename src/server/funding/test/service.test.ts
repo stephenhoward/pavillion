@@ -14,7 +14,7 @@ import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
-import { WebhookEvent } from '@/server/funding/service/provider/adapter';
+import { WebhookEvent, ProviderTransientError } from '@/server/funding/service/provider/adapter';
 import {
   DuplicateGrantError,
   GrantNotFoundError,
@@ -34,11 +34,11 @@ import logger from '@/server/common/helper/logger';
 // The funding service's domain logger is created at import, so the warning it
 // raises can only be observed by replacing createLogger. The default export
 // stays real: logError writes through it, and tests below stub it directly.
-const { fundingLogWarn } = vi.hoisted(() => ({ fundingLogWarn: vi.fn() }));
+const { fundingLogWarn, fundingLogInfo } = vi.hoisted(() => ({ fundingLogWarn: vi.fn(), fundingLogInfo: vi.fn() }));
 
 vi.mock('@/server/common/helper/logger', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/common/helper/logger')>()),
-  createLogger: () => ({ info: vi.fn(), warn: fundingLogWarn, error: vi.fn(), debug: vi.fn() }),
+  createLogger: () => ({ info: fundingLogInfo, warn: fundingLogWarn, error: vi.fn(), debug: vi.fn() }),
 }));
 
 const HOUR = 60 * 60 * 1000;
@@ -2861,7 +2861,21 @@ describe('FundingService', () => {
      * pricing the next added calendar on the wrong cycle.
      */
     describe('syncing billing cycle and amount from subscription updates', () => {
-      beforeEach(() => stubPricing(false));
+      beforeEach(() => {
+        stubPricing(false);
+        fundingLogInfo.mockClear();
+      });
+
+      /** Add an allocation row to a seeded plan. */
+      function addAllocation(plan: FundingPlanEntity, amount: number, endTime: Date | null = null) {
+        return CalendarFundingPlanEntity.create({
+          id: uuidv4(),
+          funding_plan_id: plan.id,
+          calendar_id: uuidv4(),
+          amount,
+          end_time: endTime,
+        });
+      }
 
       /** The subscription as the provider reports it on a live re-read. */
       function liveSubscription(plan: FundingPlanEntity, overrides: Record<string, unknown> = {}) {
@@ -2873,7 +2887,6 @@ describe('FundingService', () => {
           amount: YEARLY_PRICE,
           currency: 'USD',
           interval: 'year',
-          itemCount: 1,
           cancelAt: null,
           ...overrides,
         };
@@ -2893,16 +2906,22 @@ describe('FundingService', () => {
       }
 
       it('should adopt a yearly cycle the provider reports on a monthly plan, and price the next add from it', async () => {
-        const { plan } = await seedActivePlan('monthly', PRICE);
-        adapter.getSubscription.resolves(liveSubscription(plan));
+        // Billed below the configured yearly price (a Dashboard discount, say),
+        // so the existing row's rescaled amount is distinguishable from the
+        // price a new calendar is added at.
+        const liveYearly = 9 * PRICE;
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan, { amount: liveYearly }));
         const eventId = `evt_${uuidv4()}`;
 
-        await deliverUpdate(plan, { eventId, interval: 'year', amount: YEARLY_PRICE, currency: 'USD' });
+        await deliverUpdate(plan, { eventId, interval: 'year', amount: liveYearly, currency: 'USD' });
 
         await plan.reload();
+        await existing.reload();
         expect(adapter.getSubscription.calledOnceWith(plan.provider_subscription_id)).toBe(true);
         expect(plan.billing_cycle).toBe('yearly');
-        expect(plan.amount).toBe(YEARLY_PRICE);
+        expect(plan.amount).toBe(liveYearly);
+        expect(existing.amount).toBe(liveYearly);
         expect(fundingLogWarn).toHaveBeenCalledWith({
           eventId,
           eventType: 'customer.subscription.updated',
@@ -2915,6 +2934,7 @@ describe('FundingService', () => {
         await service.addCalendarToFundingPlan(accountId, calendarId);
 
         expect((await openAllocation(calendarId))!.amount).toBe(YEARLY_PRICE);
+        expect(adapter.updateSubscriptionAmount.firstCall.args[1]).toBe(liveYearly + YEARLY_PRICE);
       });
 
       it('should write the live values, not the payload\'s', async () => {
@@ -2932,13 +2952,51 @@ describe('FundingService', () => {
       it('should adopt an amount-only change without touching the cycle or warning', async () => {
         const { plan } = await seedActivePlan('monthly', PRICE);
         adapter.getSubscription.resolves(liveSubscription(plan, { interval: 'month', amount: 2 * PRICE }));
+        const eventId = `evt_${uuidv4()}`;
 
-        await deliverUpdate(plan, { interval: 'month', amount: 2 * PRICE, currency: 'USD' });
+        await deliverUpdate(plan, { eventId, interval: 'month', amount: 2 * PRICE, currency: 'USD' });
 
         await plan.reload();
         expect(plan.billing_cycle).toBe('monthly');
         expect(plan.amount).toBe(2 * PRICE);
         expect(fundingLogWarn).not.toHaveBeenCalled();
+        expect(fundingLogInfo).toHaveBeenCalledWith({
+          eventId,
+          eventType: 'customer.subscription.updated',
+          fundingPlanId: plan.id,
+        }, expect.any(String));
+      });
+
+      it('should rescale the open allocations to the new amount and leave closed ones alone', async () => {
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+        const second = await addAllocation(plan, 2 * PRICE);
+        const closed = await addAllocation(plan, PRICE, new Date('2026-01-15T00:00:00Z'));
+        plan.amount = 3 * PRICE;
+        await plan.save();
+
+        // Odd on purpose: a third of it is not a whole number of millicents.
+        const liveAmount = 4 * PRICE + 1;
+        adapter.getSubscription.resolves(liveSubscription(plan, { interval: 'month', amount: liveAmount }));
+
+        await deliverUpdate(plan, { interval: 'month', amount: liveAmount, currency: 'USD' });
+
+        await Promise.all([plan.reload(), existing.reload(), second.reload(), closed.reload()]);
+        expect(plan.amount).toBe(liveAmount);
+        expect(existing.amount + second.amount).toBe(liveAmount);
+
+        // Each keeps its share, rounded down, and the lowest id takes the
+        // remainder.
+        const floors = new Map([
+          [existing.id, Math.floor(PRICE * liveAmount / (3 * PRICE))],
+          [second.id, Math.floor(2 * PRICE * liveAmount / (3 * PRICE))],
+        ]);
+        const remainder = liveAmount - floors.get(existing.id)! - floors.get(second.id)!;
+        const lowestId = [existing.id, second.id].sort()[0];
+        floors.set(lowestId, floors.get(lowestId)! + remainder);
+        expect(existing.amount).toBe(floors.get(existing.id));
+        expect(second.amount).toBe(floors.get(second.id));
+
+        expect(closed.amount).toBe(PRICE);
       });
 
       it('should not re-read the subscription for Pavillion\'s own echo', async () => {
@@ -2967,9 +3025,9 @@ describe('FundingService', () => {
         expect(fundingLogWarn).not.toHaveBeenCalled();
       });
 
-      it('should propagate a failed re-read so the provider redelivers', async () => {
+      it('should propagate a transient re-read failure so the provider redelivers', async () => {
         const { plan } = await seedActivePlan('monthly', PRICE);
-        adapter.getSubscription.rejects(new Error('provider unavailable'));
+        adapter.getSubscription.rejects(new ProviderTransientError('provider unavailable'));
         const eventId = `evt_${uuidv4()}`;
 
         await expect(
@@ -2984,9 +3042,38 @@ describe('FundingService', () => {
         expect(await FundingEventEntity.findOne({ where: { provider_event_id: eventId } })).toBeNull();
       });
 
+      it('should skip only the sync when the re-read fails permanently', async () => {
+        // A subscription the adapter cannot convert, or a key that may not
+        // read it, fails every redelivery the same way. Propagating would lose
+        // the event's status, period and cancellation along with the sync.
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.rejects(new Error('Stripe subscription sub_x has no billing period'));
+        const eventId = `evt_${uuidv4()}`;
+        const cancelAt = new Date('2026-02-01T00:00:00Z');
+
+        await deliverUpdate(plan, {
+          eventId,
+          interval: 'year',
+          amount: YEARLY_PRICE,
+          currency: 'USD',
+          status: 'past_due',
+          cancelAt,
+        });
+
+        await plan.reload();
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+        expect(plan.status).toBe('past_due');
+        expect(plan.cancel_at).toEqual(cancelAt);
+        expect(fundingLogWarn).toHaveBeenCalledOnce();
+        expect(await FundingEventEntity.findOne({ where: { provider_event_id: eventId } })).not.toBeNull();
+      });
+
       it.each([
-        ['has more than one item', { itemCount: 2 }],
-        ['bills on an interval Pavillion does not create', { interval: undefined }],
+        // The adapter reports no interval for several items, a quantity above
+        // one, or an interval count above one (see its getSubscription tests).
+        ['reports no trustworthy interval', { interval: undefined }],
+        ['is billed in another currency', { currency: 'EUR' }],
         ['belongs to another customer', { providerCustomerId: 'cus_someone_else' }],
         ['is a different subscription', { providerSubscriptionId: 'sub_someone_else' }],
         ['reports a non-positive amount', { amount: 0 }],
@@ -3038,7 +3125,7 @@ describe('FundingService', () => {
       it('should yield to a local write that lands while the subscription is being re-read', async () => {
         // addCalendarToFundingPlan holds the plan lock while it pushes a new
         // total; a re-read taken before that commit would carry the old one.
-        const { plan } = await seedActivePlan('monthly', PRICE);
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
         adapter.getSubscription.callsFake(async () => {
           await FundingPlanEntity.update({ amount: 3 * PRICE }, { where: { id: plan.id } });
           return liveSubscription(plan, { interval: 'month', amount: 2 * PRICE });
@@ -3048,6 +3135,39 @@ describe('FundingService', () => {
 
         await plan.reload();
         expect(plan.amount).toBe(3 * PRICE);
+        expect((await openAllocation(existing.calendar_id))!.amount).toBe(PRICE);
+      });
+
+      it('should yield when the billing cycle changed while the subscription was being re-read', async () => {
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.callsFake(async () => {
+          await FundingPlanEntity.update({ billing_cycle: 'yearly' }, { where: { id: plan.id } });
+          return liveSubscription(plan, { amount: 9 * PRICE });
+        });
+
+        await deliverUpdate(plan, { interval: 'year', amount: 9 * PRICE, currency: 'USD' });
+
+        await plan.reload();
+        await existing.reload();
+        expect(plan.amount).toBe(PRICE);
+        expect(existing.amount).toBe(PRICE);
+      });
+
+      it('should not sync a plan that was cancelled while the subscription was being re-read', async () => {
+        const { plan, existing } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.callsFake(async () => {
+          await FundingPlanEntity.update({ status: 'cancelled' }, { where: { id: plan.id } });
+          return liveSubscription(plan);
+        });
+
+        await deliverUpdate(plan, { interval: 'year', amount: YEARLY_PRICE, currency: 'USD' });
+
+        await plan.reload();
+        await existing.reload();
+        expect(plan.status).toBe('cancelled');
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+        expect(existing.amount).toBe(PRICE);
       });
     });
   });

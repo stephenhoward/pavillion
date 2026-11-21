@@ -7,6 +7,7 @@ import {
   ProviderSubscription,
   ProviderCredentials,
   ProviderRequestOptions,
+  ProviderTransientError,
   WebhookEvent,
 } from './adapter';
 import { ProviderType, STRIPE_WEBHOOK_EVENTS, StripeWebhookCheck } from '@/common/model/funding-plan';
@@ -62,7 +63,7 @@ const MAX_PORTAL_CONFIGURATIONS = 1000;
  *    account's address (DEC-022), so a Stripe-side change reroutes nothing.
  *
  * The pinned API version has no portal pause feature, so there is nothing to
- * disable; a configuration reporting one enabled is still refused below.
+ * disable.
  */
 const PINNED_PORTAL_FEATURES: Stripe.BillingPortal.ConfigurationCreateParams.Features = {
   subscription_update: { enabled: false },
@@ -84,14 +85,12 @@ const PINNED_PORTAL_FEATURES: Stripe.BillingPortal.ConfigurationCreateParams.Fea
  */
 function hasPinnedPortalFeatures(configuration: Stripe.BillingPortal.Configuration): boolean {
   const features = configuration.features;
-  const pause = (features as unknown as { subscription_pause?: { enabled?: boolean } }).subscription_pause;
 
   return features?.subscription_update?.enabled === false
     && features.subscription_cancel?.enabled === true
     && features.subscription_cancel.mode === 'at_period_end'
     && features.subscription_cancel.proration_behavior === 'none'
-    && features.payment_method_update?.enabled === true
-    && pause?.enabled !== true;
+    && features.payment_method_update?.enabled === true;
 }
 
 /**
@@ -106,6 +105,48 @@ function hasPinnedPortalFeatures(configuration: Stripe.BillingPortal.Configurati
  */
 function isStripePermissionError(err: unknown): err is Stripe.errors.StripePermissionError {
   return (err as { type?: unknown } | null)?.type === 'StripePermissionError';
+}
+
+/**
+ * Stripe error types that may succeed on retry: the request never reached
+ * Stripe or timed out, Stripe rate limited it, or Stripe failed on its side
+ */
+const TRANSIENT_STRIPE_ERROR_TYPES = new Set([
+  'StripeConnectionError',
+  'StripeRateLimitError',
+  'StripeAPIError',
+]);
+
+/**
+ * Whether a Stripe error is worth retrying
+ *
+ * Also counts any 5xx response, whatever type the SDK gave it. Everything
+ * else (an invalid request, a key without permission, an unreadable
+ * response) fails the same way on every retry.
+ *
+ * @param err - Error thrown by a Stripe call
+ * @returns True for a transient failure
+ */
+function isTransientStripeError(err: unknown): boolean {
+  const { type, statusCode } = (err ?? {}) as { type?: unknown; statusCode?: unknown };
+  return (typeof type === 'string' && TRANSIENT_STRIPE_ERROR_TYPES.has(type))
+    || (typeof statusCode === 'number' && statusCode >= 500);
+}
+
+/**
+ * Whether a billing portal session error says the configuration it was
+ * given is unusable (missing, or deactivated in the Dashboard)
+ *
+ * Keyed on the parameter Stripe names, so an error about the customer does
+ * not discard a configuration that is fine.
+ *
+ * @param err - Error thrown by billingPortal.sessions.create
+ * @returns True if the error refers to the configuration
+ */
+function isPortalConfigurationRejected(err: unknown): boolean {
+  const { type, code, param } = (err ?? {}) as { type?: unknown; code?: unknown; param?: unknown };
+  return param === 'configuration'
+    && (code === 'resource_missing' || type === 'StripeInvalidRequestError');
 }
 
 /**
@@ -446,11 +487,25 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Retrieve current subscription status from provider
    *
+   * A failure that may succeed on retry is rethrown as ProviderTransientError
+   * (see isTransientStripeError); anything else, including a subscription
+   * that cannot be converted, is thrown as it is.
+   *
    * @param subscriptionId - Provider's subscription ID
    * @returns Current subscription data
+   * @throws ProviderTransientError when Stripe was unreachable, rate limited or failing
    */
   async getSubscription(subscriptionId: string): Promise<ProviderSubscription> {
-    const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    let subscription: Stripe.Subscription;
+    try {
+      subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    }
+    catch (err) {
+      if (isTransientStripeError(err)) {
+        throw new ProviderTransientError(err instanceof Error ? err.message : 'Stripe request failed', { cause: err });
+      }
+      throw err;
+    }
     return this.convertStripeSubscription(subscription);
   }
 
@@ -474,9 +529,10 @@ export class StripeAdapter implements PaymentProviderAdapter {
    *    back to the default on a transient error would hand out a portal
    *    nobody vetted just because Stripe was briefly unreachable.
    *
-   * If Stripe reports the configuration missing (deleted in the Dashboard),
-   * the cached id is dropped and the error propagates; the next open resolves
-   * again. There is no retry within the call.
+   * If Stripe rejects the configuration itself (deleted or deactivated in the
+   * Dashboard), the cached id is dropped and the error propagates; the next
+   * open resolves again. An error about anything else, the customer for
+   * instance, keeps it. There is no retry within the call.
    *
    * Nothing here logs the session URL, which is a bearer link to the
    * customer's billing, or the customer id.
@@ -520,8 +576,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       return session.url;
     }
     catch (err) {
-      if (configuration && (err as { code?: unknown } | null)?.code === 'resource_missing'
-        && this.portalConfigurationId === configuration) {
+      if (configuration && isPortalConfigurationRejected(err) && this.portalConfigurationId === configuration) {
         this.portalConfigurationId = null;
       }
       throw err;
@@ -1113,10 +1168,30 @@ export class StripeAdapter implements PaymentProviderAdapter {
       currentPeriodEnd: period.end,
       amount: amount * 1000, // Convert cents to millicents
       currency: subscription.items.data[0]?.price?.currency?.toUpperCase() || 'USD',
-      interval: this.toPlanInterval(subscription.items.data[0]?.price?.recurring?.interval),
-      itemCount: subscription.items.data.length,
+      interval: this.trustedPlanInterval(subscription),
       cancelAt: this.extractCancelAt(subscription, { source: 'subscription.retrieve' }),
     };
+  }
+
+  /**
+   * The subscription's interval, only when its amount is the plan's total
+   * for one cycle of that interval
+   *
+   * Pavillion creates one item, quantity 1, billed every month or every year.
+   * Anything else (several items, a quantity above one, every three months)
+   * means the first item's unit amount is not the plan total, so no interval
+   * is reported and the service leaves the plan's terms alone.
+   *
+   * @param subscription - Stripe subscription object
+   * @returns 'month' or 'year', or undefined when the terms are not trustworthy
+   * @private
+   */
+  private trustedPlanInterval(subscription: Stripe.Subscription): 'month' | 'year' | undefined {
+    const items = subscription.items.data;
+    if (items.length !== 1 || items[0].quantity !== 1 || items[0].price?.recurring?.interval_count !== 1) {
+      return undefined;
+    }
+    return this.toPlanInterval(items[0].price.recurring.interval);
   }
 
   /**

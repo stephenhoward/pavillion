@@ -33,6 +33,7 @@ vi.mock('@/server/common/helper/logger', () => ({
 import { StripeAdapter } from '../service/provider/stripe';
 import { capturedStripeEvent, capturedStripeEventPayload } from './fixtures/stripe';
 import { buildProviderIdempotencyKey } from '../service/provider/idempotency';
+import { ProviderTransientError } from '../service/provider/adapter';
 import { PayPalAdapter } from '../service/provider/paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
 import { ProviderFactory } from '../service/provider/factory';
@@ -1196,51 +1197,99 @@ describe('Payment Provider Adapters', () => {
         );
       });
 
-      it('should report the price interval and the item count', async () => {
+      /** A subscription whose only item is billed as Pavillion bills a plan. */
+      function singleItemSubscription(itemOverrides: Record<string, unknown> = {}, items?: unknown[]) {
         const start = Math.floor(Date.now() / 1000);
         const end = start + 365 * 24 * 60 * 60;
-        const item = (id: string) => ({
-          id,
+        const item = {
+          id: 'si_plan',
+          quantity: 1,
           current_period_start: start,
           current_period_end: end,
-          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'year' } },
-        });
-        mockStripe.subscriptions.retrieve.resolves({
-          id: 'sub_yearly',
-          customer: 'cus_yearly',
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+          ...itemOverrides,
+        };
+        return {
+          id: 'sub_plan',
+          customer: 'cus_plan',
           status: 'active',
           cancel_at: null,
-          items: { data: [item('si_1'), item('si_2')] },
-        });
+          items: { data: items ?? [item] },
+        };
+      }
 
-        const subscription = await stripeAdapter.getSubscription('sub_yearly');
+      it('should report the interval of a single quantity-1 item billed every year', async () => {
+        mockStripe.subscriptions.retrieve.resolves(singleItemSubscription());
+
+        const subscription = await stripeAdapter.getSubscription('sub_plan');
 
         expect(subscription.interval).toBe('year');
-        expect(subscription.itemCount).toBe(2);
+        expect(subscription.amount).toBe(12000000);
+        expect(subscription).not.toHaveProperty('itemCount');
       });
 
-      it('should report no interval for a price billed on an interval Pavillion does not create', async () => {
-        const start = Math.floor(Date.now() / 1000);
-        const end = start + 7 * 24 * 60 * 60;
-        mockStripe.subscriptions.retrieve.resolves({
-          id: 'sub_weekly',
-          customer: 'cus_weekly',
-          status: 'active',
-          cancel_at: null,
-          items: {
-            data: [{
-              id: 'si_weekly',
-              current_period_start: start,
-              current_period_end: end,
-              price: { unit_amount: 500, currency: 'usd', recurring: { interval: 'week' } },
-            }],
-          },
-        });
+      it.each([
+        ['has two items', () => {
+          const item = singleItemSubscription().items.data[0];
+          return singleItemSubscription({}, [item, { ...item, id: 'si_other' }]);
+        }],
+        ['has a quantity of 2', () => singleItemSubscription({ quantity: 2 })],
+        ['bills every three months', () => singleItemSubscription({
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'month', interval_count: 3 } },
+        })],
+        ['bills weekly', () => singleItemSubscription({
+          price: { unit_amount: 12000, currency: 'usd', recurring: { interval: 'week', interval_count: 1 } },
+        })],
+      ])('should report no interval for a subscription that %s', async (_label, build) => {
+        // The first item's unit amount is not the plan total for one cycle,
+        // so the service must not take its terms for the plan's.
+        mockStripe.subscriptions.retrieve.resolves(build());
 
-        const subscription = await stripeAdapter.getSubscription('sub_weekly');
+        const subscription = await stripeAdapter.getSubscription('sub_plan');
 
         expect(subscription.interval).toBeUndefined();
-        expect(subscription.itemCount).toBe(1);
+      });
+
+      it.each([
+        ['a connection failure', () => new Stripe.errors.StripeConnectionError({ message: 'socket hang up' } as any)],
+        ['a rate limit', () => new Stripe.errors.StripeRateLimitError({ message: 'too many requests' } as any)],
+        ['a Stripe API error', () => new Stripe.errors.StripeAPIError({ message: 'api error' } as any)],
+        ['a 5xx of another type', () => Object.assign(
+          new Stripe.errors.StripeUnknownError({ message: 'bad gateway' } as any),
+          { statusCode: 502 },
+        )],
+      ])('should report %s as transient', async (_label, build) => {
+        const cause = build();
+        mockStripe.subscriptions.retrieve.rejects(cause);
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error).toBeInstanceOf(ProviderTransientError);
+        expect(error.cause).toBe(cause);
+      });
+
+      it.each([
+        ['a permission error', () => new Stripe.errors.StripePermissionError({ message: 'no subscription read' } as any)],
+        ['an invalid request', () => new Stripe.errors.StripeInvalidRequestError({
+          message: 'No such subscription', code: 'resource_missing',
+        } as any)],
+      ])('should throw %s as it is, not as transient', async (_label, build) => {
+        const cause = build();
+        mockStripe.subscriptions.retrieve.rejects(cause);
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error).toBe(cause);
+        expect(error).not.toBeInstanceOf(ProviderTransientError);
+      });
+
+      it('should not report an unconvertible subscription as transient', async () => {
+        mockStripe.subscriptions.retrieve.resolves({ ...singleItemSubscription(), items: { data: [] } });
+
+        const error = await stripeAdapter.getSubscription('sub_plan').catch((err) => err);
+
+        expect(error.message).toContain('has no billing period');
+        expect(error).not.toBeInstanceOf(ProviderTransientError);
       });
     });
 
@@ -1332,7 +1381,6 @@ describe('Payment Provider Adapters', () => {
         ['prorated cancellation', { subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'create_prorations' } }],
         ['cancellation disabled', { subscription_cancel: { enabled: false, mode: 'at_period_end', proration_behavior: 'none' } }],
         ['payment method updates disabled', { payment_method_update: { enabled: false } }],
-        ['pausing enabled', { subscription_pause: { enabled: true } }],
       ])('should ignore a tagged configuration with %s and create a new one', async (_label, featureOverride) => {
         // The tag is a convenience, not a trust boundary: anyone with
         // Dashboard access can edit a tagged configuration.
@@ -1505,6 +1553,44 @@ describe('Payment Provider Adapters', () => {
 
         expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
         expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_replacement');
+      });
+
+      it('should forget a configuration Stripe refuses as inactive', async () => {
+        // Deactivated in the Dashboard: an invalid request on the
+        // configuration parameter rather than a missing resource.
+        givenConfigurations([pinnedConfiguration()]);
+        mockStripe.billingPortal.sessions.create.onFirstCall().rejects(new Stripe.errors.StripeInvalidRequestError({
+          message: 'This configuration is inactive',
+          param: 'configuration',
+        } as any));
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+        ).rejects.toThrow('inactive');
+
+        givenConfigurations([pinnedConfiguration({ id: 'bpc_replacement' })]);
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_replacement');
+      });
+
+      it('should keep the configuration when the missing resource is the customer', async () => {
+        givenConfigurations([pinnedConfiguration()]);
+        mockStripe.billingPortal.sessions.create.onFirstCall().rejects(new Stripe.errors.StripeInvalidRequestError({
+          message: 'No such customer',
+          code: 'resource_missing',
+          param: 'customer',
+        } as any));
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_gone', 'https://example.com/return', options),
+        ).rejects.toThrow('No such customer');
+
+        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(mockStripe.billingPortal.configurations.list.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_pinned');
       });
 
       it('should never log the session URL or the customer id', async () => {

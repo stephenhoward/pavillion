@@ -62,15 +62,16 @@ export interface ProviderSubscription {
   amount: number; // in millicents
   currency: string;
   /**
-   * Billing interval of the subscription's price, or undefined when the
-   * provider reported none Pavillion recognises
+   * Billing interval of the subscription, set only when `amount` is
+   * trustworthy as the plan's total for one billing cycle of that interval.
+   *
+   * Pavillion creates single-item, quantity-1 subscriptions billed every
+   * month or every year. An adapter leaves this undefined for anything else
+   * (several items, a quantity above one, an interval count above one, an
+   * interval Pavillion never creates), and a consumer must not sync a plan's
+   * billing terms from a subscription without it.
    */
   interval?: 'month' | 'year';
-  /**
-   * Number of line items on the subscription. Pavillion creates single-item
-   * subscriptions, so `amount` is the plan total only when this is 1.
-   */
-  itemCount?: number;
   /**
    * When a scheduled cancellation takes effect, or null if none is scheduled.
    *
@@ -85,6 +86,22 @@ export interface ProviderSubscription {
    * must not collapse the two.
    */
   cancelAt?: Date | null;
+}
+
+/**
+ * A provider call failed in a way that may succeed if retried: the provider
+ * was unreachable, rate limited the request, or answered with a server error.
+ *
+ * Adapters throw this so the service can tell a failure worth redelivering a
+ * webhook for from one that will fail the same way every time (a malformed
+ * subscription, a key that may not read it). Any other error from an adapter
+ * is to be treated as permanent. The original error is kept as `cause`.
+ */
+export class ProviderTransientError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ProviderTransientError';
+  }
 }
 
 /**
