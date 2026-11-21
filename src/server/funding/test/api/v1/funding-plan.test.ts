@@ -51,7 +51,7 @@ describe('User Funding Plan API Routes', () => {
         const app = express();
         fundingPlanHandlers.installHandlers(app, '/api/funding/v1');
 
-        const layers = (app as any)._router.stack
+        const layers = (app as any).router.stack
           .filter((layer: any) => layer.name === 'router')
           .flatMap((layer: any) => layer.handle.stack)
           .filter((layer: any) => layer.route?.path === path && layer.route.methods.post);

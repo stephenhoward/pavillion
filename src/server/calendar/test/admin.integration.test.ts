@@ -111,7 +111,7 @@ describe('Admin Calendars API - GET /api/v1/admin/calendars', () => {
       // Walk the router stack and confirm the adminOnly chain is present
       // on the registered /admin/calendars route. This catches accidental
       // removal of the middleware guard.
-      const calendarsRoute = (app as any)._router.stack
+      const calendarsRoute = (app as any).router.stack
         .filter((layer: any) => layer.name === 'router')
         .flatMap((layer: any) => layer.handle.stack)
         .find((layer: any) => layer.route?.path === '/admin/calendars');

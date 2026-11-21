@@ -242,8 +242,8 @@ describe('Editor Permissions API - PUT /calendars/:calendarId/editors/:editorId/
       routes.installHandlers(app, '/api/v1');
 
       let routeCount = 0;
-      if (app._router && app._router.stack) {
-        app._router.stack.forEach((middleware: any) => {
+      if (app.router && app.router.stack) {
+        app.router.stack.forEach((middleware: any) => {
           if (middleware.name === 'router') {
             middleware.handle.stack.forEach((handler: any) => {
               if (handler.route) {

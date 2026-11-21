@@ -220,7 +220,7 @@ describe('Public Calendars Discovery API (pv-u4ew.3)', () => {
       // listPublicCalendars handler. A regression that drops the middleware
       // would leave a single-handler stack on this route.
       const app = buildApp();
-      const router = (app._router || (app as any)._router) as any;
+      const router = (app.router || (app as any).router) as any;
       // Walk the mounted /api/public/v1 sub-router for the /calendars GET route.
       let stack: any[] | null = null;
       for (const layer of router.stack || []) {

@@ -579,7 +579,7 @@ export function createRouter(
     router.get(assetExtensionRegex(), handlers.assets);
 
     /* redirect to coverage server */
-    router.get("/coverage/*", handlers.coverage);
+    router.get("/coverage/*splat", handlers.coverage);
   }
 
   // Widget routes (before site routes to ensure they match first)

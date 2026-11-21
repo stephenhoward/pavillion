@@ -36,7 +36,7 @@ describe('localeMiddleware', () => {
     sandbox = sinon.createSandbox();
     app = express();
     app.use(createLocaleMiddleware(makeConfigInterface() as any));
-    app.get('*', (req: Request, res: Response) => {
+    app.get('/{*splat}', (req: Request, res: Response) => {
       res.json({ locale: req.locale });
     });
   });
@@ -78,7 +78,7 @@ describe('localeMiddleware', () => {
     it('should fall back to instance default when no URL prefix, cookie, or Accept-Language', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'es' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -90,7 +90,7 @@ describe('localeMiddleware', () => {
     it('should fall back to en when all other sources fail', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -119,7 +119,7 @@ describe('localeMiddleware', () => {
     it('should not detect locale from non-locale path segment', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -131,7 +131,7 @@ describe('localeMiddleware', () => {
     it('should handle root path without locale prefix', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -152,7 +152,7 @@ describe('localeMiddleware', () => {
         next();
       });
       accountApp.use(createLocaleMiddleware(makeConfigInterface() as any));
-      accountApp.get('*', (req: Request, res: Response) => {
+      accountApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -174,7 +174,7 @@ describe('localeMiddleware', () => {
         next();
       });
       accountApp.use(createLocaleMiddleware(makeConfigInterface() as any));
-      accountApp.get('*', (req: Request, res: Response) => {
+      accountApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -199,7 +199,7 @@ describe('localeMiddleware', () => {
     it('should ignore invalid language code in cookie', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -214,7 +214,7 @@ describe('localeMiddleware', () => {
     it('should handle missing cookie gracefully', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -260,7 +260,7 @@ describe('localeMiddleware', () => {
     it('should fall through when Accept-Language contains only unsupported languages', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -274,7 +274,7 @@ describe('localeMiddleware', () => {
     it('should handle missing Accept-Language header', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -287,7 +287,7 @@ describe('localeMiddleware', () => {
     it('should use instance default language from settings service', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'es' }) as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -304,7 +304,7 @@ describe('localeMiddleware', () => {
 
       const testApp = express();
       testApp.use(createLocaleMiddleware(failingConfig as any));
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -315,7 +315,7 @@ describe('localeMiddleware', () => {
     it('should fall back to en when no config interface is provided', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware());
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -334,7 +334,7 @@ describe('localeMiddleware', () => {
         locales.push(req.locale);
         next();
       });
-      testApp.get('*', (req: Request, res: Response) => {
+      testApp.get('/{*splat}', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
 
@@ -369,7 +369,7 @@ describe('localeMiddleware admin overrides', () => {
   function makeApp(overrides: Parameters<typeof makeConfigInterface>[0] = {}) {
     const app = express();
     app.use(createLocaleMiddleware(makeConfigInterface(overrides) as any));
-    app.get('*', (req: Request, res: Response) => {
+    app.get('/{*splat}', (req: Request, res: Response) => {
       res.json({ locale: req.locale });
     });
     return app;
