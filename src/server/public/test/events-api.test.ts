@@ -52,12 +52,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = 'yoga';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'yoga' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
@@ -80,12 +80,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = '';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: '' });
 
       expect(response.status).toBe(200);
       expect(instancesStub.called).toBe(true);
@@ -108,12 +108,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = ['cat-id-1', 'cat-id-2'];
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ categories: ['cat-id-1', 'cat-id-2'] });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
@@ -138,13 +138,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.startDate = '2025-11-15';
-        req.query.endDate = '2025-11-21';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ startDate: '2025-11-15', endDate: '2025-11-21' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
@@ -164,12 +163,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.startDate = 'invalid-date';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ startDate: 'invalid-date' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('Invalid date format');
@@ -190,15 +189,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = 'yoga';
-        req.query.categories = ['cat-id-1', 'cat-id-2'];
-        req.query.startDate = '2025-11-15';
-        req.query.endDate = '2025-11-21';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'yoga', categories: ['cat-id-1', 'cat-id-2'], startDate: '2025-11-15', endDate: '2025-11-21' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
@@ -223,12 +219,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = 'nonexistent';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'nonexistent' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
@@ -262,12 +258,12 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = 'test';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'test' });
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Failed to retrieve events');

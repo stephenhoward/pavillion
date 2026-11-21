@@ -125,13 +125,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.urlName = 'test-calendar';
-        req.query.startDate = '2026-01-01';
-        req.query.endDate = '2026-12-31';
         routes.listCategories(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ startDate: '2026-01-01', endDate: '2026-12-31' });
 
       expect(response.status).toBe(200);
       expect(response.body[0].eventCount).toBe(2);
@@ -152,12 +151,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.urlName = 'test-calendar';
-        req.query.search = 'workshop';
         routes.listCategories(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'workshop' });
 
       expect(response.status).toBe(200);
       expect(response.body[0].eventCount).toBe(1);
@@ -177,12 +176,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.urlName = 'test-calendar';
-        req.query.startDate = 'not-a-date';
         routes.listCategories(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ startDate: 'not-a-date' });
 
       expect(response.status).toBe(400);
       expect(response.body.errorName).toBe('ValidationError');
@@ -204,12 +203,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = 'category-1';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ categories: 'category-1' });
 
       if (response.status !== 200) {
         console.log('Response body:', response.body);
@@ -238,12 +237,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = ['category-1', 'category-3', 'category-5'];
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ categories: ['category-1', 'category-3', 'category-5'] });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
@@ -264,12 +263,12 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = ['invalid-category', 'non-existent'];
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ categories: ['invalid-category', 'non-existent'] });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid category IDs provided');

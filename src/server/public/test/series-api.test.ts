@@ -259,12 +259,10 @@ describe('Public Series API', () => {
       router.get('/handler', (req, res) => {
         req.params.urlName = 'test-calendar';
         req.params.seriesUrlName = 'yoga-classes';
-        req.query.limit = '10';
-        req.query.offset = '20';
         routes.getSeries(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler');
+      const response = await request(testApp(router)).get('/handler').query({ limit: '10', offset: '20' });
 
       expect(response.status).toBe(200);
       expect(response.body.pagination.limit).toBe(10);
@@ -287,11 +285,10 @@ describe('Public Series API', () => {
       router.get('/handler', (req, res) => {
         req.params.urlName = 'test-calendar';
         req.params.seriesUrlName = 'yoga-classes';
-        req.query.limit = '500';
         routes.getSeries(req, res);
       });
 
-      const response = await request(testApp(router)).get('/handler');
+      const response = await request(testApp(router)).get('/handler').query({ limit: '500' });
 
       expect(response.status).toBe(200);
       expect(response.body.pagination.limit).toBe(100);

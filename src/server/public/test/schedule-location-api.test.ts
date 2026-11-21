@@ -171,12 +171,12 @@ describe('Public API - Schedule + Location data', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.search = 'test';
         routes.listInstances(req, res);
       });
 
       const response = await request(testApp(router))
-        .get('/handler');
+        .get('/handler')
+        .query({ search: 'test' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
