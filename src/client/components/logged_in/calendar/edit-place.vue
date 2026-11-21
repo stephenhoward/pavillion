@@ -680,12 +680,12 @@ form {
             value="other-space"
             v-model="state.reassignTarget"
           />
-          <span class="reassign-option__label">
+          <span id="reassign-other-space-label" class="reassign-option__label">
             {{ t('space.reassign_option_other_space') }}
           </span>
           <select
             class="reassign-option__select"
-            :aria-label="t('space.reassign_dropdown_label')"
+            aria-labelledby="reassign-other-space-label"
             v-model="state.reassignOtherTarget"
             @change="state.reassignTarget = 'other-space'"
           >
