@@ -62,6 +62,16 @@ export interface ProviderSubscription {
   amount: number; // in millicents
   currency: string;
   /**
+   * Billing interval of the subscription's price, or undefined when the
+   * provider reported none Pavillion recognises
+   */
+  interval?: 'month' | 'year';
+  /**
+   * Number of line items on the subscription. Pavillion creates single-item
+   * subscriptions, so `amount` is the plan total only when this is 1.
+   */
+  itemCount?: number;
+  /**
    * When a scheduled cancellation takes effect, or null if none is scheduled.
    *
    * Separate from `status` because a provider reports a subscription that is
@@ -95,6 +105,15 @@ export interface WebhookEvent {
   status?: 'active' | 'past_due' | 'suspended' | 'cancelled';
   currentPeriodStart?: Date;
   currentPeriodEnd?: Date;
+  /**
+   * Billing interval of the subscription's price, as this event reports it.
+   *
+   * `undefined` means this event carries no price, and the plan's billing
+   * cycle and amount are left alone. When set, `amount` and `currency` are set
+   * from the same price. The service treats these as a trigger only: it
+   * re-reads the subscription from the provider before writing anything.
+   */
+  interval?: 'month' | 'year';
   amount?: number; // in millicents
   currency?: string;
   /**

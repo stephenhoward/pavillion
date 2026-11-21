@@ -35,6 +35,80 @@ function normalizeWebhookUrl(url: string): string {
 const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
 
 /**
+ * Metadata key and value that mark a billing portal configuration as one
+ * Pavillion created. Changing the pinned settings below means bumping the
+ * version: configurations tagged with an older one are then ignored and a new
+ * one is created. Old ones are left in place, since the API cannot delete them.
+ */
+const PORTAL_CONFIG_METADATA_KEY = 'pavillion_portal_config';
+const PORTAL_CONFIG_VERSION = 'v1';
+
+/**
+ * Upper bound on how many billing portal configurations are read when looking
+ * for Pavillion's own
+ */
+const MAX_PORTAL_CONFIGURATIONS = 1000;
+
+/**
+ * The billing portal every Pavillion session opens on. Every feature is set
+ * explicitly so nothing from the operator's Dashboard default leaks in:
+ *
+ *  - subscription_update off: Pavillion's plan row records the billing cycle
+ *    and amount, and adding a calendar prices from them, so a plan switch in
+ *    the portal would leave both stale.
+ *  - subscription_cancel at period end with no proration: an immediate
+ *    cancellation would end a plan with no resume window (DEC-022).
+ *  - customer_update may change email: lifecycle email goes to the Pavillion
+ *    account's address (DEC-022), so a Stripe-side change reroutes nothing.
+ *
+ * The pinned API version has no portal pause feature, so there is nothing to
+ * disable; a configuration reporting one enabled is still refused below.
+ */
+const PINNED_PORTAL_FEATURES: Stripe.BillingPortal.ConfigurationCreateParams.Features = {
+  subscription_update: { enabled: false },
+  subscription_cancel: { enabled: true, mode: 'at_period_end', proration_behavior: 'none' },
+  payment_method_update: { enabled: true },
+  invoice_history: { enabled: true },
+  customer_update: { enabled: true, allowed_updates: ['name', 'email', 'address', 'phone'] },
+};
+
+/**
+ * Whether a billing portal configuration carries the settings Pavillion pins
+ *
+ * The metadata tag only says who created a configuration; anyone with
+ * Dashboard access can edit one afterwards, so the settings themselves are
+ * what decide whether it may be used.
+ *
+ * @param configuration - Configuration returned by Stripe
+ * @returns True if every pinned setting holds
+ */
+function hasPinnedPortalFeatures(configuration: Stripe.BillingPortal.Configuration): boolean {
+  const features = configuration.features;
+  const pause = (features as unknown as { subscription_pause?: { enabled?: boolean } }).subscription_pause;
+
+  return features?.subscription_update?.enabled === false
+    && features.subscription_cancel?.enabled === true
+    && features.subscription_cancel.mode === 'at_period_end'
+    && features.subscription_cancel.proration_behavior === 'none'
+    && features.payment_method_update?.enabled === true
+    && pause?.enabled !== true;
+}
+
+/**
+ * Whether a Stripe error is a refusal on the key's permissions (HTTP 403),
+ * typically a restricted key without billing portal write access
+ *
+ * Read from the error's `type` rather than by `instanceof`, so it does not
+ * depend on which copy of the SDK constructed the error.
+ *
+ * @param err - Error thrown by a Stripe call
+ * @returns True for a permission error
+ */
+function isStripePermissionError(err: unknown): err is Stripe.errors.StripePermissionError {
+  return (err as { type?: unknown } | null)?.type === 'StripePermissionError';
+}
+
+/**
  * Billing period resolved from a Stripe subscription
  */
 interface BillingPeriod {
@@ -60,6 +134,12 @@ export class StripeAdapter implements PaymentProviderAdapter {
   private stripe: Stripe;
   private webhookSecret: string;
   private credentials: ProviderCredentials;
+  /** Billing portal configuration resolved for this account; see resolvePortalConfiguration */
+  private portalConfigurationId: string | null = null;
+  /** The resolution in flight, shared by concurrent first portal opens */
+  private portalConfigurationResolving: Promise<string> | null = null;
+  /** Whether the degraded (unpinned) portal path has been logged on this adapter */
+  private portalPermissionErrorLogged = false;
 
   /**
    * Initialize Stripe adapter with credentials
@@ -377,6 +457,30 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Get URL to Stripe's billing portal for customer self-service
    *
+   * The session opens on Pavillion's own portal configuration (see
+   * PINNED_PORTAL_FEATURES), never on the operator's Dashboard default, which
+   * Pavillion does not control.
+   *
+   * Two failures change that:
+   *
+   *  - The key may not manage portal configurations (a restricted key without
+   *    billing portal write). The session opens without a configuration, so
+   *    owners can still cancel and fix a card, and the operator's default
+   *    decides the rest. Logged once per adapter; not cached, so a fixed key
+   *    returns to the pinned path on the next open. The webhook sync of
+   *    billing cycle and amount (FundingService.processWebhookEvent) covers a
+   *    plan switch made there; nothing covers that default's cancel mode.
+   *  - Any other failure to resolve the configuration propagates. Falling
+   *    back to the default on a transient error would hand out a portal
+   *    nobody vetted just because Stripe was briefly unreachable.
+   *
+   * If Stripe reports the configuration missing (deleted in the Dashboard),
+   * the cached id is dropped and the error propagates; the next open resolves
+   * again. There is no retry within the call.
+   *
+   * Nothing here logs the session URL, which is a bearer link to the
+   * customer's billing, or the customer id.
+   *
    * @param customerId - Provider's customer ID
    * @param returnUrl - URL to return to after portal session
    * @param options - Per-request options (idempotency key)
@@ -387,12 +491,108 @@ export class StripeAdapter implements PaymentProviderAdapter {
     returnUrl: string,
     options?: ProviderRequestOptions,
   ): Promise<string> {
-    const session = await this.stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: returnUrl,
-    }, this.requestOptions(options, 'portal-session'));
+    let configuration: string | undefined;
+    try {
+      configuration = await this.resolvePortalConfiguration(options);
+    }
+    catch (err) {
+      if (!isStripePermissionError(err)) {
+        throw err;
+      }
 
-    return session.url;
+      if (!this.portalPermissionErrorLogged) {
+        this.portalPermissionErrorLogged = true;
+        logger.error({
+          providerType: this.providerType,
+          errorType: err.type,
+          code: err.code,
+        }, 'Stripe key may not manage billing portal configurations; opening the portal on the Dashboard default configuration');
+      }
+    }
+
+    try {
+      const session = await this.stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+        ...(configuration && { configuration }),
+      }, this.requestOptions(options, 'portal-session'));
+
+      return session.url;
+    }
+    catch (err) {
+      if (configuration && (err as { code?: unknown } | null)?.code === 'resource_missing'
+        && this.portalConfigurationId === configuration) {
+        this.portalConfigurationId = null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Resolve the billing portal configuration Pavillion's sessions open on
+   *
+   * Held on the adapter rather than stored: the admin credential form
+   * rebuilds the stored credentials on every save, and a stored id would go
+   * stale on a key swap anyway. ProviderFactory caches one adapter per
+   * provider config and builds a new one when that config changes, so a new
+   * key resolves afresh.
+   *
+   * Concurrent first calls in one process share the resolution in flight and
+   * so create at most one configuration. Two processes racing on their first
+   * open can each create one; both carry the pinned settings, and every later
+   * resolve picks the newest, so the duplicate is harmless.
+   *
+   * @param options - Caller's request options; the create derives its key from them
+   * @returns Configuration id
+   * @private
+   */
+  private async resolvePortalConfiguration(options?: ProviderRequestOptions): Promise<string> {
+    if (this.portalConfigurationId) {
+      return this.portalConfigurationId;
+    }
+
+    if (!this.portalConfigurationResolving) {
+      this.portalConfigurationResolving = this.findOrCreatePortalConfiguration(options)
+        .then((id) => {
+          this.portalConfigurationId = id;
+          return id;
+        })
+        .finally(() => {
+          this.portalConfigurationResolving = null;
+        });
+    }
+
+    return this.portalConfigurationResolving;
+  }
+
+  /**
+   * Find the newest active configuration tagged with the current version and
+   * carrying the pinned settings, or create one
+   *
+   * @param options - Caller's request options
+   * @returns Configuration id
+   * @private
+   */
+  private async findOrCreatePortalConfiguration(options?: ProviderRequestOptions): Promise<string> {
+    const configurations = await this.stripe.billingPortal.configurations
+      .list({ active: true, limit: 100 })
+      .autoPagingToArray({ limit: MAX_PORTAL_CONFIGURATIONS });
+
+    const candidates = configurations.filter((configuration) =>
+      configuration.metadata?.[PORTAL_CONFIG_METADATA_KEY] === PORTAL_CONFIG_VERSION
+      && hasPinnedPortalFeatures(configuration));
+
+    if (candidates.length > 0) {
+      return candidates.reduce((newest, candidate) =>
+        candidate.created > newest.created ? candidate : newest).id;
+    }
+
+    const created = await this.stripe.billingPortal.configurations.create({
+      features: PINNED_PORTAL_FEATURES,
+      metadata: { [PORTAL_CONFIG_METADATA_KEY]: PORTAL_CONFIG_VERSION },
+    }, this.requestOptions(options, 'portal-config'));
+
+    return created.id;
   }
 
   /**
@@ -505,6 +705,19 @@ export class StripeAdapter implements PaymentProviderAdapter {
             subscriptionId: subscription.id,
             itemCount: subscription.items?.data?.length ?? 0,
           }, 'Stripe subscription webhook has no resolvable billing period');
+        }
+
+        // Pavillion's subscriptions are single-item, quantity 1, and an amount
+        // update replaces that item's price with the plan total, so the first
+        // item's unit amount is the plan's total. Left undefined rather than
+        // defaulted when the price is incomplete: a default would read as a
+        // real price downstream.
+        const price = subscription.items?.data?.[0]?.price;
+        const interval = this.toPlanInterval(price?.recurring?.interval);
+        if (interval && typeof price?.unit_amount === 'number' && typeof price.currency === 'string') {
+          webhookEvent.interval = interval;
+          webhookEvent.amount = price.unit_amount * 1000; // Convert cents to millicents
+          webhookEvent.currency = price.currency.toUpperCase();
         }
         break;
       }
@@ -900,8 +1113,21 @@ export class StripeAdapter implements PaymentProviderAdapter {
       currentPeriodEnd: period.end,
       amount: amount * 1000, // Convert cents to millicents
       currency: subscription.items.data[0]?.price?.currency?.toUpperCase() || 'USD',
+      interval: this.toPlanInterval(subscription.items.data[0]?.price?.recurring?.interval),
+      itemCount: subscription.items.data.length,
       cancelAt: this.extractCancelAt(subscription, { source: 'subscription.retrieve' }),
     };
+  }
+
+  /**
+   * Narrow a Stripe price interval to the two Pavillion bills on
+   *
+   * @param interval - Stripe recurring interval
+   * @returns 'month' or 'year', or undefined for anything else
+   * @private
+   */
+  private toPlanInterval(interval: unknown): 'month' | 'year' | undefined {
+    return interval === 'month' || interval === 'year' ? interval : undefined;
   }
 
   /**

@@ -29,6 +29,7 @@ import { emitAfterTx } from '@/server/common/helper/emit-after-tx';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
+  ProviderSubscription,
   CreateCheckoutSessionParams,
   CheckoutSessionResult,
   CheckoutSessionStatus,
@@ -79,6 +80,17 @@ export interface ProviderInfo {
   providerType: ProviderType;
   displayName: string;
   publishableKey?: string;
+}
+
+/**
+ * A plan's billing cycle and amount as re-read from the provider, together
+ * with the values the plan row held when the re-read was made
+ */
+interface LiveSubscriptionTerms {
+  readCycle: BillingCycle;
+  readAmount: number;
+  billingCycle: BillingCycle;
+  amount: number;
 }
 
 /**
@@ -604,8 +616,10 @@ export default class FundingService {
     );
 
     // Written only once the provider has accepted the total, in the same
-    // transaction, so a refusal leaves the row as it was. Nothing else keeps
-    // this column in step: no webhook carries the amount back.
+    // transaction, so a refusal leaves the row as it was. This write is what
+    // keeps the column in step for Pavillion's own changes; the provider's
+    // echo of it matches and is ignored by processWebhookEvent's sync, which
+    // only corrects changes made outside Pavillion.
     fundingPlanEntity.amount = newAmount;
     await fundingPlanEntity.save({ transaction: tx });
   }
@@ -1834,6 +1848,12 @@ export default class FundingService {
    * `end_time`, and nothing to reconcile from. Sharing the transaction means a
    * failed mutation takes the dedupe row with it and the retry does the work.
    *
+   * An event that reports a price (`interval`) different from the plan's
+   * billing cycle or amount also syncs those two columns, because adding a
+   * calendar prices from them; see readLiveSubscriptionTerms. The live re-read
+   * that sync needs happens before the transaction opens, so no network call
+   * is made under the row lock.
+   *
    * @param event - Webhook event data
    * @param providerConfigId - Provider configuration ID
    */
@@ -1855,6 +1875,10 @@ export default class FundingService {
       await this.processCheckoutCompleted(event, providerConfigId);
       return;
     }
+
+    // Throws when the provider cannot be read. Nothing has been written yet,
+    // so the webhook fails and the provider redelivers.
+    const liveTerms = await this.readLiveSubscriptionTerms(event, providerConfigId);
 
     await db.transaction(async (t: Transaction) => {
       // Find the local FundingPlan by provider subscription ID before logging,
@@ -1978,12 +2002,161 @@ export default class FundingService {
         fundingPlanRecord.current_period_end = event.currentPeriodEnd;
       }
 
+      if (liveTerms && previousStatus !== 'cancelled') {
+        this.applyLiveSubscriptionTerms(fundingPlanRecord, liveTerms, event);
+      }
+
       await fundingPlanRecord.save({ transaction: t });
 
       if (fundingPlanRecord.status === 'cancelled') {
         await this.endCalendarAllocations(fundingPlanRecord.id, scheduledCancelAt, t);
       }
     });
+  }
+
+  /**
+   * Re-read a plan's billing cycle and amount from the provider when an event
+   * says they may have changed
+   *
+   * Pavillion never changes a plan's interval, and pins the billing portal so
+   * owners cannot either, but an operator's Dashboard (or a portal opened on
+   * its default configuration, see StripeAdapter.getBillingPortalUrl) can.
+   * Left unsynced, the plan row would price the next added calendar on the
+   * wrong cycle.
+   *
+   * The event's price is a trigger only, never the value written: the values
+   * come from a live re-read, checked against the plan it is meant to
+   * describe. Pavillion's own amount changes are already on the row, so their
+   * echoes match and cost no provider call. Read without a lock, ahead of the
+   * transaction; applyLiveSubscriptionTerms then writes only if the locked row
+   * still holds what was read here.
+   *
+   * @param event - Webhook event data
+   * @param providerConfigId - Provider configuration ID
+   * @returns The live terms, or null when there is nothing to sync
+   * @throws Whatever the provider read throws, so the webhook is redelivered
+   * @private
+   */
+  private async readLiveSubscriptionTerms(
+    event: WebhookEvent,
+    providerConfigId: string,
+  ): Promise<LiveSubscriptionTerms | null> {
+    if (!event.interval || !event.subscriptionId) {
+      return null;
+    }
+
+    const plan = await FundingPlanEntity.findOne({
+      where: {
+        provider_subscription_id: event.subscriptionId,
+        provider_config_id: providerConfigId,
+      },
+    });
+    if (!plan || plan.status === 'cancelled') {
+      return null;
+    }
+
+    const reportedCycle: BillingCycle = event.interval === 'year' ? 'yearly' : 'monthly';
+    const reportedAmount = event.amount ?? plan.amount;
+    if (reportedCycle === plan.billing_cycle && reportedAmount === plan.amount) {
+      return null;
+    }
+
+    const providerEntity = await ProviderConfigEntity.findByPk(plan.provider_config_id);
+    if (!providerEntity) {
+      return null;
+    }
+
+    const live = await ProviderFactory.getAdapter(providerEntity).getSubscription(plan.provider_subscription_id);
+
+    const invalidReason = this.liveSubscriptionProblem(live, plan);
+    if (invalidReason) {
+      logger.warn({
+        eventId: event.eventId,
+        eventType: event.eventType,
+        fundingPlanId: plan.id,
+        reason: invalidReason,
+      }, 'Provider subscription failed validation; not syncing the funding plan billing cycle or amount');
+      return null;
+    }
+
+    return {
+      readCycle: plan.billing_cycle,
+      readAmount: plan.amount,
+      billingCycle: live.interval === 'year' ? 'yearly' : 'monthly',
+      amount: live.amount,
+    };
+  }
+
+  /**
+   * Check that a re-read subscription is the plan's own and has a shape
+   * whose amount is the plan total
+   *
+   * @param live - Subscription as the provider reports it
+   * @param plan - Plan it was read for
+   * @returns A reason code when it fails, or null when it may be synced
+   * @private
+   */
+  private liveSubscriptionProblem(live: ProviderSubscription, plan: FundingPlanEntity): string | null {
+    if (live.providerSubscriptionId !== plan.provider_subscription_id) {
+      return 'subscription_mismatch';
+    }
+    if (live.providerCustomerId !== plan.provider_customer_id) {
+      return 'customer_mismatch';
+    }
+    if (live.itemCount !== 1) {
+      return 'not_single_item';
+    }
+    if (live.interval !== 'month' && live.interval !== 'year') {
+      return 'unknown_interval';
+    }
+    if (!Number.isInteger(live.amount) || live.amount <= 0) {
+      return 'invalid_amount';
+    }
+    return null;
+  }
+
+  /**
+   * Write re-read billing terms to the locked plan row
+   *
+   * Skipped when the row no longer holds what readLiveSubscriptionTerms saw:
+   * a local write (addCalendarToFundingPlan pushing a new total) landed in
+   * between, and its value wins. A later provider event resyncs if needed.
+   *
+   * @param fundingPlanRecord - Plan row, locked FOR UPDATE
+   * @param terms - Terms from readLiveSubscriptionTerms
+   * @param event - Event that triggered the sync, for logging
+   * @private
+   */
+  private applyLiveSubscriptionTerms(
+    fundingPlanRecord: FundingPlanEntity,
+    terms: LiveSubscriptionTerms,
+    event: WebhookEvent,
+  ): void {
+    if (fundingPlanRecord.billing_cycle !== terms.readCycle || fundingPlanRecord.amount !== terms.readAmount) {
+      return;
+    }
+
+    const logContext = {
+      eventId: event.eventId,
+      eventType: event.eventType,
+      fundingPlanId: fundingPlanRecord.id,
+    };
+
+    if (terms.billingCycle !== fundingPlanRecord.billing_cycle) {
+      // Should not happen once the portal is pinned: something outside
+      // Pavillion changed the subscription's interval.
+      logger.warn({
+        ...logContext,
+        previousCycle: fundingPlanRecord.billing_cycle,
+        newCycle: terms.billingCycle,
+      }, 'Funding plan billing cycle changed at the provider; syncing it');
+      fundingPlanRecord.billing_cycle = terms.billingCycle;
+    }
+
+    if (terms.amount !== fundingPlanRecord.amount) {
+      logger.info(logContext, 'Funding plan amount changed at the provider; syncing it');
+      fundingPlanRecord.amount = terms.amount;
+    }
   }
 
   /**

@@ -2854,6 +2854,202 @@ describe('FundingService', () => {
         expect(plan.amount).toBe(PRICE);
       });
     });
+
+    /**
+     * A subscription changed outside Pavillion (a portal on the operator's
+     * Dashboard default, or the Dashboard itself) must not leave the plan row
+     * pricing the next added calendar on the wrong cycle.
+     */
+    describe('syncing billing cycle and amount from subscription updates', () => {
+      beforeEach(() => stubPricing(false));
+
+      /** The subscription as the provider reports it on a live re-read. */
+      function liveSubscription(plan: FundingPlanEntity, overrides: Record<string, unknown> = {}) {
+        return {
+          providerSubscriptionId: plan.provider_subscription_id,
+          providerCustomerId: plan.provider_customer_id,
+          status: 'active',
+          ...subscriptionPeriod,
+          amount: YEARLY_PRICE,
+          currency: 'USD',
+          interval: 'year',
+          itemCount: 1,
+          cancelAt: null,
+          ...overrides,
+        };
+      }
+
+      /** Deliver a customer.subscription.updated for the plan's subscription. */
+      function deliverUpdate(plan: FundingPlanEntity, fields: Partial<WebhookEvent> = {}) {
+        return service.processWebhookEvent({
+          eventId: `evt_${uuidv4()}`,
+          eventType: 'customer.subscription.updated',
+          subscriptionId: plan.provider_subscription_id,
+          customerId: plan.provider_customer_id,
+          status: 'active',
+          rawPayload: {},
+          ...fields,
+        }, providerConfigId);
+      }
+
+      it('should adopt a yearly cycle the provider reports on a monthly plan, and price the next add from it', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan));
+        const eventId = `evt_${uuidv4()}`;
+
+        await deliverUpdate(plan, { eventId, interval: 'year', amount: YEARLY_PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(adapter.getSubscription.calledOnceWith(plan.provider_subscription_id)).toBe(true);
+        expect(plan.billing_cycle).toBe('yearly');
+        expect(plan.amount).toBe(YEARLY_PRICE);
+        expect(fundingLogWarn).toHaveBeenCalledWith({
+          eventId,
+          eventType: 'customer.subscription.updated',
+          fundingPlanId: plan.id,
+          previousCycle: 'monthly',
+          newCycle: 'yearly',
+        }, expect.any(String));
+
+        const calendarId = uuidv4();
+        await service.addCalendarToFundingPlan(accountId, calendarId);
+
+        expect((await openAllocation(calendarId))!.amount).toBe(YEARLY_PRICE);
+      });
+
+      it('should write the live values, not the payload\'s', async () => {
+        // The payload only says something may have changed; it is not
+        // trusted to say what.
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan, { amount: 2 * YEARLY_PRICE }));
+
+        await deliverUpdate(plan, { interval: 'year', amount: 999000, currency: 'USD' });
+
+        await plan.reload();
+        expect(plan.amount).toBe(2 * YEARLY_PRICE);
+      });
+
+      it('should adopt an amount-only change without touching the cycle or warning', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan, { interval: 'month', amount: 2 * PRICE }));
+
+        await deliverUpdate(plan, { interval: 'month', amount: 2 * PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(2 * PRICE);
+        expect(fundingLogWarn).not.toHaveBeenCalled();
+      });
+
+      it('should not re-read the subscription for Pavillion\'s own echo', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+
+        await deliverUpdate(plan, { interval: 'month', amount: PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(adapter.getSubscription.called).toBe(false);
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+      });
+
+      it('should leave the plan alone when the live subscription already matches it', async () => {
+        // An out-of-order delivery: the payload describes a state the
+        // subscription has since left.
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan, { interval: 'month', amount: PRICE }));
+
+        await deliverUpdate(plan, { interval: 'year', amount: YEARLY_PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(adapter.getSubscription.calledOnce).toBe(true);
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+        expect(fundingLogWarn).not.toHaveBeenCalled();
+      });
+
+      it('should propagate a failed re-read so the provider redelivers', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.rejects(new Error('provider unavailable'));
+        const eventId = `evt_${uuidv4()}`;
+
+        await expect(
+          deliverUpdate(plan, { eventId, interval: 'year', amount: YEARLY_PRICE, currency: 'USD', status: 'past_due' }),
+        ).rejects.toThrow('provider unavailable');
+
+        await plan.reload();
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+        expect(plan.status).toBe('active');
+        // No dedupe row, or the redelivery would be dropped as a duplicate.
+        expect(await FundingEventEntity.findOne({ where: { provider_event_id: eventId } })).toBeNull();
+      });
+
+      it.each([
+        ['has more than one item', { itemCount: 2 }],
+        ['bills on an interval Pavillion does not create', { interval: undefined }],
+        ['belongs to another customer', { providerCustomerId: 'cus_someone_else' }],
+        ['is a different subscription', { providerSubscriptionId: 'sub_someone_else' }],
+        ['reports a non-positive amount', { amount: 0 }],
+        ['reports a fractional amount', { amount: 1000.5 }],
+      ])('should skip the sync with a warning when the live subscription %s, and still apply the rest of the event', async (_label, overrides) => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.resolves(liveSubscription(plan, overrides));
+        const newPeriodEnd = new Date('2026-03-01T00:00:00Z');
+
+        await deliverUpdate(plan, {
+          interval: 'year',
+          amount: YEARLY_PRICE,
+          currency: 'USD',
+          status: 'past_due',
+          currentPeriodEnd: newPeriodEnd,
+        });
+
+        await plan.reload();
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+        expect(plan.status).toBe('past_due');
+        expect(plan.current_period_end).toEqual(newPeriodEnd);
+        expect(fundingLogWarn).toHaveBeenCalledOnce();
+      });
+
+      it('should not re-read the subscription of a cancelled plan', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        plan.status = 'cancelled';
+        await plan.save();
+
+        await deliverUpdate(plan, { interval: 'year', amount: YEARLY_PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(adapter.getSubscription.called).toBe(false);
+        expect(plan.billing_cycle).toBe('monthly');
+        expect(plan.amount).toBe(PRICE);
+      });
+
+      it('should not sync from an event that carries no price', async () => {
+        const { plan } = await seedActivePlan('monthly', PRICE);
+
+        await deliverUpdate(plan, { amount: YEARLY_PRICE });
+
+        await plan.reload();
+        expect(adapter.getSubscription.called).toBe(false);
+        expect(plan.amount).toBe(PRICE);
+      });
+
+      it('should yield to a local write that lands while the subscription is being re-read', async () => {
+        // addCalendarToFundingPlan holds the plan lock while it pushes a new
+        // total; a re-read taken before that commit would carry the old one.
+        const { plan } = await seedActivePlan('monthly', PRICE);
+        adapter.getSubscription.callsFake(async () => {
+          await FundingPlanEntity.update({ amount: 3 * PRICE }, { where: { id: plan.id } });
+          return liveSubscription(plan, { interval: 'month', amount: 2 * PRICE });
+        });
+
+        await deliverUpdate(plan, { interval: 'month', amount: 2 * PRICE, currency: 'USD' });
+
+        await plan.reload();
+        expect(plan.amount).toBe(3 * PRICE);
+      });
+    });
   });
 
   describe('getBillingPortalUrl', () => {
