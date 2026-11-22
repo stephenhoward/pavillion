@@ -94,20 +94,6 @@ function hasPinnedPortalFeatures(configuration: Stripe.BillingPortal.Configurati
 }
 
 /**
- * Whether a Stripe error is a refusal on the key's permissions (HTTP 403),
- * typically a restricted key without billing portal write access
- *
- * Read from the error's `type` rather than by `instanceof`, so it does not
- * depend on which copy of the SDK constructed the error.
- *
- * @param err - Error thrown by a Stripe call
- * @returns True for a permission error
- */
-function isStripePermissionError(err: unknown): err is Stripe.errors.StripePermissionError {
-  return (err as { type?: unknown } | null)?.type === 'StripePermissionError';
-}
-
-/**
  * Stripe error types that may succeed on retry: the request never reached
  * Stripe or timed out, Stripe rate limited it, or Stripe failed on its side
  */
@@ -179,8 +165,6 @@ export class StripeAdapter implements PaymentProviderAdapter {
   private portalConfigurationId: string | null = null;
   /** The resolution in flight, shared by concurrent first portal opens */
   private portalConfigurationResolving: Promise<string> | null = null;
-  /** Whether the degraded (unpinned) portal path has been logged on this adapter */
-  private portalPermissionErrorLogged = false;
 
   /**
    * Initialize Stripe adapter with credentials
@@ -516,18 +500,11 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * PINNED_PORTAL_FEATURES), never on the operator's Dashboard default, which
    * Pavillion does not control.
    *
-   * Two failures change that:
-   *
-   *  - The key may not manage portal configurations (a restricted key without
-   *    billing portal write). The session opens without a configuration, so
-   *    owners can still cancel and fix a card, and the operator's default
-   *    decides the rest. Logged once per adapter; not cached, so a fixed key
-   *    returns to the pinned path on the next open. The webhook sync of
-   *    billing cycle and amount (FundingService.processWebhookEvent) covers a
-   *    plan switch made there; nothing covers that default's cancel mode.
-   *  - Any other failure to resolve the configuration propagates. Falling
-   *    back to the default on a transient error would hand out a portal
-   *    nobody vetted just because Stripe was briefly unreachable.
+   * A failure to resolve the configuration propagates and no session is
+   * opened; it is not cached, so the next open resolves again. That includes
+   * a key that may not manage portal configurations: Stripe grants
+   * configurations and sessions under one "Customer portal" permission, so
+   * such a key could not open a session either.
    *
    * If Stripe rejects the configuration itself (deleted or deactivated in the
    * Dashboard), the cached id is dropped and the error propagates; the next
@@ -547,36 +524,19 @@ export class StripeAdapter implements PaymentProviderAdapter {
     returnUrl: string,
     options?: ProviderRequestOptions,
   ): Promise<string> {
-    let configuration: string | undefined;
-    try {
-      configuration = await this.resolvePortalConfiguration(options);
-    }
-    catch (err) {
-      if (!isStripePermissionError(err)) {
-        throw err;
-      }
-
-      if (!this.portalPermissionErrorLogged) {
-        this.portalPermissionErrorLogged = true;
-        logger.error({
-          providerType: this.providerType,
-          errorType: err.type,
-          code: err.code,
-        }, 'Stripe key may not manage billing portal configurations; opening the portal on the Dashboard default configuration');
-      }
-    }
+    const configuration = await this.resolvePortalConfiguration(options);
 
     try {
       const session = await this.stripe.billingPortal.sessions.create({
         customer: customerId,
         return_url: returnUrl,
-        ...(configuration && { configuration }),
+        configuration,
       }, this.requestOptions(options, 'portal-session'));
 
       return session.url;
     }
     catch (err) {
-      if (configuration && isPortalConfigurationRejected(err) && this.portalConfigurationId === configuration) {
+      if (isPortalConfigurationRejected(err) && this.portalConfigurationId === configuration) {
         this.portalConfigurationId = null;
       }
       throw err;

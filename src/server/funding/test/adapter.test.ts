@@ -1464,73 +1464,49 @@ describe('Payment Provider Adapters', () => {
         expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
       });
 
-      it('should open the session without a configuration when the key may not manage portal configurations', async () => {
-        // An operator's restricted key without billing-portal write. Owners
-        // can still cancel and fix a card; the operator's Dashboard default
-        // decides what else the portal shows.
-        mockStripe.billingPortal.configurations.list.returns({
-          autoPagingToArray: sandbox.stub().rejects(permissionError()),
-        });
-
-        const url = await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
-
-        expect(url).toBe('https://billing.stripe.com/p/session/test');
-        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0]).not.toHaveProperty('configuration');
-        expect(errorStub).toHaveBeenCalledOnce();
-        expect(errorStub.mock.calls[0][0]).toEqual({
-          providerType: 'stripe',
-          errorType: 'StripePermissionError',
-          code: undefined,
-        });
-      });
-
-      it('should log the permission error once per adapter and retry resolution on the next call', async () => {
-        mockStripe.billingPortal.configurations.list.returns({
-          autoPagingToArray: sandbox.stub().rejects(permissionError()),
-        });
-
-        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
-        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
-
-        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
-        expect(errorStub).toHaveBeenCalledOnce();
-
-        // A fixed key returns to the pinned path.
-        givenConfigurations([pinnedConfiguration()]);
-        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
-
-        expect(mockStripe.billingPortal.sessions.create.thirdCall.args[0].configuration).toBe('bpc_pinned');
-      });
-
-      it('should open the session without a configuration when creating one is not permitted', async () => {
-        givenConfigurations([]);
-        mockStripe.billingPortal.configurations.create.rejects(permissionError());
-
-        await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
-
-        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0]).not.toHaveProperty('configuration');
-      });
-
       it.each([
-        ['list', 'rate limited'],
-        ['create', 'network down'],
-      ])('should propagate a non-permission %s failure and open no session', async (step, message) => {
-        // Falling back to the Dashboard default on a transient error would
-        // hand out a portal Pavillion has not vetted.
+        ['list', 'a permission error', () => permissionError()],
+        ['create', 'a permission error', () => permissionError()],
+        ['list', 'a rate limit', () => new Stripe.errors.StripeRateLimitError({ message: 'rate limited' } as any)],
+        ['create', 'a connection failure', () => new Stripe.errors.StripeConnectionError({ message: 'network down' } as any)],
+      ])('should propagate %s step failing with %s and open no session', async (step, _label, makeError) => {
+        // No session ever opens without Pavillion's configuration. A key that
+        // may not manage configurations could not open a session either: Stripe
+        // grants both under one Customer portal permission.
+        const error = makeError();
         if (step === 'list') {
           mockStripe.billingPortal.configurations.list.returns({
-            autoPagingToArray: sandbox.stub().rejects(new Stripe.errors.StripeRateLimitError({ message } as any)),
+            autoPagingToArray: sandbox.stub().rejects(error),
           });
         }
         else {
           givenConfigurations([]);
-          mockStripe.billingPortal.configurations.create.rejects(new Stripe.errors.StripeConnectionError({ message } as any));
+          mockStripe.billingPortal.configurations.create.rejects(error);
         }
 
         await expect(
           stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
-        ).rejects.toThrow(message);
+        ).rejects.toBe(error);
         expect(mockStripe.billingPortal.sessions.create.called).toBe(false);
+      });
+
+      it('should not cache a permission error, and resolve again on the next call', async () => {
+        mockStripe.billingPortal.configurations.list.returns({
+          autoPagingToArray: sandbox.stub().rejects(permissionError()),
+        });
+
+        await expect(
+          stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options),
+        ).rejects.toThrow('required permissions');
+
+        // A fixed key lands on the pinned path.
+        givenConfigurations([pinnedConfiguration()]);
+        const url = await stripeAdapter.getBillingPortalUrl('cus_1', 'https://example.com/return', options);
+
+        expect(url).toBe('https://billing.stripe.com/p/session/test');
+        expect(mockStripe.billingPortal.configurations.list.calledTwice).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.calledOnce).toBe(true);
+        expect(mockStripe.billingPortal.sessions.create.firstCall.args[0].configuration).toBe('bpc_pinned');
       });
 
       it('should forget a configuration Stripe no longer has, without retrying in the same call', async () => {
@@ -1591,22 +1567,6 @@ describe('Payment Provider Adapters', () => {
 
         expect(mockStripe.billingPortal.configurations.list.calledOnce).toBe(true);
         expect(mockStripe.billingPortal.sessions.create.secondCall.args[0].configuration).toBe('bpc_pinned');
-      });
-
-      it('should never log the session URL or the customer id', async () => {
-        mockStripe.billingPortal.configurations.list.returns({
-          autoPagingToArray: sandbox.stub().rejects(permissionError()),
-        });
-
-        await stripeAdapter.getBillingPortalUrl('cus_secret_customer', 'https://example.com/return', options);
-
-        const logged = JSON.stringify([
-          ...errorStub.mock.calls,
-          ...warnStub.mock.calls,
-          ...debugStub.mock.calls,
-        ]);
-        expect(logged).not.toContain('cus_secret_customer');
-        expect(logged).not.toContain('billing.stripe.com');
       });
     });
 

@@ -2856,9 +2856,9 @@ describe('FundingService', () => {
     });
 
     /**
-     * A subscription changed outside Pavillion (a portal on the operator's
-     * Dashboard default, or the Dashboard itself) must not leave the plan row
-     * pricing the next added calendar on the wrong cycle.
+     * A subscription changed outside Pavillion (in the Stripe Dashboard, say)
+     * must not leave the plan row pricing the next added calendar on the
+     * wrong cycle.
      */
     describe('syncing billing cycle and amount from subscription updates', () => {
       beforeEach(() => {
