@@ -132,4 +132,38 @@ else
   assert_eq yes "${ran}" "the child still runs after an unreadable-file warning"
 fi
 
+# ── Wrapper container defaults ──────────────────────────────────────────────
+# scripts/backup.sh and scripts/housekeeping.sh exec into a container from the
+# host. A stub docker first on PATH lists the Compose container names and
+# records the container `docker exec` targets.
+echo "wrapper container defaults"
+if [[ -f /.dockerenv ]]; then
+  echo "  SKIP: wrapper checks (inside Docker the wrappers run the CLI directly)"
+else
+  DOCKER_DIR="$(mktemp_dir)"
+  EXEC_OUT="${DOCKER_DIR}/exec.out"
+  cat > "${DOCKER_DIR}/docker" <<'STUB'
+#!/bin/sh
+case "$1" in
+  ps) printf 'pavillion-app\npavillion-worker\ncustom-box\n' ;;
+  exec) printf '%s\n' "$3" > "${EXEC_OUT}" ;;
+esac
+STUB
+  chmod +x "${DOCKER_DIR}/docker"
+
+  for wrapper in backup housekeeping; do
+    rm -f "${EXEC_OUT}"
+    (unset PAVILLION_CONTAINER; EXEC_OUT="${EXEC_OUT}" PATH="${DOCKER_DIR}:${PATH}" \
+      bash "${REPO}/scripts/${wrapper}.sh" >/dev/null 2>&1)
+    assert_eq pavillion-worker "$(cat "${EXEC_OUT}" 2>/dev/null)" \
+      "${wrapper}.sh targets pavillion-worker by default"
+
+    rm -f "${EXEC_OUT}"
+    PAVILLION_CONTAINER=custom-box EXEC_OUT="${EXEC_OUT}" PATH="${DOCKER_DIR}:${PATH}" \
+      bash "${REPO}/scripts/${wrapper}.sh" >/dev/null 2>&1
+    assert_eq custom-box "$(cat "${EXEC_OUT}" 2>/dev/null)" \
+      "${wrapper}.sh targets PAVILLION_CONTAINER when set"
+  done
+fi
+
 report_results

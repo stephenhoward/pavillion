@@ -22,7 +22,7 @@ if [ -f /.dockerenv ]; then
   node /app/bin/pavillion housekeeping
 else
   # Outside Docker - use docker exec
-  CONTAINER_NAME="${PAVILLION_CONTAINER:-pavillion-app-1}"
+  CONTAINER_NAME="${PAVILLION_CONTAINER:-pavillion-worker}"
 
   # Check if container exists
   if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
