@@ -206,7 +206,7 @@ describe('Admin Funding API', () => {
       const app = express();
       adminHandlers.installHandlers(app, '/api/funding/v1');
 
-      const settingsLayers = (app as any)._router.stack
+      const settingsLayers = (app as any).router.stack
         .filter((layer: any) => layer.name === 'router')
         .flatMap((layer: any) => layer.handle.stack)
         .filter((layer: any) => layer.route?.path === '/admin/settings');

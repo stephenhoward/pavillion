@@ -17,8 +17,8 @@ const testApp = (router: Router ): express.Application => {
 
 const countRoutes = (app: express.Application): number => {
   let count = 0;
-  if( app._router && app._router.stack ) {
-    app._router.stack.forEach((middleware: any) => {
+  if( app.router && app.router.stack ) {
+    app.router.stack.forEach((middleware: any) => {
       if (middleware.route) { // Routes registered directly on the app
         count++;
       }

@@ -448,8 +448,8 @@ describe('Public Report API - POST /events/:eventId/reports', () => {
 
       // Verify routes are mounted by checking the router stack
       let routeCount = 0;
-      if (app._router && app._router.stack) {
-        app._router.stack.forEach((middleware: any) => {
+      if (app.router && app.router.stack) {
+        app.router.stack.forEach((middleware: any) => {
           if (middleware.name === 'router') {
             middleware.handle.stack.forEach((handler: any) => {
               if (handler.route) {

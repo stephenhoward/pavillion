@@ -310,6 +310,10 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   configureProxy(app);
 
+  // Express 5 defaults to the 'simple' query parser; keep qs parsing so
+  // bracket syntax (e.g. categories[]=a) parses as it did under Express 4.
+  app.set('query parser', 'extended');
+
   // Set up health check endpoint first (before other routes and middleware)
   setupHealthCheck(app);
 
@@ -371,6 +375,13 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     const distPath = path.join(path.resolve(), "dist");
     app.use("/assets", express.static(path.join(distPath, "assets")));
   }
+
+  // body-parser 2 leaves req.body undefined when there is no parsable body;
+  // default it to {} as Express 4 did. Body parsers still overwrite it.
+  app.use((req, _res, next) => {
+    req.body ??= {};
+    next();
+  });
 
   const eventBus = new EventEmitter();
 
@@ -511,7 +522,8 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     // In test mode, supertest works directly with the Express app object
     // without needing the server to actually listen on a port
     if (process.env.NODE_ENV !== 'test') {
-      const server = app.listen(port, () => {
+      const server = app.listen(port, (error) => {
+        if (error) throw error;
         logger.info({ port }, 'Pavillion listening');
       });
 

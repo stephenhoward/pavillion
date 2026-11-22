@@ -272,7 +272,7 @@ const REVIEWED_NO_LIMITER_ROUTES: { method: string; path: string; reason: string
 ];
 
 // =============================================================================
-// Router-stack introspection (Express 4).
+// Router-stack introspection (Express 5).
 // =============================================================================
 
 interface DiscoveredRoute {
@@ -298,39 +298,41 @@ function isRateLimiter(handle: any): boolean {
 }
 
 /**
- * Reconstructs the mount-path fragment a router layer was mounted under from its
- * compiled regexp + param keys. Express 4 stores `app.use('/x', router)` as a
- * Layer whose regexp encodes '/x'; nested params become capture groups that map
- * positionally to `layer.keys`.
+ * Mount path of each router passed to `app.use(path, router)`, keyed by the
+ * router function. Recorded by `recordMountPaths` while `buildFullApp` wires
+ * the domains.
  *
- * VALIDATED AGAINST EXPRESS 4.x (4.22.2 at time of writing). The hardcoded
- * regexp-source patterns below depend on Express 4's internal path-to-regexp
- * encoding. Express 5 (path-to-regexp v8) changes this encoding and stores
- * layer matchers differently — under it these replacements would silently
- * reconstruct wrong/empty paths. The positive-path sanity assertion in the
- * "introspection sanity check" test guards against that: if reconstruction
- * breaks, a KNOWN full path will go missing and that assertion fails loudly
- * with a clear signal, rather than producing a cascade of misattributed
- * "route not found" / "unclassified route" failures.
+ * Express 5 (router 2.x) compiles a layer's path with path-to-regexp v8 and
+ * keeps no `regexp` / `keys` from which the mount path could be decoded, so
+ * the path is captured at mount time instead. A router mounted without a path
+ * (or under '/') contributes no prefix. No router in src/server is nested
+ * under a path inside another router, so only top-level mounts are recorded.
+ * The positive-path sanity assertion in the "introspection sanity check" test
+ * still guards against a missed mount: a KNOWN full path would go missing and
+ * that assertion fails loudly, rather than producing a cascade of
+ * misattributed "route not found" / "unclassified route" failures.
  */
-function reconstructMountPath(layer: any): string {
-  if (layer.regexp && layer.regexp.fast_slash) return '';
-  const keys = layer.keys || [];
-  const src: string = layer.regexp && layer.regexp.source ? layer.regexp.source : '';
-  let path = src
-    .replace(/^\^/, '')
-    .replace(/\\\/\?\(\?=\\\/\|\$\)$/, '')
-    .replace(/\(\?=\\\/\|\$\)$/, '')
-    .replace(/\$$/, '')
-    .replace(/\\\//g, '/');
-  let ki = 0;
-  path = path.replace(/\(\?:\(\[\^\/\]\+\?\)\)/g, () => ':' + (keys[ki++]?.name ?? 'param'));
-  path = path.replace(/\(\?:\(\[\^\\\/\]\+\?\)\)/g, () => ':' + (keys[ki++]?.name ?? 'param'));
-  return path.replace(/\/\?$/, '');
+type MountPaths = Map<unknown, string>;
+
+/** Wraps `app.use` so every router mounted under a string path records it. */
+function recordMountPaths(app: Application): MountPaths {
+  const mountPaths: MountPaths = new Map();
+  const originalUse = app.use.bind(app);
+  (app as any).use = (...args: any[]) => {
+    const [first, ...rest] = args;
+    if (typeof first === 'string') {
+      const prefix = first === '/' ? '' : first.replace(/\/$/, '');
+      for (const handler of rest.flat()) {
+        if (typeof handler === 'function') mountPaths.set(handler, prefix);
+      }
+    }
+    return (originalUse as any)(...args);
+  };
+  return mountPaths;
 }
 
 /** Walks the full router stack and collects every terminal route. */
-function discoverRoutes(app: Application): DiscoveredRoute[] {
+function discoverRoutes(app: Application, mountPaths: MountPaths): DiscoveredRoute[] {
   const routes: DiscoveredRoute[] = [];
 
   function walk(stack: any[], prefix: string): void {
@@ -347,17 +349,19 @@ function discoverRoutes(app: Application): DiscoveredRoute[] {
         }
       }
       else if (layer.name === 'router' && layer.handle?.stack) {
-        walk(layer.handle.stack, prefix + reconstructMountPath(layer));
+        walk(layer.handle.stack, prefix + (mountPaths.get(layer.handle) ?? ''));
       }
     }
   }
 
-  walk((app as any)._router.stack, '');
+  walk((app as any).router.stack, '');
   return routes;
 }
 
 interface BuiltApp {
   app: Application;
+  /** Mount path of each router the domains mounted under a path. */
+  mountPaths: MountPaths;
   /** Stops domain-level timers (funding scheduled jobs) started during init. */
   teardown: () => void;
 }
@@ -374,6 +378,7 @@ interface BuiltApp {
  */
 async function buildFullApp(): Promise<BuiltApp> {
   const app: Application = express();
+  const mountPaths = recordMountPaths(app);
   const eventBus = new EventEmitter();
 
   const configurationDomain = new ConfigurationDomain(eventBus);
@@ -440,6 +445,7 @@ async function buildFullApp(): Promise<BuiltApp> {
 
   return {
     app,
+    mountPaths,
     teardown: () => fundingDomain.shutdown(),
   };
 }
@@ -455,7 +461,7 @@ describe('rate-limit coverage guard', () => {
   beforeAll(async () => {
     const built = await buildFullApp();
     teardown = built.teardown;
-    routes = discoverRoutes(built.app);
+    routes = discoverRoutes(built.app, built.mountPaths);
   });
 
   afterAll(() => {
@@ -476,16 +482,16 @@ describe('rate-limit coverage guard', () => {
 
     // Positive-path reconstruction check. POST /api/v1/register is a known,
     // stably-registered route under a nested router (accounts domain). If
-    // reconstructMountPath breaks (e.g. an Express major bump changes the
-    // internal regexp encoding), this exact full path will fail to reconstruct
+    // mount-path recording breaks (e.g. an Express major bump changes how
+    // routers are mounted), this exact full path will fail to reconstruct
     // and this assertion fails with a clear "path reconstruction failed" signal
     // — instead of the breakage surfacing downstream as misleading "route not
     // found" / "unclassified route" errors in the guards below.
     expect(
       routes.some((r) => r.method === 'POST' && r.path === '/api/v1/register'),
       'Router introspection failed to reconstruct the known route POST /api/v1/register. '
-        + 'reconstructMountPath likely broke against the installed Express version '
-        + '(validated against Express 4.x) — fix path reconstruction before trusting the guards below.',
+        + 'Mount-path recording likely broke against the installed Express version '
+        + '(validated against Express 5.x) — fix path reconstruction before trusting the guards below.',
     ).toBe(true);
   });
 

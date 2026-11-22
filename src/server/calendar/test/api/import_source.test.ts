@@ -164,7 +164,7 @@ describe('ImportSourceRoutes', () => {
       const app = express();
       routes.installHandlers(app, '/api/v1');
 
-      const layers = (app as any)._router.stack
+      const layers = (app as any).router.stack
         .filter((layer: any) => layer.name === 'router')
         .flatMap((layer: any) => layer.handle.stack)
         .filter((layer: any) => layer.route?.path === path && layer.route.methods[method]);

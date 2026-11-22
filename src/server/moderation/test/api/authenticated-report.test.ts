@@ -393,8 +393,8 @@ describe('Authenticated Report API - POST /reports', () => {
 
       // Verify routes are mounted by checking the router stack
       let routeCount = 0;
-      if (app._router && app._router.stack) {
-        app._router.stack.forEach((middleware: any) => {
+      if (app.router && app.router.stack) {
+        app.router.stack.forEach((middleware: any) => {
           if (middleware.name === 'router') {
             middleware.handle.stack.forEach((handler: any) => {
               if (handler.route) {
@@ -413,8 +413,8 @@ describe('Authenticated Report API - POST /reports', () => {
 
       // Find the router middleware and count the handlers on the POST /reports route
       let routeHandlerCount = 0;
-      if (app._router && app._router.stack) {
-        app._router.stack.forEach((middleware: any) => {
+      if (app.router && app.router.stack) {
+        app.router.stack.forEach((middleware: any) => {
           if (middleware.name === 'router') {
             middleware.handle.stack.forEach((handler: any) => {
               if (handler.route && handler.route.path === '/reports') {
