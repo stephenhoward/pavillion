@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
-import { nextTick } from 'vue';
+import { nextTick, reactive } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
 import CreateSeriesModal from '@/client/components/logged_in/calendar-content/create-series-modal.vue';
 import SeriesService from '@/client/service/series';
@@ -8,10 +8,12 @@ import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError } from '@/common/exceptions/series';
 
+// The host (series-selector) passes the series out of its reactive state, so
+// the prop is deeply reactive in production; mirror that here.
 function createNewSeries(): EventSeries {
   const series = new EventSeries(null, 'calendar-123', '', null);
   series.addContent(EventSeriesContent.fromObject({ language: 'en', name: '', description: '' }));
-  return series;
+  return reactive(series) as EventSeries;
 }
 
 function createSavedSeries(): EventSeries {
