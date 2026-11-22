@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import config from 'config';
+import pLimit from 'p-limit';
 
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import {
@@ -37,6 +38,30 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');
 
+/**
+ * Most event-lifecycle handlers (`eventCreated`, `eventUpdated`,
+ * `eventDeleted`) allowed in flight at once on PostgreSQL.
+ *
+ * Each of these handlers opens database transactions, and a batch emission
+ * (a multi-VEVENT ICS import fires one `eventCreated` per event from a single
+ * `afterCommit`) would otherwise start them all at once and drain the
+ * connection pool. The resource being protected is `database.pool.max` in
+ * `config/default.yaml`; this value must stay well below it.
+ *
+ * It ceilings these three handlers only. Outbox delivery, inbox dispatch and
+ * the other listeners installed here are not counted against it, so it is
+ * not a connection reservation: those paths can still claim pool connections
+ * alongside the handlers it admits.
+ */
+const MAX_CONCURRENT_EVENT_HANDLERS = 4;
+
+/**
+ * Queued lifecycle handlers at which one warning is logged. Reaching it means
+ * emissions are outpacing dispatch; nothing is dropped. The warning fires as
+ * the queue reaches this size, so a backlog that stays above it logs once.
+ */
+const EVENT_HANDLER_BACKLOG_WARN = 1000;
+
 export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private service: ActivityPubInterface;
   private userActorService: UserActorService;
@@ -65,14 +90,12 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
    * Every handler installed below opens its own DB transaction. On SQLite
    * (dev/test) the process holds a single shared connection that cannot BEGIN
    * a second transaction while one is open — "cannot start a transaction
-   * within a transaction". A batch operation that emits many events in one
-   * tick (e.g. a multi-VEVENT ICS file import, whose per-event `eventCreated`
-   * emits all fire from one `afterCommit`) fans out to concurrent handlers
-   * whose transactions overlap and take the process down with an unhandled
-   * rejection. Serializing dispatch removes the overlap and matches DEC-013's
-   * single chronological pipeline. PostgreSQL (production) draws a separate
-   * pooled connection per transaction, so its handlers are safe to run
-   * concurrently and we keep them concurrent to preserve throughput.
+   * within a transaction" — so every handler joins one serialized chain,
+   * matching DEC-013's single chronological pipeline. PostgreSQL (production)
+   * draws a separate pooled connection per transaction: there the
+   * event-lifecycle handlers run concurrently up to
+   * {@link MAX_CONCURRENT_EVENT_HANDLERS} so a batch emission cannot drain the
+   * pool, and every other handler runs concurrently without a bound.
    */
   private readonly serializeDispatch: boolean =
     config.get<string>('database.dialect') === 'sqlite';
@@ -80,15 +103,26 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   /** Tail of the serialized-dispatch chain; only advanced when {@link serializeDispatch}. */
   private dispatchQueue: Promise<void> = Promise.resolve();
 
+  /** Bounds the event-lifecycle handlers on PostgreSQL; unused on SQLite. */
+  private readonly lifecycleLimit = pLimit(MAX_CONCURRENT_EVENT_HANDLERS);
+
+  /**
+   * Event-lifecycle handlers queued behind {@link MAX_CONCURRENT_EVENT_HANDLERS}
+   * and not yet started. Always 0 on SQLite, where they wait on the serialized
+   * chain instead.
+   */
+  get pendingDispatchCount(): number {
+    return this.serializeDispatch ? 0 : this.lifecycleLimit.pendingCount;
+  }
+
   /**
    * Adapt a domain-event handler for installation on the (never-awaited) bus.
    *
    * On every dialect the handler runs through the shared
    * {@link guardEventHandler} so a failed background dispatch is logged rather
-   * than surfacing as a process-killing unhandled rejection. On SQLite it
-   * additionally chains each invocation onto {@link dispatchQueue} so no two
-   * handler transactions overlap; on PostgreSQL invocations run concurrently
-   * as before.
+   * than surfacing as a process-killing unhandled rejection. On SQLite each
+   * invocation joins {@link dispatchQueue} so no two handler transactions
+   * overlap; on PostgreSQL invocations run concurrently.
    */
   private serialize<T>(handler: (payload: T) => Promise<void>): (payload: T) => void {
     const run = guardEventHandler(handler, '[ActivityPub] Domain-event handler failed');
@@ -98,6 +132,28 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     }
     return (payload: T): void => {
       this.dispatchQueue = this.dispatchQueue.then(() => run(payload));
+    };
+  }
+
+  /**
+   * {@link serialize} for the event-lifecycle handlers. On SQLite it is
+   * exactly {@link serialize}. On PostgreSQL the guarded handler runs through
+   * {@link lifecycleLimit}, so at most {@link MAX_CONCURRENT_EVENT_HANDLERS}
+   * are in flight; the rest queue in emission order. The guard always
+   * resolves, so a failing handler frees its slot.
+   */
+  private serializeLifecycle<T>(handler: (payload: T) => Promise<void>): (payload: T) => void {
+    if (this.serializeDispatch) {
+      return this.serialize(handler);
+    }
+    const run = guardEventHandler(handler, '[ActivityPub] Domain-event handler failed');
+
+    return (payload: T): void => {
+      void this.lifecycleLimit(() => run(payload));
+      const pendingCount = this.lifecycleLimit.pendingCount;
+      if (pendingCount === EVENT_HANDLER_BACKLOG_WARN) {
+        logger.warn({ pendingCount }, '[ActivityPub] Event-lifecycle handler backlog reached warning threshold');
+      }
     };
   }
 
@@ -120,10 +176,14 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
-    eventBus.on('eventCreated', this.serialize(this.handleEventCreated.bind(this)));
-    eventBus.on('eventUpdated', this.serialize(this.handleEventUpdated.bind(this)));
-    eventBus.on('eventDeleted', this.serialize(this.handleEventDeleted.bind(this)));
+    eventBus.on('eventCreated', this.serializeLifecycle(this.handleEventCreated.bind(this)));
+    eventBus.on('eventUpdated', this.serializeLifecycle(this.handleEventUpdated.bind(this)));
+    eventBus.on('eventDeleted', this.serializeLifecycle(this.handleEventDeleted.bind(this)));
     eventBus.on('outboxMessageAdded', this.serialize(this.processOutboxMessage.bind(this)));
+    // No limiter or queue goes ahead of live inbox dispatch: DEC-013's inbox
+    // drain leaves rows under 10 seconds old (INBOX_DRAIN_SKIP_NEWER_THAN_MS)
+    // to this handler, a window that assumes a live POST is dispatched as it
+    // arrives.
     eventBus.on('inboxMessageAdded', this.serialize(this.processInboxMessage.bind(this)));
     eventBus.on('account.created', this.serialize(this.handleAccountCreated.bind(this)));
     eventBus.on('calendar.created', this.serialize(this.handleCalendarCreated.bind(this)));
