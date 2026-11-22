@@ -39,9 +39,9 @@
 #                             kindness. A larger value is rejected, not clamped.
 #   PAVILLION_MIGRATIONS_DIR  Directory holding the migration files the dump is
 #                             compared against. Default: <repo>/migrations
-#   PAVILLION_CONTAINER       The running Pavillion app container, used only to
+#   PAVILLION_CONTAINER       The running Pavillion worker container, used only to
 #                             record the drill's outcome once the drill is over.
-#                             Default: pavillion-app-1. Same variable name
+#                             Default: pavillion-worker. Same variable name
 #                             scripts/backup.sh already documents. If the
 #                             container is not running the outcome is not
 #                             recorded and the drill's verdict is unaffected.
@@ -108,11 +108,11 @@ BACKUP_DIR="${PAVILLION_BACKUP_DIR:-}"
 DRILL_IMAGE="${PAVILLION_DRILL_IMAGE:-postgres:17}"
 DRILL_TIMEOUT="${PAVILLION_DRILL_TIMEOUT:-90}"
 MIGRATIONS_DIR="${PAVILLION_MIGRATIONS_DIR:-${REPO_ROOT}/migrations}"
-# The running Pavillion app container, used only by record_drill_result. Same
+# The running Pavillion worker container, used only by record_drill_result. Same
 # variable name scripts/backup.sh documents, rather than a second one meaning
 # the same thing. Not to be confused with CONTAINER_NAME below, which is the
 # throwaway scratch database.
-APP_CONTAINER="${PAVILLION_CONTAINER:-pavillion-app-1}"
+WORKER_CONTAINER="${PAVILLION_CONTAINER:-pavillion-worker}"
 
 # Upper bound on PAVILLION_DRILL_TIMEOUT. An hour is far longer than any real
 # postgres start-up and short enough that a mistyped value cannot leave a
@@ -246,9 +246,9 @@ record_drill_result() {
 
   # The laptop case: PAVILLION_BACKUP_DIR pointed at a directory of dumps on a
   # host where the stack is not up. The drill has still done its job.
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${APP_CONTAINER}$"; then
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${WORKER_CONTAINER}$"; then
     err ""
-    err "WARNING: the app container ${APP_CONTAINER} is not running, so this drill's"
+    err "WARNING: the worker container ${WORKER_CONTAINER} is not running, so this drill's"
     err "         outcome was not recorded. Set PAVILLION_CONTAINER if the container"
     err "         has a different name. The drill's own verdict above is unaffected."
     return 0
@@ -262,9 +262,9 @@ record_drill_result() {
   # No -it. scripts/backup.sh uses `docker exec -it` because it is an interactive
   # operator wrapper; this drill is documented as a cron job and has no tty, where
   # -it fails outright with "the input device is not a TTY". Deliberate divergence.
-  if ! docker exec "${APP_CONTAINER}" "${cmd[@]}" >/dev/null 2>&1; then
+  if ! docker exec "${WORKER_CONTAINER}" "${cmd[@]}" >/dev/null 2>&1; then
     err ""
-    err "WARNING: could not record this drill's outcome in ${APP_CONTAINER}."
+    err "WARNING: could not record this drill's outcome in ${WORKER_CONTAINER}."
     err "         The verdict above stands; only the durable record is missing."
   fi
   return 0
@@ -680,7 +680,7 @@ s/^.*$/pg_restore: error: [redacted]/
 # PAVILLION_CONTAINER is the same hazard one command over: it lands in the
 # option-parsing region of the `docker exec` in record_drill_result, where
 # --privileged, --user and --env all live. Today the existence check in front of
-# it (`docker ps ... grep -q "^${APP_CONTAINER}$"`) happens to stop a dashed
+# it (`docker ps ... grep -q "^${WORKER_CONTAINER}$"`) happens to stop a dashed
 # value, because Docker's own naming rules forbid a leading dash so no such
 # container can exist — but that is incidental protection resting on a rule
 # documented nowhere in this script, and it evaporates the moment the order of
@@ -712,8 +712,8 @@ validate_drill_settings() {
     err "Error: PAVILLION_DRILL_IMAGE must be an image reference, not an option: ${DRILL_IMAGE}"
     return 1
   fi
-  if [[ "${APP_CONTAINER}" == -* ]]; then
-    err "Error: PAVILLION_CONTAINER must be a container name, not an option: ${APP_CONTAINER}"
+  if [[ "${WORKER_CONTAINER}" == -* ]]; then
+    err "Error: PAVILLION_CONTAINER must be a container name, not an option: ${WORKER_CONTAINER}"
     return 1
   fi
   return 0
