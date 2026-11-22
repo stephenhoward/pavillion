@@ -160,7 +160,22 @@ describe('Pavillion Widget SDK', () => {
       expect(iframe!.style.width).toBe('100%');
       expect(iframe!.style.border).toContain('none');
       expect(iframe!.getAttribute('title')).toBe('Pavillion Calendar Widget');
-      expect(iframe!.getAttribute('loading')).toBe('lazy');
+
+      widget.destroy();
+    });
+
+    // Safari (desktop and iOS) adds no session-history entry for pushState in
+    // a lazy-loaded frame, so Back from event detail leaves the host page.
+    // Playwright's WebKit does not reproduce it, so this is the only guard.
+    it('should not lazy-load the iframe', () => {
+      const widget = new PavillionWidget();
+      widget.init({
+        calendar: 'my-calendar',
+        container: '#widget-container',
+      });
+
+      const iframe = container.querySelector('iframe');
+      expect(iframe!.hasAttribute('loading')).toBe(false);
 
       widget.destroy();
     });

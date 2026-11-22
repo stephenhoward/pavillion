@@ -173,7 +173,9 @@ class PavillionWidget {
     iframe.style.display = 'block';
     iframe.style.overflow = 'hidden';
     iframe.setAttribute('title', 'Pavillion Calendar Widget');
-    iframe.setAttribute('loading', 'lazy');
+    // Never loading="lazy": Safari then records no history entry when the
+    // widget opens an event, so Back (the browser's or the widget's own)
+    // leaves the host page instead of returning to the calendar.
     iframe.setAttribute('scrolling', 'no');
 
     // Set initial height (will be adjusted by resize messages)
