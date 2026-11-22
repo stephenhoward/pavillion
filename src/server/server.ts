@@ -560,6 +560,14 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
             stopInboxDrain();
             stopOutboxDrain();
 
+            // Queued lifecycle handlers have no outbox row yet, so the outbox
+            // drain cannot recover them after restart. Detection only: the
+            // queue is neither awaited nor flushed.
+            const pendingCount = activityPubDomain.pendingDispatchCount;
+            if (pendingCount > 0) {
+              logger.warn({ pendingCount }, 'Queued ActivityPub event-lifecycle handlers dropped at shutdown');
+            }
+
             // Stop accepting scrapes and drop existing sockets before the
             // database goes away. close() alone only stops new connections and
             // would leave in-flight requests and idle keep-alive sockets to
