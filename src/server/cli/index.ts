@@ -16,9 +16,20 @@ import AccountsInterface from '../accounts/interface/index.js';
 import * as readline from 'readline';
 import Table from 'cli-table3';
 import { DateTime } from 'luxon';
-import { formatRestoreTarget, pgRestoreInvocation, resolveRestoreConnection } from './restore.js';
+import {
+  checkDumpMigrations,
+  dumpMigrationsInvocation,
+  formatRestoreTarget,
+  listCodeMigrations,
+  parseDumpMigrations,
+  pgRestoreInvocation,
+  printable,
+  resolveRestoreConnection,
+  restoreUsageError,
+} from './restore.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
@@ -228,18 +239,38 @@ async function handleBackupStatus() {
 }
 
 /**
- * Handles backup restore command.
+ * Handles backup restore command: a backup ID, or `--file <path>`.
  *
- * Interactive only: the confirmation must come from a person at a terminal,
+ * The usage check runs first and touches nothing. Then the restore is
+ * interactive only: the confirmation must come from a person at a terminal,
  * never from text piped in (`echo yes | docker exec -i ...`), so a non-TTY
- * stdin is refused before anything is touched.
+ * stdin is refused before anything is touched, on both paths.
  */
-async function handleBackupRestore(backupId: string) {
+async function handleBackupRestore(backupId: string | undefined, file: string | undefined) {
+  const usageError = restoreUsageError(backupId, file);
+  if (usageError) {
+    console.error(chalk.red(`[Restore] ${usageError}`));
+    process.exit(1);
+  }
+
   if (!process.stdin.isTTY) {
     console.error(chalk.red('[Restore] Restore must be run from an interactive terminal; refusing to read confirmation from piped input.'));
     process.exit(1);
   }
 
+  if (file) {
+    await handleBackupRestoreFromFile(file);
+  }
+  else {
+    await handleBackupRestoreById(backupId as string);
+  }
+}
+
+/**
+ * Restores the backup a metadata row names, into the database that holds the
+ * row. For rolling back a running instance.
+ */
+async function handleBackupRestoreById(backupId: string) {
   try {
     await initDatabase();
 
@@ -293,6 +324,96 @@ async function handleBackupRestore(backupId: string) {
   }
   catch (error) {
     console.error(chalk.red('\n[Restore] Failed to restore backup:'), error);
+    process.exit(1);
+  }
+}
+
+/**
+ * Reads a dump's migration record without a database or a shell.
+ *
+ * @returns The names, or null when the file is not a dump pg_restore can read
+ *   or has no SequelizeMeta data. A missing pg_restore binary is rethrown:
+ *   it says nothing about the file.
+ */
+async function readDumpMigrations(dumpPath: string): Promise<string[] | null> {
+  try {
+    const { stdout } = await execFileAsync('pg_restore', dumpMigrationsInvocation(dumpPath).args);
+    return parseDumpMigrations(stdout);
+  }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw error;
+    }
+    return null;
+  }
+}
+
+/**
+ * Restores a dump file named on the command line, for recovery onto an
+ * empty server after total loss.
+ *
+ * Reads no table before pg_restore runs: there is no backup record to look
+ * up, and the target may hold nothing at all. The file and its migration
+ * record are checked before any connection is opened.
+ */
+async function handleBackupRestoreFromFile(file: string) {
+  try {
+    const dumpPath = path.resolve(file);
+    let stat: fs.Stats | null = null;
+    try {
+      stat = fs.statSync(dumpPath);
+    }
+    catch {
+      stat = null;
+    }
+    if (!stat?.isFile()) {
+      console.error(chalk.red(`[Restore] Not a regular file: ${printable(dumpPath)}`));
+      process.exit(1);
+    }
+
+    const check = checkDumpMigrations(
+      listCodeMigrations(path.join(process.cwd(), 'migrations')),
+      await readDumpMigrations(dumpPath),
+    );
+    if (!check.ok) {
+      console.error(chalk.red(check.lines.join('\n')));
+      process.exit(1);
+    }
+
+    // Proves only that the target is reachable; reads no table.
+    await initDatabase();
+
+    console.log(chalk.bold('\n⚠️  Database Restore Warning\n'));
+    console.log('This operation will replace the current database with the dump file.');
+    console.log(chalk.red('ALL CURRENT DATA WILL BE LOST!\n'));
+
+    const conn = resolveRestoreConnection(config.get('database'));
+    console.log(formatRestoreTarget(conn) + '\n');
+
+    console.log(chalk.cyan('Dump file:'));
+    console.log(`  File: ${printable(path.basename(dumpPath))}`);
+    console.log(`  Size: ${formatBytes(stat.size)}`);
+    console.log(check.lines.join('\n') + '\n');
+
+    const confirmed = await confirm('Are you absolutely sure you want to restore this dump?');
+
+    if (!confirmed) {
+      console.log(chalk.yellow('Restore cancelled.'));
+      process.exit(0);
+    }
+
+    console.log(chalk.blue('\n[Restore] Starting database restore...'));
+
+    // No shell: the operator's path is one argument after `--`, and the
+    // password goes in the child's environment, never in its arguments.
+    const { args, env } = pgRestoreInvocation(conn, dumpPath);
+    await execFileAsync('pg_restore', args, { env });
+
+    console.log(chalk.green('\n[Restore] ✓ Database restored successfully'));
+    console.log('\n' + chalk.yellow('Start the stack with: docker compose up -d'));
+  }
+  catch (error) {
+    console.error(chalk.red('\n[Restore] Failed to restore dump:'), error);
     process.exit(1);
   }
 }
@@ -467,10 +588,11 @@ async function main() {
 
   backupCommand
     .command('restore')
-    .description('Restore database from a backup')
-    .argument('<id>', 'Backup ID to restore')
-    .action(async (id: string) => {
-      await handleBackupRestore(id);
+    .description('Replace the database with a backup (by ID) or a dump file (--file)')
+    .argument('[id]', 'Backup ID to restore')
+    .option('--file <path>', 'Dump file to restore, for recovery onto an empty server; no backup record is looked up')
+    .action(async (id: string | undefined, opts: { file?: string }) => {
+      await handleBackupRestore(id, opts.file);
     });
 
   backupCommand

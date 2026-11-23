@@ -385,7 +385,7 @@ A passing drill means your newest database backup is a complete backup of this i
 | What it restores into | A throwaway database it creates and deletes | **Your live database** |
 | Your instance's data | Untouched | **Deleted and replaced** with the backup's contents |
 | When to run it | Monthly, and after upgrades | Only when you are recovering from a loss |
-| What it takes | Nothing, or a backup's filename | A backup's ID from `./scripts/backup.sh list` |
+| What it takes | Nothing, or a backup's filename | A backup's ID from `./scripts/backup.sh list`, or, as `backup restore --file <path>`, a dump file (see [Restoring for real](#restoring-for-real)) |
 
 The restore command asks you to confirm once, then drops and recreates every table in the backup. Anything written to the instance since that backup was taken is gone: new events, new accounts, federation activity. If you want to know whether your backup works, run the drill.
 
@@ -559,24 +559,51 @@ For anyone running the drill from a script or monitor:
 
 ## Restoring for real
 
-Pavillion ships a restore command, with limits:
+The restore command has two forms. Both run `pg_restore -c --if-exists` against the configured database after a confirmation prompt. `-c` drops existing objects first, so **all current data is replaced**. Both must be run from an interactive terminal: they refuse a confirmation piped in.
+
+### Rolling back a running instance
 
 ```bash
 ./scripts/backup.sh restore <backup-id>
 ```
 
-It runs `pg_restore -c` against the configured database after a confirmation prompt. `-c` drops existing objects first, so **all current data is replaced**. Restart the app afterward. Two limits to know about:
+Restart the app afterward. Two limits to know about:
 
-- It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist.
+- It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist. For that, use `--file`, below.
 - It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
 
-To recover onto a fresh server, the repository does not ship a procedure. The outline, using plain PostgreSQL tooling:
+### Recovering onto a fresh server
+
+`backup restore --file <path>` restores a dump file without looking anything up in the database first, so it works on a server whose database is empty.
 
 1. Install Pavillion on the new server (see the [Quickstart](./quickstart)), but put your backed-up `.env`, `secrets/` and `config/local.yaml` in place first, so the app comes up with your original secrets rather than newly generated ones.
-2. Start only the `db` service and wait for it to be healthy.
-3. Restore the dump into the database, with the app and worker stopped. The drill's check on migrations is a good model: the dump and the code version should match, so check out the same Pavillion version that produced the dump.
-4. Restore your media.
-5. Start everything and verify you can log in and see events.
+2. Put the dump in the host backups directory, `/opt/pavillion/backups` unless you set `BACKUP_HOST_DIR`, owned by uid 1001. If the server is gone, that's a dump you pulled back as in [Restoring from the bucket](#restoring-from-the-bucket).
+3. Start only the database, and wait until `docker compose ps db` shows it healthy:
+
+   ```bash
+   docker compose up -d db
+   ```
+
+4. Restore the dump through a one-off worker container:
+
+   ```bash
+   docker compose run --rm --no-deps --entrypoint node worker \
+     /app/bin/pavillion backup restore --file /backups/pavillion_20260315_020000_scheduled.dump
+   ```
+
+   `--no-deps` keeps the app down: started now, it would migrate the empty database and begin serving. `--entrypoint node` skips the container's startup script; the `pavillion` command still reads your secrets files.
+5. Restore your media.
+6. Start everything, then check you can log in and see your events:
+
+   ```bash
+   docker compose up -d
+   ```
+
+Before it asks you to confirm, the command reads the dump's list of applied migrations, as the [restore drill](#the-backup-and-the-code-disagree-about-the-version) does, and compares it with the migrations this version of Pavillion ships:
+
+- **The dump is newer than this version.** It refuses and lists the migrations this version doesn't have. Restoring would leave a database the code can't run. Install the version that made the dump, by setting `PAVILLION_IMAGE_TAG` in `.env`, restore, then upgrade.
+- **The dump is older than this version.** It says how many migrations the dump is behind and goes on to the confirmation. The app applies them when it starts in step 6, as it does on any upgrade.
+- **The file isn't a Pavillion dump**, or has no migration record. It refuses, and nothing is touched.
 
 Do this at least once, on a spare machine, before you need it.
 
