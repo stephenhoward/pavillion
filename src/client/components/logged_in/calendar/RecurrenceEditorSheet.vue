@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, useId } from 'vue';
+import { computed, reactive, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import Sheet from '@/client/components/common/sheet.vue';
 import { CalendarEventSchedule, EventFrequency } from '@/common/model/events';
+import { hasFewerThanTwoOccurrences } from './recurrence-occurrences';
 
 const props = defineProps({
   schedule: {
@@ -164,6 +165,26 @@ const compileRecurrence = () => {
     ? DateTime.fromISO(state.endDate, { zone: scheduleZone() })
     : null;
 };
+
+/**
+ * Whether the current settings would make a "recurring" event that never
+ * recurs. Informs only: Done stays enabled.
+ *
+ * The helper expands in this schedule's own zone, while the server expands in
+ * the base schedule's zone (DEC-023). The two agree for a single-schedule
+ * event; for a non-base schedule in another zone the warning may be off near
+ * a day boundary.
+ */
+const fewerThanTwoOccurrences = computed(() => hasFewerThanTwoOccurrences({
+  frequency: props.schedule.frequency,
+  // v-model without .number can leave a string here.
+  interval: Number(props.schedule.interval),
+  byDay: props.schedule.byDay ?? [],
+  startDate: props.schedule.startDate,
+  endType: state.endType,
+  count: state.count,
+  endDate: state.endDate,
+}));
 </script>
 
 <template>
@@ -253,6 +274,13 @@ const compileRecurrence = () => {
         </label>
       </fieldset>
     </form>
+
+    <!-- Always mounted so the live region exists before it is filled. -->
+    <p role="status"
+       class="recurrence-warning"
+       :class="{ 'recurrence-warning--active': fewerThanTwoOccurrences }">
+      {{ fewerThanTwoOccurrences ? t('warning_fewer_than_two') : '' }}
+    </p>
 
     <footer class="sheet-footer">
       <button type="button" class="btn btn--primary" @click="emit('close')">

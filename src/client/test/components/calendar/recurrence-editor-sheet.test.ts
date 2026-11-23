@@ -439,3 +439,73 @@ describe('RecurrenceEditorSheet.vue — defaults that produce a recurring event'
     wrapper.unmount();
   });
 });
+
+describe('RecurrenceEditorSheet.vue — fewer-than-two-occurrences status line', () => {
+  const ZONE = 'America/Los_Angeles';
+  const WARNING = 'This rule makes fewer than two occurrences, so the event will not repeat.';
+
+  function weeklySchedule(): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule();
+    schedule.startDate = DateTime.fromISO('2026-11-18T22:00:00', { zone: ZONE });
+    schedule.eventEndTime = DateTime.fromISO('2026-11-18T23:00:00', { zone: ZONE });
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    schedule.byDay = ['WE'];
+    schedule.endDate = null;
+    return schedule;
+  }
+
+  function status(wrapper: ReturnType<typeof mountSheet>) {
+    return wrapper.find('[role="status"].recurrence-warning');
+  }
+
+  function doneButton(wrapper: ReturnType<typeof mountSheet>): HTMLButtonElement {
+    return wrapper.find('.sheet-footer button').element as HTMLButtonElement;
+  }
+
+  it('shows the warning for "after 1" and keeps Done enabled', async () => {
+    const schedule = weeklySchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('input[type="number"][min="1"]').setValue('1');
+
+    expect(status(wrapper).text()).toBe(WARNING);
+    expect(status(wrapper).classes()).toContain('recurrence-warning--active');
+    expect(doneButton(wrapper).disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('is empty for "after 2"', async () => {
+    const schedule = weeklySchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('input[type="number"][min="1"]').setValue('2');
+
+    expect(status(wrapper).exists()).toBe(true);
+    expect(status(wrapper).text()).toBe('');
+    expect(status(wrapper).classes()).not.toContain('recurrence-warning--active');
+    wrapper.unmount();
+  });
+
+  it('shows the warning when the end date allows only the first occurrence', async () => {
+    const schedule = weeklySchedule();
+    const wrapper = mountSheet(schedule);
+
+    await wrapper.find('input[type="date"]').setValue('2026-11-20');
+
+    expect(status(wrapper).text()).toBe(WARNING);
+    expect(doneButton(wrapper).disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('is mounted and empty when frequency is none', () => {
+    const schedule = new CalendarEventSchedule();
+    schedule.startDate = DateTime.fromISO('2026-11-18T22:00:00', { zone: ZONE });
+    const wrapper = mountSheet(schedule);
+
+    expect(status(wrapper).exists()).toBe(true);
+    expect(status(wrapper).text()).toBe('');
+    expect(doneButton(wrapper).disabled).toBe(false);
+    wrapper.unmount();
+  });
+});

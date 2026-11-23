@@ -158,6 +158,7 @@
     "after": "después de",
     "occurrences": "ocurrencias",
     "on_date": "el",
+    "warning_fewer_than_two": "Esta regla genera menos de dos ocurrencias, así que el evento no se repetirá.",
     "remove_schedule": "Eliminar esta programación",
     "start_date_label": "Fecha",
     "start_time_label": "Hora",
