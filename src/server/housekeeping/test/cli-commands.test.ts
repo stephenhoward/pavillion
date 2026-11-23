@@ -14,7 +14,19 @@ import DrillService from '@/server/housekeeping/service/drill';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { BackupDrillEntity } from '@/server/housekeeping/entity/drill';
 import { formatDrillStatus } from '@/server/cli/drill-status';
-import { pgRestoreInvocation, formatRestoreTarget, resolveRestoreConnection } from '@/server/cli/restore';
+import * as fs from 'fs';
+import * as os from 'os';
+import {
+  checkDumpMigrations,
+  compareMigrationSets,
+  dumpMigrationsInvocation,
+  formatRestoreTarget,
+  listCodeMigrations,
+  parseDumpMigrations,
+  pgRestoreInvocation,
+  resolveRestoreConnection,
+  restoreUsageError,
+} from '@/server/cli/restore';
 
 /**
  * CLI Commands Test Suite
@@ -359,6 +371,7 @@ describe('CLI Commands (HousekeepingInterface)', () => {
 
       expect(args).toEqual([
         '-c',
+        '--if-exists',
         '-h', 'db.internal',
         '-p', '6543',
         '-U', 'pavillion',
@@ -396,39 +409,236 @@ describe('CLI Commands (HousekeepingInterface)', () => {
     });
 
     /**
-     * Restore is interactive-only: piping "yes" into `docker exec -i` must not
-     * satisfy the confirmation. The test process's stdin pipe is not a TTY, so
-     * the spawned CLI sees exactly that situation. The refusal fires before
-     * initDatabase, so no connection is opened and pg_restore cannot run.
+     * Spawns the CLI with `backup restore <args>` and pipes "yes" to its
+     * stdin. The test process's stdin pipe is not a TTY, so the spawned CLI
+     * sees exactly the `echo yes | docker exec -i ...` situation.
      */
-    it('should refuse a restore when stdin is not a terminal, before touching the database', async () => {
+    function runRestoreCli(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
       const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 
-      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
-        (resolve) => {
-          const child = execFile(
-            path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
-            [
-              path.join('src', 'server', 'cli', 'index.ts'),
-              'backup', 'restore', '123e4567-e89b-12d3-a456-426614174000',
-            ],
-            { cwd: repoRoot },
-            (error, stdout, stderr) => {
-              resolve({
-                code: error ? ((error as NodeJS.ErrnoException & { code?: number }).code ?? 1) as number : 0,
-                stdout,
-                stderr,
-              });
-            },
-          );
-          child.stdin?.end('yes\n');
-        },
-      );
+      return new Promise((resolve) => {
+        const child = execFile(
+          path.join(repoRoot, 'node_modules', '.bin', 'tsx'),
+          [path.join('src', 'server', 'cli', 'index.ts'), 'backup', 'restore', ...args],
+          { cwd: repoRoot },
+          (error, stdout, stderr) => {
+            resolve({
+              code: error ? ((error as NodeJS.ErrnoException & { code?: number }).code ?? 1) as number : 0,
+              stdout,
+              stderr: stripVTControlCharacters(stderr),
+            });
+          },
+        );
+        child.stdin?.end('yes\n');
+      });
+    }
+
+    /**
+     * Restore is interactive-only: piping "yes" into `docker exec -i` must not
+     * satisfy the confirmation. The refusal fires before initDatabase, so no
+     * connection is opened and pg_restore cannot run.
+     */
+    it('should refuse a restore when stdin is not a terminal, before touching the database', async () => {
+      const result = await runRestoreCli(['123e4567-e89b-12d3-a456-426614174000']);
 
       expect(result.code).toBe(1);
-      expect(stripVTControlCharacters(result.stderr)).toContain('interactive terminal');
+      expect(result.stderr).toContain('interactive terminal');
       expect(result.stdout).not.toContain('Database connected');
       expect(result.stdout).not.toContain('Starting database restore');
     }, 60000);
+
+    it('should refuse a --file restore when stdin is not a terminal, before touching the database', async () => {
+      const result = await runRestoreCli(['--file', '/backups/pavillion_20260112_140530_manual.dump']);
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('interactive terminal');
+      expect(result.stdout).not.toContain('Database connected');
+      expect(result.stdout).not.toContain('Starting database restore');
+    }, 60000);
+
+    it('should refuse a restore given neither an id nor --file, before the terminal check', async () => {
+      const result = await runRestoreCli([]);
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('exactly one of');
+      expect(result.stderr).not.toContain('interactive terminal');
+      expect(result.stdout).not.toContain('Database connected');
+    }, 60000);
+
+    it('should refuse a restore given both an id and --file, before the terminal check', async () => {
+      const result = await runRestoreCli(['123e4567-e89b-12d3-a456-426614174000', '--file', '/backups/x.dump']);
+
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('exactly one of');
+      expect(result.stderr).not.toContain('interactive terminal');
+      expect(result.stdout).not.toContain('Database connected');
+    }, 60000);
+  });
+
+  describe('backup restore usage', () => {
+    it('should accept exactly one of an id or a file', () => {
+      expect(restoreUsageError('123e4567-e89b-12d3-a456-426614174000', undefined)).toBeNull();
+      expect(restoreUsageError(undefined, '/backups/x.dump')).toBeNull();
+    });
+
+    it('should reject neither and both', () => {
+      expect(restoreUsageError(undefined, undefined)).toContain('exactly one of');
+      expect(restoreUsageError('123e4567-e89b-12d3-a456-426614174000', '/backups/x.dump')).toContain('exactly one of');
+    });
+  });
+
+  describe('backup restore --file migration check', () => {
+    /**
+     * Real `pg_restore --data-only --table=SequelizeMeta --file=-` output from
+     * postgres:17, with a second table's COPY block appended to prove only the
+     * SequelizeMeta block is read.
+     */
+    const PG17_OUTPUT = [
+      '--',
+      '-- PostgreSQL database dump',
+      '--',
+      '',
+      '\\restrict py8B4ukiIXgmymUrKNfxTSzCiLlEmIsCkItoJeLVK1IApJEnnzY29gAnpYPcP30',
+      '',
+      '-- Dumped from database version 17.12 (Debian 17.12-1.pgdg13+1)',
+      '-- Dumped by pg_dump version 17.12 (Debian 17.12-1.pgdg13+1)',
+      '',
+      'SET statement_timeout = 0;',
+      'SET client_encoding = \'UTF8\';',
+      'SELECT pg_catalog.set_config(\'search_path\', \'\', false);',
+      '',
+      '--',
+      '-- Data for Name: SequelizeMeta; Type: TABLE DATA; Schema: public; Owner: postgres',
+      '--',
+      '',
+      'COPY public."SequelizeMeta" (name) FROM stdin;',
+      '0001_initial_schema.ts',
+      '0002_complimentary_grants.ts',
+      '\\.',
+      '',
+      '',
+      'COPY public.account (id, email) FROM stdin;',
+      '1\ta@b.c',
+      '\\.',
+      '',
+      '--',
+      '-- PostgreSQL database dump complete',
+      '--',
+      '',
+      '\\unrestrict py8B4ukiIXgmymUrKNfxTSzCiLlEmIsCkItoJeLVK1IApJEnnzY29gAnpYPcP30',
+      '',
+    ].join('\n');
+
+    it('should build the dump-reading invocation with no connection settings or password', () => {
+      const { args } = dumpMigrationsInvocation('/backups/x.dump');
+
+      expect(args).toEqual(['--data-only', '--table=SequelizeMeta', '--file=-', '--', '/backups/x.dump']);
+      expect(args.indexOf('--')).toBe(args.length - 2);
+    });
+
+    it('should read the migration names from the SequelizeMeta COPY block only', () => {
+      expect(parseDumpMigrations(PG17_OUTPUT)).toEqual([
+        '0001_initial_schema.ts',
+        '0002_complimentary_grants.ts',
+      ]);
+    });
+
+    it('should return null when the output has no SequelizeMeta COPY block', () => {
+      const withoutBlock = PG17_OUTPUT.replace('COPY public."SequelizeMeta" (name) FROM stdin;', '-- removed');
+
+      expect(parseDumpMigrations(withoutBlock)).toBeNull();
+      expect(parseDumpMigrations('')).toBeNull();
+    });
+
+    it('should return null when the COPY block is never terminated', () => {
+      expect(parseDumpMigrations('COPY public."SequelizeMeta" (name) FROM stdin;\n0001_initial_schema.ts\n')).toBeNull();
+    });
+
+    it('should compare migration sets in both directions', () => {
+      const code = ['0001_a.ts', '0002_b.ts'];
+
+      expect(compareMigrationSets(code, ['0002_b.ts', '0001_a.ts'])).toEqual({ missing: [], extra: [] });
+      expect(compareMigrationSets(code, ['0001_a.ts'])).toEqual({ missing: ['0002_b.ts'], extra: [] });
+      expect(compareMigrationSets(code, ['0001_a.ts', '0002_b.ts', '0003_c.ts'])).toEqual({ missing: [], extra: ['0003_c.ts'] });
+      expect(compareMigrationSets(code, ['0001_a.ts', '0003_c.ts'])).toEqual({ missing: ['0002_b.ts'], extra: ['0003_c.ts'] });
+    });
+
+    describe('listCodeMigrations', () => {
+      let dir: string;
+
+      beforeEach(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pv-migrations-'));
+      });
+
+      afterEach(() => {
+        fs.rmSync(dir, { recursive: true, force: true });
+      });
+
+      it('should list .ts and .js migrations, skipping declarations and other files', () => {
+        for (const name of ['0002_b.ts', '0001_a.ts', 'x.d.ts', 'README.md']) {
+          fs.writeFileSync(path.join(dir, name), '');
+        }
+
+        expect(listCodeMigrations(dir)).toEqual(['0001_a.ts', '0002_b.ts']);
+      });
+
+      it('should name the repository migrations as SequelizeMeta records them, extension included', () => {
+        const names = listCodeMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../migrations'));
+
+        expect(names).toContain('0001_initial_schema.ts');
+        expect(names).not.toContain('README.md');
+      });
+    });
+
+    describe('checkDumpMigrations', () => {
+      const code = ['0001_a.ts', '0002_b.ts'];
+
+      it('should refuse a dump with no migration record', () => {
+        for (const dump of [null, []]) {
+          const check = checkDumpMigrations(code, dump);
+
+          expect(check.ok).toBe(false);
+          expect(check.lines.join('\n')).toContain('not a Pavillion database dump, or it has no migration record');
+        }
+      });
+
+      it('should refuse a dump newer than the code, listing the extra migrations', () => {
+        const check = checkDumpMigrations(code, ['0001_a.ts', '0002_b.ts', '0003_c.ts']);
+        const text = stripVTControlCharacters(check.lines.join('\n'));
+
+        expect(check.ok).toBe(false);
+        expect(text).toContain('0003_c.ts');
+        expect(text).toContain('PAVILLION_IMAGE_TAG');
+      });
+
+      it('should refuse a dump that has migrations the code lacks even when it also lacks some', () => {
+        expect(checkDumpMigrations(code, ['0001_a.ts', '0003_c.ts']).ok).toBe(false);
+      });
+
+      it('should warn about an older dump and continue', () => {
+        const check = checkDumpMigrations(code, ['0001_a.ts']);
+        const text = stripVTControlCharacters(check.lines.join('\n'));
+
+        expect(check.ok).toBe(true);
+        expect(text).toContain('1 migration');
+        expect(text).toContain('next starts');
+      });
+
+      it('should report a match with the count', () => {
+        const check = checkDumpMigrations(code, ['0002_b.ts', '0001_a.ts']);
+
+        expect(check.ok).toBe(true);
+        expect(stripVTControlCharacters(check.lines.join('\n'))).toContain('Migrations: match this version (2)');
+      });
+
+      it('should strip control characters from names supplied by the dump', () => {
+        const check = checkDumpMigrations(code, ['0001_a.ts', '0002_b.ts', '0003_\u001b[2Jevil\u0007.ts']);
+        const text = check.lines.join('\n');
+
+        expect(text).toContain('0003_[2Jevil.ts');
+        expect(text).not.toContain('\u0007');
+        expect(text).not.toContain('\u001b[2J');
+      });
+    });
   });
 });
