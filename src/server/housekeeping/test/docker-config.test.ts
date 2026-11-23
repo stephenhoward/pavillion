@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { execFileSync, spawnSync } from 'child_process';
 
@@ -481,6 +481,60 @@ describe('Docker Configuration', () => {
       const dbMajor = dbVersionMatch![1];
 
       expect(clientMajor).toBe(dbMajor);
+    });
+
+    // Operators run backups and restores as `node /app/bin/pavillion <verb>`
+    // inside the worker container, so the launcher and everything it runs
+    // must be in the image.
+    it('should copy the CLI launcher, src and config into the production stage', () => {
+      const productionStage = extractStage(readFileSync('Dockerfile', 'utf-8'), 'production');
+
+      expect(productionStage).toMatch(/^COPY\s+bin\/pavillion\s+\.\/bin\/pavillion\s*$/m);
+      expect(productionStage).toMatch(/^COPY\s.*\s\.\/src\s*$/m);
+      expect(productionStage).toMatch(/^COPY\s.*\s\.\/config\s*$/m);
+    });
+  });
+
+  describe('bin/pavillion', () => {
+    it('should run the CLI from its TypeScript source, not from dist/', () => {
+      const launcher = readFileSync('bin/pavillion', 'utf-8');
+
+      // The production image has no compiled server under dist/; it runs
+      // src/ through tsx.
+      expect(launcher).toContain('src/server/cli/index.ts');
+      expect(existsSync('src/server/cli/index.ts')).toBe(true);
+      expect(launcher).not.toMatch(/dist\//);
+    });
+
+    it('should have tsx as a production dependency', () => {
+      const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
+
+      // The image installs with npm ci --omit=dev; the launcher spawns tsx.
+      expect(pkg.dependencies.tsx).toBeDefined();
+      expect(pkg.devDependencies?.tsx).toBeUndefined();
+    });
+  });
+
+  describe('operator wrapper scripts', () => {
+    const compose = parseYaml(readFileSync('docker-compose.yml', 'utf-8'));
+    const workerContainer = compose.services.worker.container_name;
+
+    it.each([
+      'scripts/backup.sh',
+      'scripts/housekeeping.sh',
+      'scripts/restore-drill.sh',
+    ])('%s should default PAVILLION_CONTAINER to the worker container', (script) => {
+      const match = readFileSync(script, 'utf-8').match(/\$\{PAVILLION_CONTAINER:-([^}]+)\}/);
+
+      // Backups live on the worker's volume and the worker has pg_dump.
+      expect(match).not.toBeNull();
+      expect(match![1]).toBe(workerContainer);
+    });
+
+    it('should mount pavillion-backups on the worker the wrappers target', () => {
+      const volumes: string[] = compose.services.worker.volumes ?? [];
+
+      expect(volumes.some((volume) => volume.startsWith('pavillion-backups:'))).toBe(true);
     });
   });
 
