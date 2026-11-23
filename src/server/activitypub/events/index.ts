@@ -131,7 +131,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       return (payload: T): void => { void run(payload); };
     }
     return (payload: T): void => {
-      this.dispatchQueue = this.dispatchQueue.then(() => run(payload));
+      this.dispatchQueue = this.dispatchQueue.then(async () => { await run(payload); });
     };
   }
 
