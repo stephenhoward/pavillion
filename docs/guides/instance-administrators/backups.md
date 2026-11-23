@@ -420,7 +420,7 @@ The drill compares the dump with the `migrations/` folder of the checkout you ru
 `./scripts/restore-drill.sh --help` lists every setting the drill reads. Two others matter on some servers:
 
 - `PAVILLION_DRILL_IMAGE` is the database image the throwaway container runs, `postgres:17` by default. It must match the `db` service in your `docker-compose.yml`. If you've changed that, set this to the same image.
-- `PAVILLION_CONTAINER` is the app container the drill records its result through. It's the same variable `backup.sh` reads, so set it to `pavillion-app` as described in [What Pavillion does for you](#what-pavillion-does-for-you). If it's unset, the drill looks for a container named `pavillion-app-1`, finds none, and warns that the app container isn't running.
+- `PAVILLION_CONTAINER` is the container the drill records its result through, `pavillion-worker` by default, like the [other scripts](#run-a-backup-by-hand). Set it only if your worker container has a different name. If no container by that name is running, the drill warns that its result wasn't recorded.
 
 ### When to run it
 
@@ -451,7 +451,7 @@ If it says *No successful restore drill recorded*, no backup on this instance ha
 
 This section shows passes only. A failed drill is recorded too, but the drill's own output at the time is where to read why it failed.
 
-If the app container isn't running when the drill finishes, the drill warns that the result wasn't recorded. The verdict it printed still stands. Don't run `backup record-drill` yourself: a row entered by hand would claim a drill passed when none did.
+If the worker container isn't running when the drill finishes, the drill warns that the result wasn't recorded. The verdict it printed still stands. Don't run `backup record-drill` yourself: a row entered by hand would claim a drill passed when none did.
 
 ### Reading a failure
 
