@@ -16,18 +16,21 @@ class ReportVerificationEmail extends EmailMessage {
   eventName: string;
   reportCategory: string;
   verificationToken: string;
+  instanceName: string;
 
   constructor(
     reporterEmail: string,
     eventName: string,
     reportCategory: string,
     verificationToken: string,
+    instanceName: string,
   ) {
     super('report_verification_email', textTemplate, htmlTemplate);
     this.reporterEmail = reporterEmail;
     this.eventName = eventName;
     this.reportCategory = reportCategory;
     this.verificationToken = verificationToken;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -48,12 +51,14 @@ class ReportVerificationEmail extends EmailMessage {
         reportCategory: this.reportCategory,
         verifyUrl,
         language,
+        instanceName: this.instanceName,
       }),
       htmlMessage: this.renderHtml(language, {
         eventName: truncatedName,
         reportCategory: this.reportCategory,
         verifyUrl,
         language,
+        instanceName: this.instanceName,
       }),
     };
   }

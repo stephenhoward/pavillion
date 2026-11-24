@@ -7,7 +7,7 @@ const load = (lng: string, ns: string): Record<string, string> =>
   JSON.parse(fs.readFileSync(path.join(localesDir, lng, `${ns}.json`), 'utf8'));
 const placeholders = (value: string) => [...value.matchAll(/{{\s*([\w.]+)\s*}}/g)].map(m => m[1]).sort();
 
-describe.each(['account_invitation_email', 'editor_invitation_email'])('%s locale parity', (ns) => {
+describe.each(['account_invitation_email', 'editor_invitation_email', 'report_verification_email', 'new_report_notification_email', 'admin_report_notification_email', 'auto_escalation_notification_email', 'escalation_reminder_email'])('%s locale parity', (ns) => {
   const en = load('en', ns);
 
   it.each(['es', 'fr'])('%s has the same keys and placeholders as en', (lng) => {

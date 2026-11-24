@@ -13,6 +13,7 @@ import AdminReportNotificationEmail from '../model/admin_report_notification_ema
 import EscalationReminderEmail from '../model/escalation_reminder_email';
 import AutoEscalationNotificationEmail from '../model/auto_escalation_notification_email';
 import { logError } from '@/server/common/helper/error-logger';
+import { resolveInstanceName } from '@/server/common/helper/instance-name';
 import { guardEventHandler } from '@/server/common/helper/guard-event-handler';
 import type {
   ReportCreatedPayload,
@@ -99,11 +100,13 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       // Look up the event to get its name for the email
       const eventName = await this.getEventName(report.eventId);
 
+      const instanceName = await resolveInstanceName(this.configurationInterface);
       const email = new ReportVerificationEmail(
         reporterEmail,
         eventName,
         report.category,
         report.verificationToken,
+        instanceName,
       );
 
       // The anonymous reporter has no account and so no stored language:
@@ -172,6 +175,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       // Calculate time remaining before escalation
       const timeRemaining = this.calculateTimeRemaining(report);
 
+      const instanceName = await resolveInstanceName(this.configurationInterface);
       const email = new EscalationReminderEmail(
         ownerAccount.email,
         eventName,
@@ -179,6 +183,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         report.description,
         timeRemaining,
         calendar.urlName,
+        instanceName,
       );
 
       const language = ownerAccount.language || 'en';
@@ -249,6 +254,8 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       // Format pending since date
       const pendingSince = report.createdAt.toISOString().split('T')[0];
 
+      const instanceName = await resolveInstanceName(this.configurationInterface);
+
       // Send notification to all admins
       const admins = await this.accountsInterface.getAdmins();
       for (const admin of admins) {
@@ -265,6 +272,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
           ownerEmail,
           pendingSince,
           report.id,
+          instanceName,
         );
 
         const language = admin.language || 'en';
@@ -310,6 +318,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         ? report.adminDeadline.toISOString().split('T')[0]
         : null;
 
+      const instanceName = await resolveInstanceName(this.configurationInterface);
       const email = new AdminReportNotificationEmail(
         ownerAccount.email,
         eventName,
@@ -319,6 +328,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
         report.adminPriority || 'medium',
         deadline,
         calendar.urlName,
+        instanceName,
       );
 
       const language = ownerAccount.language || 'en';
@@ -366,11 +376,13 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
       const reportCount = reports.length;
 
       // Build and send the notification email
+      const instanceName = await resolveInstanceName(this.configurationInterface);
       const email = new NewReportNotificationEmail(
         ownerAccount.email,
         eventName,
         reportCategory,
         reportCount,
+        instanceName,
       );
 
       const language = ownerAccount.language || 'en';

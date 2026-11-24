@@ -22,6 +22,7 @@ class AutoEscalationNotificationEmail extends EmailMessage {
   ownerEmail: string;
   pendingSince: string;
   reportId: string;
+  instanceName: string;
 
   constructor(
     recipientEmail: string,
@@ -32,6 +33,7 @@ class AutoEscalationNotificationEmail extends EmailMessage {
     ownerEmail: string,
     pendingSince: string,
     reportId: string,
+    instanceName: string,
   ) {
     super('auto_escalation_notification_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
@@ -42,6 +44,7 @@ class AutoEscalationNotificationEmail extends EmailMessage {
     this.ownerEmail = ownerEmail;
     this.pendingSince = pendingSince;
     this.reportId = reportId;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -70,6 +73,7 @@ class AutoEscalationNotificationEmail extends EmailMessage {
       pendingSince: this.pendingSince,
       reviewUrl,
       language,
+      instanceName: this.instanceName,
     };
 
     return {

@@ -49,6 +49,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     expect(email.namespace).toBe('auto_escalation_notification_email');
@@ -64,6 +65,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-05',
       'report-123',
+      'Test Instance',
     );
 
     expect(email.recipientEmail).toBe('admin@example.com');
@@ -86,6 +88,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -103,6 +106,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -121,6 +125,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -142,6 +147,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -161,6 +167,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -179,6 +186,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -197,6 +205,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -215,6 +224,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -233,6 +243,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -251,6 +262,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-05',
       'report-uuid',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -269,6 +281,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid-123',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -287,6 +300,7 @@ describe('AutoEscalationNotificationEmail', () => {
       'owner@example.com',
       '2026-02-07',
       'report-uuid',
+      'Test Instance',
     );
 
     const renderPlaintextSpy = sandbox.spy(email, 'renderPlaintext');
@@ -298,5 +312,25 @@ describe('AutoEscalationNotificationEmail', () => {
     expect(renderPlaintextSpy.firstCall.args[0]).toBe('fr');
     expect(renderHtmlSpy.calledOnce).toBe(true);
     expect(renderHtmlSpy.firstCall.args[0]).toBe('fr');
+  });
+
+  it('should sign off with the instance name, escaped in HTML and raw in text', () => {
+    const email = new AutoEscalationNotificationEmail(
+      'admin@example.com',
+      'Test Event',
+      'My Calendar',
+      'spam',
+      'desc',
+      'owner@example.com',
+      '2026-02-07',
+      'report-uuid',
+      'Fall & Co <Events>',
+    );
+
+    const mailData = email.buildMessage('en');
+
+    expect(mailData.textMessage).toContain('Fall & Co <Events>');
+    expect(mailData.htmlMessage).toContain('Fall &amp; Co &lt;Events&gt;');
+    expect(mailData.htmlMessage).not.toContain('<Events>');
   });
 });

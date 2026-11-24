@@ -28,6 +28,7 @@ initI18Next();
 
 const configurationInterface = {
   getDefaultLanguage: async () => 'en',
+  getAllSettings: async () => ({ siteTitle: 'Test Instance' }),
 } as unknown as ConfigurationInterface;
 
 /**
@@ -353,13 +354,14 @@ describe('ModerationEventHandlers anonymous verification email language', () => 
       { getEventById: async () => new CalendarEvent('event-id', 'cal-id') } as unknown as CalendarInterface,
       {} as AccountsInterface,
       { sendEmail: async (d: MailData) => { sentEmails.push(d); return null; } } as unknown as EmailInterface,
-      { getDefaultLanguage: async () => 'es' } as unknown as ConfigurationInterface,
+      { getDefaultLanguage: async () => 'es', getAllSettings: async () => ({ siteTitle: 'Test Instance' }) } as unknown as ConfigurationInterface,
     );
 
     await (handlers as any).handleReportCreated({ report, reporterEmail: 'reporter@example.test' });
 
-    const english = new ReportVerificationEmail('reporter@example.test', '', report.category, 'token-123').buildMessage('en');
+    const english = new ReportVerificationEmail('reporter@example.test', '', report.category, 'token-123', 'Test Instance').buildMessage('en');
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0].subject).not.toBe(english.subject);
+    expect(sentEmails[0].textMessage).toContain('Test Instance');
   });
 });
