@@ -133,6 +133,21 @@ describe('RelMeChallengeStep', () => {
       expect(input.attributes('inputmode')).toBe('url');
     });
 
+    it('names the page URL input with a visible associated label (not the placeholder)', async () => {
+      const { wrapper } = mountStep();
+      await flushPromises();
+
+      const input = wrapper.find('[data-test="rel-me-page-url-input"]');
+      const id = input.attributes('id');
+      expect(id).toBeTruthy();
+      expect(input.attributes('aria-label')).toBeUndefined();
+
+      const label = wrapper.find(`label[for="${id}"]`);
+      expect(label.exists()).toBe(true);
+      expect(label.text()).toBe('Verification page URL');
+      expect(label.text()).not.toBe(input.attributes('placeholder'));
+    });
+
     it('renders the verify button', async () => {
       const { wrapper } = mountStep();
       await flushPromises();
