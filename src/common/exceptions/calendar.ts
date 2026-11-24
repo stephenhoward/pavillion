@@ -47,6 +47,21 @@ export class CalendarNotFoundError extends Error {
 }
 
 /**
+ * Custom error class for a calendar export that could not be produced. The
+ * export is all-or-nothing, so one event that cannot be written fails the
+ * whole file. The message is fixed: which event failed, and why, goes to the
+ * server log only.
+ */
+export class CalendarExportError extends Error {
+  constructor(message: string = 'Calendar export failed') {
+    super(message);
+    this.name = 'CalendarExportError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, CalendarExportError.prototype);
+  }
+}
+
+/**
  * Custom error class for event not found
  */
 export class EventNotFoundError extends Error {

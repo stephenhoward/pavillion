@@ -1,9 +1,13 @@
 // @vitest-environment node
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { IANAZone } from 'luxon';
 import rrule from 'rrule';
 
-import { buildVTimezone, MAX_VTIMEZONE_SPAN_YEARS } from '@/server/calendar/service/export/vtimezone';
+import {
+  buildVTimezone,
+  MAX_VTIMEZONE_SPAN_YEARS,
+  VTIMEZONE_CACHE_SIZE,
+} from '@/server/calendar/service/export/vtimezone';
 
 const { rrulestr } = rrule;
 
@@ -277,5 +281,56 @@ describe('buildVTimezone', () => {
     const lines = buildVTimezone('Asia/Kolkata', 1970, 1970 + MAX_VTIMEZONE_SPAN_YEARS - 1);
 
     expect(lines[0]).toBe('BEGIN:VTIMEZONE');
+  });
+});
+
+describe('buildVTimezone cache', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('answers a repeat call for the same zone and span without rescanning', () => {
+    const first = buildVTimezone('America/Chicago', 1991, 2003);
+    const offset = vi.spyOn(IANAZone.prototype, 'offset');
+
+    const second = buildVTimezone('America/Chicago', 1991, 2003);
+
+    expect(second).toEqual(first);
+    expect(offset).not.toHaveBeenCalled();
+  });
+
+  it('scans again for the same zone over another span', () => {
+    buildVTimezone('America/Denver', 1991, 2003);
+    const offset = vi.spyOn(IANAZone.prototype, 'offset');
+
+    buildVTimezone('America/Denver', 1991, 2004);
+
+    expect(offset).toHaveBeenCalled();
+  });
+
+  it('hands out copies, so a caller changing its lines cannot change the next answer', () => {
+    const first = buildVTimezone('Europe/Lisbon', 2000, 2010);
+    const expected = [...first];
+
+    first.push('X-MUTATED:1');
+
+    expect(buildVTimezone('Europe/Lisbon', 2000, 2010)).toEqual(expected);
+  });
+
+  it('holds a bounded number of spans, forgetting the least recently used first', () => {
+    buildVTimezone('Pacific/Auckland', 2001, 2001);
+    for (let i = 0; i < VTIMEZONE_CACHE_SIZE; i++) {
+      buildVTimezone('Etc/UTC', 1800 + i, 1800 + i);
+    }
+    const offset = vi.spyOn(IANAZone.prototype, 'offset');
+
+    buildVTimezone('Pacific/Auckland', 2001, 2001);
+
+    expect(offset).toHaveBeenCalled();
+  });
+
+  it('caches nothing for a refused zone or span', () => {
+    expect(() => buildVTimezone('Mars/Olympus_Mons', 2025, 2030)).toThrow();
+    expect(() => buildVTimezone('Mars/Olympus_Mons', 2025, 2030)).toThrow();
   });
 });

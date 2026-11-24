@@ -33,6 +33,17 @@ export const MAX_VTIMEZONE_SPAN_YEARS = 250;
 /** A yearly rule is only declared once it has held for this many years. */
 const MIN_REGULAR_YEARS = 2;
 
+/**
+ * How many (zone, span) components {@link buildVTimezone} remembers. The
+ * scan costs tens of milliseconds a zone and its answer only changes with
+ * the running Node's tzdata, so repeat exports reuse it; the bound keeps an
+ * owner with schedules in hundreds of zones from growing the cache without
+ * limit. Least recently used is forgotten first.
+ */
+export const VTIMEZONE_CACHE_SIZE = 128;
+
+const vtimezoneCache = new Map<string, string[]>();
+
 /** One change of UTC offset. Offsets are in seconds east of UTC. */
 interface Transition {
   /** The first instant the new offset applies, in epoch milliseconds. */
@@ -253,6 +264,9 @@ function recurringObservance(rule: YearlyRule): Observance {
  * @param zoneName - An IANA zone name, e.g. `America/New_York`
  * @param fromYear - First calendar year the component must be right for
  * @param toYear - Last calendar year the component must be right for
+ * Answers a repeat call for the same zone and span from a bounded cache
+ * ({@link VTIMEZONE_CACHE_SIZE}); every call returns its own copy.
+ *
  * @returns The unfolded content lines, `BEGIN:VTIMEZONE` to `END:VTIMEZONE` inclusive
  * @throws {Error} When `zoneName` is not a zone the platform knows
  * @throws {RangeError} When the span is not a pair of whole years in order,
@@ -271,6 +285,25 @@ export function buildVTimezone(zoneName: string, fromYear: number, toYear: numbe
     );
   }
 
+  const key = `${zoneName}|${fromYear}|${toYear}`;
+  const cached = vtimezoneCache.get(key);
+  if (cached) {
+    // Re-inserting marks the entry most recently used.
+    vtimezoneCache.delete(key);
+    vtimezoneCache.set(key, cached);
+    return [...cached];
+  }
+
+  const lines = scanVTimezone(zoneName, fromYear, toYear);
+  vtimezoneCache.set(key, lines);
+  if (vtimezoneCache.size > VTIMEZONE_CACHE_SIZE) {
+    vtimezoneCache.delete(vtimezoneCache.keys().next().value!);
+  }
+  return [...lines];
+}
+
+/** The uncached work of {@link buildVTimezone}, for arguments it has already checked. */
+function scanVTimezone(zoneName: string, fromYear: number, toYear: number): string[] {
   const zone = IANAZone.create(zoneName);
   const spanStart = Date.UTC(fromYear, 0, 1);
   const transitions = findTransitions(zone, spanStart, Date.UTC(toYear + 1, 0, 1));
