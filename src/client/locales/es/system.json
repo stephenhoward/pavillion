@@ -36,6 +36,9 @@
     "copy": "Copiar",
     "copied": "Copiado"
   },
+  "toast": {
+    "dismiss": "Descartar notificación"
+  },
   "help": {
     "button_label": "Ayuda sobre esta página",
     "panel_title": "Ayuda sobre esta página",
