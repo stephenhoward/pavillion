@@ -8,10 +8,12 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'application_rejecte
 
 class ApplicationRejectedEmail extends EmailMessage {
   application: AccountApplication;
+  instanceName: string;
 
-  constructor(application: AccountApplication) {
+  constructor(application: AccountApplication, instanceName: string) {
     super('application_rejected_email', textTemplate, htmlTemplate);
     this.application = application;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -20,10 +22,12 @@ class ApplicationRejectedEmail extends EmailMessage {
       subject: this.renderSubject(language, {}),
       textMessage: this.renderPlaintext(language, {
         language: language,
+        instanceName: this.instanceName,
         appUrl: config.get('domain'),
       }),
       htmlMessage: this.renderHtml(language, {
         language: language,
+        instanceName: this.instanceName,
         appUrl: config.get('domain'),
       }),
     };

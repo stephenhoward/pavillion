@@ -28,7 +28,7 @@ describe('ApplicationConfirmationEmail', () => {
 
   it('should build message with the applicant email address', () => {
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -38,7 +38,7 @@ describe('ApplicationConfirmationEmail', () => {
   it('should include the confirmation URL with token in plaintext', () => {
     const domain = config.get<string>('domain');
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -48,7 +48,7 @@ describe('ApplicationConfirmationEmail', () => {
   it('should include the confirmation URL with token in HTML', () => {
     const domain = config.get<string>('domain');
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -57,7 +57,7 @@ describe('ApplicationConfirmationEmail', () => {
 
   it('should render a CTA label in HTML', () => {
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -66,7 +66,7 @@ describe('ApplicationConfirmationEmail', () => {
 
   it('should render an expiration notice in plaintext', () => {
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -75,7 +75,7 @@ describe('ApplicationConfirmationEmail', () => {
 
   it('should have a non-empty subject line', () => {
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('en');
 
@@ -86,7 +86,7 @@ describe('ApplicationConfirmationEmail', () => {
   it('should render French content when language is fr', () => {
     const domain = config.get<string>('domain');
     const application = new AccountApplication('app-id', 'applicant@example.com');
-    const email = new ApplicationConfirmationEmail(application, token);
+    const email = new ApplicationConfirmationEmail(application, token, 'Riverside Events');
 
     const message = email.buildMessage('fr');
 
@@ -98,11 +98,34 @@ describe('ApplicationConfirmationEmail', () => {
   it('should produce identical content for the same token (no resend hint)', () => {
     const application = new AccountApplication('app-id', 'applicant@example.com');
 
-    const firstSend = new ApplicationConfirmationEmail(application, token).buildMessage('en');
-    const resend = new ApplicationConfirmationEmail(application, token).buildMessage('en');
+    const firstSend = new ApplicationConfirmationEmail(application, token, 'Riverside Events').buildMessage('en');
+    const resend = new ApplicationConfirmationEmail(application, token, 'Riverside Events').buildMessage('en');
 
     expect(resend.subject).toBe(firstSend.subject);
     expect(resend.textMessage).toBe(firstSend.textMessage);
     expect(resend.htmlMessage).toBe(firstSend.htmlMessage);
+  });
+});
+
+describe('ApplicationConfirmationEmail sign-off', () => {
+  const build = (name: string) => new ApplicationConfirmationEmail(new AccountApplication('app-id', 'a@example.com'), 'tok', name);
+
+  it.each(['en', 'es', 'fr'])('signs off with the instance name instead of a team name (%s)', (language) => {
+    const message = build('Riverside Events').buildMessage(language);
+
+    expect(message.textMessage.trimEnd()).toMatch(/Riverside Events\s*(-{3,}[\s\S]*)?$/);
+    expect(message.htmlMessage).toContain('Riverside Events');
+    for (const body of [message.textMessage, message.htmlMessage]) {
+      expect(body).not.toContain('Pavillion Team');
+      expect(body).not.toContain('The Team');
+    }
+  });
+
+  it('escapes the instance name in HTML and leaves it literal in text', () => {
+    const message = build('Arts & Crafts').buildMessage('en');
+
+    expect(message.htmlMessage).toContain('Arts &amp; Crafts');
+    expect(message.textMessage).toContain('Arts & Crafts');
+    expect(message.textMessage).not.toContain('&amp;');
   });
 });
