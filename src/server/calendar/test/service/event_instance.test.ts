@@ -8,7 +8,11 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
-import EventInstanceService, { expandScheduleOccurrences } from '@/server/calendar/service/event_instance';
+import EventInstanceService, {
+  expandScheduleOccurrences,
+  occurrenceEndTime,
+  scheduleOccursAt,
+} from '@/server/calendar/service/event_instance';
 import type ConfigurationInterface from '@/server/configuration/interface';
 import { getDefaultDateRange } from '@/common/utils/datePresets';
 import EventService from '@/server/calendar/service/events';
@@ -2998,5 +3002,141 @@ describe('EventInstanceService zone-aware expansion', () => {
         '2026-11-10T18:15:00.000Z',
       ]);
     });
+  });
+});
+
+describe('scheduleOccursAt', () => {
+  const NEW_YORK = 'America/New_York';
+
+  function weekly(start: DateTime, extra: Partial<CalendarEventSchedule> = {}): CalendarEventSchedule {
+    const schedule = new CalendarEventSchedule(uuidv4(), start);
+    schedule.frequency = EventFrequency.WEEKLY;
+    schedule.interval = 1;
+    Object.assign(schedule, extra);
+    return schedule;
+  }
+
+  it('is true only at the start instant of a one-off schedule', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const schedule = new CalendarEventSchedule(uuidv4(), start);
+
+    expect(scheduleOccursAt(schedule, schedule, start.toJSDate())).toBe(true);
+    expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 1 }).toJSDate())).toBe(false);
+  });
+
+  it('is true at an occurrence of a recurring schedule and false between occurrences', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const schedule = weekly(start);
+
+    expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 3 }).toJSDate())).toBe(true);
+    expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 3, days: 1 }).toJSDate())).toBe(false);
+    expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 3, minutes: 1 }).toJSDate())).toBe(false);
+  });
+
+  it('keeps the wall-clock time across a daylight-saving change', () => {
+    // 18:00 in New York is 22:00Z in October and 23:00Z after 1 November 2026
+    const start = DateTime.fromObject({ year: 2026, month: 10, day: 19, hour: 18 }, { zone: NEW_YORK });
+    const schedule = weekly(start);
+
+    expect(scheduleOccursAt(schedule, schedule, new Date('2026-11-02T23:00:00Z'))).toBe(true);
+    expect(scheduleOccursAt(schedule, schedule, new Date('2026-11-02T22:00:00Z'))).toBe(false);
+  });
+
+  it('steps in the frame schedule\'s zone, not the schedule\'s own', () => {
+    const base = new CalendarEventSchedule(
+      uuidv4(),
+      DateTime.fromObject({ year: 2026, month: 10, day: 1, hour: 9 }, { zone: NEW_YORK }),
+    );
+    // 19:00 in Berlin is 13:00 in New York; Berlin leaves summer time on 25 October
+    const schedule = weekly(DateTime.fromObject({ year: 2026, month: 10, day: 19, hour: 19 }, { zone: 'Europe/Berlin' }));
+
+    expect(scheduleOccursAt(schedule, base, new Date('2026-10-26T17:00:00Z'))).toBe(true);
+    expect(scheduleOccursAt(schedule, schedule, new Date('2026-10-26T17:00:00Z'))).toBe(false);
+  });
+
+  it('is false past the count or the end date', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const counted = weekly(start, { count: 2 });
+    const ended = weekly(start, { endDate: start.plus({ weeks: 1 }) });
+
+    for (const schedule of [counted, ended]) {
+      expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 1 }).toJSDate())).toBe(true);
+      expect(scheduleOccursAt(schedule, schedule, start.plus({ weeks: 2 }).toJSDate())).toBe(false);
+    }
+  });
+
+  it('is false for a start the rule itself does not produce', () => {
+    // Monday start, Wednesdays only
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const schedule = weekly(start, { byDay: ['WE'] });
+
+    expect(scheduleOccursAt(schedule, schedule, start.toJSDate())).toBe(false);
+    expect(scheduleOccursAt(schedule, schedule, start.plus({ days: 2 }).toJSDate())).toBe(true);
+  });
+
+  it('is false for a schedule with no start or an unreachable ordinal', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const unreachable = new CalendarEventSchedule(uuidv4(), start);
+    unreachable.frequency = EventFrequency.MONTHLY;
+    unreachable.byDay = ['6MO'];
+
+    expect(scheduleOccursAt(new CalendarEventSchedule(uuidv4()), null, start.toJSDate())).toBe(false);
+    expect(scheduleOccursAt(unreachable, unreachable, start.toJSDate())).toBe(false);
+  });
+});
+
+describe('occurrenceEndTime', () => {
+  const NEW_YORK = 'America/New_York';
+
+  function eventWith(base: CalendarEventSchedule, ...others: CalendarEventSchedule[]): CalendarEvent {
+    const event = new CalendarEvent(uuidv4(), uuidv4());
+    event.schedules = [...others, base];
+    return event;
+  }
+
+  it('applies the base schedule\'s duration to any occurrence of the event', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const base = new CalendarEventSchedule(uuidv4(), start);
+    base.eventEndTime = start.plus({ hours: 1, minutes: 30, seconds: 15 });
+    const extra = new CalendarEventSchedule(uuidv4(), start.plus({ days: 40 }));
+
+    const end = occurrenceEndTime(eventWith(base, extra), extra.startDate!);
+
+    expect(end?.toISO()).toBe(extra.startDate!.plus({ hours: 1, minutes: 30, seconds: 15 }).toISO());
+  });
+
+  it('keeps the wall-clock end on the night the clocks change', () => {
+    // 22:00 to 03:00; on 1 November 2026 New York repeats an hour, so the
+    // occurrence that starts on 31 October lasts six real hours
+    const start = DateTime.fromObject({ year: 2026, month: 10, day: 24, hour: 22 }, { zone: NEW_YORK });
+    const base = new CalendarEventSchedule(uuidv4(), start);
+    base.eventEndTime = start.plus({ hours: 5 });
+
+    const end = occurrenceEndTime(eventWith(base), start.plus({ weeks: 1 }));
+
+    expect(end?.toFormat('yyyy-MM-dd HH:mm')).toBe('2026-11-01 03:00');
+    expect(end!.diff(start.plus({ weeks: 1 })).as('hours')).toBe(6);
+  });
+
+  it('returns the end in the zone of the start it was given', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const base = new CalendarEventSchedule(uuidv4(), start);
+    base.eventEndTime = start.plus({ hours: 2 });
+
+    const end = occurrenceEndTime(eventWith(base), start.toUTC());
+
+    expect(end?.zoneName).toBe('UTC');
+    expect(end?.toMillis()).toBe(start.plus({ hours: 2 }).toMillis());
+  });
+
+  it('is null without an end time, with a non-positive duration, or without a base schedule', () => {
+    const start = DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK });
+    const open = new CalendarEventSchedule(uuidv4(), start);
+    const backwards = new CalendarEventSchedule(uuidv4(), start);
+    backwards.eventEndTime = start.minus({ hours: 1 });
+
+    expect(occurrenceEndTime(eventWith(open), start)).toBeNull();
+    expect(occurrenceEndTime(eventWith(backwards), start)).toBeNull();
+    expect(occurrenceEndTime(new CalendarEvent(uuidv4(), uuidv4()), start)).toBeNull();
   });
 });

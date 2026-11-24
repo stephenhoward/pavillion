@@ -22,6 +22,7 @@ describe.each([
   'admin_report_notification_email',
   'auto_escalation_notification_email',
   'escalation_reminder_email',
+  'calendar_export',
 ])('%s locale parity', (ns) => {
   const en = load('en', ns);
 
