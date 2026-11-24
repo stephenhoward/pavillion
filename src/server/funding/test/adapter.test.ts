@@ -1254,10 +1254,7 @@ describe('Payment Provider Adapters', () => {
         ['a connection failure', () => new Stripe.errors.StripeConnectionError({ message: 'socket hang up' } as any)],
         ['a rate limit', () => new Stripe.errors.StripeRateLimitError({ message: 'too many requests' } as any)],
         ['a Stripe API error', () => new Stripe.errors.StripeAPIError({ message: 'api error' } as any)],
-        ['a 5xx of another type', () => Object.assign(
-          new Stripe.errors.StripeUnknownError({ message: 'bad gateway' } as any),
-          { statusCode: 502 },
-        )],
+        ['a 5xx of another type', () => new Stripe.errors.StripeError({ message: 'bad gateway', statusCode: 502 } as any)],
       ])('should report %s as transient', async (_label, build) => {
         const cause = build();
         mockStripe.subscriptions.retrieve.rejects(cause);
@@ -1592,7 +1589,7 @@ describe('Payment Provider Adapters', () => {
         // Verify session was created with correct params
         expect(mockStripe.checkout.sessions.create.calledOnce).toBe(true);
         const createArgs = mockStripe.checkout.sessions.create.firstCall.args[0];
-        expect(createArgs.ui_mode).toBe('embedded');
+        expect(createArgs.ui_mode).toBe('embedded_page');
         expect(createArgs.mode).toBe('subscription');
         expect(createArgs.line_items[0].price).toBe('price_existing_123');
         expect(createArgs.line_items[0].quantity).toBe(1);
