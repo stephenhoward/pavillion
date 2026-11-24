@@ -1,15 +1,19 @@
 <template>
   <div class="editors-tab">
 
-    <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error" role="alert">
-      {{ state.error }}
-    </div>
+    <!-- Live regions stay mounted so screen readers announce text changes;
+         while empty they collapse visually but stay in the accessibility tree. -->
+    <div
+      class="editors-tab__live"
+      :class="state.error ? 'alert alert--error' : 'editors-tab__live--empty'"
+      role="alert"
+    >{{ state.error }}</div>
 
-    <!-- Success Display -->
-    <div v-if="state.success" class="alert alert--success" role="alert">
-      {{ state.success }}
-    </div>
+    <div
+      class="editors-tab__live"
+      :class="state.success ? 'alert alert--success' : 'editors-tab__live--empty'"
+      role="status"
+    >{{ state.success }}</div>
 
     <!-- Loading State -->
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
@@ -489,11 +493,17 @@ onMounted(loadEditors);
 
 <style scoped lang="scss">
 @use '../../../assets/style/components/calendar-admin' as *;
+@use '@/client/assets/style/mixins/visibility' as *;
 
 .editors-tab {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
+}
+
+// Empty live region: out of layout (absolute, so no flex gap) but still exposed.
+.editors-tab__live--empty {
+  @include sr-only;
 }
 
 .editors-content {

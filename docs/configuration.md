@@ -149,6 +149,12 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 
 *Required only if using S3 storage. Also requires setting `media.storage.driver: 's3'` in `config/local.yaml`.
 
+### Backups host directory
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BACKUP_HOST_DIR` | No | `/opt/pavillion/backups` | Host folder bound to the `pavillion-backups` volume, where the worker's dumps appear as ordinary files. Set it in `.env`. See [Backups](./backups.md#what-pavillion-does-for-you) |
+
 ### Off-host backup copy
 
 Optional. Read by the worker only, and separate from the media `S3_*`
@@ -468,6 +474,7 @@ behaviour.
 | `calendarFollow.byAccount` | Account | 30 follow or unfollow requests per 15 minutes |
 | `calendarFundingPlan.byAccount` | Account | 30 per 15 minutes |
 | `checkoutSession.byAccount` | Account | 10 per 15 minutes |
+| `billingPortal.byAccount` | Account | 10 billing portal opens per 15 minutes |
 | `fundingWebhook.byIp` | IP address | 300 per minute |
 | `importSource.createByAccount` | Account | 15 new import sources per hour |
 | `importSource.verifyBySource` | Import source | 3 verification attempts per hour |

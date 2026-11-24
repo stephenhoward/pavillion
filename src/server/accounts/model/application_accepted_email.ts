@@ -10,11 +10,13 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'application_accepte
 class ApplicationAcceptedEmail extends EmailMessage {
   account: Account;
   passwordResetCode: string;
+  instanceName: string;
 
-  constructor(application: Account, passwordResetCode: string) {
+  constructor(application: Account, passwordResetCode: string, instanceName: string) {
     super('application_accepted_email', textTemplate, htmlTemplate);
     this.account = application;
     this.passwordResetCode = passwordResetCode;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -26,11 +28,13 @@ class ApplicationAcceptedEmail extends EmailMessage {
       textMessage: this.renderPlaintext(language, {
         passwordResetCode: this.passwordResetCode,
         language: language,
+        instanceName: this.instanceName,
         registrationUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         passwordResetCode: this.passwordResetCode,
         language: language,
+        instanceName: this.instanceName,
         registrationUrl,
       }),
     };

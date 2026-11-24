@@ -177,6 +177,23 @@ describe('event-lifecycle handler concurrency', () => {
       expect(handlers.pendingDispatchCount, 'none of them joined the lifecycle queue').toBe(3);
     });
 
+    it('invalidates the authorization cache on remoteEditorRevoked while the limiter is saturated', async () => {
+      for (let i = 0; i < BOUND + 3; i++) {
+        eventBus.emit('eventCreated', lifecyclePayload(i));
+      }
+      await flush();
+      expect(actorUrlStub.callCount, 'limiter saturated').toBe(BOUND);
+      expect(handlers.pendingDispatchCount).toBe(3);
+
+      const invalidate = sandbox.stub(service, 'invalidateAuthorizationCache');
+      eventBus.emit('remoteEditorRevoked', { calendarId: 'limit-calendar', actorUri: 'https://remote.example/users/editor' });
+      await flush();
+
+      expect(invalidate.calledOnceWithExactly('limit-calendar', 'https://remote.example/users/editor'), 'ran before any gate was released').toBe(true);
+      expect(gates, 'no lifecycle gate was released').toHaveLength(BOUND);
+      expect(handlers.pendingDispatchCount, 'did not join the lifecycle queue').toBe(3);
+    });
+
     it('logs one count-only warning when the backlog reaches the threshold', async () => {
       const threshold = 1000;
       for (let i = 0; i < BOUND + threshold + 5; i++) {

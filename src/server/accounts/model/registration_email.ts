@@ -10,11 +10,13 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'account_registratio
 class AccountRegistrationEmail extends EmailMessage {
   account: Account;
   token: string;
+  instanceName: string;
 
-  constructor(account: Account, token: string) {
+  constructor(account: Account, token: string, instanceName: string) {
     super('account_registration_email', textTemplate, htmlTemplate);
     this.account = account;
     this.token = token;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -26,11 +28,13 @@ class AccountRegistrationEmail extends EmailMessage {
       textMessage: this.renderPlaintext(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         registrationUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         registrationUrl,
       }),
     };

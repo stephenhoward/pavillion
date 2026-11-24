@@ -10,11 +10,13 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'application_confirm
 class ApplicationConfirmationEmail extends EmailMessage {
   application: AccountApplication;
   token: string;
+  instanceName: string;
 
-  constructor(application: AccountApplication, token: string) {
+  constructor(application: AccountApplication, token: string, instanceName: string) {
     super('application_confirmation_email', textTemplate, htmlTemplate);
     this.application = application;
     this.token = token;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -25,10 +27,12 @@ class ApplicationConfirmationEmail extends EmailMessage {
       subject: this.renderSubject(language, {}),
       textMessage: this.renderPlaintext(language, {
         language: language,
+        instanceName: this.instanceName,
         confirmationUrl: confirmationUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         language: language,
+        instanceName: this.instanceName,
         confirmationUrl: confirmationUrl,
       }),
     };

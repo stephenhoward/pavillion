@@ -32,13 +32,13 @@ describe('AdminApplicationNotificationEmail', () => {
   }
 
   it('constructs with the admin_application_notification_email namespace', () => {
-    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
+    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication(), 'Riverside Events');
 
     expect(email.namespace).toBe('admin_application_notification_email');
   });
 
   it('sets the recipient address to the admin email passed to the constructor', () => {
-    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
+    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication(), 'Riverside Events');
 
     const mailData = email.buildMessage('en');
 
@@ -46,7 +46,7 @@ describe('AdminApplicationNotificationEmail', () => {
   });
 
   it('renders a non-empty subject line', () => {
-    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
+    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication(), 'Riverside Events');
 
     const mailData = email.buildMessage('en');
 
@@ -55,7 +55,7 @@ describe('AdminApplicationNotificationEmail', () => {
   });
 
   it('renders non-empty text and html bodies', () => {
-    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
+    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication(), 'Riverside Events');
 
     const mailData = email.buildMessage('en');
 
@@ -66,7 +66,7 @@ describe('AdminApplicationNotificationEmail', () => {
   });
 
   it('includes the applicant email and a review deep link in the rendered body, and never the applicant free-text message', () => {
-    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication());
+    const email = new AdminApplicationNotificationEmail('admin@example.com', makeApplication(), 'Riverside Events');
 
     const mailData = email.buildMessage('en');
     const expectedReviewUrl = 'https://' + config.get<string>('domain') + '/settings/admin/accounts';
@@ -81,5 +81,28 @@ describe('AdminApplicationNotificationEmail', () => {
     // their mailbox.
     expect(mailData.textMessage).not.toContain('sensitive message text');
     expect(mailData.htmlMessage).not.toContain('sensitive message text');
+  });
+});
+
+describe('AdminApplicationNotificationEmail sign-off', () => {
+  const build = (name: string) => new AdminApplicationNotificationEmail('admin@example.com', new AccountApplication('app-id', 'a@example.com', 'm'), name);
+
+  it.each(['en', 'es', 'fr'])('signs off with the instance name instead of a team name (%s)', (language) => {
+    const message = build('Riverside Events').buildMessage(language);
+
+    expect(message.textMessage.trimEnd()).toMatch(/Riverside Events\s*(-{3,}[\s\S]*)?$/);
+    expect(message.htmlMessage).toContain('Riverside Events');
+    for (const body of [message.textMessage, message.htmlMessage]) {
+      expect(body).not.toContain('Pavillion Team');
+      expect(body).not.toContain('The Team');
+    }
+  });
+
+  it('escapes the instance name in HTML and leaves it literal in text', () => {
+    const message = build('Arts & Crafts').buildMessage('en');
+
+    expect(message.htmlMessage).toContain('Arts &amp; Crafts');
+    expect(message.textMessage).toContain('Arts & Crafts');
+    expect(message.textMessage).not.toContain('&amp;');
   });
 });

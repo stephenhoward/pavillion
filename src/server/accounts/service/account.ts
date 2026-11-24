@@ -198,6 +198,8 @@ export default class AccountService {
       throw new AccountRegistrationClosedError();
     }
 
+    const instanceName = await resolveInstanceName(this.configurationInterface);
+
     let accountInfo;
     try {
       accountInfo = await this._setupAccount(email);
@@ -206,7 +208,7 @@ export default class AccountService {
       if (error instanceof AccountAlreadyExistsError) {
         const existingAccount = await this.getAccountByEmail(email);
         if (existingAccount) {
-          const message = new AccountAlreadyExistsEmail(existingAccount);
+          const message = new AccountAlreadyExistsEmail(existingAccount, instanceName);
           await this.emailInterface.sendEmail(message.buildMessage(existingAccount.language));
         }
         throw error;
@@ -214,7 +216,7 @@ export default class AccountService {
       throw error;
     }
 
-    const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
+    const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code, instanceName);
     await this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
     return accountInfo.account;
   }
@@ -262,6 +264,8 @@ export default class AccountService {
       throw new AccountApplicationsClosedError();
     }
 
+    const instanceName = await resolveInstanceName(this.configurationInterface);
+
     const existingAccount = await this.getAccountByEmail(email);
     const existingApplication = await AccountApplicationEntity.findOne({
       where: { email: normalizeEmail(email) },
@@ -271,7 +275,7 @@ export default class AccountService {
     // Email the account owner (mirrors registerNewAccount) so the work timing
     // matches the create-and-confirm branches.
     if (existingAccount) {
-      const accountExistsMessage = new AccountAlreadyExistsEmail(existingAccount);
+      const accountExistsMessage = new AccountAlreadyExistsEmail(existingAccount, instanceName);
       await this.emailInterface.sendEmail(
         accountExistsMessage.buildMessage(existingAccount.language),
       );
@@ -293,6 +297,7 @@ export default class AccountService {
       const confirmationMessage = new ApplicationConfirmationEmail(
         application,
         existingApplication.confirmation_token,
+        instanceName,
       );
       await this.emailInterface.sendEmail(confirmationMessage.buildMessage(await this.getNoAccountLanguage()));
       return true;
@@ -307,7 +312,7 @@ export default class AccountService {
       existingApplication.status_timestamp = new Date();
       await existingApplication.save();
 
-      const ackMessage = new ApplicationAcknowledgmentEmail(existingApplication.toModel());
+      const ackMessage = new ApplicationAcknowledgmentEmail(existingApplication.toModel(), instanceName);
       await this.emailInterface.sendEmail(ackMessage.buildMessage(await this.getNoAccountLanguage()));
       return true;
     }
@@ -331,7 +336,7 @@ export default class AccountService {
     await applicationEntity.save();
 
     const application = applicationEntity.toModel();
-    const confirmationMessage = new ApplicationConfirmationEmail(application, confirmationToken);
+    const confirmationMessage = new ApplicationConfirmationEmail(application, confirmationToken, instanceName);
     await this.emailInterface.sendEmail(confirmationMessage.buildMessage(await this.getNoAccountLanguage()));
 
     return true;
@@ -420,7 +425,8 @@ export default class AccountService {
     // Build the acknowledgment email from the application we already loaded.
     // The model carries the email address; status/timestamp on the model
     // reflect pre-update values but are not surfaced to the recipient.
-    const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel());
+    const instanceName = await resolveInstanceName(this.configurationInterface);
+    const ackMessage = new ApplicationAcknowledgmentEmail(application.toModel(), instanceName);
     await this.emailInterface.sendEmail(ackMessage.buildMessage(await this.getNoAccountLanguage()));
 
     // Notify instance administrators that an application has reached the
@@ -439,7 +445,7 @@ export default class AccountService {
         if (!admin.email) {
           continue;
         }
-        const adminEmail = new AdminApplicationNotificationEmail(admin.email, application.toModel());
+        const adminEmail = new AdminApplicationNotificationEmail(admin.email, application.toModel(), instanceName);
         await this.emailInterface.sendEmail(adminEmail.buildMessage(admin.language || 'en'));
       }
     }
@@ -769,7 +775,8 @@ export default class AccountService {
 
     // Send email before destroying the application, so a failed send leaves
     // the application in place for the admin to approve again.
-    const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
+    const instanceName = await resolveInstanceName(this.configurationInterface);
+    const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code, instanceName);
     await this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
 
     // Delete the application now that it's been accepted and account created
@@ -804,7 +811,8 @@ export default class AccountService {
     await application.save();
 
     if (!silent) {
-      const message = new ApplicationRejectedEmail(application.toModel());
+      const instanceName = await resolveInstanceName(this.configurationInterface);
+      const message = new ApplicationRejectedEmail(application.toModel(), instanceName);
       await this.emailInterface.sendEmail(message.buildMessage(await this.getNoAccountLanguage()));
     }
   }

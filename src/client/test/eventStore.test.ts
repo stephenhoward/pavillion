@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useEventStore } from '@/client/stores/eventStore';
-import { CalendarEvent } from '@/common/model/events';
+import { DateTime } from 'luxon';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
+
+function eventStarting(id: string, start: string): CalendarEvent {
+  const event = new CalendarEvent(id, 'calendar-123');
+  event.schedules = [new CalendarEventSchedule(`${id}-s`, DateTime.fromISO(start, { zone: 'utc' }))];
+  return event;
+}
 
 describe('EventStore', () => {
   beforeEach(() => {
@@ -148,6 +155,37 @@ describe('EventStore', () => {
       const events = store.eventsForCalendar('non-existent-calendar');
 
       expect(events).toEqual([]);
+    });
+  });
+
+  describe('eventsForCalendar ordering', () => {
+    it('places an added earlier-dated event before later ones', () => {
+      const store = useEventStore();
+      store.addEvent('calendar-123', eventStarting('dec-11', '2026-12-11T10:00:00Z'));
+      store.addEvent('calendar-123', eventStarting('dec-15', '2026-12-15T10:00:00Z'));
+      store.addEvent('calendar-123', eventStarting('dec-12', '2026-12-12T10:00:00Z'));
+
+      expect(store.eventsForCalendar('calendar-123').map(e => e.id)).toEqual(['dec-11', 'dec-12', 'dec-15']);
+    });
+
+    it('re-sorts an event whose date changed on update', () => {
+      const store = useEventStore();
+      store.addEvent('calendar-123', eventStarting('a', '2026-12-11T10:00:00Z'));
+      store.addEvent('calendar-123', eventStarting('b', '2026-12-15T10:00:00Z'));
+
+      store.updateEvent('calendar-123', eventStarting('b', '2026-12-01T10:00:00Z'));
+
+      expect(store.eventsForCalendar('calendar-123').map(e => e.id)).toEqual(['b', 'a']);
+    });
+
+    it('does not reorder the stored array', () => {
+      const store = useEventStore();
+      store.addEvent('calendar-123', eventStarting('late', '2026-12-15T10:00:00Z'));
+      store.addEvent('calendar-123', eventStarting('early', '2026-12-01T10:00:00Z'));
+
+      store.eventsForCalendar('calendar-123');
+
+      expect(store.events['calendar-123'].map(e => e.id)).toEqual(['late', 'early']);
     });
   });
 });

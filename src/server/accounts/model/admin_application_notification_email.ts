@@ -22,11 +22,13 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'admin_application_n
 class AdminApplicationNotificationEmail extends EmailMessage {
   recipientEmail: string;
   application: AccountApplication;
+  instanceName: string;
 
-  constructor(recipientEmail: string, application: AccountApplication) {
+  constructor(recipientEmail: string, application: AccountApplication, instanceName: string) {
     super('admin_application_notification_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
     this.application = application;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -44,6 +46,7 @@ class AdminApplicationNotificationEmail extends EmailMessage {
       reviewUrl,
       appUrl,
       language,
+      instanceName: this.instanceName,
     };
 
     return {

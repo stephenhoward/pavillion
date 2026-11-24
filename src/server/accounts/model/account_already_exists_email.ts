@@ -9,10 +9,12 @@ const htmlTemplate = compileTemplate('src/server/accounts', 'account_already_exi
 
 class AccountAlreadyExistsEmail extends EmailMessage {
   account: Account;
+  instanceName: string;
 
-  constructor(account: Account) {
+  constructor(account: Account, instanceName: string) {
     super('account_already_exists_email', textTemplate, htmlTemplate);
     this.account = account;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -24,11 +26,13 @@ class AccountAlreadyExistsEmail extends EmailMessage {
       subject: this.renderSubject(language, {}),
       textMessage: this.renderPlaintext(language, {
         language: language,
+        instanceName: this.instanceName,
         loginUrl,
         forgotPasswordUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         language: language,
+        instanceName: this.instanceName,
         loginUrl,
         forgotPasswordUrl,
       }),
