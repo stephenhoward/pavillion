@@ -67,6 +67,15 @@
       "description": "Create lock file maintenance before default-priority updates so the concurrent PR limit cannot starve it",
       "matchUpdateTypes": ["lockFileMaintenance"],
       "prPriority": 5
+    },
+    {
+      "description": [
+        "TypeScript stays on 6.x: 7.0 ships no JavaScript API, so typescript-eslint, dependency-cruiser, vue-tsc and the scripts and tests that import 'typescript' cannot run on it.",
+        "dependency-cruiser fails silently there, exiting 0 with 0 modules cruised.",
+        "Lift this once those tools support the API that 7.1 introduces."
+      ],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7"
     }
   ]
 }
