@@ -17,6 +17,11 @@ describe.each([
   'application_acknowledgment_email',
   'application_confirmation_email',
   'application_rejected_email',
+  'report_verification_email',
+  'new_report_notification_email',
+  'admin_report_notification_email',
+  'auto_escalation_notification_email',
+  'escalation_reminder_email',
 ])('%s locale parity', (ns) => {
   const en = load('en', ns);
 
