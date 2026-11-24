@@ -5,7 +5,7 @@ import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
 import { FundingPlanNotFoundError, FundingPlanNotResumableError } from '@/common/exceptions/funding';
 import { logError } from '@/server/common/helper/error-logger';
-import { limitFundingPlanChangeByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitFundingPlanChangeByAccount, limitBillingPortalByAccount } from '@/server/common/middleware/rate-limiters';
 
 /**
  * User funding plan route handlers
@@ -31,11 +31,12 @@ export default class FundingPlanRoutes {
     // All user funding plan endpoints require authentication
     router.get('/options', ExpressHelper.loggedInOnly, this.getOptions.bind(this));
     router.get('/status', ExpressHelper.loggedInOnly, this.getStatus.bind(this));
-    // Both reach the payment provider with the instance's credentials, so each
-    // account's plan changes are bounded.
+    // All three reach the payment provider with the instance's credentials, so
+    // each account's plan changes and portal opens are bounded (portal in its
+    // own bucket, so cancel/resume cannot lock an owner out of recovery).
     router.post('/cancel', ExpressHelper.loggedInOnly, limitFundingPlanChangeByAccount, this.cancel.bind(this));
     router.post('/resume', ExpressHelper.loggedInOnly, limitFundingPlanChangeByAccount, this.resume.bind(this));
-    router.get('/portal', ExpressHelper.loggedInOnly, this.getPortal.bind(this));
+    router.get('/portal', ExpressHelper.loggedInOnly, limitBillingPortalByAccount, this.getPortal.bind(this));
 
     app.use(routePrefix, router);
   }
