@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, nextTick, onMounted, watch } from 'vue';
+import { reactive, ref, nextTick, onMounted, watch, useId } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { X } from 'lucide-vue-next';
@@ -26,6 +26,8 @@ const props = defineProps({
 const { t } = useTranslation('categories', {
   keyPrefix: 'management',
 });
+
+const uid = useId();
 
 const categoryService = new CategoryService();
 
@@ -165,7 +167,7 @@ onMounted(() => {
         {{ state.error }}
       </div>
 
-      <p class="form-helper">{{ t('category_name_help') }}</p>
+      <p :id="`${uid}-name-help`" class="form-helper">{{ t('category_name_help') }}</p>
 
       <div class="language-fields">
         <div
@@ -173,14 +175,15 @@ onMounted(() => {
           :key="lang"
           class="language-field"
         >
-          <label :for="`category-name-${lang}`" class="language-label">{{ languageDisplayName(lang, i18next.language) }}:</label>
+          <label :for="`${uid}-name-${lang}`" class="language-label">{{ t('category_name_language_label', { language: languageDisplayName(lang, i18next.language) }) }}</label>
           <div class="language-input-wrapper">
             <input
-              :id="`category-name-${lang}`"
+              :id="`${uid}-name-${lang}`"
               type="text"
               class="language-input"
               v-model="localCategory.content(lang).name"
               :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
+              :aria-describedby="`${uid}-name-help`"
               :placeholder="t('category_name_placeholder')"
               :disabled="state.isSaving"
               @keyup.enter="saveCategory"
