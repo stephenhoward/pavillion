@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { IANAZone } from 'luxon';
 import rrule from 'rrule';
 
-import { buildVTimezone } from '@/server/calendar/service/export/vtimezone';
+import { buildVTimezone, MAX_VTIMEZONE_SPAN_YEARS } from '@/server/calendar/service/export/vtimezone';
 
 const { rrulestr } = rrule;
 
@@ -266,5 +266,16 @@ describe('buildVTimezone', () => {
 
   it('refuses a span that ends before it starts', () => {
     expect(() => buildVTimezone('Europe/Berlin', 2030, 2025)).toThrow(RangeError);
+  });
+
+  it('refuses a span too wide to scan, before scanning any of it', () => {
+    expect(() => buildVTimezone('Europe/Berlin', 1970, 9999)).toThrow(RangeError);
+    expect(() => buildVTimezone('Europe/Berlin', 1970, 1970 + MAX_VTIMEZONE_SPAN_YEARS)).toThrow(RangeError);
+  });
+
+  it('accepts the widest span it allows', () => {
+    const lines = buildVTimezone('Asia/Kolkata', 1970, 1970 + MAX_VTIMEZONE_SPAN_YEARS - 1);
+
+    expect(lines[0]).toBe('BEGIN:VTIMEZONE');
   });
 });

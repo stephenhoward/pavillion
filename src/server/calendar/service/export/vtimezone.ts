@@ -20,6 +20,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** RFC 5545 weekday codes indexed by `Date.getUTCDay()`. */
 const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
+/**
+ * The widest span, in calendar years, {@link buildVTimezone} will scan. The
+ * scan is synchronous and walks the span a day at a time, so its cost grows
+ * with the span: a century is a fraction of a second, eight thousand years
+ * tens of seconds. Callers size the span from stored dates, which can be
+ * arbitrarily far away; this bound keeps a caller that forgets to cap it
+ * from blocking the event loop.
+ */
+export const MAX_VTIMEZONE_SPAN_YEARS = 250;
+
 /** A yearly rule is only declared once it has held for this many years. */
 const MIN_REGULAR_YEARS = 2;
 
@@ -245,7 +255,8 @@ function recurringObservance(rule: YearlyRule): Observance {
  * @param toYear - Last calendar year the component must be right for
  * @returns The unfolded content lines, `BEGIN:VTIMEZONE` to `END:VTIMEZONE` inclusive
  * @throws {Error} When `zoneName` is not a zone the platform knows
- * @throws {RangeError} When the span is not a pair of whole years in order
+ * @throws {RangeError} When the span is not a pair of whole years in order,
+ *   or covers more than {@link MAX_VTIMEZONE_SPAN_YEARS} years
  */
 export function buildVTimezone(zoneName: string, fromYear: number, toYear: number): string[] {
   if (!IANAZone.isValidZone(zoneName)) {
@@ -253,6 +264,11 @@ export function buildVTimezone(zoneName: string, fromYear: number, toYear: numbe
   }
   if (!Number.isInteger(fromYear) || !Number.isInteger(toYear) || fromYear > toYear) {
     throw new RangeError(`Invalid time zone span: ${fromYear} to ${toYear}`);
+  }
+  if (toYear - fromYear + 1 > MAX_VTIMEZONE_SPAN_YEARS) {
+    throw new RangeError(
+      `Time zone span ${fromYear} to ${toYear} is wider than ${MAX_VTIMEZONE_SPAN_YEARS} years`,
+    );
   }
 
   const zone = IANAZone.create(zoneName);

@@ -22,8 +22,11 @@ import { serializeCalendarToIcs } from '@/server/calendar/service/export/ics_ser
 const NEW_YORK = 'America/New_York';
 const BERLIN = 'Europe/Berlin';
 
+const SYDNEY = 'Australia/Sydney';
+
 const SERIES_EVENT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BERLIN_EVENT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const WEDNESDAYS_EVENT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const NOW = new Date('2026-06-01T12:00:00Z');
 // One year either side of now. The window holds a daylight-saving change in
@@ -37,6 +40,16 @@ const newYork = (year: number, month: number, day: number, hour: number) =>
 const HIDDEN = newYork(2026, 3, 16, 18);
 const SHOWN_CANCELLED = newYork(2026, 11, 9, 18);
 const EXTRA_DATE = newYork(2026, 7, 4, 10);
+// An extra date entered in another zone than the series: 20:00 in Berlin
+const EXTRA_DATE_ABROAD = DateTime.fromObject({ year: 2026, month: 8, day: 15, hour: 20 }, { zone: BERLIN });
+// The series ends on one of its own Mondays, inside the window, so the last
+// occurrence's instant is the UNTIL instant itself.
+const SERIES_END = newYork(2027, 3, 29, 18);
+
+// Monday 21 September 2026, 19:00 in Sydney: the start of a Wednesdays-only
+// rule, so the start itself is never an occurrence.
+const WEDNESDAYS_START = DateTime.fromObject({ year: 2026, month: 9, day: 21, hour: 19 }, { zone: SYDNEY });
+const WEDNESDAYS_COUNT = 6;
 
 function schedule(id: string, start: DateTime, extra: Partial<CalendarEventSchedule> = {}): CalendarEventSchedule {
   const s = new CalendarEventSchedule(id, start);
@@ -45,8 +58,9 @@ function schedule(id: string, start: DateTime, extra: Partial<CalendarEventSched
 }
 
 /**
- * Mondays at 18:00 in New York from January 2026, with one date hidden, one
- * shown as cancelled, and an extra Saturday morning.
+ * Mondays at 18:00 in New York from January 2026 until the last Monday of
+ * March 2027, with one date hidden, one shown as cancelled, an extra Saturday
+ * morning, and an extra date entered in Berlin time.
  */
 function seriesEvent(): CalendarEvent {
   const start = newYork(2026, 1, 5, 18);
@@ -57,9 +71,10 @@ function seriesEvent(): CalendarEvent {
       frequency: EventFrequency.WEEKLY,
       interval: 1,
       eventEndTime: start.plus({ hours: 2 }),
-      endDate: newYork(2027, 8, 30, 18),
+      endDate: SERIES_END,
     }),
     schedule('22222222-2222-4222-8222-222222222222', EXTRA_DATE),
+    schedule('66666666-6666-4666-8666-666666666666', EXTRA_DATE_ABROAD),
     schedule('33333333-3333-4333-8333-333333333333', HIDDEN.toUTC(), { isExclusion: true, hideFromPublic: true }),
     schedule('44444444-4444-4444-8444-444444444444', SHOWN_CANCELLED.toUTC(), { isExclusion: true, hideFromPublic: false }),
   ];
@@ -83,6 +98,27 @@ function berlinEvent(): CalendarEvent {
   return event;
 }
 
+/**
+ * Every second Wednesday at 19:00 in Sydney, six times, from a rule whose
+ * stored start is a Monday. Pavillion never lists the Monday and counts six
+ * Wednesdays; an importer counts DTSTART, so the two only agree if the file
+ * starts the series on the first Wednesday.
+ */
+function wednesdaysEvent(): CalendarEvent {
+  const event = new CalendarEvent(WEDNESDAYS_EVENT, 'calendar-id');
+  event.addContent(new CalendarEventContent('en', 'Midweek Run'));
+  event.schedules = [
+    schedule('77777777-7777-4777-8777-777777777777', WEDNESDAYS_START, {
+      frequency: EventFrequency.WEEKLY,
+      interval: 2,
+      byDay: ['WE'],
+      count: WEDNESDAYS_COUNT,
+      eventEndTime: WEDNESDAYS_START.plus({ minutes: 45 }),
+    }),
+  ];
+  return event;
+}
+
 const key = (eventId: string, ms: number) => `${eventId} ${new Date(ms).toISOString()}`;
 
 /** What Pavillion lists for an event inside the window, hidden dates left out. */
@@ -96,7 +132,11 @@ async function pavillionOccurrences(event: CalendarEvent): Promise<string[]> {
 }
 
 describe('calendar export read back by node-ical', () => {
-  const events = [seriesEvent(), berlinEvent()];
+  const events = [seriesEvent(), berlinEvent(), wednesdaysEvent()];
+  const startsOf = (eventId: string) => instances
+    .filter(found => found.eventId === eventId)
+    .map(({ instance }) => instance.start.getTime())
+    .sort((a, b) => a - b);
   let instances: Array<{ eventId: string; instance: EventInstance }>;
 
   beforeAll(() => {
@@ -124,12 +164,47 @@ describe('calendar export read back by node-ical', () => {
 
     expect(actual).toEqual(expected);
     // Enough dates that both zones' clock changes fall inside the comparison
-    expect(expected.length).toBeGreaterThan(90);
+    expect(expected.length).toBeGreaterThan(85);
     expect(expected).toContain(key(SERIES_EVENT, EXTRA_DATE.toMillis()));
+    expect(expected).toContain(key(SERIES_EVENT, EXTRA_DATE_ABROAD.toMillis()));
     expect(expected).toContain(key(SERIES_EVENT, Date.parse('2026-03-02T23:00:00Z')));
     expect(expected).toContain(key(SERIES_EVENT, Date.parse('2026-03-09T22:00:00Z')));
     expect(expected).toContain(key(BERLIN_EVENT, Date.parse('2025-10-02T17:30:00Z')));
     expect(expected).toContain(key(BERLIN_EVENT, Date.parse('2025-11-06T18:30:00Z')));
+  });
+
+  it('ends a series on its end date, which is its last occurrence', async () => {
+    const listed = await pavillionOccurrences(seriesEvent());
+    const weekAfter = SERIES_END.plus({ weeks: 1 });
+
+    // Pavillion lists the end date itself and nothing a week later, well inside the window
+    expect(listed).toContain(key(SERIES_EVENT, SERIES_END.toMillis()));
+    expect(listed).not.toContain(key(SERIES_EVENT, weekAfter.toMillis()));
+    expect(weekAfter.toMillis()).toBeLessThan(TO.getTime());
+    // and so does the file read back
+    expect(startsOf(SERIES_EVENT).at(-1)).toBe(SERIES_END.toMillis());
+  });
+
+  it('ends a counted series after the same occurrences, the first being the first one listed', async () => {
+    const wednesday = (month: number, day: number) =>
+      DateTime.fromObject({ year: 2026, month, day, hour: 19 }, { zone: SYDNEY }).toMillis();
+    // Sydney's clocks go forward on 4 October 2026, between the first two
+    const everySecondWednesday = [
+      wednesday(9, 23), wednesday(10, 7), wednesday(10, 21), wednesday(11, 4), wednesday(11, 18), wednesday(12, 2),
+    ];
+
+    expect(await pavillionOccurrences(wednesdaysEvent()))
+      .toEqual(everySecondWednesday.map(ms => key(WEDNESDAYS_EVENT, ms)));
+    expect(startsOf(WEDNESDAYS_EVENT)).toEqual(everySecondWednesday);
+    expect(startsOf(WEDNESDAYS_EVENT)).toHaveLength(WEDNESDAYS_COUNT);
+    expect(startsOf(WEDNESDAYS_EVENT)).not.toContain(WEDNESDAYS_START.toMillis());
+  });
+
+  it('reads an extra date entered in another zone at the same instant', () => {
+    const abroad = instances.find(({ instance }) => instance.start.getTime() === EXTRA_DATE_ABROAD.toMillis());
+
+    expect(abroad?.eventId).toBe(SERIES_EVENT);
+    expect(abroad?.instance.start.tz).toBe(BERLIN);
   });
 
   it('leaves the hidden date out', () => {
@@ -154,5 +229,6 @@ describe('calendar export read back by node-ical', () => {
 
     expect(lengthsInMinutes(SERIES_EVENT)).toEqual(new Set([120]));
     expect(lengthsInMinutes(BERLIN_EVENT)).toEqual(new Set([90]));
+    expect(lengthsInMinutes(WEDNESDAYS_EVENT)).toEqual(new Set([45]));
   });
 });

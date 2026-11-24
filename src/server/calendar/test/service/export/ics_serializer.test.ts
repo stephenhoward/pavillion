@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { describe, it, expect } from 'vitest';
-import { DateTime } from 'luxon';
+import { describe, it, expect, afterEach } from 'vitest';
+import { DateTime, Settings } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
@@ -115,12 +115,24 @@ function onlyVevent(events: CalendarEvent[], overrides: Partial<IcsExportInput> 
 
 describe('serializeCalendarToIcs', () => {
   describe('file structure', () => {
-    it('writes this exact file for one weekly event', () => {
-      const event = makeEvent(EVENT_A, [
-        weekly(SCHEDULE_1, MONDAY_EVENING, { eventEndTime: MONDAY_EVENING.plus({ hours: 2 }) }),
-      ]);
+    const weeklyEvent = () => makeEvent(EVENT_A, [
+      weekly(SCHEDULE_1, MONDAY_EVENING, { eventEndTime: MONDAY_EVENING.plus({ hours: 2 }) }),
+    ]);
 
-      const result = serialize([event]);
+    it('carries no organizer, attendee, account or email data', () => {
+      const { ics } = serialize([weeklyEvent()]);
+      const lines = contentLines(ics);
+
+      expect(lines.filter(line => /^(ORGANIZER|ATTENDEE|CONTACT)[:;]/.test(line))).toEqual([]);
+      expect(ics.toLowerCase()).not.toContain('mailto:');
+      // The only "@" in the file scopes a UID to the instance domain
+      expect(lines.filter(line => line.includes('@'))).toEqual([`UID:${EVENT_A}@events.example`]);
+      // The owning calendar's id is on the event model and stays there
+      expect(ics).not.toContain('calendar-id');
+    });
+
+    it('writes this exact file for one weekly event', () => {
+      const result = serialize([weeklyEvent()]);
 
       expect(result.eventCount).toBe(1);
       expect(result.skippedEventIds).toEqual([]);
@@ -344,6 +356,100 @@ describe('serializeCalendarToIcs', () => {
 
       expect(['BEGIN:VTIMEZONE', ...timezone, 'END:VTIMEZONE']).toEqual(buildVTimezone(NEW_YORK, 2018, 2041));
     });
+
+    it('never starts a VTIMEZONE before 1970', () => {
+      const event = makeEvent(EVENT_A, [
+        schedule(SCHEDULE_1, DateTime.fromObject({ year: 1965, month: 5, day: 3, hour: 18 }, { zone: NEW_YORK })),
+      ]);
+
+      const [timezone] = components(serialize([event]).ics, 'VTIMEZONE');
+
+      expect(['BEGIN:VTIMEZONE', ...timezone, 'END:VTIMEZONE']).toEqual(buildVTimezone(NEW_YORK, 1970, 2036));
+      expect(property(timezone, 'DTSTART')).toBe('DTSTART:19700101T000000');
+    });
+
+    it('runs a VTIMEZONE ten years past a date later than now', () => {
+      // The United States changed its rule in 2007. From a clock in 1990 a
+      // span ending ten years after now (2000) would declare the old rule;
+      // ten years after the 1998 date (2008) reaches the new one.
+      const event = makeEvent(EVENT_A, [
+        schedule(SCHEDULE_1, DateTime.fromObject({ year: 1998, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK })),
+      ]);
+
+      const [timezone] = components(serialize([event], { now: new Date('1990-06-01T12:00:00Z') }).ics, 'VTIMEZONE');
+
+      expect(['BEGIN:VTIMEZONE', ...timezone, 'END:VTIMEZONE']).toEqual(buildVTimezone(NEW_YORK, 1989, 2008));
+      expect(timezone).toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU');
+    });
+
+    describe('a stored date in the far future', () => {
+      // A clock in 1946 puts the cap at 2006 (fifty years past now, plus the
+      // ten ahead), the last year of the United States' pre-2007 rule. A
+      // span that ran on to the stored year would declare the 2007 rule
+      // instead, so the cap is visible in the file itself.
+      const LONG_AGO = new Date('1946-06-01T12:00:00Z');
+
+      it.each([
+        [
+          'a one-off date in the year 9999',
+          () => schedule(SCHEDULE_1, DateTime.fromObject({ year: 9999, month: 5, day: 4, hour: 18 }, { zone: NEW_YORK })),
+          'DTSTART;TZID=America/New_York:99990504T180000',
+        ],
+        [
+          'a rule that ends in the year 9999',
+          () => weekly(SCHEDULE_1, MONDAY_EVENING, {
+            endDate: DateTime.fromObject({ year: 9999, month: 12, day: 31, hour: 18 }, { zone: NEW_YORK }),
+          }),
+          'RRULE:FREQ=WEEKLY;UNTIL=99991231T230000Z',
+        ],
+      ])('serializes %s without stretching the VTIMEZONE to it', (_label, makeSchedule, expectedLine) => {
+        const { ics } = serialize([makeEvent(EVENT_A, [makeSchedule()])], { now: LONG_AGO });
+        const [timezone] = components(ics, 'VTIMEZONE');
+
+        expect(vevents(ics)[0]).toContain(expectedLine);
+        expect(['BEGIN:VTIMEZONE', ...timezone, 'END:VTIMEZONE']).toEqual(buildVTimezone(NEW_YORK, 1970, 2006));
+        expect(timezone).toContain('RRULE:FREQ=YEARLY;BYMONTH=4;BYDAY=1SU');
+        expect(timezone).not.toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU');
+      });
+    });
+
+    it('accepts a zone name the platform knows under another spelling, and writes it as stored', () => {
+      // Intl canonicalizes Asia/Kolkata to Asia/Calcutta on some runtimes; the
+      // stored name is still a zone, and is the TZID the VTIMEZONE declares.
+      const event = makeEvent(EVENT_A, [
+        schedule(SCHEDULE_1, DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: 'Asia/Kolkata' })),
+      ]);
+
+      const { ics } = serialize([event]);
+
+      expect(property(vevents(ics)[0], 'DTSTART')).toBe('DTSTART;TZID=Asia/Kolkata:20260504T180000');
+      expect(components(ics, 'VTIMEZONE').map(lines => property(lines, 'TZID'))).toEqual(['TZID:Asia/Kolkata']);
+    });
+
+    describe('process time zone', () => {
+      const processZone = Settings.defaultZone;
+
+      afterEach(() => {
+        Settings.defaultZone = processZone;
+      });
+
+      it('writes the same file whatever zone the process runs in', () => {
+        const fixture = () => [makeEvent(EVENT_A, [
+          weekly(SCHEDULE_1, MONDAY_EVENING, { eventEndTime: MONDAY_EVENING.plus({ hours: 2 }) }),
+          schedule(SCHEDULE_2, MONDAY_EVENING.plus({ days: 2 })),
+          exclusion(SCHEDULE_3, MONDAY_EVENING.plus({ weeks: 2 }), true),
+          exclusion('exclusion-shown', MONDAY_EVENING.plus({ weeks: 3 }), false),
+        ])];
+        const inProcessZone = serialize(fixture()).ics;
+
+        Settings.defaultZone = 'Asia/Tokyo';
+        const inTokyo = serialize(fixture()).ics;
+
+        expect(DateTime.local().zoneName).toBe('Asia/Tokyo');
+        expect(inTokyo).toBe(inProcessZone);
+        expect(vevents(inTokyo)).toHaveLength(3);
+      });
+    });
   });
 
   describe('schedules and UIDs', () => {
@@ -399,6 +505,22 @@ describe('serializeCalendarToIcs', () => {
       ])]);
 
       expect(property(lines, 'EXDATE')).toBe('EXDATE;TZID=America/New_York:20260518T180000,20260601T180000');
+    });
+
+    it('writes a hidden date on every recurring VEVENT of the event, the one it falls on included', () => {
+      // Mondays and Tuesdays; the hidden date is a Tuesday
+      const event = makeEvent(EVENT_A, [
+        weekly(SCHEDULE_1, MONDAY_EVENING),
+        weekly(SCHEDULE_2, MONDAY_EVENING.plus({ days: 1 })),
+        exclusion(SCHEDULE_3, MONDAY_EVENING.plus({ weeks: 2, days: 1 }), true),
+      ]);
+
+      const [mondays, tuesdays] = vevents(serialize([event]).ics);
+
+      expect(property(tuesdays, 'UID')).toBe(`UID:${EVENT_A}-${SCHEDULE_2}@events.example`);
+      expect(property(tuesdays, 'DTSTART')).toBe('DTSTART;TZID=America/New_York:20260505T180000');
+      expect(property(tuesdays, 'EXDATE')).toBe('EXDATE;TZID=America/New_York:20260519T180000');
+      expect(property(mondays, 'EXDATE')).toBe('EXDATE;TZID=America/New_York:20260519T180000');
     });
 
     it('matches a hidden date stored in another zone by its instant', () => {
@@ -582,6 +704,35 @@ describe('serializeCalendarToIcs', () => {
       expect(property(lines, 'DESCRIPTION')).toBe('DESCRIPTION:Bring:\\n\tcake\\nand\\; plates\\\\napkins');
     });
 
+    it('keeps a line break in a place, space or category name inside its own property', () => {
+      const payload = 'x\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nSUMMARY:spoof';
+      const escaped = 'x\\nEND:VEVENT\\nBEGIN:VEVENT\\nSUMMARY:spoof';
+      const event = makeEvent(EVENT_A, [schedule(SCHEDULE_1, MONDAY_EVENING)]);
+      event.location = new EventLocation('location-1', payload, '100 Main St');
+      event.space = new EventLocationSpace('space-1', 'location-1');
+      event.space.addContent(new EventLocationSpaceContent('en', payload));
+      const category = new EventCategory('category-1', 'calendar-id');
+      category.addContent(new EventCategoryContent('en', payload));
+      event.categories = [category];
+
+      const { ics } = serialize([event]);
+      const blocks = vevents(ics);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].map(line => line.split(/[:;]/)[0])).toEqual([
+        'UID', 'DTSTAMP', 'LAST-MODIFIED', 'DTSTART', 'SUMMARY', 'LOCATION', 'CATEGORIES', 'URL',
+      ]);
+      expect(property(blocks[0], 'SUMMARY')).toBe('SUMMARY:Community Meetup');
+      expect(property(blocks[0], 'LOCATION')).toBe(`LOCATION:${escaped}\\, ${escaped}\\, 100 Main St`);
+      expect(property(blocks[0], 'CATEGORIES')).toBe(`CATEGORIES:${escaped}`);
+      // On the wire too: a folded continuation starts with a space, so no
+      // physical line can open or close a component, or pass for a property
+      const physical = ics.split('\r\n');
+      expect(physical.filter(line => line === 'BEGIN:VEVENT')).toHaveLength(1);
+      expect(physical.filter(line => line === 'END:VEVENT')).toHaveLength(1);
+      expect(physical.filter(line => line.startsWith('SUMMARY:'))).toEqual(['SUMMARY:Community Meetup']);
+    });
+
     it('writes category names in the chosen language, each escaped, joined by commas', () => {
       const music = new EventCategory('category-1', 'calendar-id');
       music.addContent(new EventCategoryContent('en', 'Music'));
@@ -664,8 +815,18 @@ describe('serializeCalendarToIcs', () => {
         () => [schedule(SCHEDULE_1, DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: 'UTC+5' }))],
       ],
       [
+        // Intl accepts a bare offset as a zone, but it has no rules and its
+        // colon would break the TZID parameter
+        'a schedule in a fixed-offset zone',
+        () => [schedule(SCHEDULE_1, DateTime.fromObject({ year: 2026, month: 5, day: 4, hour: 18 }, { zone: '+01:00' }))],
+      ],
+      [
         'a schedule whose start is not a valid date',
         () => [schedule(SCHEDULE_1, DateTime.invalid('unparseable'))],
+      ],
+      [
+        'an end time that is not a valid date',
+        () => [schedule(SCHEDULE_1, MONDAY_EVENING, { eventEndTime: DateTime.invalid('unparseable') })],
       ],
       [
         'a recurring exclusion',

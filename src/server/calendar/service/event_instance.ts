@@ -318,8 +318,11 @@ const FREQUENCY_MAP: Record<EventFrequency, number> = {
  *
  * The recurrence sheet's `hasFewerThanTwoOccurrences()`
  * (`src/client/components/logged_in/calendar/recurrence-occurrences.ts`)
- * mirrors these options to predict the occurrence count before save. Change
- * the two together.
+ * mirrors these options to predict the occurrence count before save. The
+ * calendar export mirrors them too: `recurrenceRule()` writes the same
+ * options as an RFC 5545 RRULE and `assertSerializable()` refuses what they
+ * cannot express (`src/server/calendar/service/export/ics_serializer.ts`).
+ * Change all three together.
  */
 function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFrame): InstanceType<typeof RRule> | null {
   const frequency = schedule.frequency !== null

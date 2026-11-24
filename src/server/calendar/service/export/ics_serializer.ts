@@ -1,4 +1,4 @@
-import { DateTime, IANAZone } from 'luxon';
+import { DateTime } from 'luxon';
 
 import type { Calendar } from '@/common/model/calendar';
 import {
@@ -94,6 +94,19 @@ const EARLIEST_ZONE_YEAR = 1970;
 /** How far past its latest written year a VTIMEZONE keeps declaring rules. */
 const ZONE_YEARS_AHEAD = 10;
 
+/**
+ * The furthest past the year of `now` a stored date may pull the end of a
+ * VTIMEZONE span. A stored date can be arbitrarily far away (an imported
+ * `UNTIL=99991231` lands in a schedule's end date), and the span is scanned
+ * a day at a time, synchronously.
+ *
+ * Capping loses nothing an importer can use. A zone with a regular yearly
+ * rule is written as recurring observances, which carry on past the span
+ * whatever its end; a zone with no such rule keeps its last observance,
+ * which is all the platform's data could say about a year that far off.
+ */
+const MAX_ZONE_YEARS_PAST_NOW = 50;
+
 const FREQUENCY_NAMES: Record<EventFrequency, string> = {
   [EventFrequency.DAILY]: 'DAILY',
   [EventFrequency.WEEKLY]: 'WEEKLY',
@@ -136,6 +149,10 @@ function formatInstant(date: Date): string {
  * UTC, otherwise `;TZID=` with local time. Values share one zone.
  */
 function dateTimeLine(name: string, values: DateTime[], zoneYears: ZoneYears): string {
+  // An invalid DateTime formats as the words "Invalid DateTime".
+  if (values.some(value => !value.isValid)) {
+    throw new Error(`${name} has an invalid date-time value`);
+  }
   const zoneName = values[0].zoneName ?? UTC;
   if (zoneName === UTC) {
     return `${name}:${values.map(formatUtc).join(',')}`;
@@ -170,8 +187,16 @@ function assertSerializable(schedules: CalendarEventSchedule[]): void {
     if (schedule.isExclusion) {
       continue;
     }
+    if (schedule.eventEndTime && !schedule.eventEndTime.isValid) {
+      throw new Error(`schedule ${schedule.id} has an invalid end time`);
+    }
+    // The rule the model applies to a zone arriving on the wire: a name the
+    // platform resolves to an IANA zone, never a fixed offset. Intl accepts
+    // "+01:00" as a zone, but an offset has no rules to declare and its colon
+    // would break the TZID parameter. The name is written as stored; the
+    // platform's canonical spelling of it may differ (Asia/Kolkata).
     const zoneName = schedule.startDate.zoneName;
-    if (zoneName !== UTC && !IANAZone.isValidZone(zoneName ?? '')) {
+    if (zoneName !== UTC && CalendarEventSchedule.parseZone(zoneName) === null) {
       throw new Error(`schedule ${schedule.id} is in "${zoneName}", which is not an IANA time zone`);
     }
     if (!isRecurring(schedule)) {
@@ -490,11 +515,12 @@ export function serializeCalendarToIcs(input: IcsExportInput): IcsExportResult {
   }
 
   const nowYear = DateTime.fromJSDate(input.now, { zone: UTC }).year;
-  const timezoneLines = zoneYears.sorted().flatMap(({ zoneName, first, last }) => buildVTimezone(
-    zoneName,
-    Math.max(EARLIEST_ZONE_YEAR, Math.min(first, nowYear) - 1),
-    Math.max(last, nowYear) + ZONE_YEARS_AHEAD,
-  ));
+  const timezoneLines = zoneYears.sorted().flatMap(({ zoneName, first, last }) => {
+    const fromYear = Math.max(EARLIEST_ZONE_YEAR, Math.min(first, nowYear) - 1);
+    const lastYear = Math.min(Math.max(last, nowYear), nowYear + MAX_ZONE_YEARS_PAST_NOW);
+    // Never before fromYear, which the 1970 floor can lift past a clock set earlier.
+    return buildVTimezone(zoneName, fromYear, Math.max(fromYear, lastYear + ZONE_YEARS_AHEAD));
+  });
 
   const lines = [
     'BEGIN:VCALENDAR',
