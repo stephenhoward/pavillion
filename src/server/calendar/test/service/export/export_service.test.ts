@@ -34,7 +34,7 @@ import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import CalendarService from '@/server/calendar/service/calendar';
-import CalendarExportService, { MAX_EXPORT_ZONES } from '@/server/calendar/service/export/export_service';
+import CalendarExportService, { MAX_EXPORT_ZONES, MAX_QUEUED_EXPORTS } from '@/server/calendar/service/export/export_service';
 import { IcsSerializationError } from '@/server/calendar/service/export/ics_serializer';
 import { VTIMEZONE_CACHE_SIZE } from '@/server/calendar/service/export/vtimezone';
 
@@ -84,8 +84,8 @@ describe('CalendarExportService', () => {
   });
 
   /** `count` distinct zones, as the serializer would plan them. */
-  const spans = (count: number) => Array.from({ length: count }, (_, i) => ({
-    zoneName: `Etc/GMT+${i}`,
+  const spans = (count: number, first = 0) => Array.from({ length: count }, (_, i) => ({
+    zoneName: `Etc/GMT+${first + i}`,
     fromYear: 2025,
     toYear: 2036,
   }));
@@ -315,6 +315,73 @@ describe('CalendarExportService', () => {
       expect(buildMock).not.toHaveBeenCalled();
       expect(result.ics).toContain('TZID:America/New_York\r\n');
       expect(result.ics).toContain('DTSTART;TZID=America/New_York:20260504T180000');
+    });
+  });
+
+  describe('one export at a time', () => {
+    const OK = { ics: 'BEGIN:VCALENDAR\r\n', eventCount: 0, skippedEventIds: [] };
+
+    beforeEach(() => {
+      serializeMock.mockReturnValue(OK);
+    });
+
+    it('runs a second concurrent export\'s zone scans only after the first export\'s', async () => {
+      const built: string[] = [];
+      planMock.mockReturnValueOnce(spans(3, 0)).mockReturnValueOnce(spans(3, 10));
+      buildMock.mockImplementation((zoneName: string) => {
+        built.push(zoneName);
+        return [];
+      });
+
+      await Promise.all([
+        service.exportCalendarIcs(account, CALENDAR_ID, 'en'),
+        service.exportCalendarIcs(account, CALENDAR_ID, 'en'),
+      ]);
+
+      expect(built).toEqual([
+        'Etc/GMT+0', 'Etc/GMT+1', 'Etc/GMT+2',
+        'Etc/GMT+10', 'Etc/GMT+11', 'Etc/GMT+12',
+      ]);
+    });
+
+    it('refuses an export once the running one already has the most waiting, logging the calendar only', async () => {
+      planMock.mockReturnValue(spans(2));
+
+      const results = await Promise.allSettled(
+        Array.from({ length: MAX_QUEUED_EXPORTS + 2 }, () => service.exportCalendarIcs(account, CALENDAR_ID, 'en')),
+      );
+
+      expect(MAX_QUEUED_EXPORTS).toBe(2);
+      expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled', 'fulfilled', 'rejected']);
+      const refused = (results[3] as PromiseRejectedResult).reason;
+      expect(refused).toBeInstanceOf(CalendarExportError);
+      expect(refused.message).toBe('Calendar export failed');
+      expect(warnMock).toHaveBeenCalledWith({ calendarId: CALENDAR_ID }, expect.any(String));
+      expect(serializeMock).toHaveBeenCalledTimes(MAX_QUEUED_EXPORTS + 1);
+    });
+
+    it('releases the slot when an export fails, so the waiting one and the next one run', async () => {
+      planMock.mockReturnValue(spans(1));
+      serializeMock.mockImplementationOnce(() => {
+        throw new RangeError('scan failed');
+      });
+
+      const [failed, waited] = await Promise.allSettled([
+        service.exportCalendarIcs(account, CALENDAR_ID, 'en'),
+        service.exportCalendarIcs(account, CALENDAR_ID, 'en'),
+      ]);
+
+      expect(failed.status).toBe('rejected');
+      expect((failed as PromiseRejectedResult).reason).toBeInstanceOf(CalendarExportError);
+      expect(waited.status).toBe('fulfilled');
+      await expect(service.exportCalendarIcs(account, CALENDAR_ID, 'en')).resolves.toMatchObject({ ics: OK.ics });
+    });
+
+    it('releases the slot when an export is refused for too many zones', async () => {
+      planMock.mockReturnValueOnce(spans(MAX_EXPORT_ZONES + 1)).mockReturnValue(spans(1));
+
+      await expect(service.exportCalendarIcs(account, CALENDAR_ID, 'en')).rejects.toBeInstanceOf(CalendarExportError);
+      await expect(service.exportCalendarIcs(account, CALENDAR_ID, 'en')).resolves.toMatchObject({ ics: OK.ics });
     });
   });
 });

@@ -30,11 +30,51 @@ const logger = createLogger('calendar');
 
 /**
  * The most time zones one export may declare. Each costs a synchronous scan
- * of up to a few hundred milliseconds; past this the export is refused.
+ * of up to about 0.3-0.4 s, so a full export is about 22 s of scanning;
+ * past this the export is refused.
  * Kept below `VTIMEZONE_CACHE_SIZE` so all of one export's zones fit in the
  * cache, and a repeat export of the same calendar scans nothing.
  */
 export const MAX_EXPORT_ZONES = 64;
+
+/**
+ * How many exports may wait for the one running. A worst-case export holds
+ * the slot for about 22 seconds, so waiting is bounded; past this, an export
+ * is refused rather than queued.
+ */
+export const MAX_QUEUED_EXPORTS = 2;
+
+/**
+ * The process-wide export slot: whether an export holds it, and the exports
+ * waiting for it, first come first served. Ownership passes straight from
+ * the releasing export to the next waiter.
+ */
+let exportSlotHeld = false;
+const exportSlotWaiters: Array<() => void> = [];
+
+/** Takes the export slot, waiting for it if needed; false when the queue is full. */
+async function acquireExportSlot(): Promise<boolean> {
+  if (!exportSlotHeld) {
+    exportSlotHeld = true;
+    return true;
+  }
+  if (exportSlotWaiters.length >= MAX_QUEUED_EXPORTS) {
+    return false;
+  }
+  await new Promise<void>(resolve => exportSlotWaiters.push(resolve));
+  return true;
+}
+
+/** Hands the export slot to the next waiter, or frees it. */
+function releaseExportSlot(): void {
+  const next = exportSlotWaiters.shift();
+  if (next) {
+    next();
+  }
+  else {
+    exportSlotHeld = false;
+  }
+}
 
 /** The server i18next namespace holding the export's translated strings. */
 const EXPORT_NAMESPACE = 'calendar_export';
@@ -67,8 +107,9 @@ export default class CalendarExportService {
    * @throws {CalendarNotFoundError} When the calendar does not exist
    * @throws {CalendarEditorPermissionError} When the account does not own it
    * @throws {ValidationError} When `lang` is not one of the export languages
-   * @throws {CalendarExportError} When any event cannot be serialized, or the
-   *   file would need more than {@link MAX_EXPORT_ZONES} time zones
+   * @throws {CalendarExportError} When any event cannot be serialized, the
+   *   file would need more than {@link MAX_EXPORT_ZONES} time zones, or
+   *   {@link MAX_QUEUED_EXPORTS} exports are already waiting
    */
   async exportCalendarIcs(account: Account, calendarId: string, lang: unknown): Promise<CalendarIcsExport> {
     const calendar = await this.ownedCalendar(account, calendarId);
@@ -98,14 +139,28 @@ export default class CalendarExportService {
     // refuse a file that needs too many, and build the rest one at a time
     // with a yield between. The serializer is handed the built lines, so it
     // scans nothing, whatever other exports did to the shared cache meanwhile.
-    const plan = await serializerStep(calendar.id, () => planVTimezones(input));
-    if (plan.length > MAX_EXPORT_ZONES) {
-      // The count only: zone names are the owner's data.
-      logger.warn({ calendarId: calendar.id, zoneCount: plan.length }, 'Calendar export refused: too many time zones');
+    //
+    // The yield bounds one export's stretch, not the event loop's: exports in
+    // flight together would run their yielded scans back to back in the same
+    // turn. So one export at a time, process-wide, does this part.
+    if (!await acquireExportSlot()) {
+      logger.warn({ calendarId: calendar.id }, 'Calendar export refused: too many exports waiting');
       throw new CalendarExportError();
     }
-    const vtimezones = await serializerStep(calendar.id, () => buildPlannedVTimezones(plan));
-    const result = await serializerStep(calendar.id, () => serializeCalendarToIcs({ ...input, vtimezones }));
+    let result;
+    try {
+      const plan = await serializerStep(calendar.id, () => planVTimezones(input));
+      if (plan.length > MAX_EXPORT_ZONES) {
+        // The count only: zone names are the owner's data.
+        logger.warn({ calendarId: calendar.id, zoneCount: plan.length }, 'Calendar export refused: too many time zones');
+        throw new CalendarExportError();
+      }
+      const vtimezones = await serializerStep(calendar.id, () => buildPlannedVTimezones(plan));
+      result = await serializerStep(calendar.id, () => serializeCalendarToIcs({ ...input, vtimezones }));
+    }
+    finally {
+      releaseExportSlot();
+    }
 
     for (const eventId of result.skippedEventIds) {
       logger.warn({ calendarId: calendar.id, eventId }, 'Calendar export left out an event with no dated schedule');

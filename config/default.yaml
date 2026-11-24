@@ -188,9 +188,9 @@ rateLimit:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 100  # 100 requests per account per 15 minutes
   # GET /api/v1/calendars/:calendarId/export and /export/languages share this
-  # bucket. One export can scan up to 64 time zones (tens of milliseconds
-  # each), so it gets a tighter cap than the generic widgetConfig one; an
-  # owner downloads a backup a few times, not dozens.
+  # bucket. One export can scan up to 64 time zones, at worst about 0.3-0.4 s
+  # each (about 22 s per export), so it gets a tighter cap than the generic
+  # widgetConfig one; an owner downloads a backup a few times, not dozens.
   calendarExport:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds

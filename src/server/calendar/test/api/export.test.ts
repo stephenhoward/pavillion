@@ -20,6 +20,7 @@ import { ValidationError } from '@/common/exceptions/base';
 import { CalendarExportError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { testApp } from '@/server/common/test/lib/express';
+import ExpressHelper from '@/server/common/helper/express';
 import CalendarExportRoutes, { attachmentDisposition } from '@/server/calendar/api/v1/export';
 import CalendarInterface from '@/server/calendar/interface';
 
@@ -174,8 +175,16 @@ describe('CalendarExportRoutes', () => {
     it.each([
       '/calendars/:calendarId/export',
       '/calendars/:calendarId/export/languages',
-    ])('puts the dedicated export limiter on GET %s', (path) => {
-      expect(routeHandlers(path)).toContain(exportLimiter);
+    ])('puts the dedicated export limiter on GET %s, after the login check', (path) => {
+      const handlers = routeHandlers(path);
+      const limiterAt = handlers.indexOf(exportLimiter);
+
+      expect(limiterAt).toBeGreaterThan(-1);
+      for (const loginStep of ExpressHelper.loggedInOnly) {
+        const loginAt = handlers.indexOf(loginStep);
+        expect(loginAt).toBeGreaterThan(-1);
+        expect(loginAt).toBeLessThan(limiterAt);
+      }
     });
 
     it('allows 10 export requests per account per 15 minutes by default', () => {

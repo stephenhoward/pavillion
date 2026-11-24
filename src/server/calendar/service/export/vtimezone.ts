@@ -35,8 +35,9 @@ const MIN_REGULAR_YEARS = 2;
 
 /**
  * How many (zone, span) components {@link buildVTimezone} remembers. The
- * scan costs tens of milliseconds a zone and its answer only changes with
- * the running Node's tzdata, so repeat exports reuse it; the bound keeps an
+ * scan costs up to about 0.3-0.4 s a zone in the worst case (a span from
+ * 1970 to decades ahead), about 22 s for a 64-zone export, and its answer
+ * only changes with the running Node's tzdata, so repeat exports reuse it; the bound keeps an
  * owner with schedules in hundreds of zones from growing the cache without
  * limit. Least recently used is forgotten first.
  */
