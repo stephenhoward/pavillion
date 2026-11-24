@@ -38,13 +38,13 @@
               type="checkbox"
               :checked="state.selectedCategories.has(category.id)"
               @change="toggleCategorySelection(category.id)"
-              :aria-label="`Select ${category.content(currentLanguage)?.name || 'Unnamed Category'}`"
+              :aria-label="t('select_category_aria', { name: categoryName(category) })"
             />
           </label>
 
           <div class="category-info">
             <div class="category-info__name">
-              {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
+              {{ categoryName(category) }}
             </div>
             <div class="category-info__meta">
               <span>{{ t('event_count', { count: category.eventCount || 0 }) }}</span>
@@ -113,9 +113,13 @@
     >
       <div class="delete-dialog">
         <p class="dialog-description">
-          Are you sure you want to delete "<strong>{{ state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category' }}</strong>"?
+          <TranslationComponent :translation="t('delete_confirm_question', { name: categoryName(state.categoryToDelete) })">
+            <template #1><strong>{{ categoryName(state.categoryToDelete) }}</strong></template>
+          </TranslationComponent>
           <span v-if="(state.categoryToDelete.eventCount || 0) > 0">
-            This category is assigned to <strong>{{ t('event_count', { count: state.categoryToDelete.eventCount }) }}</strong>.
+            <TranslationComponent :translation="t('delete_confirm_assigned', { name: t('event_count', { count: state.categoryToDelete.eventCount }) })">
+              <template #1><strong>{{ t('event_count', { count: state.categoryToDelete.eventCount }) }}</strong></template>
+            </TranslationComponent>
           </span>
         </p>
 
@@ -132,7 +136,7 @@
             />
             <div class="option-content">
               <span class="option-title">{{ t('delete_option_remove') }}</span>
-              <p class="option-description">Events will remain but won't have this category</p>
+              <p class="option-description">{{ t('delete_option_remove_description') }}</p>
             </div>
           </label>
 
@@ -149,7 +153,7 @@
             />
             <div class="option-content">
               <span id="delete-option-migrate-title" class="option-title">{{ t('delete_option_migrate') }}</span>
-              <p class="option-description">Move all events to a different category</p>
+              <p class="option-description">{{ t('delete_option_migrate_description') }}</p>
               <select
                 v-if="state.deleteAction === 'migrate'"
                 aria-labelledby="delete-option-migrate-title"
@@ -162,7 +166,7 @@
                   :key="cat.id"
                   :value="cat.id"
                 >
-                  {{ cat.content(currentLanguage)?.name || 'Unnamed Category' }}
+                  {{ categoryName(cat) }}
                 </option>
               </select>
             </div>
@@ -214,7 +218,7 @@
             />
             <div class="category-info">
               <span class="category-name">
-                {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
+                {{ categoryName(category) }}
               </span>
               <span class="category-event-count">
                 {{ t('event_count', { count: category.eventCount || 0 }) }}
@@ -258,7 +262,7 @@
 
 <script setup>
 import { reactive, onMounted, ref, computed } from 'vue';
-import { useTranslation } from 'i18next-vue';
+import { useTranslation, TranslationComponent } from 'i18next-vue';
 import i18next from 'i18next';
 import { Plus, Pencil, Trash2, Languages } from 'lucide-vue-next';
 import { EventCategory } from '@/common/model/event_category';
@@ -288,6 +292,8 @@ const { t } = useTranslation('calendars', {
 const toast = useToast();
 const categoryService = new CategoryService();
 const currentLanguage = computed(() => i18next.language);
+
+const categoryName = (category) => category.content(currentLanguage.value)?.name || t('unnamed_category');
 
 const state = reactive({
   categories: [],
