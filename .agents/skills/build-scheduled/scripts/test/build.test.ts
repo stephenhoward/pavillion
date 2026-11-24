@@ -1630,8 +1630,18 @@ describe('validateRecordedPr', () => {
     expect(validateRecordedPr(view({ state: 'MERGED', baseRefName: 'main' }), doneTop, 'maint')).toEqual({ ok: true, merged: true });
   });
 
+  it('accepts a merged PR whose reading still carries the auto-merge request that merged it', () => {
+    const pr = view({ state: 'MERGED', baseRefName: 'main', autoMergeRequest: { enabledAt: '2026-11-12T00:00:00Z' } });
+    expect(validateRecordedPr(pr, doneTop, 'maint')).toEqual({ ok: true, merged: true });
+  });
+
   it('rejects a merged top level of an unfinished chain, naming the top level', () => {
     const r = validateRecordedPr(view({ state: 'MERGED' }), top, 'maint');
+    expect(r).toEqual({ ok: false, reason: '#102: state MERGED on the chain\'s top submitted level' });
+  });
+
+  it('rejects a merged top level of an unfinished chain on its state, whatever its auto-merge reading', () => {
+    const r = validateRecordedPr(view({ state: 'MERGED', autoMergeRequest: { enabledAt: '2026-11-12T00:00:00Z' } }), top, 'maint');
     expect(r).toEqual({ ok: false, reason: '#102: state MERGED on the chain\'s top submitted level' });
   });
 
@@ -1652,6 +1662,7 @@ describe('validateRecordedPr', () => {
     ['another number', view({ number: 7 }), top, /#7/],
     ['auto-merge set', view({ autoMergeRequest: { enabledAt: '2026-11-12T00:00:00Z' } }), top, /auto-merge/],
     ['no auto-merge reading', (({ autoMergeRequest: _a, ...rest }) => rest)(view()), top, /autoMergeRequest/],
+    ['a merged PR with no auto-merge reading', (({ autoMergeRequest: _a, ...rest }) => rest)(view({ state: 'MERGED', baseRefName: 'main' })), doneTop, /autoMergeRequest/],
     ['a missing field', { number: 102, state: 'OPEN' }, top, /author/],
     ['no reading at all', null, top, /not an object/],
   ])('rejects %s', (_name, pr, expected, reason) => {
@@ -2362,6 +2373,7 @@ describe('validatePublishTarget', () => {
     ['a fork', view({ isCrossRepository: true }), /repository/],
     ['auto-merge set', view({ autoMergeRequest: { enabledAt: 'x' } }), /auto-merge/],
     ['no auto-merge reading', (({ autoMergeRequest: _a, ...rest }) => rest)(view()), /auto-merge/],
+    ['a merged PR with no auto-merge reading', (({ autoMergeRequest: _a, ...rest }) => rest)(view({ state: 'MERGED' })), /auto-merge/],
     ['a head that is not a branch name', view({ headRefName: '--upload-pack=x' }), /head/],
     ['a base that is not a branch name', view({ baseRefName: 'feat/x' }), /base/],
     ['no reading', null, /not an object/],

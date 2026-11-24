@@ -1206,16 +1206,21 @@ const PR_VIEW_FIELDS = 'number,state,author,isCrossRepository,headRefName,baseRe
 
 /**
  * Whose PR it is and whether it can merge on its own, for every PR the run
- * validates or edits: the number asked for, auto-merge not set, authored by
- * the authenticated gh login, and from this repository — isCrossRepository
- * exactly false, so a missing or malformed reading fails closed.
+ * validates or edits: the number asked for, an auto-merge reading present
+ * and, unless the PR is MERGED, auto-merge not set, authored by the
+ * authenticated gh login, and from this repository — isCrossRepository
+ * exactly false, so a missing or malformed reading fails closed. A merged PR
+ * is exempt from the auto-merge rule because gh keeps the autoMergeRequest
+ * object on a PR that auto-merge merged, and there is nothing left for it to
+ * merge on its own.
  */
 function prIdentity(view: unknown, pr: number, ghLogin: string): { ok: true; p: Record<string, unknown> } | { ok: false; reason: string } {
   const no = (reason: string) => ({ ok: false as const, reason: `#${pr}: ${reason}` });
   if (typeof view !== 'object' || view === null || Array.isArray(view)) return no('gh pr view reading is not an object');
   const p = view as Record<string, unknown>;
   if (p.number !== pr) return no(`gh pr view returned #${JSON.stringify(p.number)}`);
-  if (!('autoMergeRequest' in p) || p.autoMergeRequest !== null) return no('auto-merge is set or unreadable: the maintainer merges by hand');
+  if (!('autoMergeRequest' in p)) return no('auto-merge is unreadable: the maintainer merges by hand');
+  if (p.state !== 'MERGED' && p.autoMergeRequest !== null) return no('auto-merge is set: the maintainer merges by hand');
   const author = (p.author as { login?: unknown } | null)?.login;
   if (ghLogin === '' || typeof author !== 'string' || author.toLowerCase() !== ghLogin.toLowerCase()) {
     return no(`author ${JSON.stringify(author)} is not the authenticated gh login ${JSON.stringify(ghLogin)}`);
