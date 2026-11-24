@@ -338,6 +338,7 @@
     "error_not_found": "No se encontró este calendario.",
     "error_language": "Ese idioma ya no está disponible para este calendario. Recarga la página y elige de nuevo.",
     "error_export_failed": "No se pudo crear el archivo, así que no se descargó nada. Inténtalo de nuevo en unos minutos.",
+    "error_rate_limited": "Demasiadas solicitudes de exportación. Espera unos minutos e inténtalo de nuevo.",
     "error_generic": "La descarga falló. Comprueba tu conexión e inténtalo de nuevo."
   },
   "places": {

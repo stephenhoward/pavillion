@@ -14,6 +14,7 @@ import {
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
+import { RateLimitError } from '@/common/exceptions/report';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 import { currentAccountId } from '@/client/service/authn';
@@ -32,6 +33,7 @@ const errorMap = {
   CalendarEditorPermissionError,
   CalendarExportError,
   ValidationError,
+  RateLimitError,
   EditorAlreadyExistsError,
   EditorNotFoundError,
   BulkEventsNotFoundError,

@@ -212,6 +212,8 @@ describe('settings nav items', () => {
 
     it('hides owner-only leaves from an editor and keeps shared ones', () => {
       expect(isVisibleLeaf('calendar', 'calendar_general', ctx({ isOwner: false }))).toBe(false);
+      expect(isVisibleLeaf('calendar', 'calendar_export', ctx({ isOwner: false }))).toBe(false);
+      expect(isVisibleLeaf('calendar', 'calendar_export', ctx({ isOwner: true }))).toBe(true);
       expect(isVisibleLeaf('calendar', 'calendar_widget', ctx({ isOwner: false }))).toBe(true);
     });
 

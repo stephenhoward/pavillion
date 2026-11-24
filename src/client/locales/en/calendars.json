@@ -338,6 +338,7 @@
     "error_not_found": "This calendar could not be found.",
     "error_language": "That language is no longer available for this calendar. Reload the page and choose again.",
     "error_export_failed": "The file could not be created, so nothing was downloaded. Try again in a few minutes.",
+    "error_rate_limited": "Too many export requests. Wait a few minutes and try again.",
     "error_generic": "The download failed. Check your connection and try again."
   },
   "places": {

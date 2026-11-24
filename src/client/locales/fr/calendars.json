@@ -338,6 +338,7 @@
     "error_not_found": "Ce calendrier est introuvable.",
     "error_language": "Cette langue n'est plus disponible pour ce calendrier. Rechargez la page et choisissez à nouveau.",
     "error_export_failed": "Le fichier n'a pas pu être créé, rien n'a donc été téléchargé. Réessayez dans quelques minutes.",
+    "error_rate_limited": "Trop de demandes d'exportation. Attendez quelques minutes et réessayez.",
     "error_generic": "Le téléchargement a échoué. Vérifiez votre connexion et réessayez."
   },
   "places": {

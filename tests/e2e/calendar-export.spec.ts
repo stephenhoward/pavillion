@@ -15,7 +15,7 @@ import {
   PHONE,
   calendarLeafPath,
   gotoSettings,
-  settingsRootList,
+  settingsPath,
   settingsRow,
   settingsTitle,
 } from './helpers/settings-nav';
@@ -29,7 +29,31 @@ import {
  * The seeded calendar's languages column says en,es. Setup gives it French
  * content through the API, which the column never learns, so a picker that
  * offers en, es and fr can only have read the export endpoint's list.
+ *
+ * Setup also saves Spanish as the owner's language. The list starts with en,
+ * so a picker pre-filled with es shows the interface-language default, not
+ * the first-entry fallback. The UI is therefore in Spanish, and every label
+ * below is read from the es locale files rather than written out.
  */
+
+/** A string from a client locale file, by dotted key. */
+function esString(namespace: 'settings' | 'calendars', key: string): string {
+  const file = new URL(`../../src/client/locales/es/${namespace}.json`, import.meta.url);
+  const bundle = JSON.parse(readFileSync(file, 'utf8'));
+  const value = key.split('.').reduce((node, part) => node?.[part], bundle);
+  if (typeof value !== 'string') {
+    throw new Error(`es/${namespace}.json has no string at ${key}`);
+  }
+  return value;
+}
+
+const ES = {
+  settingsTitle: esString('settings', 'titles.settings'),
+  calendarRow: esString('settings', 'nav.root.calendar'),
+  exportRow: esString('settings', 'nav.calendar.export'),
+  languageLabel: esString('calendars', 'export.language_label'),
+  downloadButton: esString('calendars', 'export.download_button'),
+};
 
 let env: TestEnvironment;
 
@@ -40,7 +64,7 @@ test.use({ viewport: PHONE });
 async function downloadExport(page: Page): Promise<Download> {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Download', exact: true }).click(),
+    page.getByRole('button', { name: ES.downloadButton, exact: true }).click(),
   ]);
   return download;
 }
@@ -56,11 +80,13 @@ test.describe('Calendar export', () => {
   test.beforeAll(async () => {
     env = await startTestServer();
     const token = await loginViaApi(env.baseURL, ADMIN_EMAIL, ADMIN_PASSWORD);
+    const auth = { headers: { Authorization: `Bearer ${token}` } };
     await axios.patch(
       `${env.baseURL}/api/v1/calendars/${ADMIN_CALENDAR_ID}/settings`,
       { content: { fr: { name: 'Calendrier de test', imageAlt: '' } } },
-      { headers: { Authorization: `Bearer ${token}` } },
+      auth,
     );
+    await axios.patch(`${env.baseURL}/api/v1/accounts/me/profile`, { language: 'es' }, auth);
   });
 
   test.afterAll(async () => {
@@ -71,26 +97,27 @@ test.describe('Calendar export', () => {
     await loginAsAdmin(page, env.baseURL);
     const main = page.getByRole('main');
 
-    await gotoSettings(page, env.baseURL, settingsRootList);
-    // Scoped to main: the bottom bar has its own "Calendar" link.
-    await settingsRow(main, 'Calendar').click();
-    await settingsRow(main, 'Export').click();
-    await expect(settingsTitle(page, 'Export')).toBeVisible();
+    await gotoSettings(page, env.baseURL, { path: settingsPath.root, title: ES.settingsTitle });
+    // Scoped to main: the bottom bar has its own calendar link.
+    await settingsRow(main, ES.calendarRow).click();
+    await settingsRow(main, ES.exportRow).click();
+    await expect(settingsTitle(page, ES.exportRow)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'export')}$`));
 
-    const picker = page.getByLabel('Language');
-    await expect(picker).toHaveValue('en');
+    const picker = page.getByLabel(ES.languageLabel, { exact: true });
     const options = await picker.locator('option').evaluateAll(
       (nodes) => nodes.map((node) => (node as HTMLOptionElement).value),
     );
     expect(options).toEqual(['en', 'es', 'fr']);
+    // The interface language, though the list starts with en.
+    await expect(picker).toHaveValue('es');
 
-    const english = await downloadExport(page);
-    expect(english.suggestedFilename()).toBe(`${ADMIN_CALENDAR_URL_NAME}-en.ics`);
-    const englishEvents = await vevents(english);
-    expect(englishEvents.length).toBeGreaterThan(0);
-    expect(englishEvents.some((event) => typeof event.summary === 'string' && event.summary.length > 0)).toBe(true);
-    await expect(page.getByRole('status').filter({ hasText: `${ADMIN_CALENDAR_URL_NAME}-en.ics` })).toBeVisible();
+    const spanish = await downloadExport(page);
+    expect(spanish.suggestedFilename()).toBe(`${ADMIN_CALENDAR_URL_NAME}-es.ics`);
+    const spanishEvents = await vevents(spanish);
+    expect(spanishEvents.length).toBeGreaterThan(0);
+    expect(spanishEvents.some((event) => typeof event.summary === 'string' && event.summary.length > 0)).toBe(true);
+    await expect(page.getByRole('status').filter({ hasText: `${ADMIN_CALENDAR_URL_NAME}-es.ics` })).toBeVisible();
 
     // No event has French text: the server falls back, and still accepts fr.
     await picker.selectOption('fr');

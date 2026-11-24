@@ -9,6 +9,7 @@ import { downloadIcs } from '@/common/utils/ics-generator';
 import { ValidationError, UnknownError } from '@/common/exceptions/base';
 import { CalendarExportError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+import { RateLimitError } from '@/common/exceptions/report';
 
 vi.mock('@/common/utils/ics-generator', () => ({
   downloadIcs: vi.fn(),
@@ -113,6 +114,17 @@ describe('Calendar export page', () => {
 
       expect(alertRegion(wrapper).text()).toContain('Only the calendar\'s owner');
     });
+
+    it('shows the rate-limit message when the list is refused for too many requests', async () => {
+      const list = deferredList();
+      vi.spyOn(CalendarService.prototype, 'getExportLanguages').mockReturnValue(list.promise);
+      const wrapper = mountExport();
+      list.reject(new RateLimitError());
+      await flushPromises();
+
+      expect(alertRegion(wrapper).text()).toContain('Too many export requests');
+      expect(downloadButton(wrapper)).toHaveLength(0);
+    });
   });
 
   describe('the language picker', () => {
@@ -133,6 +145,13 @@ describe('Calendar export page', () => {
 
       const values = picker(wrapper).findAll('option').map((option) => option.element.value);
       expect(values).toEqual(['fr', 'en', 'es']);
+    });
+
+    it('names each option in the interface language', async () => {
+      const wrapper = await mountWithList(['en', 'es', 'fr']);
+
+      const labels = picker(wrapper).findAll('option').map((option) => option.text());
+      expect(labels).toEqual(['English', 'Spanish', 'French']);
     });
 
     it('has a visible label', async () => {
@@ -217,6 +236,7 @@ describe('Calendar export page', () => {
       ['ValidationError', new ValidationError('bad lang'), 'no longer available'],
       ['CalendarEditorPermissionError', new CalendarEditorPermissionError(), 'Only the calendar\'s owner'],
       ['CalendarNotFoundError', new CalendarNotFoundError(), 'could not be found'],
+      ['RateLimitError', new RateLimitError(), 'Too many export requests'],
       ['an unknown failure', new UnknownError(), 'download failed'],
     ])('shows the translated message for %s and saves nothing', async (_label, error, expected) => {
       vi.spyOn(CalendarService.prototype, 'exportCalendar').mockRejectedValue(error);

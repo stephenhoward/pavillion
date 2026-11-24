@@ -7,6 +7,7 @@ import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
+import { RateLimitError } from '@/common/exceptions/report';
 import {
   UrlNameAlreadyExistsError,
   InvalidUrlNameError,
@@ -839,6 +840,7 @@ describe('getExportLanguages', () => {
     ['ValidationError', ValidationError],
     ['CalendarEditorPermissionError', CalendarEditorPermissionError],
     ['CalendarNotFoundError', CalendarNotFoundError],
+    ['RateLimitError', RateLimitError],
   ])('should map %s to its typed exception', async (errorName, ErrorClass) => {
     vi.mocked(axios.get).mockRejectedValue({ response: { data: { errorName } } });
 
@@ -901,6 +903,7 @@ describe('exportCalendar', () => {
     ['CalendarEditorPermissionError', CalendarEditorPermissionError],
     ['CalendarNotFoundError', CalendarNotFoundError],
     ['CalendarExportError', CalendarExportError],
+    ['RateLimitError', RateLimitError],
   ])('should map %s to its typed exception', async (errorName, ErrorClass) => {
     vi.mocked(axios.get).mockRejectedValue({ response: { data: { errorName } } });
 

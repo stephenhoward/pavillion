@@ -42,6 +42,7 @@ const errorText = ref('');
 const ERROR_KEYS: Record<string, string> = {
   CalendarEditorPermissionError: 'error_permission',
   CalendarNotFoundError: 'error_not_found',
+  RateLimitError: 'error_rate_limited',
 };
 
 function errorKey(error: unknown, extra: Record<string, string>, fallback: string): string {
@@ -162,7 +163,7 @@ onMounted(loadLanguages);
   flex-direction: column;
   gap: var(--pav-space-4);
   background: var(--pav-surface-primary);
-  border-radius: 0.75rem;
+  border-radius: var(--pav-border-radius-lg);
   padding: var(--pav-space-6);
 
   @include pav-media-down(md) {
