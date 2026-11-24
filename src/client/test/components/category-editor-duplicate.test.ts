@@ -15,6 +15,7 @@ const CATEGORY_TRANSLATIONS = {
   'management.edit_category_title': 'Edit Category',
   'management.category_name_help': 'Enter a descriptive name for this category',
   'management.category_name_placeholder': 'Category name',
+  'management.category_name_language_label': 'Category name ({{language}})',
   'management.create_button': 'Create Category',
   'management.cancel_button': 'Cancel',
   'management.save_button': 'Save Changes',
@@ -216,25 +217,31 @@ describe('CategoryEditor — name field labels', () => {
     });
   });
 
-  it('associates each language label with its name input, without relying on the placeholder', async () => {
+  it('names each input by field and language, linked to the helper text', async () => {
     const wrapper = mountEditor(createBilingualCategory());
     await flushPromises();
 
     const fields = wrapper.findAll('.language-field');
     expect(fields).toHaveLength(2);
 
-    const ids = fields.map((field) => {
+    const helper = wrapper.find('.form-helper');
+    const helperId = helper.attributes('id');
+    expect(helperId).toBeTruthy();
+
+    const languageNames = ['English', 'Spanish'];
+    const ids = fields.map((field, i) => {
       const label = field.find('label.language-label');
       const input = field.find('input.language-input');
       const id = input.attributes('id');
       expect(id).toBeTruthy();
       expect(label.attributes('for')).toBe(id);
-      // The name comes from the label's visible text, not the placeholder.
-      expect(label.text().replace(/:$/, '').trim()).not.toBe('');
-      expect(label.text()).not.toContain('Category name');
+      expect(label.text()).toContain('Category name');
+      expect(label.text()).toContain(languageNames[i]);
+      expect(input.attributes('aria-describedby')).toBe(helperId);
       return id;
     });
     expect(new Set(ids).size).toBe(ids.length);
+    expect(helper.text()).toBe('Enter a descriptive name for this category');
 
     wrapper.unmount();
   });
