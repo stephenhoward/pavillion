@@ -6,7 +6,7 @@ import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import type { CalendarActor } from "@/server/activitypub/entity/calendar_actor";
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } from "@/common/model/events";
+import { CalendarEvent, CalendarEventContent, compareEventsByStart, CalendarEventSchedule, UrlPrompt, URL_PROMPT_VALUES } from "@/common/model/events";
 import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -506,9 +506,14 @@ class EventService {
    * Each event is returned with its location, schedules, media, series,
    * categories and content eager-loaded.
    *
+   * Events are ordered by the start of their base schedule, earliest first
+   * (see compareEventsByStart): events with no schedule come last, ties are
+   * broken by id, recurring events are keyed by their first schedule, and past
+   * events are neither filtered nor moved.
+   *
    * @param calendar - the calendar to retrieve events for
    * @param options - optional search and filter parameters
-   * @returns a promise that resolves to the list of events
+   * @returns a promise that resolves to the ordered list of events
    */
   async listEvents(calendar: Calendar, options?: {
     search?: string;
@@ -623,7 +628,7 @@ class EventService {
       return e;
     });
 
-    return mappedEvents;
+    return mappedEvents.sort(compareEventsByStart);
   }
 
   generateEventId(): string {
