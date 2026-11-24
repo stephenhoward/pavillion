@@ -48,6 +48,9 @@ describe('Calendar export routes', () => {
   let mainCalendar: { id: string; urlName: string };
   let emptyCalendar: { id: string; urlName: string };
   let brokenCalendar: { id: string; urlName: string };
+  /** Content in fr first, en added after; one event in es. */
+  let orderCalendar: { id: string; urlName: string };
+  let ownerAccountId: string;
 
   /** Weekly series with one date hidden and one shown as cancelled; en + es. */
   let weeklyId: string;
@@ -178,6 +181,7 @@ describe('Calendar export routes', () => {
       new EmailInterface(),
     );
     const { account: owner } = await accountService._setupAccount('export-owner@pavillion.dev', 'testpassword');
+    ownerAccountId = owner.id;
     ownerToken = await env.login('export-owner@pavillion.dev', 'testpassword');
     await accountService._setupAccount('export-other@pavillion.dev', 'testpassword');
     otherToken = await env.login('export-other@pavillion.dev', 'testpassword');
@@ -192,6 +196,7 @@ describe('Calendar export routes', () => {
     });
     emptyCalendar = await createCalendar(ownerToken, 'exportempty');
     brokenCalendar = await createCalendar(ownerToken, 'exportbroken');
+    orderCalendar = await createCalendar(ownerToken, 'exportorder', { fr: { name: 'Ordre du jour' } });
     const otherCalendar = await createCalendar(otherToken, 'exportother');
 
     await CalendarMemberEntity.create({
@@ -288,6 +293,24 @@ describe('Calendar export routes', () => {
     });
     await settle(repostedId, repostedStart);
     await EventRepostEntity.create({ id: uuidv4(), event_id: repostedId, calendar_id: mainCalendar.id });
+
+    // The order calendar's oldest content row must sort after a newer one:
+    // creating over HTTP always writes an en row first, so drop it and add en
+    // back after fr.
+    for (const content of [{ en: null }, { en: { name: 'Order of the day' } }]) {
+      const patched = await request(env.app)
+        .patch(`/api/v1/calendars/${orderCalendar.id}/settings`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ content });
+      expect(patched.status).toBeLessThan(300);
+    }
+    const orderEventStart = todayIn(NEW_YORK, 12).plus({ days: 6 });
+    const orderEventId = await createEvent(ownerToken, {
+      calendarId: orderCalendar.id,
+      content: { es: { name: 'Orden del día' } },
+      schedules: [schedule(orderEventStart)],
+    });
+    await settle(orderEventId, orderEventStart);
 
     const brokenStart = todayIn(NEW_YORK, 12).plus({ days: 3 });
     brokenEventId = await createEvent(ownerToken, {
@@ -419,6 +442,12 @@ describe('Calendar export routes', () => {
       expect(second.body).toEqual(first.body);
     });
 
+    it('orders the calendar\'s content languages by when they were added, not by code', async () => {
+      const response = await exportLanguages(ownerToken, orderCalendar.id);
+
+      expect(response.body).toEqual({ languages: ['fr', 'en', 'es'] });
+    });
+
     it('lists the calendar\'s own language for a calendar with no events', async () => {
       const response = await exportLanguages(ownerToken, emptyCalendar.id);
 
@@ -480,6 +509,17 @@ describe('Calendar export routes', () => {
       expect(response.headers['content-type']).toBe('text/calendar; charset=utf-8');
       expect(response.headers['content-disposition']).toBe(`attachment; filename="${mainCalendar.urlName}-fr.ics"`);
       expect(response.headers['cache-control']).toBe('no-store');
+    });
+  });
+
+  describe('privacy', () => {
+    it('puts neither the owner\'s email nor their account id in the file or its headers', async () => {
+      const response = await exportFile(ownerToken, mainCalendar.id, '?lang=en');
+      const sent = `${JSON.stringify(response.headers)}\n${response.text}`;
+
+      expect(response.status).toBe(200);
+      expect(sent).not.toContain('export-owner@pavillion.dev');
+      expect(sent).not.toContain(ownerAccountId);
     });
   });
 

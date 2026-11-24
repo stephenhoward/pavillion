@@ -261,12 +261,12 @@ function recurringObservance(rule: YearlyRule): Observance {
  *   such rule: one dated observance each, after an anchor observance at the
  *   start of `fromYear` that carries the offset then in force.
  *
- * @param zoneName - An IANA zone name, e.g. `America/New_York`
- * @param fromYear - First calendar year the component must be right for
- * @param toYear - Last calendar year the component must be right for
  * Answers a repeat call for the same zone and span from a bounded cache
  * ({@link VTIMEZONE_CACHE_SIZE}); every call returns its own copy.
  *
+ * @param zoneName - An IANA zone name, e.g. `America/New_York`
+ * @param fromYear - First calendar year the component must be right for
+ * @param toYear - Last calendar year the component must be right for
  * @returns The unfolded content lines, `BEGIN:VTIMEZONE` to `END:VTIMEZONE` inclusive
  * @throws {Error} When `zoneName` is not a zone the platform knows
  * @throws {RangeError} When the span is not a pair of whole years in order,

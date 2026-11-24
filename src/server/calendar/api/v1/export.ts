@@ -6,7 +6,7 @@ import { CalendarExportError, CalendarNotFoundError } from '@/common/exceptions/
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
-import { limitWidgetConfigByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitCalendarExportByAccount } from '@/server/common/middleware/rate-limiters';
 import CalendarInterface from '../../interface';
 
 /**
@@ -16,8 +16,9 @@ import CalendarInterface from '../../interface';
  * errors. The owner check, the language set and the serialization live in
  * CalendarExportService.
  *
- * Both routes are logged-in only and rate limited per account
- * (`limitWidgetConfigByAccount`, the import routes' default).
+ * Both routes are logged-in only and share a dedicated per-account limiter
+ * (`limitCalendarExportByAccount`, 10 per 15 minutes): an export can scan up
+ * to 64 time zones, so it gets a tighter budget than the generic one.
  */
 class CalendarExportRoutes {
   private service: CalendarInterface;
@@ -32,13 +33,13 @@ class CalendarExportRoutes {
     router.get(
       '/calendars/:calendarId/export',
       ExpressHelper.loggedInOnly,
-      limitWidgetConfigByAccount,
+      limitCalendarExportByAccount,
       this.exportCalendar.bind(this),
     );
     router.get(
       '/calendars/:calendarId/export/languages',
       ExpressHelper.loggedInOnly,
-      limitWidgetConfigByAccount,
+      limitCalendarExportByAccount,
       this.listLanguages.bind(this),
     );
 

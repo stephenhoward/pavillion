@@ -17,12 +17,24 @@ import { LocationSpaceContentEntity, LocationSpaceEntity } from '@/server/calend
 import CalendarService from '@/server/calendar/service/calendar';
 import {
   IcsExportEvent,
+  IcsExportInput,
   IcsSerializationError,
+  VTimezoneSpan,
+  planVTimezones,
   serializeCalendarToIcs,
 } from '@/server/calendar/service/export/ics_serializer';
+import { buildVTimezone } from '@/server/calendar/service/export/vtimezone';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('calendar');
+
+/**
+ * The most time zones one export may declare. Each costs a synchronous scan
+ * of up to a few hundred milliseconds; past this the export is refused.
+ * Kept below `VTIMEZONE_CACHE_SIZE` so all of one export's zones fit in the
+ * cache, and a repeat export of the same calendar scans nothing.
+ */
+export const MAX_EXPORT_ZONES = 64;
 
 /** The server i18next namespace holding the export's translated strings. */
 const EXPORT_NAMESPACE = 'calendar_export';
@@ -55,7 +67,8 @@ export default class CalendarExportService {
    * @throws {CalendarNotFoundError} When the calendar does not exist
    * @throws {CalendarEditorPermissionError} When the account does not own it
    * @throws {ValidationError} When `lang` is not one of the export languages
-   * @throws {CalendarExportError} When any event cannot be serialized
+   * @throws {CalendarExportError} When any event cannot be serialized, or the
+   *   file would need more than {@link MAX_EXPORT_ZONES} time zones
    */
   async exportCalendarIcs(account: Account, calendarId: string, lang: unknown): Promise<CalendarIcsExport> {
     const calendar = await this.ownedCalendar(account, calendarId);
@@ -71,25 +84,28 @@ export default class CalendarExportService {
       await i18next.loadNamespaces(EXPORT_NAMESPACE);
     }
 
-    let result;
-    try {
-      result = serializeCalendarToIcs({
-        calendar,
-        events: entries,
-        language: lang,
-        fallbackLanguages: languages,
-        domain: config.get<string>('domain'),
-        now: new Date(),
-        accessibilityHeading: accessibilityHeadingFor(lang),
-      });
-    }
-    catch (error) {
-      // Any failure, not only a per-event one: a VTIMEZONE can fail outside
-      // the serializer's per-event guard, and still no partial file goes out.
-      const eventId = error instanceof IcsSerializationError ? error.eventId : undefined;
-      logger.error({ err: error, calendarId: calendar.id, eventId }, 'Calendar export failed');
+    const input: IcsExportInput = {
+      calendar,
+      events: entries,
+      language: lang,
+      fallbackLanguages: languages,
+      domain: config.get<string>('domain'),
+      now: new Date(),
+      accessibilityHeading: accessibilityHeadingFor(lang),
+    };
+
+    // Every VTIMEZONE costs a synchronous scan. Count them before any runs,
+    // refuse a file that needs too many, and build the rest one at a time
+    // with a yield between. The serializer is handed the built lines, so it
+    // scans nothing, whatever other exports did to the shared cache meanwhile.
+    const plan = await serializerStep(calendar.id, () => planVTimezones(input));
+    if (plan.length > MAX_EXPORT_ZONES) {
+      // The count only: zone names are the owner's data.
+      logger.warn({ calendarId: calendar.id, zoneCount: plan.length }, 'Calendar export refused: too many time zones');
       throw new CalendarExportError();
     }
+    const vtimezones = await serializerStep(calendar.id, () => buildPlannedVTimezones(plan));
+    const result = await serializerStep(calendar.id, () => serializeCalendarToIcs({ ...input, vtimezones }));
 
     for (const eventId of result.skippedEventIds) {
       logger.warn({ calendarId: calendar.id, eventId }, 'Calendar export left out an event with no dated schedule');
@@ -217,6 +233,38 @@ export default class CalendarExportService {
       return { event, lastModified: latestUpdate([row, ...(row.content ?? []), ...(row.schedules ?? [])]) };
     });
   }
+}
+
+/**
+ * Runs one step of serialization, turning any failure into the fixed-message
+ * export error: not only a per-event one, since a VTIMEZONE can fail outside
+ * the serializer's per-event guard. No partial file goes out, and the log,
+ * not the response, says which calendar and, when known, which event.
+ */
+async function serializerStep<T>(calendarId: string, step: () => T | Promise<T>): Promise<T> {
+  try {
+    return await step();
+  }
+  catch (error) {
+    const eventId = error instanceof IcsSerializationError ? error.eventId : undefined;
+    logger.error({ err: error, calendarId, eventId }, 'Calendar export failed');
+    throw new CalendarExportError();
+  }
+}
+
+/**
+ * Builds each planned VTIMEZONE, yielding to the event loop before each one,
+ * so no synchronous stretch is longer than one zone's scan.
+ *
+ * @returns The lines of each zone's component, keyed by zone name
+ */
+async function buildPlannedVTimezones(plan: VTimezoneSpan[]): Promise<Map<string, string[]>> {
+  const built = new Map<string, string[]>();
+  for (const { zoneName, fromYear, toYear } of plan) {
+    await new Promise(resolve => setImmediate(resolve));
+    built.set(zoneName, buildVTimezone(zoneName, fromYear, toYear));
+  }
+  return built;
 }
 
 /**

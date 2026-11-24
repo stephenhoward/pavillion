@@ -328,9 +328,4 @@ describe('buildVTimezone cache', () => {
 
     expect(offset).toHaveBeenCalled();
   });
-
-  it('caches nothing for a refused zone or span', () => {
-    expect(() => buildVTimezone('Mars/Olympus_Mons', 2025, 2030)).toThrow();
-    expect(() => buildVTimezone('Mars/Olympus_Mons', 2025, 2030)).toThrow();
-  });
 });

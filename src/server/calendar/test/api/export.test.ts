@@ -1,8 +1,19 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
+import config from 'config';
+
+// Under test config every limiter is the same no-op, so the export limiter is
+// swapped for a reference of its own to tell it apart in the route stack.
+const { exportLimiter } = vi.hoisted(() => ({
+  exportLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+vi.mock('@/server/common/middleware/rate-limiters', async importOriginal => ({
+  ...await importOriginal<typeof import('@/server/common/middleware/rate-limiters')>(),
+  limitCalendarExportByAccount: exportLimiter,
+}));
 
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
@@ -143,6 +154,33 @@ describe('CalendarExportRoutes', () => {
 
       expect(response.status).toBe(500);
       expect(JSON.stringify(response.body)).not.toContain('database');
+    });
+  });
+
+  describe('rate limiter wiring', () => {
+    function routeHandlers(path: string): unknown[] {
+      const app = express();
+      routes.installHandlers(app, '/api/v1');
+
+      const layers = (app as any).router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === path && layer.route.methods.get);
+
+      expect(layers).toHaveLength(1);
+      return layers[0].route.stack.map((layer: any) => layer.handle);
+    }
+
+    it.each([
+      '/calendars/:calendarId/export',
+      '/calendars/:calendarId/export/languages',
+    ])('puts the dedicated export limiter on GET %s', (path) => {
+      expect(routeHandlers(path)).toContain(exportLimiter);
+    });
+
+    it('allows 10 export requests per account per 15 minutes by default', () => {
+      expect(config.get<number>('rateLimit.calendarExport.byAccount.max')).toBe(10);
+      expect(config.get<number>('rateLimit.calendarExport.byAccount.windowMs')).toBe(15 * 60 * 1000);
     });
   });
 
