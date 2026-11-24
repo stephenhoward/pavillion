@@ -25,7 +25,7 @@ Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each 
 
 ### What Pavillion does for you
 
-The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02:00 by default (`housekeeping.backup.schedule`) and writes a file named like `pavillion_20260315_020000_scheduled.dump` to the `pavillion-backups` volume (`/backups` inside the worker). `docker-compose.yml` binds that volume to `/opt/pavillion/backups` on the host, so the dumps are ordinary files you can see and copy.
+The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02:00 by default (`housekeeping.backup.schedule`) and writes a file named like `pavillion_20260315_020000_scheduled.dump` to the `pavillion-backups` volume (`/backups` inside the worker). `docker-compose.yml` binds that volume to a folder on the host, so the dumps are ordinary files you can see and copy. The folder is `/opt/pavillion/backups` unless you set `BACKUP_HOST_DIR` in your `.env` file. The rest of this guide calls it the host backups directory.
 
 Old dumps are pruned on a grandparent-parent-child schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
 
@@ -40,7 +40,7 @@ To make a backup now, or to see the ones Pavillion has made, use the commands in
 The dumps live on the same machine as the database they protect. A failed disk takes both. You have two ways to get them somewhere else:
 
 - **Let the worker do it.** Give Pavillion a bucket on an object-storage service and it uploads each verified dump right after writing it. That's the off-host copy, set up in [Copy backups off the server](#copy-backups-off-the-server) below.
-- **Use what you already know.** `rsync` or `scp` to another host, your provider's snapshot feature on `/opt/pavillion/backups`, or an object-storage sync tool, on a schedule.
+- **Use what you already know.** `rsync` or `scp` to another host, your provider's snapshot feature on the host backups directory, or an object-storage sync tool, on a schedule.
 
 Either works. The off-host copy has nothing to schedule and nothing to forget, and with the bucket settings below it survives someone breaking into the server, not just the server dying. A tool you already run for other machines is fine if it gives you the same safety.
 
@@ -220,7 +220,7 @@ With neither key set, the worker uses whatever credentials its environment provi
    ```
 
 4. Wait for `Manual backup completed` in the worker log. The upload happens before that line, so once it appears the copy is either in the bucket or has failed.
-5. Open the bucket in your provider's console, using your read access, not the server's key. You should see `pavillion-backups/pavillion_<date>_<time>_manual.dump`, the same size as the file in `/opt/pavillion/backups`.
+5. Open the bucket in your provider's console, using your read access, not the server's key. You should see `pavillion-backups/pavillion_<date>_<time>_manual.dump`, the same size as the file in the host backups directory.
 
 From then on, every backup the worker makes, the nightly one and any you queue by hand, is copied the same way. A dump that fails the "verified" check isn't copied.
 
@@ -278,7 +278,7 @@ If someone may have had the server's key, don't trust the newest object under a 
      --version-id <VersionId> ./restore/pavillion_20260315_020000_scheduled.dump
    ```
 
-4. If you still have the server's backup listing (`./scripts/backup.sh list`) or a copy of `/opt/pavillion/backups`, compare the file's size with the one recorded there.
+4. If you still have the server's backup listing (`./scripts/backup.sh list`) or a copy of the host backups directory, compare the file's size with the one recorded there.
 5. Run the restore drill against it, as above, before restoring for real.
 
 This works only with versioning or Object Lock on, which is one more reason they're required.
@@ -553,7 +553,7 @@ For anyone running the drill from a script or monitor:
 
 ### Things that trip people up
 
-**`ls /opt/pavillion/backups` says *Permission denied*.** The folder belongs to the user the containers run as, uid 1001, which is the `pavillion` user if you used `bin/provision.sh`. Logged in as anyone else, it looks as if your backups are missing. The drill reads them through Docker, so it doesn't need that access, and `docker compose exec worker ls -1 /backups` lists them.
+**`ls` on the host backups directory says *Permission denied*.** The folder belongs to the user the containers run as, uid 1001, which is the `pavillion` user if you used `bin/provision.sh`. Logged in as anyone else, it looks as if your backups are missing. The drill reads them through Docker, so it doesn't need that access, and `docker compose exec worker ls -1 /backups` lists them.
 
 **Drilling the morning after an upgrade.** The newest backup is from before the upgrade, so the migrations check fails. Nothing is wrong with your backups. Wait for the next one.
 
