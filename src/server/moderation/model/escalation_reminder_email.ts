@@ -20,6 +20,7 @@ class EscalationReminderEmail extends EmailMessage {
   reportDescription: string;
   timeRemaining: string;
   calendarUrlName: string;
+  instanceName: string;
 
   constructor(
     recipientEmail: string,
@@ -28,6 +29,7 @@ class EscalationReminderEmail extends EmailMessage {
     reportDescription: string,
     timeRemaining: string,
     calendarUrlName: string,
+    instanceName: string,
   ) {
     super('escalation_reminder_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
@@ -36,6 +38,7 @@ class EscalationReminderEmail extends EmailMessage {
     this.reportDescription = reportDescription;
     this.timeRemaining = timeRemaining;
     this.calendarUrlName = calendarUrlName;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -62,6 +65,7 @@ class EscalationReminderEmail extends EmailMessage {
       timeRemaining: this.timeRemaining,
       reviewUrl,
       language,
+      instanceName: this.instanceName,
     };
 
     return {

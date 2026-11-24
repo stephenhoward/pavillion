@@ -25,20 +25,11 @@ Pavillion's own backup system runs `pg_dump` and, if you set it up, copies each 
 
 ### What Pavillion does for you
 
-The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02:00 by default (`housekeeping.backup.schedule`) and writes a file named like `pavillion_20260315_020000_scheduled.dump` to the `pavillion-backups` volume (`/backups` inside the worker). `docker-compose.yml` binds that volume to `/opt/pavillion/backups` on the host, so the dumps are ordinary files you can see and copy.
+The `worker` container runs `pg_dump` in custom format (`-Fc`) every night at 02:00 by default (`housekeeping.backup.schedule`) and writes a file named like `pavillion_20260315_020000_scheduled.dump` to the `pavillion-backups` volume (`/backups` inside the worker). `docker-compose.yml` binds that volume to a folder on the host, so the dumps are ordinary files you can see and copy. The folder is `/opt/pavillion/backups` unless you set `BACKUP_HOST_DIR` in your `.env` file. The rest of this guide calls it the host backups directory.
 
 Old dumps are pruned on a grandparent-parent-child schedule: by default 7 daily, 4 weekly (Sundays) and 6 monthly (the 1st of the month) are kept. The schedule, the retention counts and the path are the `housekeeping.backup.*` keys in `config/default.yaml`; override them in `config/local.yaml`.
 
-Run the commands below from the Pavillion directory. `scripts/backup.sh` runs the Pavillion CLI inside a container. It looks for one named `pavillion-app-1` unless you set `PAVILLION_CONTAINER`, and the container in the shipped `docker-compose.yml` is named `pavillion-app`, so set the variable:
-
-```bash
-export PAVILLION_CONTAINER=pavillion-app
-./scripts/backup.sh create    # queue a backup now; the worker performs it
-./scripts/backup.sh list      # every backup Pavillion knows about
-./scripts/backup.sh status    # storage use, last backup, retention, last restore drill
-```
-
-`create` only queues the job. Check `list` or `status` for the result.
+To make a backup now, or to see the ones Pavillion has made, use the commands in [Run a backup by hand](#run-a-backup-by-hand).
 
 ### "Verified" is a low bar
 
@@ -49,7 +40,7 @@ export PAVILLION_CONTAINER=pavillion-app
 The dumps live on the same machine as the database they protect. A failed disk takes both. You have two ways to get them somewhere else:
 
 - **Let the worker do it.** Give Pavillion a bucket on an object-storage service and it uploads each verified dump right after writing it. That's the off-host copy, set up in [Copy backups off the server](#copy-backups-off-the-server) below.
-- **Use what you already know.** `rsync` or `scp` to another host, your provider's snapshot feature on `/opt/pavillion/backups`, or an object-storage sync tool, on a schedule.
+- **Use what you already know.** `rsync` or `scp` to another host, your provider's snapshot feature on the host backups directory, or an object-storage sync tool, on a schedule.
 
 Either works. The off-host copy has nothing to schedule and nothing to forget, and with the bucket settings below it survives someone breaking into the server, not just the server dying. A tool you already run for other machines is fine if it gives you the same safety.
 
@@ -58,6 +49,24 @@ Some guidance that isn't about tooling:
 - Not on the same disk as the instance, and not in the same region if your provider is your only redundancy.
 - Encrypted at rest. A dump is your whole community's data, including account email addresses and the private keys your calendars sign federation traffic with. Treat it like the secrets below.
 - Frequency follows how fast events get created. For most community instances the nightly dump plus a nightly copy is enough. If losing a day of edits would be painful, copy more often, or run `./scripts/backup.sh create` before risky changes like upgrades.
+
+## Run a backup by hand
+
+Run these from the Pavillion directory (`/opt/pavillion` if you used `bin/provision.sh`):
+
+```bash
+./scripts/backup.sh create          # queue a backup now; the worker performs it
+./scripts/backup.sh list            # every backup Pavillion knows about, with its ID
+./scripts/backup.sh status          # storage use, last backup, retention, last restore drill
+./scripts/backup.sh restore <id>    # replace the database with backup <id>
+./scripts/housekeeping.sh           # scheduled jobs, their settings and next run times
+```
+
+`create` only queues the job. Check `list` or `status` for the result.
+
+`scripts/backup.sh` and `scripts/housekeeping.sh` run the Pavillion CLI inside the `pavillion-worker` container, the only one that can see the backup files. Set `PAVILLION_CONTAINER` to point them at a different container. If you followed an earlier version of this guide, which had you export `PAVILLION_CONTAINER=pavillion-app`, run `unset PAVILLION_CONTAINER` and remove that line from your shell profile: the app container can't see the backup files, so a restore sent there fails.
+
+`restore` replaces the current database: everything written since that backup is gone. Before it does, it names the database and host it will replace and asks you to confirm; check that they are this instance's before you answer. It needs a terminal to ask in, so it refuses input piped from another command or a script. Afterward, restart the app with `docker compose restart app`. It rolls a running instance back to an earlier backup; it does not recover a lost server or an empty database. For those, see [Restoring for real](#restoring-for-real).
 
 ## Copy backups off the server
 
@@ -207,12 +216,11 @@ With neither key set, the worker uses whatever credentials its environment provi
 3. Make a backup now:
 
    ```bash
-   export PAVILLION_CONTAINER=pavillion-app
    ./scripts/backup.sh create
    ```
 
 4. Wait for `Manual backup completed` in the worker log. The upload happens before that line, so once it appears the copy is either in the bucket or has failed.
-5. Open the bucket in your provider's console, using your read access, not the server's key. You should see `pavillion-backups/pavillion_<date>_<time>_manual.dump`, the same size as the file in `/opt/pavillion/backups`.
+5. Open the bucket in your provider's console, using your read access, not the server's key. You should see `pavillion-backups/pavillion_<date>_<time>_manual.dump`, the same size as the file in the host backups directory.
 
 From then on, every backup the worker makes, the nightly one and any you queue by hand, is copied the same way. A dump that fails the "verified" check isn't copied.
 
@@ -270,7 +278,7 @@ If someone may have had the server's key, don't trust the newest object under a 
      --version-id <VersionId> ./restore/pavillion_20260315_020000_scheduled.dump
    ```
 
-4. If you still have the server's backup listing (`./scripts/backup.sh list`) or a copy of `/opt/pavillion/backups`, compare the file's size with the one recorded there.
+4. If you still have the server's backup listing (`./scripts/backup.sh list`) or a copy of the host backups directory, compare the file's size with the one recorded there.
 5. Run the restore drill against it, as above, before restoring for real.
 
 This works only with versioning or Object Lock on, which is one more reason they're required.
@@ -377,7 +385,7 @@ A passing drill means your newest database backup is a complete backup of this i
 | What it restores into | A throwaway database it creates and deletes | **Your live database** |
 | Your instance's data | Untouched | **Deleted and replaced** with the backup's contents |
 | When to run it | Monthly, and after upgrades | Only when you are recovering from a loss |
-| What it takes | Nothing, or a backup's filename | A backup's ID from `./scripts/backup.sh list` |
+| What it takes | Nothing, or a backup's filename | A backup's ID from `./scripts/backup.sh list`, or, as `backup restore --file <path>`, a dump file (see [Restoring for real](#restoring-for-real)) |
 
 The restore command asks you to confirm once, then drops and recreates every table in the backup. Anything written to the instance since that backup was taken is gone: new events, new accounts, federation activity. If you want to know whether your backup works, run the drill.
 
@@ -406,7 +414,7 @@ The drill compares the dump with the `migrations/` folder of the checkout you ru
 `./scripts/restore-drill.sh --help` lists every setting the drill reads. Two others matter on some servers:
 
 - `PAVILLION_DRILL_IMAGE` is the database image the throwaway container runs, `postgres:17` by default. It must match the `db` service in your `docker-compose.yml`. If you've changed that, set this to the same image.
-- `PAVILLION_CONTAINER` is the app container the drill records its result through. It's the same variable `backup.sh` reads, so set it to `pavillion-app` as described in [What Pavillion does for you](#what-pavillion-does-for-you). If it's unset, the drill looks for a container named `pavillion-app-1`, finds none, and warns that the app container isn't running.
+- `PAVILLION_CONTAINER` is the container the drill records its result through, `pavillion-worker` by default, like the [other scripts](#run-a-backup-by-hand). Set it only if your worker container has a different name. If no container by that name is running, the drill warns that its result wasn't recorded.
 
 ### When to run it
 
@@ -437,7 +445,7 @@ If it says *No successful restore drill recorded*, no backup on this instance ha
 
 This section shows passes only. A failed drill is recorded too, but the drill's own output at the time is where to read why it failed.
 
-If the app container isn't running when the drill finishes, the drill warns that the result wasn't recorded. The verdict it printed still stands. Don't run `backup record-drill` yourself: a row entered by hand would claim a drill passed when none did.
+If the worker container isn't running when the drill finishes, the drill warns that the result wasn't recorded. The verdict it printed still stands. Don't run `backup record-drill` yourself: a row entered by hand would claim a drill passed when none did.
 
 ### Reading a failure
 
@@ -545,30 +553,57 @@ For anyone running the drill from a script or monitor:
 
 ### Things that trip people up
 
-**`ls /opt/pavillion/backups` says *Permission denied*.** The folder belongs to the user the containers run as, uid 1001, which is the `pavillion` user if you used `bin/provision.sh`. Logged in as anyone else, it looks as if your backups are missing. The drill reads them through Docker, so it doesn't need that access, and `docker compose exec worker ls -1 /backups` lists them.
+**`ls` on the host backups directory says *Permission denied*.** The folder belongs to the user the containers run as, uid 1001, which is the `pavillion` user if you used `bin/provision.sh`. Logged in as anyone else, it looks as if your backups are missing. The drill reads them through Docker, so it doesn't need that access, and `docker compose exec worker ls -1 /backups` lists them.
 
 **Drilling the morning after an upgrade.** The newest backup is from before the upgrade, so the migrations check fails. Nothing is wrong with your backups. Wait for the next one.
 
 ## Restoring for real
 
-Pavillion ships a restore command, with limits:
+The restore command has two forms. Both run `pg_restore -c --if-exists` against the configured database after a confirmation prompt. `-c` drops existing objects first, so **all current data is replaced**. Both must be run from an interactive terminal: they refuse a confirmation piped in.
+
+### Rolling back a running instance
 
 ```bash
-PAVILLION_CONTAINER=pavillion-worker ./scripts/backup.sh restore <backup-id>
+./scripts/backup.sh restore <backup-id>
 ```
 
-It runs `pg_restore -c` against the configured database after a confirmation prompt. `-c` drops existing objects first, so **all current data is replaced**. Restart the app afterward. Two limits to know about:
+Restart the app afterward. Two limits to know about:
 
-- It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist.
-- It reads the dump from the backup directory, which only the `worker` container mounts, hence the `pavillion-worker` above. The default `pavillion-app` container can't see the files. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
+- It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist. For that, use `--file`, below.
+- It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
 
-To recover onto a fresh server, the repository does not ship a procedure. The outline, using plain PostgreSQL tooling:
+### Recovering onto a fresh server
+
+`backup restore --file <path>` restores a dump file without looking anything up in the database first, so it works on a server whose database is empty.
 
 1. Install Pavillion on the new server (see the [Quickstart](./quickstart)), but put your backed-up `.env`, `secrets/` and `config/local.yaml` in place first, so the app comes up with your original secrets rather than newly generated ones.
-2. Start only the `db` service and wait for it to be healthy.
-3. Restore the dump into the database, with the app and worker stopped. The drill's check on migrations is a good model: the dump and the code version should match, so check out the same Pavillion version that produced the dump.
-4. Restore your media.
-5. Start everything and verify you can log in and see events.
+2. Put the dump in the host backups directory, `/opt/pavillion/backups` unless you set `BACKUP_HOST_DIR`, owned by uid 1001. If the server is gone, that's a dump you pulled back as in [Restoring from the bucket](#restoring-from-the-bucket).
+3. Start only the database, and wait until `docker compose ps db` shows it healthy:
+
+   ```bash
+   docker compose up -d db
+   ```
+
+4. Restore the dump through a one-off worker container:
+
+   ```bash
+   docker compose run --rm --no-deps --entrypoint node worker \
+     /app/bin/pavillion backup restore --file /backups/pavillion_20260315_020000_scheduled.dump
+   ```
+
+   `--no-deps` keeps the app down: started now, it would migrate the empty database and begin serving. `--entrypoint node` skips the container's startup script; the `pavillion` command still reads your secrets files.
+5. Restore your media.
+6. Start everything, then check you can log in and see your events:
+
+   ```bash
+   docker compose up -d
+   ```
+
+Before it asks you to confirm, the command reads the dump's list of applied migrations, as the [restore drill](#the-backup-and-the-code-disagree-about-the-version) does, and compares it with the migrations this version of Pavillion ships:
+
+- **The dump is newer than this version.** It refuses and lists the migrations this version doesn't have. Restoring would leave a database the code can't run. Install the version that made the dump, by setting `PAVILLION_IMAGE_TAG` in `.env`, restore, then upgrade.
+- **The dump is older than this version.** It says how many migrations the dump is behind and goes on to the confirmation. The app applies them when it starts in step 6, as it does on any upgrade.
+- **The file isn't a Pavillion dump**, or has no migration record. It refuses, and nothing is touched.
 
 Do this at least once, on a spare machine, before you need it.
 

@@ -22,6 +22,7 @@ class AdminReportNotificationEmail extends EmailMessage {
   priority: string;
   deadline: string | null;
   calendarUrlName: string;
+  instanceName: string;
 
   constructor(
     recipientEmail: string,
@@ -32,6 +33,7 @@ class AdminReportNotificationEmail extends EmailMessage {
     priority: string,
     deadline: string | null,
     calendarUrlName: string,
+    instanceName: string,
   ) {
     super('admin_report_notification_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
@@ -42,6 +44,7 @@ class AdminReportNotificationEmail extends EmailMessage {
     this.priority = priority;
     this.deadline = deadline;
     this.calendarUrlName = calendarUrlName;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -71,6 +74,7 @@ class AdminReportNotificationEmail extends EmailMessage {
       deadline: this.deadline,
       reviewUrl,
       language,
+      instanceName: this.instanceName,
     };
 
     return {

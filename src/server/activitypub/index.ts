@@ -73,6 +73,16 @@ export default class ActivityPubDomain {
   }
 
   /**
+   * Event-lifecycle handlers queued on the PostgreSQL limiter and not yet
+   * started; 0 before {@link installEventHandlers} and always 0 on SQLite.
+   * They have no outbox row yet, so a shutdown that drops them is not
+   * recovered by the outbox drain.
+   */
+  public get pendingDispatchCount(): number {
+    return this.eventHandlers?.pendingDispatchCount ?? 0;
+  }
+
+  /**
    * Start draining unprocessed inbox rows in this process: once now, taking
    * only rows written before the drain began, then every `activitypub.inboxDrain.intervalMs`, leaving rows
    * written within {@link INBOX_DRAIN_SKIP_NEWER_THAN_MS} to live dispatch.

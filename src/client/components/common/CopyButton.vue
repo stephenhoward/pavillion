@@ -8,11 +8,11 @@ import { Copy } from 'lucide-vue-next';
  * flashes a "Copied" label for `feedbackMs`, and announces the copy to
  * assistive tech via a polite `role="status"` live region.
  *
- * The clipboard write is a soft-fail: when `navigator.clipboard` is
- * unavailable (older browsers, JSDOM tests without a clipboard mock,
- * permission-denied) the button still flashes its "copied" state so the
- * user gets UI feedback that the action ran. The caller's source element
- * remains text-selectable for manual copy.
+ * Success is shown and announced only after the clipboard write resolves.
+ * When `navigator.clipboard` is unavailable or the write rejects, the button
+ * emits `error`, shows a "Copy failed" label and announces the failure in the
+ * same live region. The caller's source element remains text-selectable for
+ * manual copy.
  *
  * Two visual variants:
  * - `ghost` (default): inline icon+label, transparent background
@@ -54,31 +54,41 @@ const emit = defineEmits<{
 const { t } = useTranslation('system', { keyPrefix: 'copy_button' });
 
 const copied = ref<boolean>(false);
+const failed = ref<boolean>(false);
 let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const resolvedLabel = computed<string>(() => props.label ?? t('copy'));
 const resolvedCopiedLabel = computed<string>(() => props.copiedLabel ?? t('copied'));
+const resolvedFailedLabel = computed<string>(() => t('copy_failed'));
+const resolvedStatus = computed<string>(() => {
+  if (copied.value) return resolvedCopiedLabel.value;
+  if (failed.value) return resolvedFailedLabel.value;
+  return '';
+});
 const resolvedAriaLabel = computed<string>(() => props.ariaLabel ?? resolvedLabel.value);
 
 const onClick = async (): Promise<void> => {
+  let succeeded = false;
   try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(props.text);
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      throw new Error('Clipboard unavailable');
     }
+    await navigator.clipboard.writeText(props.text);
+    succeeded = true;
     emit('copied');
   }
   catch (err) {
     emit('error', err);
-    // Soft-fail: still flash the "copied" indicator so the user sees the
-    // action ran. The source value stays user-selectable for manual copy.
   }
 
-  copied.value = true;
+  copied.value = succeeded;
+  failed.value = !succeeded;
   if (copyTimeout) {
     clearTimeout(copyTimeout);
   }
   copyTimeout = setTimeout(() => {
     copied.value = false;
+    failed.value = false;
     copyTimeout = null;
   }, props.feedbackMs);
 };
@@ -110,7 +120,7 @@ onBeforeUnmount(() => {
       aria-hidden="true"
     />
     <span class="copy-button__label">
-      {{ copied ? resolvedCopiedLabel : resolvedLabel }}
+      {{ resolvedStatus || resolvedLabel }}
     </span>
     <span
       class="copy-button__live-region"
@@ -118,7 +128,7 @@ onBeforeUnmount(() => {
       aria-live="polite"
       aria-atomic="true"
     >
-      {{ copied ? resolvedCopiedLabel : '' }}
+      {{ resolvedStatus }}
     </span>
   </button>
 </template>

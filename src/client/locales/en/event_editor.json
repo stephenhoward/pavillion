@@ -158,6 +158,7 @@
     "after": "after",
     "occurrences": "occurrences",
     "on_date": "on",
+    "warning_fewer_than_two": "This rule makes fewer than two occurrences, so the event will not repeat.",
     "remove_schedule": "Remove this schedule",
     "start_date_label": "Date",
     "start_time_label": "Time",

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, compareEventsByStart } from '@/common/model/events';
 
 export const useEventStore = defineStore('events', {
   state: () => {
@@ -63,12 +63,13 @@ export const useEventStore = defineStore('events', {
   },
   getters: {
     /**
-     * Get events for a specific calendar
+     * Get events for a specific calendar, ordered by base schedule start
+     * (earliest first, undated last, ties by id).
      * @param state - The store state
-     * @returns Function that returns events for a calendar ID or empty array
+     * @returns Function that returns a sorted copy of a calendar's events, or an empty array
      */
     eventsForCalendar: (state) => (calendarId: string) => {
-      return state.events[calendarId] || [];
+      return [...(state.events[calendarId] || [])].sort(compareEventsByStart);
     },
   },
 });

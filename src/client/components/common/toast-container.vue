@@ -1,7 +1,9 @@
 <script setup>
 import { watch, onUnmounted } from 'vue';
 import { useToast } from '@/client/composables/useToast';
+import { useTranslation } from 'i18next-vue';
 
+const { t } = useTranslation('system', { keyPrefix: 'toast' });
 const { toasts, removeToast } = useToast();
 
 /**
@@ -151,7 +153,7 @@ onUnmounted(() => {
       <button
         class="alert__close"
         type="button"
-        aria-label="Dismiss notification"
+        :aria-label="t('dismiss')"
         @click="dismissToast(toast.id)"
       >
         &times;

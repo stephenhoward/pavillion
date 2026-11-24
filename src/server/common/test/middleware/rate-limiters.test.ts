@@ -20,6 +20,7 @@ import {
   limitCalendarFundingPlanByAccount,
   limitCheckoutSessionByAccount,
   limitFundingPlanChangeByAccount,
+  limitBillingPortalByAccount,
   limitCalendarFollowByAccount,
   limitImportSourceVerifyBySource,
   limitImportSourceSyncBySource,
@@ -366,6 +367,11 @@ describe('rate-limiters', () => {
     it('should export limitFundingPlanChangeByAccount limiter', () => {
       expect(limitFundingPlanChangeByAccount).toBeDefined();
       expect(typeof limitFundingPlanChangeByAccount).toBe('function');
+    });
+
+    it('should export limitBillingPortalByAccount limiter', () => {
+      expect(limitBillingPortalByAccount).toBeDefined();
+      expect(typeof limitBillingPortalByAccount).toBe('function');
     });
 
     it('should export limitImportSourceVerifyBySource limiter', () => {

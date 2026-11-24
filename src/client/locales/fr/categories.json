@@ -21,6 +21,7 @@
     "confirm_delete_message": "Êtes-vous sûr de vouloir supprimer cette catégorie ? Cette action est irréversible.",
     "category_name_label": "Nom de la catégorie",
     "category_name_help": "Saisissez un nom descriptif pour cette catégorie",
+    "category_name_language_label": "Nom de la catégorie ({{language}})",
     "error_empty_name": "Le nom de la catégorie ne peut pas être vide",
     "error_create_category": "Erreur lors de la création de la catégorie",
     "error_update_category": "Erreur lors de la mise à jour de la catégorie",

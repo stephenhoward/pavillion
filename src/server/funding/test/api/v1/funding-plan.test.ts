@@ -9,7 +9,7 @@ import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
 import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
-import { limitFundingPlanChangeByAccount } from '@/server/common/middleware/rate-limiters';
+import { limitFundingPlanChangeByAccount, limitBillingPortalByAccount } from '@/server/common/middleware/rate-limiters';
 import { MissingRequiredFieldError, FundingPlanNotResumableError } from '@/common/exceptions/funding';
 
 describe('User Funding Plan API Routes', () => {
@@ -65,6 +65,22 @@ describe('User Funding Plan API Routes', () => {
         expect(handlers.indexOf(limitFundingPlanChangeByAccount)).toBeGreaterThan(handlers.indexOf(authCheck));
       },
     );
+
+    it('should wire limitBillingPortalByAccount after loggedInOnly on GET /portal', () => {
+      const app = express();
+      fundingPlanHandlers.installHandlers(app, '/api/funding/v1');
+
+      const layers = (app as any).router.stack
+        .filter((layer: any) => layer.name === 'router')
+        .flatMap((layer: any) => layer.handle.stack)
+        .filter((layer: any) => layer.route?.path === '/portal' && layer.route.methods.get);
+
+      expect(layers.length).toBe(1);
+      const handlers = layers[0].route.stack.map((l: any) => l.handle);
+      const authCheck = ExpressHelper.loggedInOnly[ExpressHelper.loggedInOnly.length - 1];
+      expect(handlers.indexOf(authCheck)).toBeGreaterThanOrEqual(0);
+      expect(handlers.indexOf(limitBillingPortalByAccount)).toBeGreaterThan(handlers.indexOf(authCheck));
+    });
   });
 
   describe('GET /options', () => {

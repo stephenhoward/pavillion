@@ -158,6 +158,7 @@
     "after": "après",
     "occurrences": "occurrences",
     "on_date": "le",
+    "warning_fewer_than_two": "Cette règle produit moins de deux occurrences, donc l'événement ne se répétera pas.",
     "remove_schedule": "Supprimer cette planification",
     "start_date_label": "Date",
     "start_time_label": "Heure",

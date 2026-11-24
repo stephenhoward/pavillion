@@ -50,6 +50,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       '2026-02-14',
       'city-events',
+      'Test Instance',
     );
 
     expect(email.namespace).toBe('admin_report_notification_email');
@@ -65,6 +66,7 @@ describe('AdminReportNotificationEmail', () => {
       'medium',
       '2026-03-01',
       'city-events',
+      'Test Instance',
     );
 
     expect(email.recipientEmail).toBe('owner@example.com');
@@ -87,6 +89,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -104,6 +107,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     email.buildMessage('en');
@@ -121,6 +125,7 @@ describe('AdminReportNotificationEmail', () => {
       'medium',
       null,
       'city-events',
+      'Test Instance',
     );
 
     email.buildMessage('en');
@@ -138,6 +143,7 @@ describe('AdminReportNotificationEmail', () => {
       'low',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -157,6 +163,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       '2026-02-14',
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -178,6 +185,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -197,6 +205,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -215,6 +224,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -233,6 +243,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -251,6 +262,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -269,6 +281,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       '2026-02-14',
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -287,6 +300,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -307,6 +321,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const mailData = email.buildMessage('en');
@@ -325,6 +340,7 @@ describe('AdminReportNotificationEmail', () => {
       'high',
       null,
       'city-events',
+      'Test Instance',
     );
 
     const renderPlaintextSpy = sandbox.spy(email, 'renderPlaintext');
@@ -336,5 +352,25 @@ describe('AdminReportNotificationEmail', () => {
     expect(renderPlaintextSpy.firstCall.args[0]).toBe('fr');
     expect(renderHtmlSpy.calledOnce).toBe(true);
     expect(renderHtmlSpy.firstCall.args[0]).toBe('fr');
+  });
+
+  it('should sign off with the instance name, escaped in HTML and raw in text', () => {
+    const email = new AdminReportNotificationEmail(
+      'owner@example.com',
+      'Test Event',
+      'My Calendar',
+      'spam',
+      'desc',
+      'high',
+      '2026-02-14',
+      'city-events',
+      'Fall & Co <Events>',
+    );
+
+    const mailData = email.buildMessage('en');
+
+    expect(mailData.textMessage).toContain('Fall & Co <Events>');
+    expect(mailData.htmlMessage).toContain('Fall &amp; Co &lt;Events&gt;');
+    expect(mailData.htmlMessage).not.toContain('<Events>');
   });
 });

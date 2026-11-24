@@ -163,6 +163,7 @@ COPY --from=builder /app/tsconfig.json ./
 
 # Copy entrypoint script and make it executable
 COPY bin/entrypoint.sh ./
+COPY bin/pavillion ./bin/pavillion
 RUN chmod +x /app/entrypoint.sh
 
 # Create directories for runtime data

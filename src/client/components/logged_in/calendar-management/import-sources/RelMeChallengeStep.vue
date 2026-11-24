@@ -47,6 +47,9 @@
       <p class="field-help">
         {{ t('rel_me_challenge.page_url_help') }}
       </p>
+      <label :for="pageUrlInputId" class="field-label">
+        {{ t('rel_me_challenge.page_url_label') }}
+      </label>
       <input
         :id="pageUrlInputId"
         v-model="pageUrl"
@@ -60,7 +63,6 @@
         data-test="rel-me-page-url-input"
         :placeholder="t('rel_me_challenge.page_url_placeholder')"
         :maxlength="RELME_PAGE_URL_MAX_LENGTH"
-        :aria-label="t('rel_me_challenge.page_url_aria')"
         :aria-invalid="errorMessage !== null"
         :aria-describedby="errorMessage ? errorRegionId : undefined"
         @input="onInput"
@@ -326,6 +328,12 @@ const onChangeMethod = (): void => {
   color: var(--pav-text-secondary);
   font-size: var(--pav-font-size-small);
   line-height: var(--pav-line-height-normal);
+}
+
+.field-label {
+  color: var(--pav-text-secondary);
+  font-size: var(--pav-font-size-small);
+  font-weight: var(--pav-font-weight-medium);
 }
 
 .code-display {

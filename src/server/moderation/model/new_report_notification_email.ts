@@ -15,18 +15,21 @@ class NewReportNotificationEmail extends EmailMessage {
   eventName: string;
   reportCategory: string;
   reportCount: number;
+  instanceName: string;
 
   constructor(
     recipientEmail: string,
     eventName: string,
     reportCategory: string,
     reportCount: number,
+    instanceName: string,
   ) {
     super('new_report_notification_email', textTemplate, htmlTemplate);
     this.recipientEmail = recipientEmail;
     this.eventName = eventName;
     this.reportCategory = reportCategory;
     this.reportCount = reportCount;
+    this.instanceName = instanceName;
   }
 
   /**
@@ -48,12 +51,14 @@ class NewReportNotificationEmail extends EmailMessage {
         reportCategory: this.reportCategory,
         reportCount: this.reportCount,
         language,
+        instanceName: this.instanceName,
       }),
       htmlMessage: this.renderHtml(language, {
         eventName: truncatedName,
         reportCategory: this.reportCategory,
         reportCount: this.reportCount,
         language,
+        instanceName: this.instanceName,
       }),
     };
   }
