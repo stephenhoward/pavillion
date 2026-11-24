@@ -47,6 +47,21 @@ export function compareSchedulesByStart(a: CalendarEventSchedule, b: CalendarEve
 }
 
 /**
+ * Orders events by the start instant of their base schedule, earliest first.
+ * An event with no base schedule sorts last; equal starts are broken by id so
+ * the order is stable. A recurring event is keyed by its first schedule's
+ * start, not its next occurrence, which is the date the events list prints.
+ */
+export function compareEventsByStart(a: CalendarEvent, b: CalendarEvent): number {
+  const aStart = a.baseSchedule()?.startDate?.toMillis() ?? Infinity;
+  const bStart = b.baseSchedule()?.startDate?.toMillis() ?? Infinity;
+  if (aStart !== bStart) {
+    return aStart < bStart ? -1 : 1;
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
  * Represents a calendar event with multilingual content support.
  * Extends TranslatedModel to manage event content in different languages.
  *

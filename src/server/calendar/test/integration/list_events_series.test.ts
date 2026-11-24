@@ -108,4 +108,23 @@ describe('listEvents — series association (integration)', () => {
     expect(events[0].series!.urlName).toBe('summer-concerts');
     expect(events[0].series!.content('en').name).toBe('Summer Concerts');
   });
+
+  it('returns events ordered by base schedule start regardless of insertion order', async () => {
+    const orderCalendar = await calendarInterface.createCalendar(account, 'listeventsordercal');
+    for (const [name, start] of [
+      ['Third', '2026-12-15T19:00:00.000Z'],
+      ['First', '2026-09-22T19:00:00.000Z'],
+      ['Second', '2026-12-11T19:00:00.000Z'],
+    ]) {
+      await calendarInterface.createEvent(account, {
+        calendarId: orderCalendar.id,
+        content: { en: { name } },
+        schedules: [{ start }],
+      });
+    }
+
+    const events = await calendarInterface.listEvents(orderCalendar);
+
+    expect(events.map(e => e.content('en').name)).toEqual(['First', 'Second', 'Third']);
+  });
 });
