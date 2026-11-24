@@ -105,6 +105,40 @@ describe('Editors Component', () => {
     vi.restoreAllMocks();
   });
 
+  describe('Live regions', () => {
+    it('mounts both regions before any message is set', async () => {
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({ activeEditors: [], pendingInvitations: [] });
+
+      const wrapper = mountEditors();
+      await flushPromises();
+
+      const alert = wrapper.find('[role="alert"]');
+      const status = wrapper.find('[role="status"]');
+      expect(alert.exists()).toBe(true);
+      expect(status.exists()).toBe(true);
+      expect(alert.text()).toBe('');
+      expect(status.text()).toBe('');
+    });
+
+    it('keeps the same elements when a message arrives', async () => {
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({ activeEditors: [], pendingInvitations: [] });
+
+      const wrapper = mountEditors();
+      await flushPromises();
+      const alertEl = wrapper.find('[role="alert"]').element;
+      const statusEl = wrapper.find('[role="status"]').element;
+
+      wrapper.vm.state.error = 'boom';
+      wrapper.vm.state.success = 'done';
+      await nextTick();
+
+      expect(wrapper.find('[role="alert"]').element).toBe(alertEl);
+      expect(wrapper.find('[role="status"]').element).toBe(statusEl);
+      expect(alertEl.textContent).toBe('boom');
+      expect(statusEl.textContent).toBe('done');
+    });
+  });
+
   describe('Component Initialization', () => {
     it('loads editors on mount', async () => {
       const testEditors = [
