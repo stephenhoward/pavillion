@@ -295,7 +295,7 @@
     "rel_me_challenge": {
       "instructions": "Publica un enlace de verificación a este calendario en una página del mismo sitio que el feed del calendario, luego introduce la URL de esa página abajo y haz clic en Verificar.",
       "html_snippet_aria": "Fragmento HTML",
-      "page_url_aria": "URL de la página de verificación",
+      "page_url_label": "URL de la página de verificación",
       "page_url_placeholder": "ejemplo.com/sobre-nosotros",
       "page_url_help": "Paso 2: Introduce la URL de la página donde has publicado el enlace rel=\"me\".",
       "page_url_required": "Se requiere una URL de página de verificación.",

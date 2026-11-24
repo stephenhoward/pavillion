@@ -295,7 +295,7 @@
     "rel_me_challenge": {
       "instructions": "Publish a verification link to this calendar on a page on the same site as the calendar feed, then enter that page's URL below and click Verify.",
       "html_snippet_aria": "HTML snippet",
-      "page_url_aria": "Verification page URL",
+      "page_url_label": "Verification page URL",
       "page_url_placeholder": "example.com/about",
       "page_url_help": "Step 2: Enter the URL of the page where you have published the rel=\"me\" link.",
       "page_url_required": "A verification page URL is required.",

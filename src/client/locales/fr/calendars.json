@@ -295,7 +295,7 @@
     "rel_me_challenge": {
       "instructions": "Publiez un lien de vérification vers ce calendrier sur une page du même site que le flux de calendrier, puis saisissez l'URL de cette page ci-dessous et cliquez sur Vérifier.",
       "html_snippet_aria": "Extrait HTML",
-      "page_url_aria": "URL de la page de vérification",
+      "page_url_label": "URL de la page de vérification",
       "page_url_placeholder": "exemple.com/a-propos",
       "page_url_help": "Étape 2 : Saisissez l'URL de la page où vous avez publié le lien rel=\"me\".",
       "page_url_required": "Une URL de page de vérification est obligatoire.",
