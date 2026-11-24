@@ -34,7 +34,8 @@
   },
   "copy_button": {
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "copy_failed": "Copy failed"
   },
   "toast": {
     "dismiss": "Dismiss notification"

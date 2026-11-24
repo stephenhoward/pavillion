@@ -34,7 +34,8 @@
   },
   "copy_button": {
     "copy": "Copiar",
-    "copied": "Copiado"
+    "copied": "Copiado",
+    "copy_failed": "No se pudo copiar"
   },
   "toast": {
     "dismiss": "Descartar notificación"
