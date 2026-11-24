@@ -16,9 +16,9 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
+    "types": ["node"],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "sourceMap": true
   },
