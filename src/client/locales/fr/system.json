@@ -34,7 +34,8 @@
   },
   "copy_button": {
     "copy": "Copier",
-    "copied": "Copié"
+    "copied": "Copié",
+    "copy_failed": "Échec de la copie"
   },
   "help": {
     "button_label": "Aide sur cette page",

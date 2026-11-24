@@ -121,27 +121,46 @@ describe('CopyButton', () => {
       expect(wrapper.find('button').text()).not.toContain('Copied!');
     });
 
-    it('still flashes the copied state when the clipboard call rejects (soft-fail)', async () => {
+    it('shows and announces failure, not success, when the clipboard call rejects', async () => {
       writeTextMock.mockRejectedValue(new Error('denied'));
 
       const wrapper = mountCopyButton({ copiedLabel: 'Copied!' });
       await wrapper.find('button').trigger('click');
       await flushPromises();
 
-      expect(wrapper.find('button').text()).toContain('Copied!');
+      expect(wrapper.find('button').text()).toContain('Copy failed');
+      expect(wrapper.find('button').text()).not.toContain('Copied!');
+      expect(wrapper.find('[role="status"]').text()).toBe('Copy failed');
       expect(wrapper.emitted('error')).toBeTruthy();
       expect(wrapper.emitted('copied')).toBeFalsy();
     });
 
-    it('still flashes the copied state when navigator.clipboard is unavailable', async () => {
-      delete (globalThis.navigator as unknown as { clipboard?: unknown }).clipboard;
+    it('reports failure when navigator.clipboard is unavailable', async () => {
+      Object.defineProperty(globalThis.navigator, 'clipboard', {
+        value: undefined,
+        configurable: true,
+      });
 
       const wrapper = mountCopyButton({ copiedLabel: 'Copied!' });
       await wrapper.find('button').trigger('click');
       await flushPromises();
 
-      expect(wrapper.find('button').text()).toContain('Copied!');
-      expect(wrapper.emitted('copied')).toBeTruthy();
+      expect(wrapper.find('[role="status"]').text()).toBe('Copy failed');
+      expect(wrapper.emitted('error')).toBeTruthy();
+      expect(wrapper.emitted('copied')).toBeFalsy();
+    });
+
+    it('clears the failure state after feedbackMs', async () => {
+      writeTextMock.mockRejectedValue(new Error('denied'));
+
+      const wrapper = mountCopyButton({ feedbackMs: 1500 });
+      await wrapper.find('button').trigger('click');
+      await flushPromises();
+      vi.advanceTimersByTime(1500);
+      await flushPromises();
+
+      expect(wrapper.find('[role="status"]').text()).toBe('');
+      expect(wrapper.find('button').text()).toContain('Copy');
     });
   });
 
