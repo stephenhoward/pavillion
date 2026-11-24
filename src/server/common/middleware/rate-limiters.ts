@@ -259,6 +259,21 @@ export const limitFundingPlanChangeByAccount: RequestHandler = isRateLimitEnable
   : noOpMiddleware;
 
 /**
+ * Billing portal rate limiter for authenticated users.
+ * Limits: 10 requests per account per 15 minutes (default config).
+ * Bounds GET /portal, each open of which creates a provider portal session
+ * with the instance's credentials. Its own bucket, so cancel/resume toggles
+ * cannot lock an owner out of the portal that recovers a suspended plan.
+ */
+export const limitBillingPortalByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.billingPortal.byAccount.max'),
+    config.get<number>('rateLimit.billingPortal.byAccount.windowMs'),
+    'billing-portal',
+  )
+  : noOpMiddleware;
+
+/**
  * Stripe funding webhook rate limiter by IP address.
  * Limits: 300 requests per IP per minute (default config).
  *

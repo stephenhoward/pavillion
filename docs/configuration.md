@@ -468,6 +468,7 @@ behaviour.
 | `calendarFollow.byAccount` | Account | 30 follow or unfollow requests per 15 minutes |
 | `calendarFundingPlan.byAccount` | Account | 30 per 15 minutes |
 | `checkoutSession.byAccount` | Account | 10 per 15 minutes |
+| `billingPortal.byAccount` | Account | 10 billing portal opens per 15 minutes |
 | `fundingWebhook.byIp` | IP address | 300 per minute |
 | `importSource.createByAccount` | Account | 15 new import sources per hour |
 | `importSource.verifyBySource` | Import source | 3 verification attempts per hour |

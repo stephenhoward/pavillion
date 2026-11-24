@@ -199,6 +199,10 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 10  # 10 cancel/resume requests per account per 15 minutes
+  billingPortal:
+    byAccount:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 10  # 10 billing portal opens per account per 15 minutes
   # GET /api/v1/notification. The client polls every 30 seconds per open tab
   # and refetches on tab focus and inbox mount, so the bucket (shared by every
   # tab and device of one account) must sit well above that steady state.
