@@ -149,6 +149,12 @@ Configure these for S3-compatible media storage (AWS S3, DigitalOcean Spaces, Mi
 
 *Required only if using S3 storage. Also requires setting `media.storage.driver: 's3'` in `config/local.yaml`.
 
+### Backups host directory
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BACKUP_HOST_DIR` | No | `/opt/pavillion/backups` | Host folder bound to the `pavillion-backups` volume, where the worker's dumps appear as ordinary files. Set it in `.env`. See [Backups](./backups.md#what-pavillion-does-for-you) |
+
 ### Off-host backup copy
 
 Optional. Read by the worker only, and separate from the media `S3_*`
