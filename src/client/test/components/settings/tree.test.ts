@@ -24,6 +24,7 @@ const createTestRouter = (): Router => createRouter({
     { path: '/settings/calendar/:calendar/editors', name: 'calendar_editors', component: Stub },
     { path: '/settings/calendar/:calendar/reports', name: 'calendar_reports', component: Stub },
     { path: '/settings/calendar/:calendar/import', name: 'calendar_import', component: Stub },
+    { path: '/settings/calendar/:calendar/export', name: 'calendar_export', component: Stub },
     { path: '/settings/calendar/:calendar/widget', name: 'calendar_widget', component: Stub },
     { path: '/settings/account/profile', name: 'profile', component: Stub },
     { path: '/settings/account/security', name: 'security', component: Stub },
@@ -153,7 +154,7 @@ describe('settings tree', () => {
 
     expect(loadCalendars.calledOnce).toBe(true);
     expect(loadFunding.calledOnce).toBe(true);
-    expect(rows(w, 'Calendar')).toEqual(['General', 'Editors', 'Reports', 'Import', 'Widget']);
+    expect(rows(w, 'Calendar')).toEqual(['General', 'Editors', 'Reports', 'Import', 'Export', 'Widget']);
   });
 
   it('opens with a skip button that focuses the page heading', async () => {
@@ -296,7 +297,7 @@ describe('settings tree', () => {
 
   it('addresses the current calendar, never an unresolvable route param', async () => {
     const w = await mountAt('/settings/calendar/nope/general');
-    expect(rows(w, 'Calendar')).toEqual(['General', 'Editors', 'Reports', 'Import', 'Widget']);
+    expect(rows(w, 'Calendar')).toEqual(['General', 'Editors', 'Reports', 'Import', 'Export', 'Widget']);
     const hrefs = group(w, 'Calendar')!.findAll('a').map((a) => a.attributes('href'));
     expect(hrefs.every((href) => href?.startsWith('/settings/calendar/riverside/'))).toBe(true);
     expect(w.html()).not.toContain('nope');

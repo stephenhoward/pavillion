@@ -37,6 +37,7 @@ import {
   Shield,
   ShieldCheck,
   Sprout,
+  Upload,
   User,
   Users,
 } from 'lucide-vue-next';
@@ -168,6 +169,7 @@ const CALENDAR_LEAVES: readonly LeafDefinition[] = [
     subRoutes: ['calendar_report_detail'],
   },
   { id: 'import', routeName: 'calendar_import', labelKey: 'nav.calendar.import', icon: Download, ownerOnly: true },
+  { id: 'export', routeName: 'calendar_export', labelKey: 'nav.calendar.export', icon: Upload, ownerOnly: true },
   { id: 'widget', routeName: 'calendar_widget', labelKey: 'nav.calendar.widget', icon: LayoutTemplate },
 ];
 

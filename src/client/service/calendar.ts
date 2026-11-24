@@ -5,9 +5,15 @@ import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import { WidgetConfig } from '@/common/model/widget_config';
 import ModelService from '@/client/service/models';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import {
+  UrlNameAlreadyExistsError,
+  InvalidUrlNameError,
+  CalendarNotFoundError,
+  CalendarExportError,
+} from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 import { currentAccountId } from '@/client/service/authn';
@@ -24,6 +30,8 @@ const errorMap = {
   InvalidUrlNameError,
   CalendarNotFoundError,
   CalendarEditorPermissionError,
+  CalendarExportError,
+  ValidationError,
   EditorAlreadyExistsError,
   EditorNotFoundError,
   BulkEventsNotFoundError,
@@ -464,5 +472,56 @@ export default class CalendarService {
     const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
     const response = await axios.put(`/api/v1/calendars/${encodedId}/widget/config`, config.toObject());
     return WidgetConfig.fromObject(response.data);
+  }
+
+  /**
+   * The languages a calendar can be exported in, in the server's order.
+   * Owner only. Never empty: a body that is not a non-empty list of strings
+   * throws UnknownError, so a caller never renders an empty picker.
+   *
+   * @param calendarId - The ID of the calendar
+   * @returns The language codes
+   */
+  async getExportLanguages(calendarId: string): Promise<string[]> {
+    const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+    let data: unknown;
+    try {
+      const response = await axios.get(`/api/v1/calendars/${encodedId}/export/languages`);
+      data = response.data;
+    }
+    catch (error: unknown) {
+      handleApiError(error, errorMap);
+    }
+    const languages = (data as { languages?: unknown } | null)?.languages;
+    if (!Array.isArray(languages) || languages.length === 0
+      || !languages.every((code) => typeof code === 'string')) {
+      throw new UnknownError();
+    }
+    return languages;
+  }
+
+  /**
+   * Fetch a calendar's own events as one iCalendar file in `lang`. Owner only.
+   *
+   * No `responseType` is set on purpose: axios then tries JSON.parse on every
+   * body and keeps the string when that fails, so a 200 yields the .ics text
+   * while an error body arrives parsed for handleApiError to read.
+   *
+   * @param calendarId - The ID of the calendar
+   * @param lang - The language to export in; one of getExportLanguages' codes
+   * @returns The file's text, and the number of events in it (null when the
+   *   server did not say)
+   */
+  async exportCalendar(calendarId: string, lang: string): Promise<{ ics: string; eventCount: number | null }> {
+    const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+    try {
+      const response = await axios.get(`/api/v1/calendars/${encodedId}/export`, { params: { lang } });
+      const header = response.headers?.['x-pavillion-event-count'];
+      const count = typeof header === 'string' && /^\d+$/.test(header.trim()) ? Number(header) : null;
+      return { ics: String(response.data), eventCount: count };
+    }
+    catch (error: unknown) {
+      handleApiError(error, errorMap);
+    }
   }
 }

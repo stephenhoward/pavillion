@@ -325,6 +325,21 @@
     "guide_link": "How importing calendars works",
     "verify_aria": "Verify ownership for import source {{url}}"
   },
+  "export": {
+    "description": "Download every event this calendar publishes, past and future, as one .ics file you can import into another calendar app; events reposted from other calendars are not included.",
+    "loading": "Loading the export options…",
+    "language_label": "Language",
+    "download_button": "Download",
+    "downloading": "Preparing the file…",
+    "download_started": "Your download of {{filename}} has started.",
+    "empty": "This calendar has no events of its own yet, so there is nothing to download.",
+    "error_loading": "The export options could not be loaded. Reload the page to try again.",
+    "error_permission": "Only the calendar's owner can export it.",
+    "error_not_found": "This calendar could not be found.",
+    "error_language": "That language is no longer available for this calendar. Reload the page and choose again.",
+    "error_export_failed": "The file could not be created, so nothing was downloaded. Try again in a few minutes.",
+    "error_generic": "The download failed. Check your connection and try again."
+  },
   "places": {
     "title": "Places",
     "add_place_button": "Add Place",

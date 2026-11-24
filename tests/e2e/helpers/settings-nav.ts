@@ -51,7 +51,7 @@ export const DESKTOP = { width: 1280, height: 800 };
  */
 export const SHELL_MD = SHELL_SIDEBAR_UP_PX;
 
-export type CalendarLeaf = 'general' | 'editors' | 'reports' | 'import' | 'widget';
+export type CalendarLeaf = 'general' | 'editors' | 'reports' | 'import' | 'export' | 'widget';
 
 export type AdminLeaf =
   | 'settings'
@@ -121,6 +121,7 @@ const CALENDAR_LEAF_TITLES: Record<CalendarLeaf, string> = {
   editors: 'Editors',
   reports: 'Reports',
   import: 'Import',
+  export: 'Export',
   widget: 'Widget',
 };
 

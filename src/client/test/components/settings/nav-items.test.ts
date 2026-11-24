@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import {
-  Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, User, Users,
+  Calendar, Download, Globe, LayoutTemplate, LogOut, Server, Settings, Shield, ShieldCheck, Sprout, Upload, User, Users,
 } from 'lucide-vue-next';
 import settingsEn from '@/client/locales/en/settings.json';
 import { Calendar as CalendarModel } from '@/common/model/calendar';
@@ -50,19 +50,19 @@ describe('settings nav items', () => {
     it.each([
       { isOwner: true, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
-        calendar: ['general', 'editors', 'reports', 'import', 'widget'],
+        calendar: ['general', 'editors', 'reports', 'import', 'export', 'widget'],
         account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: true, fundingEnabled: false,
         root: ['calendar', 'account', 'instance', 'logout'],
-        calendar: ['general', 'editors', 'reports', 'import', 'widget'],
+        calendar: ['general', 'editors', 'reports', 'import', 'export', 'widget'],
         account: ['profile', 'security', 'calendars'] },
       { isOwner: true, isAdmin: false, fundingEnabled: true,
         root: ['calendar', 'account', 'logout'],
-        calendar: ['general', 'editors', 'reports', 'import', 'widget'],
+        calendar: ['general', 'editors', 'reports', 'import', 'export', 'widget'],
         account: ['profile', 'security', 'calendars', 'funding_plan'] },
       { isOwner: true, isAdmin: false, fundingEnabled: false,
         root: ['calendar', 'account', 'logout'],
-        calendar: ['general', 'editors', 'reports', 'import', 'widget'],
+        calendar: ['general', 'editors', 'reports', 'import', 'export', 'widget'],
         account: ['profile', 'security', 'calendars'] },
       { isOwner: false, isAdmin: true, fundingEnabled: true,
         root: ['calendar', 'account', 'instance', 'logout'],
@@ -128,7 +128,7 @@ describe('settings nav items', () => {
 
     it('gives each link item its route name', () => {
       expect(calendarItems(ctx()).map((item) => item.routeName)).toEqual([
-        'calendar_general', 'calendar_editors', 'calendar_reports', 'calendar_import', 'calendar_widget',
+        'calendar_general', 'calendar_editors', 'calendar_reports', 'calendar_import', 'calendar_export', 'calendar_widget',
       ]);
       expect(accountItems(ctx()).map((item) => item.routeName)).toEqual([
         'profile', 'security', 'account_calendars', 'funding_plan',
@@ -150,7 +150,7 @@ describe('settings nav items', () => {
       const icons = (items: { icon: unknown }[]) => items.map((item) => item.icon);
 
       expect(icons(rootItems(ctx({ isAdmin: true })))).toEqual([Calendar, User, Server, LogOut]);
-      expect(icons(calendarItems(ctx()))).toEqual([Settings, Users, ShieldCheck, Download, LayoutTemplate]);
+      expect(icons(calendarItems(ctx()))).toEqual([Settings, Users, ShieldCheck, Download, Upload, LayoutTemplate]);
       expect(icons(accountItems(ctx()))).toEqual([User, Shield, Calendar, Sprout]);
       // The six icons of the admin pane's own navigation.
       expect(icons(adminItems())).toEqual([Settings, Users, Calendar, ShieldCheck, Globe, Sprout]);

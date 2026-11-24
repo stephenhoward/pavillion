@@ -325,6 +325,21 @@
     "guide_link": "Cómo funciona la importación de calendarios",
     "verify_aria": "Verificar propiedad de la fuente de importación {{url}}"
   },
+  "export": {
+    "description": "Descarga todos los eventos que publica este calendario, pasados y futuros, en un solo archivo .ics que puedes importar en otra aplicación de calendario; no incluye los eventos compartidos desde otros calendarios.",
+    "loading": "Cargando las opciones de exportación…",
+    "language_label": "Idioma",
+    "download_button": "Descargar",
+    "downloading": "Preparando el archivo…",
+    "download_started": "La descarga de {{filename}} ha comenzado.",
+    "empty": "Este calendario aún no tiene eventos propios, así que no hay nada que descargar.",
+    "error_loading": "No se pudieron cargar las opciones de exportación. Recarga la página para intentarlo de nuevo.",
+    "error_permission": "Solo la persona propietaria del calendario puede exportarlo.",
+    "error_not_found": "No se encontró este calendario.",
+    "error_language": "Ese idioma ya no está disponible para este calendario. Recarga la página y elige de nuevo.",
+    "error_export_failed": "No se pudo crear el archivo, así que no se descargó nada. Inténtalo de nuevo en unos minutos.",
+    "error_generic": "La descarga falló. Comprueba tu conexión e inténtalo de nuevo."
+  },
   "places": {
     "title": "Lugares",
     "add_place_button": "Añadir lugar",

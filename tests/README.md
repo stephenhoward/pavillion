@@ -25,7 +25,7 @@ The e2e tests are split into two distinct suites with different infrastructure r
 **Usage:**
 ```bash
 npm run test:e2e          # Run all single-instance tests in Chromium
-npm run test:e2e:webkit   # Run the widget and public-calendar specs in WebKit
+npm run test:e2e:webkit   # Run the widget, public-calendar and calendar-export specs in WebKit
 npm run test:e2e:ui       # Run with Playwright UI
 npm run test:e2e:debug    # Run in debug mode
 ```

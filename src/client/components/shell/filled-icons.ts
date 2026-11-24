@@ -11,6 +11,7 @@ import {
   Shield,
   ShieldCheck,
   Sprout,
+  Upload,
   User,
   Users,
 } from 'lucide-vue-next';
@@ -25,6 +26,7 @@ import SettingsFilled from './icons/settings-filled.vue';
 import ShieldFilled from './icons/shield-filled.vue';
 import ShieldCheckFilled from './icons/shield-check-filled.vue';
 import SproutFilled from './icons/sprout-filled.vue';
+import UploadFilled from './icons/upload-filled.vue';
 import UserFilled from './icons/user-filled.vue';
 import UsersFilled from './icons/users-filled.vue';
 
@@ -48,6 +50,7 @@ const FILLED_ICONS = new Map<Component, Component>([
   [Shield, ShieldFilled],
   [ShieldCheck, ShieldCheckFilled],
   [Sprout, SproutFilled],
+  [Upload, UploadFilled],
   [User, UserFilled],
   [Users, UsersFilled],
 ]);

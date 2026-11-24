@@ -22,6 +22,7 @@ const createTestRouter = (): Router => createRouter({
     { path: '/settings/calendar/:calendar/reports', name: 'calendar_reports', component: Stub },
     { path: '/settings/calendar/:calendar/reports/:reportId', name: 'calendar_report_detail', component: Stub },
     { path: '/settings/calendar/:calendar/import', name: 'calendar_import', component: Stub },
+    { path: '/settings/calendar/:calendar/export', name: 'calendar_export', component: Stub },
     { path: '/settings/calendar/:calendar/widget', name: 'calendar_widget', component: Stub },
     { path: '/settings/account', name: 'account', component: Stub },
     { path: '/settings/account/profile', name: 'profile', component: Stub },
