@@ -10,7 +10,7 @@ This guide covers downloading a copy of your calendar's events as one file and o
 
 An export gives you a copy of your events to keep somewhere else. A neighborhood association can put its season's events in the board's shared Google Calendar, and a venue can keep a list of the dates and details it published before a big change to its program.
 
-An export is a snapshot, not a connection. Nothing keeps the file in step with Pavillion, so edits, new events, and cancellations you make afterward don't reach it. To keep other people in step with your calendar, give them your [public URL](./public-url), or, if they run a Pavillion calendar of their own, let them [follow yours](./follow-and-repost).
+An export is a snapshot, not a connection. Nothing keeps the file in step with Pavillion, so edits, new events, and cancellations you make afterward don't reach it. To keep other people in step with your calendar, give them your [public URL](./public-url), or, if they run a Pavillion calendar of their own, let them [follow yours](./follow-and-repost). The file is meant for other calendar apps, not for moving events into another Pavillion calendar: importing it there shows dates you cancelled as going ahead.
 
 ## Find Export
 
