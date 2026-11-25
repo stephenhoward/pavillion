@@ -570,7 +570,9 @@ The restore command has two forms. Both run `pg_restore -c --if-exists` against 
 Restart the app afterward. Two limits to know about:
 
 - It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist. For that, use `--file`, below.
-- It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore. This guide has not exercised it against a live deployment, so try it on a copy before you rely on it.
+- It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore.
+- It currently ends with `Failed to restore backup` and a `pg_restore` error, `cannot drop inherited constraint "job_common_pkey"`, followed by `errors ignored on restore: 1`. That error is about the job queue's tables, and the restore carries on past it: your calendars, events and accounts come back as they were in the backup. Restart the app and check them before you trust it.
+- The backup you restored, and any taken after it, drop out of `./scripts/backup.sh list` and `status`, because the list lives in the database you just rolled back. Their files are still in the backup directory, and the retention cleanup no longer deletes them, so remove the ones you don't want by hand.
 
 ### Recovering onto a fresh server
 
