@@ -61,6 +61,18 @@ describe('guidesForRoute', () => {
     ]);
   });
 
+  it('returns the export guide for the calendar export leaf', () => {
+    expect(guidesForRoute('calendar_export')).toEqual([
+      { slug: 'guides/calendar-owners/ics-export', key: 'ics_export' },
+    ]);
+  });
+
+  it('lists the export guide beside the import guide on the calendar settings index', () => {
+    expect(guidesForRoute('calendar_management')).toContainEqual(
+      { slug: 'guides/calendar-owners/ics-export', key: 'ics_export' },
+    );
+  });
+
   it('returns an empty array for an unknown route name', () => {
     expect(guidesForRoute('not_a_real_route')).toEqual([]);
   });

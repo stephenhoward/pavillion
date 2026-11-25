@@ -11,6 +11,8 @@ There are two ways in, and which one you use depends on what your old calendar c
 - **Upload an exported file.** Export an `.ics` file from your old calendar and upload it. Pavillion imports the events right away — no verification, no DNS, no website editing. This is the simplest path for most people, including anyone coming from Google Calendar, Outlook, or iCloud.
 - **Connect a feed URL.** Point Pavillion at an ICS feed your source publishes, prove you control the domain it's published on, and pull updates on demand with <Btn>Sync now</Btn>. This suits a self-hosted source you'll keep editing for a while during the switch-over.
 
+This guide covers moving events into Pavillion. To take a copy of your Pavillion calendar out to Google Calendar, Apple Calendar, or Outlook, see [Export your calendar to another calendar app](./ics-export).
+
 ## What ICS import is for
 
 A bit of background on what this import process is for, before you set anything up.
