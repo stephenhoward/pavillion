@@ -9,6 +9,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, EventFreque
 import { EventLocation, EventLocationSpace, EventLocationSpaceContent } from '@/common/model/location';
 import {
   IcsSerializationError,
+  planVTimezones,
   serializeCalendarToIcs,
   type IcsExportEvent,
   type IcsExportInput,
@@ -60,8 +61,8 @@ function entry(event: CalendarEvent, lastModified = LAST_MODIFIED): IcsExportEve
   return { event, lastModified };
 }
 
-function serialize(events: CalendarEvent[], overrides: Partial<IcsExportInput> = {}) {
-  return serializeCalendarToIcs({
+function inputFor(events: CalendarEvent[], overrides: Partial<IcsExportInput> = {}): IcsExportInput {
+  return {
     calendar: new Calendar('calendar-id', 'townhall'),
     events: events.map(event => entry(event)),
     language: 'en',
@@ -70,7 +71,11 @@ function serialize(events: CalendarEvent[], overrides: Partial<IcsExportInput> =
     now: NOW,
     accessibilityHeading: language => HEADINGS[language] ?? HEADINGS.en,
     ...overrides,
-  });
+  };
+}
+
+function serialize(events: CalendarEvent[], overrides: Partial<IcsExportInput> = {}) {
+  return serializeCalendarToIcs(inputFor(events, overrides));
 }
 
 /** The logical content lines: folds undone, the final CRLF's empty tail dropped. */
@@ -286,6 +291,41 @@ describe('serializeCalendarToIcs', () => {
   });
 
   describe('time zones', () => {
+    it('plans exactly the VTIMEZONEs it writes, span for span, without building any', () => {
+      const event = makeEvent(EVENT_A, [
+        weekly(SCHEDULE_1, MONDAY_EVENING, { endDate: MONDAY_EVENING.plus({ years: 3 }) }),
+        schedule(SCHEDULE_2, DateTime.fromObject({ year: 2026, month: 7, day: 9, hour: 19 }, { zone: BERLIN })),
+      ]);
+      const input = inputFor([event]);
+
+      const plan = planVTimezones(input);
+
+      expect(plan.map(span => span.zoneName)).toEqual([NEW_YORK, BERLIN]);
+      const planned = plan.map(({ zoneName, fromYear, toYear }) => buildVTimezone(zoneName, fromYear, toYear).slice(1, -1));
+      expect(components(serializeCalendarToIcs(input).ics, 'VTIMEZONE')).toEqual(planned);
+    });
+
+    it('plans no VTIMEZONE for a calendar with no zoned dates', () => {
+      expect(planVTimezones(inputFor([]))).toEqual([]);
+    });
+
+    it('writes supplied VTIMEZONE lines as given, and builds only the zones not supplied', () => {
+      const event = makeEvent(EVENT_A, [
+        weekly(SCHEDULE_1, MONDAY_EVENING),
+        schedule(SCHEDULE_2, DateTime.fromObject({ year: 2026, month: 7, day: 9, hour: 19 }, { zone: BERLIN })),
+      ]);
+      const supplied = ['BEGIN:VTIMEZONE', `TZID:${NEW_YORK}`, 'X-SUPPLIED:by the caller', 'END:VTIMEZONE'];
+      const input = inputFor([event], { vtimezones: new Map([[NEW_YORK, supplied]]) });
+      const berlin = planVTimezones(input).find(span => span.zoneName === BERLIN)!;
+
+      const { ics } = serializeCalendarToIcs(input);
+
+      expect(components(ics, 'VTIMEZONE')).toEqual([
+        supplied.slice(1, -1),
+        buildVTimezone(BERLIN, berlin.fromYear, berlin.toYear).slice(1, -1),
+      ]);
+    });
+
     it('writes a UTC schedule in Z form with no TZID and no VTIMEZONE', () => {
       const start = MONDAY_EVENING.toUTC();
       const event = makeEvent(EVENT_A, [

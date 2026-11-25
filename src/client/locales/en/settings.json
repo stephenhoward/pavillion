@@ -24,6 +24,7 @@
       "editors": "Editors",
       "reports": "Reports",
       "import": "Import",
+      "export": "Export",
       "widget": "Widget"
     },
     "account": {

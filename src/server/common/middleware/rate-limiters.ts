@@ -188,6 +188,21 @@ export const limitWidgetConfigByAccount: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
+ * Calendar export rate limiter for authenticated users, shared by the export
+ * and export-languages routes.
+ * Limits: 10 requests per account per 15 minutes (default config).
+ * An export scans up to 64 time zones synchronously between yields, so the
+ * generic widgetConfig cap (100/15m) was too loose a bound on that cost.
+ */
+export const limitCalendarExportByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.calendarExport.byAccount.max'),
+    config.get<number>('rateLimit.calendarExport.byAccount.windowMs'),
+    'calendar-export',
+  )
+  : noOpMiddleware;
+
+/**
  * Calendar funding plan rate limiter for authenticated users.
  * Limits: 30 requests per account per 15 minutes (default config).
  * Prevents abuse of calendar add/remove funding plan endpoints.

@@ -16,3 +16,5 @@ Pavillion stores translatable content as a first-class concept rather than as an
 - The difference between a multilingual calendar (intended for several language communities) and a calendar that happens to have some translated events
 
 In the meantime, the language controls live alongside content fields in the editor.
+
+A calendar file you download from **Export** holds one language. To get another, choose it and download the file again; [Export your calendar to another calendar app](./ics-export#choose-a-language) covers the language choice.

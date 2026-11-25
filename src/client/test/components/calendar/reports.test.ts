@@ -83,6 +83,7 @@ function buildRouter(): Router {
       { path: 'reports', name: 'calendar_reports', component: CalendarReports },
       { path: 'reports/:reportId', name: 'calendar_report_detail', component: CalendarReports },
       { path: 'import', name: 'calendar_import', component: Leaf },
+      { path: 'export', name: 'calendar_export', component: Leaf },
       { path: 'widget', name: 'calendar_widget', component: WidgetLeaf },
     ] },
     { path: '/admin/moderation/reports/:reportId', name: 'moderation_report_detail', component: Leaf },

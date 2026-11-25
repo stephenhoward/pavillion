@@ -58,6 +58,13 @@ export interface IcsExportInput {
   now: Date;
   /** The "Accessibility" heading in the given language. */
   accessibilityHeading: (language: string) => string;
+  /**
+   * VTIMEZONE components already built, keyed by zone name, each the
+   * `buildVTimezone` lines for that zone's span in {@link planVTimezones}.
+   * A zone found here is written as given and never scanned; any other zone
+   * is built as usual.
+   */
+  vtimezones?: ReadonlyMap<string, readonly string[]>;
 }
 
 export interface IcsExportResult {
@@ -475,21 +482,29 @@ function eventVevents(entry: IcsExportEvent, input: IcsExportInput, zoneYears: Z
   return vevents;
 }
 
-/**
- * The VCALENDAR text for a calendar's events.
- *
- * Synchronous and deterministic for a given input. An empty `events` list
- * returns a calendar with no VEVENT and no VTIMEZONE, which a strict
- * validator may flag (RFC 5545 asks for at least one component).
- *
- * @throws {IcsSerializationError} When any one event cannot be serialized;
- *   no partial file is returned. Nothing is logged here; the caller logs.
- */
-export function serializeCalendarToIcs(input: IcsExportInput): IcsExportResult {
-  if (Number.isNaN(input.now.getTime())) {
+/** One VTIMEZONE the file will carry: a zone and the calendar years it covers. */
+export interface VTimezoneSpan {
+  zoneName: string;
+  fromYear: number;
+  toYear: number;
+}
+
+/** The VEVENT lines of every event, and what they need from the rest of the file. */
+interface EventPass {
+  eventLines: string[];
+  eventCount: number;
+  skippedEventIds: string[];
+  zoneYears: ZoneYears;
+}
+
+function assertValidNow(now: Date): void {
+  if (Number.isNaN(now.getTime())) {
     throw new TypeError('now must be a valid date');
   }
+}
 
+/** Writes every event's VEVENTs, noting the zones and years they use. */
+function serializeEvents(input: IcsExportInput): EventPass {
   const zoneYears = new ZoneYears();
   const eventLines: string[] = [];
   const skippedEventIds: string[] = [];
@@ -513,14 +528,51 @@ export function serializeCalendarToIcs(input: IcsExportInput): IcsExportResult {
       eventLines.push('BEGIN:VEVENT', ...vevent, 'END:VEVENT');
     }
   }
+  return { eventLines, eventCount, skippedEventIds, zoneYears };
+}
 
-  const nowYear = DateTime.fromJSDate(input.now, { zone: UTC }).year;
-  const timezoneLines = zoneYears.sorted().flatMap(({ zoneName, first, last }) => {
+/** The span each zone's VTIMEZONE covers, ordered by zone name. */
+function zoneSpans(zoneYears: ZoneYears, now: Date): VTimezoneSpan[] {
+  const nowYear = DateTime.fromJSDate(now, { zone: UTC }).year;
+  return zoneYears.sorted().map(({ zoneName, first, last }) => {
     const fromYear = Math.max(EARLIEST_ZONE_YEAR, Math.min(first, nowYear) - 1);
     const lastYear = Math.min(Math.max(last, nowYear), nowYear + MAX_ZONE_YEARS_PAST_NOW);
     // Never before fromYear, which the 1970 floor can lift past a clock set earlier.
-    return buildVTimezone(zoneName, fromYear, Math.max(fromYear, lastYear + ZONE_YEARS_AHEAD));
+    return { zoneName, fromYear, toYear: Math.max(fromYear, lastYear + ZONE_YEARS_AHEAD) };
   });
+}
+
+/**
+ * The VTIMEZONEs {@link serializeCalendarToIcs} will build for this input,
+ * as the same spans it passes to `buildVTimezone`, without building any.
+ * Lets a caller bound or spread the cost of the zone scans, then hand the
+ * built lines back as `vtimezones`, so the synchronous serialization scans
+ * nothing. Pure and synchronous.
+ *
+ * @throws {IcsSerializationError} When any one event cannot be serialized
+ */
+export function planVTimezones(input: IcsExportInput): VTimezoneSpan[] {
+  assertValidNow(input.now);
+  return zoneSpans(serializeEvents(input).zoneYears, input.now);
+}
+
+/**
+ * The VCALENDAR text for a calendar's events.
+ *
+ * Synchronous and deterministic for a given input. An empty `events` list
+ * returns a calendar with no VEVENT and no VTIMEZONE, which a strict
+ * validator may flag (RFC 5545 asks for at least one component).
+ *
+ * @throws {IcsSerializationError} When any one event cannot be serialized;
+ *   no partial file is returned. Nothing is logged here; the caller logs.
+ */
+export function serializeCalendarToIcs(input: IcsExportInput): IcsExportResult {
+  assertValidNow(input.now);
+
+  const { eventLines, eventCount, skippedEventIds, zoneYears } = serializeEvents(input);
+  const timezoneLines = zoneSpans(zoneYears, input.now)
+    .flatMap(({ zoneName, fromYear, toYear }) =>
+      input.vtimezones?.get(zoneName) ?? buildVTimezone(zoneName, fromYear, toYear));
 
   const lines = [
     'BEGIN:VCALENDAR',

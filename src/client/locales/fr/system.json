@@ -175,6 +175,10 @@
       "ics_import": {
         "label": "Importer des événements via ICS",
         "description": "Migrez des événements d'un autre calendrier vers celui-ci par une importation ponctuelle d'un fichier ICS."
+      },
+      "ics_export": {
+        "label": "Exporter votre calendrier",
+        "description": "Téléchargez une copie ponctuelle des événements de ce calendrier sous forme de fichier ICS pour une autre application de calendrier."
       }
     }
   },

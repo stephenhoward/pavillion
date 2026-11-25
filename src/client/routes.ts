@@ -21,6 +21,7 @@ import CalendarGeneralView from '@/client/components/logged_in/calendar-manageme
 import CalendarEditorsView from '@/client/components/logged_in/calendar-management/editors.vue';
 import CalendarReportsView from '@/client/components/logged_in/calendar-management/reports.vue';
 import CalendarImportView from '@/client/components/logged_in/calendar-management/import-sources/ImportSourcesSection.vue';
+import CalendarExportView from '@/client/components/logged_in/calendar-management/export.vue';
 import CalendarWidgetView from '@/client/components/logged_in/calendar-management/widget-tab.vue';
 import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
 import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
@@ -137,6 +138,7 @@ export function buildClientRoutes(deps: ClientRouteDeps): RouteRecordRaw[] {
                 { path: 'reports/:reportId', component: CalendarReportsView, name: 'calendar_report_detail', beforeEnter: mustBeLoggedIn,
                   meta: { settingsTitleKey: 'titles.report_detail' } },
                 { path: 'import', component: CalendarImportView, name: 'calendar_import', beforeEnter: mustBeLoggedIn },
+                { path: 'export', component: CalendarExportView, name: 'calendar_export', beforeEnter: mustBeLoggedIn },
                 { path: 'widget', component: CalendarWidgetView, name: 'calendar_widget', beforeEnter: mustBeLoggedIn },
               ],
             },

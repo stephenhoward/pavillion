@@ -6,7 +6,14 @@ import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
+import { RateLimitError } from '@/common/exceptions/report';
+import {
+  UrlNameAlreadyExistsError,
+  InvalidUrlNameError,
+  CalendarNotFoundError,
+  CalendarExportError,
+} from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { createPinia, setActivePinia } from 'pinia';
@@ -794,5 +801,118 @@ describe('resendInvitation', () => {
     // Act & Assert
     await expect(service.resendInvitation(calendarId, invitationId))
       .rejects.toThrow(UnknownError);
+  });
+});
+
+describe('getExportLanguages', () => {
+  let service: CalendarService;
+
+  beforeEach(() => {
+    service = new CalendarService({} as ReturnType<typeof useCalendarStore>);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should request the calendar\'s export languages and return them in order', async () => {
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: { languages: ['en', 'es', 'fr'] } });
+
+    const languages = await service.getExportLanguages('cal1');
+
+    expect(axiosGet).toHaveBeenCalledWith('/api/v1/calendars/cal1/export/languages');
+    expect(languages).toEqual(['en', 'es', 'fr']);
+  });
+
+  it.each([
+    ['an empty list', { languages: [] }],
+    ['a missing list', {}],
+    ['a list with a non-string entry', { languages: ['en', 4] }],
+    ['a body that is not an object', 'oops'],
+  ])('should throw UnknownError for %s', async (_label, data) => {
+    vi.mocked(axios.get).mockResolvedValue({ data });
+
+    await expect(service.getExportLanguages('cal1')).rejects.toThrow(UnknownError);
+  });
+
+  it.each([
+    ['ValidationError', ValidationError],
+    ['CalendarEditorPermissionError', CalendarEditorPermissionError],
+    ['CalendarNotFoundError', CalendarNotFoundError],
+    ['RateLimitError', RateLimitError],
+  ])('should map %s to its typed exception', async (errorName, ErrorClass) => {
+    vi.mocked(axios.get).mockRejectedValue({ response: { data: { errorName } } });
+
+    await expect(service.getExportLanguages('cal1')).rejects.toThrow(ErrorClass);
+  });
+
+  it('should throw UnknownError for a failure with no known errorName', async () => {
+    vi.mocked(axios.get).mockRejectedValue(new Error('Network error'));
+
+    await expect(service.getExportLanguages('cal1')).rejects.toThrow(UnknownError);
+  });
+});
+
+describe('exportCalendar', () => {
+  let service: CalendarService;
+
+  beforeEach(() => {
+    service = new CalendarService({} as ReturnType<typeof useCalendarStore>);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should request the export in the chosen language and return the body and event count', async () => {
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({
+      data: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n',
+      headers: { 'x-pavillion-event-count': '3' },
+    });
+
+    const result = await service.exportCalendar('cal1', 'es');
+
+    expect(axiosGet).toHaveBeenCalledWith('/api/v1/calendars/cal1/export', { params: { lang: 'es' } });
+    expect(result).toEqual({ ics: 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n', eventCount: 3 });
+  });
+
+  it('should report a zero event count as 0', async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: 'BEGIN:VCALENDAR', headers: { 'x-pavillion-event-count': '0' } });
+
+    const result = await service.exportCalendar('cal1', 'en');
+
+    expect(result.eventCount).toBe(0);
+  });
+
+  it.each([
+    ['missing', {}],
+    ['not a number', { 'x-pavillion-event-count': 'many' }],
+    ['empty', { 'x-pavillion-event-count': '' }],
+  ])('should report a %s event count header as null', async (_label, headers) => {
+    vi.mocked(axios.get).mockResolvedValue({ data: 'BEGIN:VCALENDAR', headers });
+
+    const result = await service.exportCalendar('cal1', 'en');
+
+    expect(result.eventCount).toBeNull();
+  });
+
+  it.each([
+    ['ValidationError', ValidationError],
+    ['CalendarEditorPermissionError', CalendarEditorPermissionError],
+    ['CalendarNotFoundError', CalendarNotFoundError],
+    ['CalendarExportError', CalendarExportError],
+    ['RateLimitError', RateLimitError],
+  ])('should map %s to its typed exception', async (errorName, ErrorClass) => {
+    vi.mocked(axios.get).mockRejectedValue({ response: { data: { errorName } } });
+
+    await expect(service.exportCalendar('cal1', 'en')).rejects.toThrow(ErrorClass);
+  });
+
+  it('should throw UnknownError for a failure with no known errorName', async () => {
+    vi.mocked(axios.get).mockRejectedValue({ response: { status: 500, data: { error: 'boom' } } });
+
+    await expect(service.exportCalendar('cal1', 'en')).rejects.toThrow(UnknownError);
   });
 });

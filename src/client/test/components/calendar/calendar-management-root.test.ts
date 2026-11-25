@@ -53,6 +53,7 @@ const ReportsStub = routeStub('ReportsStub', ['calendarId'], () => {
   }
 });
 const ImportStub = routeStub('ImportStub', ['calendarId', 'instanceHost']);
+const ExportStub = routeStub('ExportStub', ['calendarId', 'calendarUrlName']);
 const WidgetStub = routeStub('WidgetStub', ['calendarId', 'calendarUrlName', 'isOwner']);
 
 /** The calendar subtree with the real route names and the real index guards. */
@@ -73,6 +74,7 @@ function buildRouter(): Router {
       { path: 'reports', name: 'calendar_reports', component: ReportsStub },
       { path: 'reports/:reportId', name: 'calendar_report_detail', component: ReportsStub },
       { path: 'import', name: 'calendar_import', component: ImportStub },
+      { path: 'export', name: 'calendar_export', component: ExportStub },
       { path: 'widget', name: 'calendar_widget', component: WidgetStub },
     ] },
     { path: '/settings/account/profile', name: 'profile', component: { render: () => null } },
@@ -217,6 +219,16 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.findComponent(WidgetStub).props('calendarUrlName')).toBe('my-calendar');
     });
 
+    it('passes the calendar id and url name to the export leaf', async () => {
+      stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);
+
+      const { wrapper } = await mountAt('/settings/calendar/my-calendar/export');
+
+      const exportLeaf = wrapper.findComponent(ExportStub);
+      expect(exportLeaf.props('calendarId')).toBe('cal-uuid-1');
+      expect(exportLeaf.props('calendarUrlName')).toBe('my-calendar');
+    });
+
     it.each([
       ['owner', true],
       ['editor', false],
@@ -245,6 +257,7 @@ describe('CalendarManagementRoot', () => {
       ['reports', 'ReportsStub'],
       [`reports/${REPORT_ID}`, 'ReportsStub'],
       ['import', 'ImportStub'],
+      ['export', 'ExportStub'],
     ])('replaces an editor at %s with widget, dropping the query', async (leaf, stub) => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'editor')]);
 
@@ -329,6 +342,7 @@ describe('CalendarManagementRoot', () => {
       ['reports', 'calendar_reports', 'ReportsStub'],
       [`reports/${REPORT_ID}`, 'calendar_report_detail', 'ReportsStub'],
       ['import', 'calendar_import', 'ImportStub'],
+      ['export', 'calendar_export', 'ExportStub'],
       ['widget', 'calendar_widget', 'WidgetStub'],
     ])('keeps an owner on %s', async (leaf, name, stub) => {
       stubLoadedCalendars([makeCalendarInfo('my-calendar', 'owner')]);

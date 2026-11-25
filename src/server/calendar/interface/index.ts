@@ -22,6 +22,7 @@ import { DateTime } from 'luxon';
 import SeriesService from '../service/series';
 import ImportSourceService from '../service/import/import_source_service';
 import SyncService, { type SyncDependencies, type SyncResult } from '../service/import/sync';
+import CalendarExportService, { type CalendarIcsExport } from '../service/export/export_service';
 import { ImportSource, ImportSourceVerificationType } from '@/common/model/import_source';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
@@ -60,6 +61,7 @@ export default class CalendarInterface {
   private seriesService: SeriesService;
   private importSourceService: ImportSourceService;
   private sharedSyncService: SyncService;
+  private calendarExportService: CalendarExportService;
   private mediaInterface?: MediaInterface;
 
   constructor(
@@ -89,6 +91,7 @@ export default class CalendarInterface {
       calendarService: this.calendarService,
     });
     this.importSourceService = new ImportSourceService(this.calendarService, this.sharedSyncService);
+    this.calendarExportService = new CalendarExportService(this.calendarService);
   }
 
   /**
@@ -1046,6 +1049,31 @@ export default class CalendarInterface {
    */
   async removeRemoteEditorAccess(accountId: string, calendarActorId: string): Promise<boolean> {
     return this.calendarService.removeRemoteCalendarMembership(accountId, calendarActorId);
+  }
+
+  // Calendar export operations
+
+  /**
+   * A calendar's own events as one iCalendar file, for its owner.
+   * See CalendarExportService.exportCalendarIcs.
+   *
+   * @param account - The requesting account (must own the calendar)
+   * @param calendarId - The calendar UUID
+   * @param lang - Requested language, unvalidated
+   */
+  async exportCalendarIcs(account: Account, calendarId: string, lang: unknown): Promise<CalendarIcsExport> {
+    return this.calendarExportService.exportCalendarIcs(account, calendarId, lang);
+  }
+
+  /**
+   * The languages a calendar can be exported in, for its owner.
+   * See CalendarExportService.listExportLanguages.
+   *
+   * @param account - The requesting account (must own the calendar)
+   * @param calendarId - The calendar UUID
+   */
+  async listCalendarExportLanguages(account: Account, calendarId: string): Promise<string[]> {
+    return this.calendarExportService.listExportLanguages(account, calendarId);
   }
 
   // Import source operations

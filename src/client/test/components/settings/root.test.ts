@@ -64,6 +64,7 @@ function makeRouter(): Router {
           { path: 'reports', component: Pane, name: 'calendar_reports' },
           { path: 'reports/:reportId', component: Pane, name: 'calendar_report_detail' },
           { path: 'import', component: Pane, name: 'calendar_import' },
+          { path: 'export', component: Pane, name: 'calendar_export' },
           { path: 'widget', component: Pane, name: 'calendar_widget' },
         ] },
         { path: 'account', component: SettingsListPage, name: 'account', meta: { settingsGroup: 'account' } },

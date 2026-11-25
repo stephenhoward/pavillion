@@ -172,7 +172,7 @@ test.describe('Calendar Editor Collaboration', () => {
         await loginViaUi(editorPage, env.baseURL, INVITEE_EMAIL, INVITEE_PASSWORD);
 
         // Reports and Editors are owner-only: the editor is replaced to Widget, query dropped
-        for (const leaf of ['reports', 'editors'] as const) {
+        for (const leaf of ['reports', 'editors', 'export'] as const) {
           await editorPage.goto(env.baseURL + calendarLeafPath('test_calendar', leaf) + '?x=1');
           await expect(editorPage).toHaveURL(env.baseURL + calendarLeafPath('test_calendar', 'widget'));
           await expect(settingsTitle(editorPage, 'Widget')).toBeVisible();
@@ -181,7 +181,7 @@ test.describe('Calendar Editor Collaboration', () => {
         // The tree's Calendar group offers the editor Widget only
         const calendarGroup = settingsGroup(settingsTree(editorPage), 'Calendar');
         await expect(settingsRow(calendarGroup, 'Widget')).toBeVisible();
-        for (const ownerOnly of ['General', 'Editors', 'Reports', 'Import']) {
+        for (const ownerOnly of ['General', 'Editors', 'Reports', 'Import', 'Export']) {
           await expect(settingsRow(calendarGroup, ownerOnly)).toHaveCount(0);
         }
       }

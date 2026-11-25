@@ -191,9 +191,10 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Bring events in from elsewhere',
+          text: 'Move events in and out',
           items: [
             { text: 'Migrate from another calendar via ICS import', link: '/guides/calendar-owners/ics-import' },
+            { text: 'Export your calendar to another calendar app', link: '/guides/calendar-owners/ics-export' },
           ],
         },
         {

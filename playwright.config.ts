@@ -24,7 +24,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Usage:
  *   npm run test:e2e          (Chromium, every spec)
- *   npm run test:e2e:webkit   (iPhone 13 WebKit, the widget and public-calendar specs)
+ *   npm run test:e2e:webkit   (iPhone 13 WebKit, the widget, public-calendar and calendar-export specs)
  *
  * For federation tests (requires Docker):
  *   npm run test:federation
@@ -83,7 +83,7 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['iPhone 13'] },
-      testMatch: ['**/widget-embedding.spec.ts', '**/public-calendar.spec.ts'],
+      testMatch: ['**/widget-embedding.spec.ts', '**/public-calendar.spec.ts', '**/calendar-export.spec.ts'],
     },
   ],
 

@@ -21,7 +21,7 @@ Two ways to read this section:
 
 **Connect with other calendars** — following neighbors, reposting events, the social side of running a calendar in a federated network.
 
-**Bring events in from elsewhere** — migrating from existing calendars (Google, Nextcloud, WordPress, Gancio, Mobilizon) via ICS import.
+**Move events in and out** — migrating from existing calendars (Google, Nextcloud, WordPress, Gancio, Mobilizon) via ICS import, and [exporting your calendar](./ics-export) as a file for Google Calendar, Apple Calendar, or Outlook.
 
 **Share your calendar** — public URLs, embeddable widgets, the distribution surface.
 
