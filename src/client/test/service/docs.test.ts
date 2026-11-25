@@ -68,9 +68,9 @@ describe('guidesForRoute', () => {
   });
 
   it('lists the export guide beside the import guide on the calendar settings index', () => {
-    expect(guidesForRoute('calendar_management')).toContainEqual(
-      { slug: 'guides/calendar-owners/ics-export', key: 'ics_export' },
-    );
+    const guides = guidesForRoute('calendar_management');
+    expect(guides).toContainEqual({ slug: 'guides/calendar-owners/ics-import', key: 'ics_import' });
+    expect(guides).toContainEqual({ slug: 'guides/calendar-owners/ics-export', key: 'ics_export' });
   });
 
   it('returns an empty array for an unknown route name', () => {

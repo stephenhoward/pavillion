@@ -8,9 +8,9 @@ This guide covers downloading a copy of your calendar's events as one file and o
 
 ## What an export is for
 
-An export gives you a copy of your events to keep somewhere else. A neighborhood association can put its season's events in the board's shared Google Calendar, and a venue can keep a record of everything it published before a big change to its program.
+An export gives you a copy of your events to keep somewhere else. A neighborhood association can put its season's events in the board's shared Google Calendar, and a venue can keep a list of the dates and details it published before a big change to its program.
 
-An export is a copy at the moment you download it. Nothing links the file back to Pavillion, so edits, new events, and cancellations you make afterward don't reach it. To keep other people in step with your calendar, give them your [public URL](./public-url), or, if they run a Pavillion calendar of their own, let them [follow yours](./follow-and-repost).
+An export is a snapshot, not a connection. Nothing keeps the file in step with Pavillion, so edits, new events, and cancellations you make afterward don't reach it. To keep other people in step with your calendar, give them your [public URL](./public-url), or, if they run a Pavillion calendar of their own, let them [follow yours](./follow-and-repost).
 
 ## Find Export
 
@@ -29,9 +29,9 @@ The file holds every event your calendar publishes, past and future. Each event 
 - Its **dates and times**. A recurring event comes out as a recurring event, so the other app keeps repeating it.
 - Its **place**, its **categories**, and a link to the event's page on your public calendar.
 
-Cancelled dates come out cancelled or not at all, never as going ahead. A date you cancelled with **Hide from public** on is left out of the file. A date shown on your public page as **Cancelled** is in the file, marked cancelled; how the other app displays a cancelled date is up to that app. [Post a recurring event](./recurring-events#cancel-a-single-occurrence) covers the difference between the two.
+A date you cancelled with **Hide from public** on is left out of the file. A date shown on your public page as **Cancelled**, including a one-time event you cancelled, is in the file with its usual title, marked cancelled. How the other app displays a cancelled date is up to that app. [Post a recurring event](./recurring-events#cancel-a-single-occurrence) covers the difference between the two.
 
-Events you reposted from other calendars are not in the file.
+The file leaves out events you reposted from other calendars, and from your own events it leaves out the image, the **External Link**, and which series an event belongs to.
 
 ## Choose a language
 
@@ -39,7 +39,7 @@ Each file holds one language. The **Language** list offers the languages your ca
 
 An event with no text in the language you chose comes out in another language it is written in.
 
-The language is part of the filename: your calendar's handle, then the language code, as in `riverbend-folk-en.ics` and `riverbend-folk-es.ics`. To get a second language, choose it and click <Btn>Download</Btn> again.
+The language is part of the filename: your calendar's URL handle, then the language code, as in `riverbend-folk-en.ics` and `riverbend-folk-es.ics`. To get a second language, choose it and click <Btn>Download</Btn> again.
 
 ::: tip <Lightbulb /> A note on which language to pick.
 Pick the language of the people who will read the copy. If the copy is for a Spanish-speaking partner organization, download the Spanish file. If two groups each want a copy, download a file for each rather than sending one group text it can't read.
