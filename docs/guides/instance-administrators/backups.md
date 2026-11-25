@@ -287,6 +287,8 @@ This works only with versioning or Object Lock on, which is one more reason they
 
 When an account is deleted, its data stays in every backup made before the deletion, local and remote, until those backups expire. Restoring an old dump brings the account back. With the lifecycle rule above, a deleted account is gone from the bucket after at most 180 days plus the 60-day noncurrent-version window, about eight months, plus any Object Lock retention still running and up to about a day while the provider applies the rule. If someone asks when their data is fully gone, that's the honest answer, and if you restore an old dump, delete again any accounts that had been deleted since it was made.
 
+A rollback by ID leaves some dumps on the server that local pruning no longer removes; see [Rolling back a running instance](#rolling-back-a-running-instance).
+
 ## Secrets and config
 
 A restored database is not enough on its own. Back these up from the Pavillion directory:
@@ -567,12 +569,12 @@ The restore command has two forms. Both run `pg_restore -c --if-exists` against 
 ./scripts/backup.sh restore <backup-id>
 ```
 
-Restart the app afterward. Two limits to know about:
+Restart the app afterward. Things to know before you run it:
 
 - It looks the backup up by ID in the database it is about to replace, so it works for rolling back a running instance, not for recovering onto an empty server where that record doesn't exist. For that, use `--file`, below.
 - It reads the dump from the backup directory, which only the `worker` container mounts, so don't point `PAVILLION_CONTAINER` at the app container for a restore.
-- It currently ends with `Failed to restore backup` and a `pg_restore` error, `cannot drop inherited constraint "job_common_pkey"`, followed by `errors ignored on restore: 1`. That error is about the job queue's tables, and the restore carries on past it: your calendars, events and accounts come back as they were in the backup. Restart the app and check them before you trust it.
-- The backup you restored, and any taken after it, drop out of `./scripts/backup.sh list` and `status`, because the list lives in the database you just rolled back. Their files are still in the backup directory, and the retention cleanup no longer deletes them, so remove the ones you don't want by hand.
+- Rolling back a running instance ends with `Failed to restore backup` and a `pg_restore` error, `cannot drop inherited constraint "job_common_pkey"`, followed by `errors ignored on restore: 1`, and the command exits 1. If you script it, don't take that exit code alone as a failed restore. The error is about the job queue's tables, and the restore carries on past it: your calendars, events and accounts come back as they were in the backup. Restart the app and check them before you trust it. Restoring with `--file` onto an empty server, below, hasn't shown this error.
+- The backup you restored, and any taken after it, drop out of `./scripts/backup.sh list` and `status`, because the list lives in the database you just rolled back. Their files stay in the backup directory and the retention cleanup no longer deletes them. They hold your community's data, including accounts deleted after the backup you restored, so the limit in [Deleted accounts](#deleted-accounts) doesn't apply to them until you remove them. They're the files dated after the backup you restored: list them with `docker compose exec worker ls -1 /backups` (see [Things that trip people up](#things-that-trip-people-up) on why `ls` on the host may say *Permission denied*) and delete the ones you don't want. Copies already sent to the bucket expire under the bucket's lifecycle rule, like any other.
 
 ### Recovering onto a fresh server
 
