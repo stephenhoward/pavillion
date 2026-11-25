@@ -21,6 +21,8 @@
 
 import type { EventEmitter } from 'events';
 
+import { invokeListeners } from '@/server/common/helper/emit-after-tx';
+
 /**
  * Invoke every listener registered for `event` directly and await the
  * promises they return.
@@ -32,6 +34,11 @@ import type { EventEmitter } from 'events';
  * skipped) and negative assertions ("no row was written"), which condition
  * polling cannot express.
  *
+ * Built on {@link invokeListeners}, the production dispatcher, so tests and
+ * production share one path: `once` listeners remove themselves, and a
+ * listener failure is logged and absorbed rather than rejecting here. Assert
+ * on the end state, not on whether this rejects.
+ *
  * Only valid when the test owns the emitter and would otherwise emit
  * inline. When the emit is buried inside an awaited service call, use
  * {@link waitFor} on the end-state instead.
@@ -41,9 +48,7 @@ export async function dispatchAndAwait(
   event: string,
   payload: unknown,
 ): Promise<void> {
-  await Promise.all(
-    emitter.listeners(event).map(listener => listener(payload)),
-  );
+  await invokeListeners(emitter, event, payload);
 }
 
 export interface WaitForOptions {
