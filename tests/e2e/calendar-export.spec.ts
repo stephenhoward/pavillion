@@ -104,11 +104,13 @@ test.describe('Calendar export', () => {
     await expect(settingsTitle(page, ES.exportRow)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${calendarLeafPath(ADMIN_CALENDAR_URL_NAME, 'export')}$`));
 
+    // The title belongs to the settings layout, so it shows before the leaf's
+    // language list arrives; the picker only mounts once it has. Poll, since
+    // evaluateAll reads whatever is in the DOM once and does not wait.
     const picker = page.getByLabel(ES.languageLabel, { exact: true });
-    const options = await picker.locator('option').evaluateAll(
+    await expect.poll(() => picker.locator('option').evaluateAll(
       (nodes) => nodes.map((node) => (node as HTMLOptionElement).value),
-    );
-    expect(options).toEqual(['en', 'es', 'fr']);
+    )).toEqual(['en', 'es', 'fr']);
     // The interface language, though the list starts with en.
     await expect(picker).toHaveValue('es');
 
