@@ -318,8 +318,11 @@ const FREQUENCY_MAP: Record<EventFrequency, number> = {
  *
  * The recurrence sheet's `hasFewerThanTwoOccurrences()`
  * (`src/client/components/logged_in/calendar/recurrence-occurrences.ts`)
- * mirrors these options to predict the occurrence count before save. Change
- * the two together.
+ * mirrors these options to predict the occurrence count before save. The
+ * calendar export mirrors them too: `recurrenceRule()` writes the same
+ * options as an RFC 5545 RRULE and `assertSerializable()` refuses what they
+ * cannot express (`src/server/calendar/service/export/ics_serializer.ts`).
+ * Change all three together.
  */
 function buildScheduleRule(schedule: CalendarEventSchedule, frame: WallClockFrame): InstanceType<typeof RRule> | null {
   const frequency = schedule.frequency !== null
@@ -393,6 +396,59 @@ export function expandScheduleOccurrences(
     .map(floating => frame.fromFloating(floating).toJSDate())
     .filter(d => d.getTime() <= untilMs)
     .sort((a, b) => a.getTime() - b.getTime());
+}
+
+/**
+ * Whether a schedule's own occurrences, with no exclusions applied, include
+ * `instant`. A recurring schedule steps in the {@link WallClockFrame} of
+ * `frameSchedule`, the event's base schedule, as
+ * {@link expandScheduleOccurrences} does; a one-off schedule occurs at its
+ * start instant only.
+ *
+ * The rule is searched across a slack-widened floating window and each
+ * candidate compared as a true instant, because a wall time skipped by a
+ * daylight-saving change occurs at an instant whose own wall time differs.
+ */
+export function scheduleOccursAt(
+  schedule: CalendarEventSchedule,
+  frameSchedule: CalendarEventSchedule | null,
+  instant: Date,
+): boolean {
+  if (!schedule.startDate || hasUnreachableByDayOrdinal(schedule.frequency, schedule.byDay)) {
+    return false;
+  }
+  const frame = WallClockFrame.of(frameSchedule);
+  const rule = buildScheduleRule(schedule, frame);
+  if (!rule) {
+    return schedule.startDate.toMillis() === instant.getTime();
+  }
+  const floatingMs = frame.toFloating(DateTime.fromJSDate(instant)).getTime();
+  return rule
+    .between(new Date(floatingMs - FLOATING_WINDOW_SLACK_MS), new Date(floatingMs + FLOATING_WINDOW_SLACK_MS), true)
+    .some(floating => frame.fromFloating(floating).toMillis() === instant.getTime());
+}
+
+/**
+ * An occurrence's end time: the duration of the event's
+ * {@link CalendarEvent.baseSchedule} applied to `startTime`, in the zone
+ * `startTime` carries. Null when that schedule has no eventEndTime or its
+ * duration is not positive. Every occurrence of an event, extra dates
+ * included, takes its length from the base schedule.
+ *
+ * The duration is wall-clock length in the event's {@link WallClockFrame}:
+ * a 22:00–03:00 event still ends at 03:00 on the night the clocks change.
+ */
+export function occurrenceEndTime(event: CalendarEvent, startTime: DateTime): DateTime | null {
+  const base = event.baseSchedule();
+  if (!base?.startDate || !base.eventEndTime) {
+    return null;
+  }
+  const frame = WallClockFrame.of(base);
+  const durationMs = frame.toFloating(base.eventEndTime).getTime()
+    - frame.toFloating(base.startDate).getTime();
+  if (durationMs <= 0) return null;
+  const floatingEnd = new Date(frame.toFloating(startTime).getTime() + durationMs);
+  return frame.fromFloating(floatingEnd).setZone(startTime.zone);
 }
 
 export default class EventInstanceService {
@@ -907,25 +963,14 @@ export default class EventInstanceService {
    * {@link CalendarEvent.baseSchedule}. Returns null if that schedule has no
    * eventEndTime. Shared by generateInstances and
    * findOrMaterializeInstanceWithDetails so the two paths agree on the
-   * computed end time.
-   *
-   * The duration is wall-clock length in the event's {@link WallClockFrame}:
-   * a 22:00–03:00 event still ends at 03:00 on the night the clocks change.
+   * computed end time. Delegates to the module-level
+   * {@link occurrenceEndTime}, which the calendar export shares.
    */
   private computeOccurrenceEndTime(
     event: CalendarEvent,
     startTime: DateTime,
   ): DateTime | null {
-    const base = event.baseSchedule();
-    if (!base?.startDate || !base.eventEndTime) {
-      return null;
-    }
-    const frame = WallClockFrame.of(base);
-    const durationMs = frame.toFloating(base.eventEndTime).getTime()
-      - frame.toFloating(base.startDate).getTime();
-    if (durationMs <= 0) return null;
-    const floatingEnd = new Date(frame.toFloating(startTime).getTime() + durationMs);
-    return frame.fromFloating(floatingEnd).setZone(startTime.zone);
+    return occurrenceEndTime(event, startTime);
   }
 
   /**
