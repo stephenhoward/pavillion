@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 
 import db from '@/server/common/entity/db';
 import { DiskUsageSnapshotEntity } from '@/server/housekeeping/entity/disk-snapshot';
@@ -33,6 +34,7 @@ class FakeJobQueueService {
 describe('Worker disk snapshot write', () => {
   let sandbox: sinon.SinonSandbox;
   let queue: FakeJobQueueService;
+  let processDiskReadingStub: sinon.SinonStub;
 
   beforeAll(async () => {
     await db.sync({ force: true });
@@ -44,8 +46,7 @@ describe('Worker disk snapshot write', () => {
     // Other job handlers must be able to register without side effects.
     sandbox.stub(BackupService.prototype, 'createBackup').resolves({} as any);
     sandbox.stub(RetentionService.prototype, 'enforceRetention').resolves();
-    sandbox.stub(AlertsService.prototype, 'sendDiskWarning').resolves();
-    sandbox.stub(AlertsService.prototype, 'sendDiskCritical').resolves();
+    processDiskReadingStub = sandbox.stub(AlertsService.prototype, 'processDiskReading').resolves();
     sandbox.stub(IpCleanupService.prototype, 'cleanupExpiredIpData').resolves({ hashCleared: 0, subnetCleared: 0 });
     sandbox.stub(UnverifiedReportCleanupService.prototype, 'cleanupExpiredUnverifiedReports').resolves({ reportsDeleted: 0, reporterRowsDeleted: 0 });
     sandbox.stub(NotificationRetentionCleanupService.prototype, 'cleanupExpiredNotifications').resolves({
@@ -82,6 +83,26 @@ describe('Worker disk snapshot write', () => {
     expect(snapshot!.freeBytes).toBe(600);
     expect(snapshot!.percentageUsed).toBe(40);
     expect(snapshot!.writtenAt).toBeInstanceOf(Date);
+  });
+
+  it('hands the recorded reading and the configured thresholds to the alert flow', async () => {
+    const usage = {
+      totalBytes: BigInt(1000),
+      usedBytes: BigInt(950),
+      freeBytes: BigInt(50),
+      percentageUsed: 95,
+      path: '/backups',
+    };
+    sandbox.stub(DiskMonitorService.prototype, 'checkDiskUsage').resolves(usage);
+
+    await queue.handlers['disk:check']({}, undefined);
+
+    expect(processDiskReadingStub.calledOnce).toBe(true);
+    expect(processDiskReadingStub.firstCall.args[0]).toBe(usage);
+    expect(processDiskReadingStub.firstCall.args[1]).toEqual({
+      warning: config.get<number>('housekeeping.monitoring.disk.warning_threshold'),
+      critical: config.get<number>('housekeeping.monitoring.disk.critical_threshold'),
+    });
   });
 
   it('overwrites the previous row rather than appending a second one', async () => {
