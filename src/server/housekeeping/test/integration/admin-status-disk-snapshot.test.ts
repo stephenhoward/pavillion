@@ -83,14 +83,16 @@ describe('Admin status disk panel reads the worker snapshot', () => {
       freeBytes: BigInt(25000000000),
       percentageUsed: 75,
       path: '/backups',
-    });
+    }, new Date('2026-01-13T03:00:00.000Z'));
 
     const response = await request(app).get('/api/v1/admin/housekeeping/status').expect(200);
 
     expect(response.body.diskUsage).toEqual({
       percentageUsed: 75,
       totalBytes: '100000000000',
+      usedBytes: '75000000000',
       freeBytes: '25000000000',
+      measuredAt: '2026-01-13T03:00:00.000Z',
     });
     // The snapshot also drives the alert state the panel renders.
     expect(response.body.alerts).toContain('ok');

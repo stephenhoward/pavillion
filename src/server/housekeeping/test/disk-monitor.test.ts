@@ -30,13 +30,34 @@ describe('DiskMonitorService', () => {
 
       const result = await service.checkDiskUsage('/backups');
 
-      // 1000000 blocks - 250000 free blocks = 750000 used blocks
-      // 750000 / 1000000 = 0.75 = 75% used
-      expect(result.percentageUsed).toBeCloseTo(75, 1);
+      // 1000000 blocks - 250000 free blocks = 750000 used blocks.
+      // 50000 blocks are reserved (bfree > bavail), so as df computes it:
+      // 750000 / (750000 + 200000) = 78.947...% used
+      expect(result.percentageUsed).toBeCloseTo(78.94, 2);
       expect(result.totalBytes).toBe(BigInt(1000000) * BigInt(4096));
       expect(result.usedBytes).toBe(BigInt(750000) * BigInt(4096));
       expect(result.freeBytes).toBe(BigInt(200000) * BigInt(4096));
       expect(result.path).toBe('/backups');
+    });
+
+    it('should return 0 rather than NaN when nothing is used or available', async () => {
+      const mockStats = {
+        blocks: BigInt(1000),
+        bsize: BigInt(4096),
+        bavail: BigInt(0),      // Every block reserved
+        bfree: BigInt(1000),
+        type: BigInt(0),
+        files: BigInt(0),
+        ffree: BigInt(0),
+      };
+
+      vi.spyOn(fs, 'statfs').mockResolvedValue(mockStats as any);
+
+      const result = await service.checkDiskUsage('/backups');
+
+      expect(result.percentageUsed).toBe(0);
+      expect(result.usedBytes).toBe(BigInt(0));
+      expect(result.freeBytes).toBe(BigInt(0));
     });
 
     it('should handle zero percent usage', async () => {

@@ -4,7 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import axios from 'axios';
 
-const { t } = useTranslation('admin', {
+const { t, i18next } = useTranslation('admin', {
   keyPrefix: 'housekeeping',
 });
 
@@ -79,6 +79,14 @@ function formatAbsoluteTime(isoDate) {
 
   const date = DateTime.fromISO(isoDate);
   return date.toLocaleString(DateTime.DATETIME_MED);
+}
+
+/**
+ * Formats when the disk reading was taken, relative to now, in the
+ * interface language.
+ */
+function formatMeasuredAt(isoDate) {
+  return DateTime.fromISO(isoDate).toRelative({ locale: i18next.language });
 }
 
 /**
@@ -171,7 +179,7 @@ onMounted(() => {
         <div class="disk-usage-header">
           <span class="disk-label">{{ t("disk_usage") }}</span>
           <span class="disk-stats-text">
-            {{ formatBytes(status.diskUsage.totalBytes - status.diskUsage.freeBytes) }}
+            {{ formatBytes(status.diskUsage.usedBytes) }}
             / {{ formatBytes(status.diskUsage.totalBytes) }}
           </span>
         </div>
@@ -189,6 +197,9 @@ onMounted(() => {
         </div>
         <div class="disk-percentage" :class="alertLevel">
           {{ status.diskUsage.percentageUsed.toFixed(1) }}% {{ t("disk_usage_used") }}
+        </div>
+        <div class="disk-measured">
+          {{ t("disk_measured", { when: formatMeasuredAt(status.diskUsage.measuredAt) }) }}
         </div>
       </div>
 
@@ -443,6 +454,12 @@ onMounted(() => {
         &.critical {
           color: var(--pav-color-red-600);
         }
+      }
+
+      .disk-measured {
+        margin-top: var(--pav-space-1);
+        font-size: var(--pav-font-size-2xs);
+        color: var(--pav-color-text-muted);
       }
 
       .info-card-empty {
