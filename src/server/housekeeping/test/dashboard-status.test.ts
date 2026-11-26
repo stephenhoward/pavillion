@@ -145,7 +145,9 @@ describe('Housekeeping Dashboard Status', () => {
       expect(response.body.diskUsage).toEqual({
         percentageUsed: 75.0,
         totalBytes: '100000000000',
+        usedBytes: '75000000000',
         freeBytes: '25000000000',
+        measuredAt: '2026-01-13T03:00:00.000Z',
       });
     });
 
