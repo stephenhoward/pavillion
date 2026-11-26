@@ -133,9 +133,11 @@ upgrades that touch existing secrets get the right behavior.
 `bin/deploy.sh` does not automate rollback. It keeps the application image
 your instance ran before the latest upgrade on the server, tagged
 `ghcr.io/stephenhoward/pavillion:previous`, so you can go back one version
-without downloading anything. The `previous` image is whatever was running
-when the upgrade started, so if you re-run `bin/deploy.sh` after a failed
-health check, `previous` moves to the version that failed.
+without downloading anything. If you re-run `bin/deploy.sh` after a failed
+health check and it downloads a newer version, `previous` becomes the
+version that failed, and once the newer version is healthy the image from
+before the failed one is removed. To keep that image, roll back to it
+before re-running.
 
 After a healthy upgrade, `bin/deploy.sh` removes every other application
 image that no container uses, keeping only the running image and the
