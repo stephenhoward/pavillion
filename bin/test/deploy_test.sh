@@ -470,7 +470,7 @@ cat > "$DOCKER_SHIM" <<'SHIM'
 #   app_ref        the reference `compose up` starts app from
 #   pull_plan      ref|image id|size|digest ref, applied by `compose pull`
 #   fail           keys that make a call fail: pull, up, ps, inspect,
-#                  image_ls, rm:<arg>
+#                  image_ls, tag, rm:<arg>
 #   calls          every call, its arguments joined by '|'
 set -u
 S="$SHIM_STATE"
@@ -675,6 +675,7 @@ case "${1:-}" in
     esac
     ;;
   tag)
+    fails tag && { echo "Error response from daemon: tag failed" >&2; exit 1; }
     id=$(find_image "$2") || { echo "Error: No such image: $2" >&2; exit 1; }
     drop_ref "$3"
     add_ref "$id" "$3"
@@ -858,10 +859,10 @@ assert_eq "yes" "$(has_image "$ws" 8)" "another repository's image is kept"
 assert_eq "yes" "$(has_image "$ws" 5)" "an id also tagged in another repository is not removed"
 assert_eq "mirror.example.test/pavillion:old" "$(refs_of "$ws" 5)" "an id shared by tag loses only this repository's tag"
 assert_eq "yes" "$(has_image "$ws" 6)" "an id shared by digest is not removed by id"
-assert_eq "no" "$(has_image "$ws" 7)" "an image with a tag failing Docker's tag grammar is still removed by id"
-assert_contains "$output" "not a valid Docker tag" "the invalid tag is skipped with a warning"
-assert_contains "$output" "Removed 1 old application images" "only the one removable image is counted"
-assert_safe_calls "$ws" "$APP_REPO" "cleanup neighbours" "${APP_REPO}:old" "$(img_id 7)"
+assert_eq "yes" "$(has_image "$ws" 7)" "an image with a tag failing Docker's tag grammar is kept, not removed by id"
+assert_contains "$output" "not a valid Docker tag or is previous; keeping it" "the image with the invalid tag is kept with a warning"
+assert_contains "$output" "Removed 0 old application images" "no image with a kept reference is counted"
+assert_safe_calls "$ws" "$APP_REPO" "cleanup neighbours" "${APP_REPO}:old"
 
 echo "test: a registry with a port keeps the port in the repository"
 port_repo="registry.example.test:5000/pavillion"
@@ -911,6 +912,7 @@ echo up > "${ws}/state/fail"
 output=$(deploy_images "$ws")
 assert_eq "1" "${output##*EXIT:}" "failed up exits 1"
 assert_eq "yes" "$(has_image "$ws" 4)" "failed up removes nothing"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:previous")" "failed up leaves the replaced image tagged :previous"
 assert_safe_calls "$ws" "$APP_REPO" "failed up"
 
 ws=$(image_ws "$APP_REPO" latest)
@@ -1001,6 +1003,44 @@ assert_contains "$output" "Could not remove $(img_id 4)" "refused removal: a war
 assert_eq "yes" "$(has_image "$ws" 4)" "refused removal: the image is kept"
 assert_contains "$output" "Removed 0 old application images" "refused removal: it is not counted"
 assert_safe_calls "$ws" "$APP_REPO" "refused removal" "$(img_id 4)"
+
+echo "test: a failing docker tag removes nothing"
+ws=$(failing_ws)
+echo tag > "${ws}/state/fail"
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "failing tag: deploy still exits 0"
+assert_contains "$output" "Could not tag the running image" "failing tag: a warning says the tag failed"
+assert_eq "yes" "$(has_image "$ws" 4)" "failing tag: nothing is removed"
+assert_eq "" "$(grep -F '|image|rm|' "${ws}/state/calls" || true)" "failing tag: no removal is attempted"
+assert_safe_calls "$ws" "$APP_REPO" "failing tag"
+
+echo "test: an app image configured as :previous outside PAVILLION_IMAGE_TAG refuses before pulling"
+ws=$(failing_ws)
+printf 'postgres:17\n%s:previous\n' "$APP_REPO" > "${ws}/state/config_images"
+output=$(deploy_images "$ws")
+assert_eq "3" "${output##*EXIT:}" "a configured :previous reference exits 3"
+assert_contains "$output" "To resume upgrades" "a configured :previous reference says how to resume upgrades"
+assert_eq "" "$(grep -F '|compose|pull' "${ws}/state/calls" || true)" "a configured :previous reference does not pull"
+assert_eq "yes" "$(has_image "$ws" 4)" "a configured :previous reference removes nothing"
+assert_safe_calls "$ws" "$APP_REPO" "configured :previous reference"
+
+echo "test: an image size with a leading zero is read as decimal"
+ws=$(failing_ws)
+awk -F'|' -v OFS='|' -v id="$(img_id 4)" '$1 == id { $2 = "0900000000" } { print }' \
+  "${ws}/state/images" > "${ws}/state/images.new"
+mv "${ws}/state/images.new" "${ws}/state/images"
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "leading-zero size: deploy exits 0"
+assert_contains "$output" "Removed 1 old application images, reclaimed 900.0 MB" "leading-zero size: reclaimed space is the decimal value"
+assert_safe_calls "$ws" "$APP_REPO" "leading-zero size" "$(img_id 4)"
+
+echo "test: assert_safe_calls reports forged forbidden calls"
+ws=$(image_ws "$APP_REPO" latest)
+printf 'docker|image|rm|%s\ndocker|volume|rm|pavillion-media\n' "$(img_id 9)" > "${ws}/state/calls"
+self_test=$(_FAILS=0; assert_safe_calls "$ws" "$APP_REPO" "forged calls" "$(img_id 4)")
+assert_contains "$self_test" "FAIL: forged calls" "the shared helper fails on forged calls"
+assert_contains "$self_test" "unexpected-rm:[docker|image|rm|$(img_id 9)]" "the shared helper names an unexpected image rm argument"
+assert_contains "$self_test" "forbidden:[docker|volume|rm|pavillion-media]" "the shared helper names a volume call"
 
 # ---- helper table tests (deploy.sh sourced; main is guarded) ----
 
@@ -1184,5 +1224,11 @@ rm -f "${tmp5}/docker_env.log"
 (cd "$tmp5" && unset DOMAIN && PATH="${tmp5}/shim:${PATH}" \
   bash bin/deploy.sh --non-interactive --domain=flag.example.org --docker-only --health-timeout=5 >/dev/null 2>&1)
 assert_eq "DOMAIN=<unset>" "$(head -n1 "${tmp5}/docker_env.log")" "--domain is never exported as DOMAIN"
+
+echo "test: select_candidates keeps a kept id however large the keep set"
+kept_id=$(img_id 4)
+big_keep="${kept_id}"$'\n'"$(for ((i = 0; i < 4000; i++)); do img_id 9; echo; done)"
+assert_eq "" "$(with_deploy "$ws_helpers" select_candidates "${kept_id} <none>" "$big_keep")" \
+  "select_candidates: an id early in a keep set larger than a pipe buffer is still kept"
 
 report_results

@@ -742,12 +742,17 @@ format_bytes() {
   }'
 }
 
-# refuse_rollback_image_tag: exit 3 when PAVILLION_IMAGE_TAG (shell or .env)
-# is the local rollback tag. That tag exists only on this host, so a pull
-# for it would fail, and cleanup must not run against it.
+# refuse_rollback_image_tag: exit 3 when the app is configured to run the
+# local rollback tag — PAVILLION_IMAGE_TAG (shell or .env) says so, or the
+# configured app image (APP_IMAGE_REF, once app_image_context has read it)
+# ends in it. That tag exists only on this host, so a pull for it would
+# fail, and cleanup must not run against it.
 refuse_rollback_image_tag() {
-  [[ "$(resolve_setting PAVILLION_IMAGE_TAG "")" == "$ROLLBACK_TAG" ]] || return 0
-  log_error "PAVILLION_IMAGE_TAG is set to '${ROLLBACK_TAG}': this instance is running its local rollback image."
+  if [[ "$(resolve_setting PAVILLION_IMAGE_TAG "")" != "$ROLLBACK_TAG" \
+    && "$APP_IMAGE_REF" != *":${ROLLBACK_TAG}" ]]; then
+    return 0
+  fi
+  log_error "The app image is configured as '${ROLLBACK_TAG}': this instance is running its local rollback image."
   log_error "  To resume upgrades, remove PAVILLION_IMAGE_TAG from ${ENV_FILE} and the shell, or set it to"
   log_error "  the version to upgrade to, then re-run bin/deploy.sh."
   return 3
@@ -897,7 +902,7 @@ select_candidates() {
   local id tag
   while read -r id tag; do
     [[ -n "$id" ]] || continue
-    printf '%s\n' "$keep" | grep -Fqx -- "$id" && continue
+    [[ $'\n'"$keep"$'\n' == *$'\n'"$id"$'\n'* ]] && continue
     [[ "$seen" == *"$id"* ]] && continue
     seen="${seen} ${id}"
     printf '%s\n' "$id"
@@ -906,8 +911,10 @@ select_candidates() {
 
 # remove_app_image <id> <listing>: untag the image's application tags by
 # reference, then — unless another repository still references it — remove
-# it by id. Sets REMOVED_IMAGE_SIZE to its size before removal (0 when
-# unknown). Exit 0 only when the image is gone.
+# it by id. An image carrying a tag that cannot be untagged safely (one
+# failing the tag grammar, or the rollback tag) is kept untouched. Sets
+# REMOVED_IMAGE_SIZE to its size before removal (0 when unknown). Exit 0
+# only when the image is gone.
 remove_app_image() {
   local id="$1"
   local listing="$2"
@@ -918,22 +925,33 @@ remove_app_image() {
     return 1
   fi
   local size="${info%% *}"
-  [[ "$size" =~ ^[0123456789]+$ ]] || size=0
+  if [[ "$size" =~ ^[0123456789]+$ ]]; then
+    size=$((10#$size))
+  else
+    size=0
+  fi
   local refs
   refs=$(parse_ref_arrays "${info#* }")
 
+  local -a tags=()
   local row_id tag
-  while read -r row_id tag <&3; do
+  while read -r row_id tag; do
     [[ "$row_id" == "$id" && "$tag" != "<none>" ]] || continue
     if ! validate_image_tag "$tag" || [[ "$tag" == "$ROLLBACK_TAG" ]]; then
-      log_warn "Skipping a tag of ${id} that is not a valid Docker tag."
-      continue
-    fi
-    if ! docker image rm "${APP_REPOSITORY}:${tag}" >/dev/null; then
-      log_warn "Could not remove ${APP_REPOSITORY}:${tag}; keeping ${id}."
+      log_warn "${id} has a tag that is not a valid Docker tag or is ${ROLLBACK_TAG}; keeping it."
       return 1
     fi
-  done 3<<< "$listing"
+    tags+=("$tag")
+  done <<< "$listing"
+
+  if (( ${#tags[@]} > 0 )); then
+    for tag in "${tags[@]}"; do
+      if ! docker image rm "${APP_REPOSITORY}:${tag}" >/dev/null; then
+        log_warn "Could not remove ${APP_REPOSITORY}:${tag}; keeping ${id}."
+        return 1
+      fi
+    done
+  fi
 
   if refs_outside_repository "$refs" "$APP_REPOSITORY"; then
     log_info "${id} is also referenced by another repository; removed only its ${APP_REPOSITORY} tags."
@@ -984,11 +1002,11 @@ prune_app_images() {
 # run_docker: pull, tag the replaced image for rollback, up, poll /health,
 # and only after a healthy start remove old application images.
 run_docker() {
-  refuse_rollback_image_tag || return $?
   local cleanup=0
   if app_image_context; then
     cleanup=1
   fi
+  refuse_rollback_image_tag || return $?
   run_docker_pull || return 1
   if (( cleanup )) && ! tag_rollback_image; then
     cleanup=0
