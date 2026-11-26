@@ -363,12 +363,14 @@ describe('AlertsService', () => {
       expect(warnings.map(call => call[1])).toContainEqual({ error: { name: 'Error', code: 'EENVELOPE' } });
     });
 
-    it('a template render error is logged by name and code only', async () => {
+    it('a per-recipient template render error is logged by name and code only', async () => {
       renderFailure.error = leakyError('ERENDER');
 
       await service.sendDiskWarning(85, 80, '/backups');
 
       expectCleanLogs();
+      const warnings = logCalls.filter(([level]) => level === 'warn');
+      expect(warnings.map(call => call[1])).toContainEqual({ error: { name: 'Error', code: 'ERENDER' } });
     });
 
     it('a failed administrator lookup is logged by name and code only', async () => {

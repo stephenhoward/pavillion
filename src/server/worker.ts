@@ -13,7 +13,7 @@ import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 import RetentionService from '@/server/housekeeping/service/retention';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
-import AlertsService from '@/server/housekeeping/service/alerts';
+import AlertsService, { describeSendError } from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
@@ -175,7 +175,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       });
     }
     catch (error) {
-      logger.error({ err: error }, 'Disk check failed');
+      logger.error({ error: describeSendError(error) }, 'Disk check failed');
       // Don't throw - allow monitoring to continue on next scheduled check
     }
   });

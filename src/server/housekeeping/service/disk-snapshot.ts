@@ -26,12 +26,8 @@ export interface DiskSnapshot {
 }
 
 /**
- * Reads and writes worker-measured filesystem usage snapshots.
- *
- * This is the single read path for backup-volume disk usage in the web
- * process. The app container does not mount the backup volume, so statfs of
- * the backup path fails there — the worker measures, this table carries the
- * result across the process boundary.
+ * The columns recordSnapshot's upsert may write. The alert columns are left
+ * out so the hourly write never clears the alert state.
  */
 const MEASUREMENT_COLUMNS: (keyof DiskUsageSnapshotEntity)[] = [
   'path',
@@ -42,6 +38,14 @@ const MEASUREMENT_COLUMNS: (keyof DiskUsageSnapshotEntity)[] = [
   'written_at',
 ];
 
+/**
+ * Reads and writes worker-measured filesystem usage snapshots.
+ *
+ * This is the single read path for backup-volume disk usage in the web
+ * process. The app container does not mount the backup volume, so statfs of
+ * the backup path fails there — the worker measures, this table carries the
+ * result across the process boundary.
+ */
 export default class DiskSnapshotService {
   /**
    * Records (upserts) a filesystem usage snapshot.
