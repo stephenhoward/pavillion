@@ -10,8 +10,8 @@
  *
  * The listener resolves a {@link HandlerOutcome} for whoever holds its
  * promise and never rejects. The bus discards the value; a dispatcher that
- * awaits listener return values (such as `dispatchAndAwait` in
- * `common/test/helpers/emit-and-settle.ts`) can count failures without the
+ * awaits listener return values (such as `invokeListeners` in
+ * `common/helper/emit-after-tx.ts`) can count failures without the
  * handler knowing about the operation that emitted the event. A synchronous
  * throw from the handler is caught on the same path as a rejection. The
  * wrapper does not retry a failed handler.

@@ -2353,7 +2353,7 @@ describe('EventInstanceService.buildEventInstances', () => {
     new CalendarEventHandlers(calendarInterface).install(eventBus);
 
     const edited = weeklyEvent(eventId, SERIES_START.set({ hour: 11 }));
-    // Rejects if the handler lets the rebuild failure escape.
+    // Settles once the handler has run; a failure is logged, not rethrown.
     await dispatchAndAwait(eventBus, 'eventUpdated', { calendar: null, event: edited });
 
     const after = await rowsFor(eventId);
