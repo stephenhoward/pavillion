@@ -31,9 +31,6 @@ log() {
     exit 1
   fi
 
-  log "Pruning old images..."
-  docker image prune -f >> "$LOG_FILE" 2>&1 || true
-
   log "Staging deploy complete"
 
 ) 200>"$LOCK_FILE"

@@ -19,11 +19,10 @@ wrapper around `bin/deploy.sh --non-interactive`. The wrapper adds:
    machine.
 2. **Log file** — writes all output to `/opt/pavillion/deploy.log` for
    post-hoc inspection.
-3. **Image prune** — removes dangling images after a successful deploy.
 
-All secret management, migrations, container lifecycle, and health checks
-live in `bin/deploy.sh`. See `docs/upgrading.md` for the admin-facing
-story.
+All secret management, migrations, container lifecycle, health checks and
+removal of old application images live in `bin/deploy.sh`. See
+`docs/upgrading.md` for the admin-facing story.
 
 ## Why Webhook Instead of SSH
 

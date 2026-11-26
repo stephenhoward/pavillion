@@ -449,6 +449,559 @@ assert_eq "4" "$exit_code" "health-check timeout exits with code 4"
 
 # tmp4 (and its shim state files) is cleaned up by mktemp_dir's EXIT trap.
 
+# ---- application image retention (stateful docker shim) ----
+#
+# The shim below keeps a fake image store and container list and answers
+# the docker calls bin/deploy.sh makes, so each case can check what an
+# upgrade leaves behind. Output shapes (12-character short ids, '<none>' tag
+# rows for images that keep only a digest, sizes in bytes from image
+# inspect, `compose config --images app` listing app's dependency first)
+# were taken from Docker 20.10 with the classic (overlay2) image store; every
+# value — ids, digests, repository names, sizes — is synthetic. The shim
+# models one output shape and does not claim to tell image stores apart.
+
+DOCKER_SHIM="${_MKTEMP_ROOT}/docker-shim"
+cat > "$DOCKER_SHIM" <<'SHIM'
+#!/usr/bin/env bash
+# State lives in $SHIM_STATE:
+#   images         id|size|ref,ref,...     (refs are repo:tag or repo@digest)
+#   containers     container id|image id|config image|running or exited|service
+#   config_images  what `compose config --images app` prints
+#   app_ref        the reference `compose up` starts app from
+#   pull_plan      ref|image id|size|digest ref, applied by `compose pull`
+#   fail           keys that make a call fail: pull, up, ps, inspect,
+#                  image_ls, rm:<arg>
+#   calls          every call, its arguments joined by '|'
+set -u
+S="$SHIM_STATE"
+{ printf 'docker'; printf '|%s' "$@"; printf '\n'; } >> "$S/calls"
+
+fails() { grep -Fqx -- "$1" "$S/fail" 2>/dev/null; }
+
+ref_repo() {
+  local r="${1%%@*}"
+  if [[ "${r##*/}" == *:* ]]; then echo "${r%:*}"; else echo "$r"; fi
+}
+
+is_id() { [[ "$1" =~ ^(sha256:)?[abcdef0123456789]{12,64}$ ]]; }
+
+# find_image <id, short id or reference> -> stdout: the stored id.
+find_image() {
+  local want="$1" id size refs
+  while IFS='|' read -r id size refs; do
+    [[ -n "$id" ]] || continue
+    if is_id "$want"; then
+      [[ "$id" == "sha256:${want#sha256:}"* ]] && { echo "$id"; return 0; }
+    else
+      [[ ",${refs}," == *",${want},"* ]] && { echo "$id"; return 0; }
+    fi
+  done < "$S/images"
+  return 1
+}
+
+field() { awk -F'|' -v id="$1" -v n="$2" '$1 == id { print $n }' "$S/images"; }
+
+set_refs() {
+  awk -F'|' -v OFS='|' -v id="$1" -v refs="$2" '$1 == id { $3 = refs } { print }' \
+    "$S/images" > "$S/images.new" && mv "$S/images.new" "$S/images"
+}
+
+delete_image() {
+  awk -F'|' -v id="$1" '$1 != id' "$S/images" > "$S/images.new" && mv "$S/images.new" "$S/images"
+}
+
+# drop_ref <ref>: remove <ref> from every image.
+drop_ref() {
+  local id size refs out r
+  while IFS='|' read -r id size refs; do
+    out=""
+    for r in ${refs//,/ }; do [[ "$r" == "$1" ]] || out="${out:+${out},}${r}"; done
+    printf '%s|%s|%s\n' "$id" "$size" "$out"
+  done < "$S/images" > "$S/images.new" && mv "$S/images.new" "$S/images"
+}
+
+add_ref() {
+  local refs
+  refs=$(field "$1" 3)
+  set_refs "$1" "${refs:+${refs},}$2"
+}
+
+in_use() { awk -F'|' -v id="$1" '$2 == id { found = 1 } END { exit !found }' "$S/containers"; }
+
+json_refs() {
+  local kind="$1" refs="$2" out="" r
+  for r in ${refs//,/ }; do
+    if [[ "$kind" == tags && "$r" != *@* ]] || [[ "$kind" == digests && "$r" == *@* ]]; then
+      out="${out:+${out},}\"${r}\""
+    fi
+  done
+  printf '[%s]' "$out"
+}
+
+image_inspect() {
+  local format="$1"; shift
+  local rc=0 ref id out
+  for ref in "$@"; do
+    if ! id=$(find_image "$ref"); then
+      echo "Error: No such image: ${ref}" >&2
+      rc=1
+      continue
+    fi
+    out="$format"
+    out="${out//\{\{.Id\}\}/$id}"
+    out="${out//\{\{.Size\}\}/$(field "$id" 2)}"
+    out="${out//\{\{json .RepoTags\}\}/$(json_refs tags "$(field "$id" 3)")}"
+    out="${out//\{\{json .RepoDigests\}\}/$(json_refs digests "$(field "$id" 3)")}"
+    echo "$out"
+  done
+  return "$rc"
+}
+
+container_inspect() {
+  local format="$1"; shift
+  [[ "$format" == '{{.Image}}' ]] && fails inspect && { echo "inspect failed" >&2; exit 1; }
+  local want cid img cfg state svc out
+  for want in "$@"; do
+    while IFS='|' read -r cid img cfg state svc; do
+      [[ "$cid" == "$want" ]] || continue
+      out="${format//\{\{.Image\}\}/$img}"
+      echo "${out//\{\{.Config.Image\}\}/$cfg}"
+    done < "$S/containers"
+  done
+}
+
+image_ls() {
+  fails image_ls && { echo "image ls failed" >&2; exit 1; }
+  local repo="$1" id size refs r tags digest short
+  while IFS='|' read -r id size refs; do
+    [[ -n "$id" ]] || continue
+    tags=""; digest=""
+    for r in ${refs//,/ }; do
+      [[ "$(ref_repo "$r")" == "$repo" ]] || continue
+      if [[ "$r" == *@* ]]; then digest=1; else tags="${tags} ${r##*:}"; fi
+    done
+    short="${id#sha256:}"; short="${short:0:12}"
+    if [[ -n "$tags" ]]; then
+      for r in $tags; do echo "${short} ${r}"; done
+    elif [[ -n "$digest" ]]; then
+      echo "${short} <none>"
+    fi
+  done < "$S/images"
+}
+
+image_rm() {
+  local x="$1" id
+  fails "rm:${x}" && { echo "Error response from daemon: conflict: unable to remove ${x}" >&2; exit 1; }
+  id=$(find_image "$x") || { echo "Error: No such image: ${x}" >&2; exit 1; }
+  local refs r repo kept=""
+  refs=$(field "$id" 3)
+  if is_id "$x"; then
+    in_use "$id" && { echo "Error response from daemon: conflict: image is being used by a container" >&2; exit 1; }
+    local repos=""
+    for r in ${refs//,/ }; do repo=$(ref_repo "$r"); [[ " $repos " == *" $repo "* ]] || repos="${repos} ${repo}"; done
+    [[ "$(echo $repos | wc -w)" -le 1 ]] || { echo "Error response from daemon: conflict: image is referenced in multiple repositories" >&2; exit 1; }
+    delete_image "$id"
+    echo "Deleted: ${id}"
+    return 0
+  fi
+  repo=$(ref_repo "$x")
+  local tag_left=""
+  for r in ${refs//,/ }; do
+    [[ "$r" == "$x" ]] && continue
+    [[ "$r" != *@* && "$(ref_repo "$r")" == "$repo" ]] && tag_left=1
+    kept="${kept:+${kept},}${r}"
+  done
+  if [[ -z "$tag_left" ]]; then
+    local rest=""
+    for r in ${kept//,/ }; do
+      [[ "$r" == *@* && "$(ref_repo "$r")" == "$repo" ]] || rest="${rest:+${rest},}${r}"
+    done
+    kept="$rest"
+  fi
+  echo "Untagged: ${x}"
+  if [[ -z "$kept" ]] && ! in_use "$id"; then
+    delete_image "$id"
+    echo "Deleted: ${id}"
+  else
+    set_refs "$id" "$kept"
+  fi
+}
+
+compose() {
+  case "${1:-}" in
+    config) cat "$S/config_images" ;;
+    ps)
+      local cid img cfg state svc
+      while IFS='|' read -r cid img cfg state svc; do
+        [[ "$svc" == app && "$state" == running ]] && echo "$cid"
+      done < "$S/containers"
+      return 0
+      ;;
+    pull)
+      fails pull && { echo "Error: pull failed" >&2; exit 1; }
+      local ref id size digest
+      while IFS='|' read -r ref id size digest; do
+        [[ -n "$ref" ]] || continue
+        drop_ref "$ref"
+        if find_image "$id" >/dev/null; then
+          add_ref "$id" "$ref"
+        else
+          printf '%s|%s|%s,%s\n' "$id" "$size" "$ref" "$digest" >> "$S/images"
+        fi
+      done < "$S/pull_plan"
+      ;;
+    up)
+      fails up && { echo "Error: up failed" >&2; exit 1; }
+      local ref id
+      ref=$(cat "$S/app_ref")
+      id=$(find_image "$ref") || exit 1
+      awk -F'|' '$5 != "app"' "$S/containers" > "$S/containers.new"
+      printf '%s|%s|%s|running|app\n' "$(printf 'a%.0s' $(seq 1 64))" "$id" "$ref" >> "$S/containers.new"
+      mv "$S/containers.new" "$S/containers"
+      ;;
+  esac
+  return 0
+}
+
+case "${1:-}" in
+  compose) shift; compose "$@" ;;
+  inspect) shift; [[ "$1" == --format ]] && shift; f="$1"; shift; container_inspect "$f" "$@" ;;
+  ps) fails ps && { echo "ps failed" >&2; exit 1; }; cut -d'|' -f1 "$S/containers" | grep -v '^$' || true ;;
+  image)
+    case "${2:-}" in
+      inspect) shift 2; [[ "$1" == --format ]] && shift; f="$1"; shift; image_inspect "$f" "$@" ;;
+      ls) image_ls "$3" ;;
+      rm) image_rm "$3" ;;
+    esac
+    ;;
+  tag)
+    id=$(find_image "$2") || { echo "Error: No such image: $2" >&2; exit 1; }
+    drop_ref "$3"
+    add_ref "$id" "$3"
+    ;;
+esac
+exit $?
+SHIM
+chmod +x "$DOCKER_SHIM"
+
+# rep <char> <count> -> stdout: <char> repeated <count> times.
+rep() { local out="" i; for ((i = 0; i < $2; i++)); do out="${out}$1"; done; printf '%s' "$out"; }
+# Synthetic ids: image n is sha256:nnnn…, its digest sha256:ffff…nnnn…,
+# container n is cccc…n.
+img_id() { printf 'sha256:%s' "$(rep "$1" 64)"; }
+img_digest() { printf 'sha256:%s%s' "$(rep f 32)" "$(rep "$1" 32)"; }
+ctr_id() { printf '%s%s' "$(rep c 63)" "$1"; }
+
+IMG_SIZE=400000000
+APP_REPO="ghcr.example.test/pavillion"
+
+# image_ws <repo> <configured tag> -> stdout: a workspace whose shim state
+# has a running database container, the app's dependency listed first in
+# `compose config --images app`, and an unrelated repository's image.
+image_ws() {
+  local repo="$1" tag="$2" ws
+  ws=$(mktemp_dir)
+  setup_workspace "$ws" "${FIXTURES}/env_complete"
+  mkdir -p "${ws}/shim" "${ws}/state"
+  cp "$DOCKER_SHIM" "${ws}/shim/docker"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${ws}/shim/curl"
+  chmod +x "${ws}/shim/curl"
+  printf 'postgres:17\n%s:%s\n' "$repo" "$tag" > "${ws}/state/config_images"
+  printf '%s:%s\n' "$repo" "$tag" > "${ws}/state/app_ref"
+  {
+    printf '%s|300000000|postgres:17,postgres@%s\n' "$(img_id 9)" "$(img_digest 9)"
+    printf '%s|90000000|other.example.test/tool:1\n' "$(img_id 8)"
+  } > "${ws}/state/images"
+  printf '%s|%s|postgres:17|running|db\n' "$(ctr_id 9)" "$(img_id 9)" > "${ws}/state/containers"
+  : > "${ws}/state/pull_plan"
+  : > "${ws}/state/fail"
+  : > "${ws}/state/calls"
+  echo "$ws"
+}
+
+# add_image <ws> <n> <refs> — refs comma-separated.
+add_image() { printf '%s|%s|%s\n' "$(img_id "$2")" "$IMG_SIZE" "$3" >> "$1/state/images"; }
+# add_container <ws> <n> <image n> <config image> <running|exited> <service>
+add_container() {
+  printf '%s|%s|%s|%s|%s\n' "$(ctr_id "$2")" "$(img_id "$3")" "$4" "$5" "$6" >> "$1/state/containers"
+}
+# plan_pull <ws> <ref> <image n> — the next pull moves <ref> to image n.
+plan_pull() { printf '%s|%s|%s|%s\n' "$2" "$(img_id "$3")" "$IMG_SIZE" "${2%:*}@$(img_digest "$3")" > "$1/state/pull_plan"; }
+
+# deploy_images <ws> [NAME=value ...] -> stdout: the run's output, then EXIT:<code>.
+deploy_images() {
+  local ws="$1"
+  shift
+  (
+    unset PAVILLION_IMAGE_TAG APP_PORT
+    cd "$ws" && env "$@" PATH="${ws}/shim:${PATH}" SHIM_STATE="${ws}/state" \
+      bash bin/deploy.sh --non-interactive --docker-only --health-timeout=3 2>&1
+    echo "EXIT:$?"
+  ) || true
+}
+
+has_image() {
+  if awk -F'|' -v id="$(img_id "$2")" '$1 == id { found = 1 } END { exit !found }' "$1/state/images"; then
+    echo yes
+  else
+    echo no
+  fi
+}
+refs_of() { awk -F'|' -v id="$(img_id "$2")" '$1 == id { print $3 }' "$1/state/images"; }
+# tagged <ws> <image n> <ref> -> yes if image n carries <ref>.
+tagged() { if [[ ",$(refs_of "$1" "$2")," == *",$3,"* ]]; then echo yes; else echo no; fi; }
+count_lines() { printf '%s\n' "$1" | grep -c -- "$2" || true; }
+
+# assert_safe_calls <ws> <repo> <label> [expected image rm argument ...]
+# The shared check every image case runs: each docker call is one of the
+# allowlisted subcommands; every `image rm` has exactly one, non-empty,
+# expected argument; every `tag` targets exactly <repo>:previous; and no call
+# forces, touches a volume, or prunes.
+assert_safe_calls() {
+  local ws="$1" repo="$2" label="$3"
+  shift 3
+  local expected=" $* "
+  local problems="" line
+  local -a a
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    case "$line" in
+      *--force*|*'|-f|'*|*'|-f'|*volume*|*'system|prune'*|*'image|prune'*|*'down|-v'*)
+        problems="${problems} forbidden:[${line}]" ;;
+    esac
+    IFS='|' read -r -a a <<< "$line"
+    case "${a[1]:-}|${a[2]:-}" in
+      compose\|config|compose\|ps|compose\|pull|compose\|up|compose\|logs) ;;
+      inspect\|*|ps\|*|image\|inspect|image\|ls) ;;
+      image\|rm)
+        if [[ ${#a[@]} -ne 4 || -z "${a[3]:-}" || "$expected" != *" ${a[3]:-} "* ]]; then
+          problems="${problems} unexpected-rm:[${line}]"
+        fi
+        ;;
+      tag\|*)
+        if [[ ${#a[@]} -ne 4 || "${a[3]:-}" != "${repo}:previous" ]]; then
+          problems="${problems} unexpected-tag:[${line}]"
+        fi
+        ;;
+      *) problems="${problems} not-allowlisted:[${line}]" ;;
+    esac
+  done < "${ws}/state/calls"
+  assert_eq "" "$problems" "${label}: docker calls stay inside the cleanup allowlist"
+}
+
+echo "test: two successive healthy upgrades remove the oldest image and keep the running and :previous ones"
+ws=$(image_ws "$APP_REPO" latest)
+add_image "$ws" 1 "${APP_REPO}:latest,${APP_REPO}@$(img_digest 1)"
+add_container "$ws" 1 1 "${APP_REPO}:latest" running app
+plan_pull "$ws" "${APP_REPO}:latest" 2
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "first upgrade exits 0"
+assert_eq "yes" "$(tagged "$ws" 1 "${APP_REPO}:previous")" "first upgrade tags the replaced image :previous"
+assert_eq "yes" "$(has_image "$ws" 2)" "first upgrade keeps the new image"
+assert_contains "$output" "Removed 0 old application images, reclaimed 0 B" "first upgrade has nothing older to remove"
+assert_safe_calls "$ws" "$APP_REPO" "first upgrade"
+: > "${ws}/state/calls"
+plan_pull "$ws" "${APP_REPO}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "second upgrade exits 0"
+assert_eq "no" "$(has_image "$ws" 1)" "second upgrade removes the oldest application image"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:previous")" "second upgrade moves :previous to the image it replaced"
+assert_eq "yes" "$(tagged "$ws" 3 "${APP_REPO}:latest")" "the running image keeps the configured tag"
+assert_eq "yes" "$(has_image "$ws" 9)" "the database image is untouched"
+assert_eq "yes" "$(has_image "$ws" 8)" "another repository's image is untouched"
+assert_eq "1" "$(count_lines "$output" 'Removed ')" "the reclaim line is logged once"
+assert_contains "$output" "Removed 1 old application images, reclaimed 400.0 MB" "the reclaim line names the count and the size"
+assert_safe_calls "$ws" "$APP_REPO" "second upgrade" "$(img_id 1)"
+assert_eq "" "$(grep -F "|image|rm|" "${ws}/state/calls" | grep -F -e "$(img_id 2)" -e "$(img_id 3)" || true)" \
+  "full keep-set ids match the short ids image ls prints, so kept images are never removed"
+
+echo "test: a healthy redeploy with no new image leaves :previous alone and still removes superseded images"
+add_image "$ws" 4 "${APP_REPO}@$(img_digest 4)"
+: > "${ws}/state/calls"
+plan_pull "$ws" "${APP_REPO}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "redeploy exits 0"
+assert_contains "$output" "No new application image" "redeploy reports no new image"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:previous")" "redeploy leaves :previous where it was"
+assert_eq "no" "$(has_image "$ws" 4)" "redeploy removes a superseded <none> image"
+assert_eq "" "$(grep -F '|tag|' "${ws}/state/calls" || true)" "redeploy tags nothing"
+assert_safe_calls "$ws" "$APP_REPO" "redeploy" "$(img_id 4)"
+
+echo "test: with a pinned PAVILLION_IMAGE_TAG a superseded image still carrying its version tag is removed"
+ws=$(image_ws "$APP_REPO" v3)
+add_image "$ws" 1 "${APP_REPO}:v1,${APP_REPO}@$(img_digest 1)"
+add_image "$ws" 2 "${APP_REPO}:v2,${APP_REPO}@$(img_digest 2)"
+add_container "$ws" 2 2 "${APP_REPO}:v2" running app
+plan_pull "$ws" "${APP_REPO}:v3" 3
+output=$(deploy_images "$ws" PAVILLION_IMAGE_TAG=v3)
+assert_eq "0" "${output##*EXIT:}" "pinned upgrade exits 0"
+assert_eq "no" "$(has_image "$ws" 1)" "the v1 image is removed"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:previous")" "the replaced v2 image is tagged :previous"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:v2")" "the replaced image keeps its own version tag"
+assert_safe_calls "$ws" "$APP_REPO" "pinned upgrade" "${APP_REPO}:v1" "$(img_id 1)"
+
+echo "test: cleanup keeps stopped containers' images, other repositories and shared ids, and skips invalid tags"
+ws=$(image_ws "$APP_REPO" latest)
+add_image "$ws" 2 "${APP_REPO}:previous,${APP_REPO}@$(img_digest 2)"
+add_image "$ws" 3 "${APP_REPO}:latest,${APP_REPO}@$(img_digest 3)"
+add_container "$ws" 3 3 "${APP_REPO}:latest" running app
+add_image "$ws" 4 "${APP_REPO}@$(img_digest 4)"
+add_container "$ws" 4 4 "${APP_REPO}:latest" exited migrate
+add_image "$ws" 5 "${APP_REPO}:old,mirror.example.test/pavillion:old"
+add_image "$ws" 6 "${APP_REPO}@$(img_digest 6),other.example.test/pavillion@$(img_digest 6)"
+add_image "$ws" 7 "${APP_REPO}:-bad,${APP_REPO}@$(img_digest 7)"
+plan_pull "$ws" "${APP_REPO}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "cleanup run exits 0"
+assert_eq "yes" "$(has_image "$ws" 4)" "an image used only by a stopped container is kept"
+assert_eq "yes" "$(has_image "$ws" 8)" "another repository's image is kept"
+assert_eq "yes" "$(has_image "$ws" 5)" "an id also tagged in another repository is not removed"
+assert_eq "mirror.example.test/pavillion:old" "$(refs_of "$ws" 5)" "an id shared by tag loses only this repository's tag"
+assert_eq "yes" "$(has_image "$ws" 6)" "an id shared by digest is not removed by id"
+assert_eq "no" "$(has_image "$ws" 7)" "an image with a tag failing Docker's tag grammar is still removed by id"
+assert_contains "$output" "not a valid Docker tag" "the invalid tag is skipped with a warning"
+assert_contains "$output" "Removed 1 old application images" "only the one removable image is counted"
+assert_safe_calls "$ws" "$APP_REPO" "cleanup neighbours" "${APP_REPO}:old" "$(img_id 7)"
+
+echo "test: a registry with a port keeps the port in the repository"
+port_repo="registry.example.test:5000/pavillion"
+ws=$(image_ws "$port_repo" latest)
+add_image "$ws" 1 "${port_repo}@$(img_digest 1)"
+add_image "$ws" 2 "${port_repo}:latest,${port_repo}@$(img_digest 2)"
+add_container "$ws" 2 2 "${port_repo}:latest" running app
+add_image "$ws" 5 "${port_repo}-extra:latest"
+plan_pull "$ws" "${port_repo}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "port-registry upgrade exits 0"
+assert_eq "yes" "$(tagged "$ws" 2 "${port_repo}:previous")" "the replaced image is tagged <registry:port>/<name>:previous"
+assert_eq "no" "$(has_image "$ws" 1)" "the superseded image is removed"
+assert_eq "yes" "$(has_image "$ws" 5)" "a repository sharing the name as a prefix is untouched"
+assert_safe_calls "$ws" "$port_repo" "port registry" "$(img_id 1)"
+
+# failing_ws -> stdout: a workspace mid-upgrade with a superseded image (4).
+failing_ws() {
+  local ws
+  ws=$(image_ws "$APP_REPO" latest)
+  add_image "$ws" 2 "${APP_REPO}:latest,${APP_REPO}@$(img_digest 2)"
+  add_container "$ws" 2 2 "${APP_REPO}:latest" running app
+  add_image "$ws" 4 "${APP_REPO}@$(img_digest 4)"
+  plan_pull "$ws" "${APP_REPO}:latest" 3
+  echo "$ws"
+}
+
+echo "test: health-check timeout, failed pull, failed up and fresh install remove nothing"
+ws=$(failing_ws)
+printf '#!/usr/bin/env bash\nexit 7\n' > "${ws}/shim/curl"
+output=$(deploy_images "$ws")
+assert_eq "4" "${output##*EXIT:}" "health-check timeout exits 4"
+assert_eq "yes" "$(has_image "$ws" 4)" "health-check timeout removes nothing"
+assert_eq "yes" "$(tagged "$ws" 2 "${APP_REPO}:previous")" "health-check timeout leaves the replaced image tagged :previous"
+assert_safe_calls "$ws" "$APP_REPO" "health-check timeout"
+
+ws=$(failing_ws)
+echo pull > "${ws}/state/fail"
+output=$(deploy_images "$ws")
+assert_eq "1" "${output##*EXIT:}" "failed pull exits 1"
+assert_eq "yes" "$(has_image "$ws" 4)" "failed pull removes nothing"
+assert_contains "$output" "monitoring-and-logs#when-the-disk-alert-arrives" "failed pull points at the disk alert guide"
+assert_safe_calls "$ws" "$APP_REPO" "failed pull"
+
+ws=$(failing_ws)
+echo up > "${ws}/state/fail"
+output=$(deploy_images "$ws")
+assert_eq "1" "${output##*EXIT:}" "failed up exits 1"
+assert_eq "yes" "$(has_image "$ws" 4)" "failed up removes nothing"
+assert_safe_calls "$ws" "$APP_REPO" "failed up"
+
+ws=$(image_ws "$APP_REPO" latest)
+add_image "$ws" 4 "${APP_REPO}@$(img_digest 4)"
+plan_pull "$ws" "${APP_REPO}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "fresh install exits 0"
+assert_eq "yes" "$(has_image "$ws" 4)" "fresh install removes nothing"
+assert_contains "$output" "No running app container" "fresh install says why nothing is tagged or removed"
+assert_eq "" "$(grep -F -e '|tag|' -e '|image|rm|' "${ws}/state/calls" || true)" "fresh install tags and removes nothing"
+assert_safe_calls "$ws" "$APP_REPO" "fresh install"
+
+echo "test: PAVILLION_IMAGE_TAG=previous refuses before pulling"
+for source in shell env; do
+  ws=$(failing_ws)
+  if [[ "$source" == env ]]; then
+    printf 'PAVILLION_IMAGE_TAG=previous\n' >> "${ws}/.env"
+    output=$(deploy_images "$ws")
+  else
+    output=$(deploy_images "$ws" PAVILLION_IMAGE_TAG=previous)
+  fi
+  assert_eq "3" "${output##*EXIT:}" "previous from the ${source} exits 3"
+  assert_contains "$output" "To resume upgrades" "previous from the ${source} says how to resume upgrades"
+  assert_eq "" "$(grep -F '|compose|pull' "${ws}/state/calls" || true)" "previous from the ${source} does not pull"
+  assert_eq "yes" "$(has_image "$ws" 4)" "previous from the ${source} removes nothing"
+  assert_safe_calls "$ws" "$APP_REPO" "previous from the ${source}"
+done
+
+echo "test: an empty, multi-line or invalid application repository skips cleanup"
+for variant in empty multi-line invalid; do
+  ws=$(failing_ws)
+  case "$variant" in
+    empty) printf 'postgres:17\n' > "${ws}/state/config_images" ;;
+    multi-line) printf 'postgres:17\n%s:latest\n%s:v2\n' "$APP_REPO" "$APP_REPO" > "${ws}/state/config_images" ;;
+    invalid)
+      printf 'postgres:17\nGhcr.Example.test/Pavillion:latest\n' > "${ws}/state/config_images"
+      awk -F'|' -v OFS='|' '$5 == "app" { $3 = "Ghcr.Example.test/Pavillion:latest" } { print }' \
+        "${ws}/state/containers" > "${ws}/state/containers.new"
+      mv "${ws}/state/containers.new" "${ws}/state/containers"
+      ;;
+  esac
+  output=$(deploy_images "$ws")
+  assert_eq "0" "${output##*EXIT:}" "${variant} repository: deploy still exits 0"
+  assert_contains "$output" "old application images will not be removed" "${variant} repository: cleanup is skipped with a warning"
+  assert_eq "yes" "$(has_image "$ws" 4)" "${variant} repository: nothing is removed"
+  assert_eq "" "$(grep -F -e '|tag|' -e '|image|rm|' "${ws}/state/calls" || true)" "${variant} repository: nothing is tagged or removed"
+  assert_safe_calls "$ws" "$APP_REPO" "${variant} repository"
+done
+
+echo "test: a failing keep-set command aborts cleanup"
+for key in ps inspect image_ls; do
+  ws=$(failing_ws)
+  echo "$key" > "${ws}/state/fail"
+  output=$(deploy_images "$ws")
+  assert_eq "0" "${output##*EXIT:}" "failing ${key}: deploy still exits 0"
+  assert_contains "$output" "no images removed" "failing ${key}: cleanup aborts with a warning"
+  assert_eq "yes" "$(has_image "$ws" 4)" "failing ${key}: nothing is removed"
+  assert_safe_calls "$ws" "$APP_REPO" "failing ${key}"
+done
+
+echo "test: an image id that is not a full sha256: id aborts cleanup"
+ws=$(failing_ws)
+printf 'sha256:%s|%s|%s@%s\n' "$(rep 5 40)" "$IMG_SIZE" "$APP_REPO" "$(img_digest 5)" >> "${ws}/state/images"
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "short id: deploy still exits 0"
+assert_contains "$output" "no images removed" "short id: cleanup aborts with a warning"
+assert_eq "yes" "$(has_image "$ws" 4)" "short id: nothing is removed"
+assert_safe_calls "$ws" "$APP_REPO" "short id"
+
+echo "test: a running image with no tag or digest in the repository is not tagged :previous"
+ws=$(image_ws "$APP_REPO" latest)
+add_image "$ws" 2 ""
+add_container "$ws" 2 2 "${APP_REPO}:latest" running app
+plan_pull "$ws" "${APP_REPO}:latest" 3
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "untagged running image: deploy exits 0"
+assert_contains "$output" "not tagging it previous" "untagged running image: tagging is skipped with a warning"
+assert_eq "" "$(grep -F '|tag|' "${ws}/state/calls" || true)" "untagged running image: no tag call"
+assert_eq "yes" "$(has_image "$ws" 2)" "untagged running image: it is not removed"
+assert_safe_calls "$ws" "$APP_REPO" "untagged running image"
+
+echo "test: a removal Docker refuses warns and the deploy exits 0"
+ws=$(failing_ws)
+echo "rm:$(img_id 4)" > "${ws}/state/fail"
+output=$(deploy_images "$ws")
+assert_eq "0" "${output##*EXIT:}" "refused removal: deploy exits 0"
+assert_contains "$output" "Could not remove $(img_id 4)" "refused removal: a warning names the image"
+assert_eq "yes" "$(has_image "$ws" 4)" "refused removal: the image is kept"
+assert_contains "$output" "Removed 0 old application images" "refused removal: it is not counted"
+assert_safe_calls "$ws" "$APP_REPO" "refused removal" "$(img_id 4)"
+
 # ---- helper table tests (deploy.sh sourced; main is guarded) ----
 
 # with_deploy <root> [NAME=value ...] <function> [args...]
