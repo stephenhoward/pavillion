@@ -46,6 +46,8 @@ import {
   SharedEventEntity,
 } from '@/server/activitypub/entity/activitypub';
 import { EventObject } from '@/server/activitypub/model/object/event';
+import FollowActivity from '@/server/activitypub/model/action/follow';
+import { addToOutbox } from '@/server/activitypub/helper/outbox';
 import { waitFor, waitForStableCount } from '@/server/common/test/lib/test_polling';
 
 describe('Same-instance follow brings in existing events', () => {
@@ -325,6 +327,40 @@ describe('Same-instance follow brings in existing events', () => {
 
     expect(accepted).toEqual([curator.id]);
     expect(await sharesOf(curator)).toEqual([weeklyEvent.id]);
+  });
+
+  it('accepts a refollow left pending by a stale follower row and catches up once', async () => {
+    // The state an unfollow made before Undo(Follow) matched local actors
+    // left behind: the organizer still holds the curator as a follower.
+    await seedPreFixFollow({ following: false });
+    const curatorActor = await localActorOf(curator);
+    const organizerActor = await localActorOf(organizer);
+
+    const accepted: string[] = [];
+    const onAccepted = (payload: { followingCalendarId: string }) => accepted.push(payload.followingCalendarId);
+    eventBus.on('activitypub:follow:accepted', onAccepted);
+    try {
+      // Recreates the curator's following row pending and sends a Follow with
+      // a new id, which the organizer sees as a repeat from an existing follower.
+      await follow(true);
+
+      expect(accepted).toEqual([curator.id]);
+      expect(await sharesOf(curator)).toEqual([upcomingEvent.id, weeklyEvent.id].sort());
+      expect(await sharesOf(curator)).not.toContain(pastEvent.id);
+      expect(await FollowerCalendarEntity.count({ where: { calendar_id: organizer.id } })).toBe(1);
+
+      // A further Follow while the follow is active re-runs the catch-up,
+      // which brings in nothing the curator has already received.
+      await addToOutbox(eventBus, curator, new FollowActivity(curatorActor.actor_uri, organizerActor.actor_uri));
+      await settle();
+
+      expect(accepted).toEqual([curator.id, curator.id]);
+    }
+    finally {
+      eventBus.off('activitypub:follow:accepted', onAccepted);
+    }
+    expect(await sharesOf(curator)).toEqual([upcomingEvent.id, weeklyEvent.id].sort());
+    expect(await FollowerCalendarEntity.count({ where: { calendar_id: organizer.id } })).toBe(1);
   });
 
   // ap_inbox is keyed on the activity id alone, so a second local follower's

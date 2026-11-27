@@ -16,9 +16,10 @@ import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
-import { ActivityPubInboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { Calendar } from '@/common/model/calendar';
 import CreateActivity from '@/server/activitypub/model/action/create';
+import FollowActivity from '@/server/activitypub/model/action/follow';
 
 describe('ProcessInboxService - Blocked Instance Filtering', () => {
   let sandbox: sinon.SinonSandbox;
@@ -112,6 +113,44 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       const updateCall = mockMessage.update.getCall(0);
       expect(updateCall.args[0].processed_status).toBe('blocked');
       expect(updateCall.args[0].processed_time).toBeInstanceOf(Date);
+    });
+
+    it('should not re-accept a repeat Follow from a blocked instance', async () => {
+      // An existing follower's repeat Follow is answered with a fresh Accept,
+      // so the blocked-instance gate must stop it before that branch.
+      const actorUri = 'https://blocked.example.com/calendars/testcal';
+
+      const moderationService = moderationInterface.getModerationService();
+      sandbox.stub(moderationService, 'isInstanceBlocked').resolves(true);
+
+      const calendar = new Calendar('test-cal-id', 'test-calendar');
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
+
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves({
+        id: 'existing-follower-row',
+        calendar_actor_id: 'remote-calendar-id',
+        calendar_id: 'test-cal-id',
+      } as any);
+      const outboxBuild = sandbox.stub(ActivityPubOutboxMessageEntity, 'build').returns({ save: sandbox.stub().resolves() } as any);
+
+      const follow = new FollowActivity(actorUri, 'https://local.example.com/calendars/test-calendar');
+      const mockMessage = {
+        id: follow.id,
+        calendar_id: 'test-cal-id',
+        type: 'Follow',
+        message: follow.toObject(),
+        messageTime: new Date(),
+        processedAt: null,
+        update: sandbox.stub().resolves(),
+      } as unknown as ActivityPubInboxMessageEntity;
+
+      const processFollowSpy = sandbox.spy(inboxService, 'processFollowAccount');
+
+      await inboxService.processInboxMessage(mockMessage);
+
+      expect(processFollowSpy.called, 'Follow handler must not run').toBe(false);
+      expect(outboxBuild.called, 'no Accept may be queued').toBe(false);
+      expect((mockMessage.update as sinon.SinonStub).getCall(0).args[0].processed_status).toBe('blocked');
     });
 
     it('should process activities from non-blocked instances normally', async () => {

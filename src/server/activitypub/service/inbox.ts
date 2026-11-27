@@ -2217,7 +2217,9 @@ class ProcessInboxService {
 
   /**
    * Processes a Follow activity by creating a new follower relationship
-   * and queuing an Accept activity for asynchronous delivery.
+   * and queuing an Accept activity for asynchronous delivery. A Follow from
+   * an actor that is already a follower queues a fresh Accept and changes
+   * nothing else.
    *
    * @param {Calendar} calendar - The calendar being followed
    * @param {FollowActivity} message - The Follow activity message
@@ -2248,13 +2250,9 @@ class ProcessInboxService {
 
       logger.info(`Follower relationship created successfully`);
 
-      // Queue Accept activity for asynchronous delivery
-      const actorUrl = ActivityPubActor.actorUrl(calendar);
-      const acceptActivity = new AcceptActivity(actorUrl, message);
-
       logger.info(`Queueing Accept activity to ${message.actor}`);
 
-      await addToOutbox(this.eventBus, calendar, acceptActivity);
+      await this.queueAccept(calendar, message);
 
       logger.info(`Accept activity queued for delivery`);
 
@@ -2266,8 +2264,30 @@ class ProcessInboxService {
       });
     }
     else {
-      logger.info(`Follow relationship already exists for ${message.actor}, skipping`);
+      // Re-accept rather than skip (maintainer ruling, 2026-11-22). Accepting
+      // again is idempotent: no second row, no second notification. Answering
+      // a repeat Follow with a fresh Accept is the fediverse norm for a follow
+      // stuck pending, which is how a follower left by a stale row recovers.
+      // And an inbound Follow means one thing on this path whatever state we
+      // hold. A second Accept is safe on the peer side: a Pavillion peer
+      // re-runs its backfill, which the ap_inbox key makes idempotent
+      // (DEC-013), and other servers treat it as a confirmation.
+      await this.queueAccept(calendar, message);
+
+      logger.info({ calendarId: calendar.id, activityId: message.id }, 'Re-accepted Follow from an existing follower');
     }
+  }
+
+  /**
+   * Queues an Accept for a Follow on the followed calendar's outbox. Delivery
+   * goes to the embedded Follow's actor.
+   *
+   * @param calendar - The calendar being followed
+   * @param message - The Follow being accepted
+   */
+  private async queueAccept(calendar: Calendar, message: FollowActivity): Promise<void> {
+    const acceptActivity = new AcceptActivity(ActivityPubActor.actorUrl(calendar), message);
+    await addToOutbox(this.eventBus, calendar, acceptActivity);
   }
   /**
    * Processes an Accept activity received in response to a Follow or Flag request.

@@ -35,6 +35,7 @@ import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import { NoteObject } from '@/server/activitypub/model/object/note';
+import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -165,7 +166,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(acceptObject.object).toBe(testCalendar.id);
     });
 
-    it('should not create duplicate follower record if already exists', async () => {
+    it('should re-send Accept without a duplicate follower record if already exists', async () => {
       // Arrange
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
@@ -178,7 +179,6 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       const findOneStub = sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(existingFollower as any);
       const createStub = sandbox.stub(FollowerCalendarEntity, 'create');
-      const createOutboxStub = sandbox.stub(ActivityPubOutboxMessageEntity, 'create');
 
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
@@ -186,7 +186,10 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Assert
       expect(findOneStub.calledOnce).toBe(true);
       expect(createStub.called).toBe(false);
-      expect(createOutboxStub.called).toBe(false); // No Accept if already following
+      const outboxRows = await ActivityPubOutboxMessageEntity.findAll({ where: { calendar_id: testCalendar.id } });
+      expect(outboxRows).toHaveLength(1);
+      expect(outboxRows[0].type).toBe('Accept');
+      expect((outboxRows[0].message as any).object.id).toBe(followActivity.id);
     });
 
     it('should emit activitypub:calendar:followed after successful Follow processing', async () => {
@@ -259,6 +262,85 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Assert - display name used when available
       expect(emittedEvents).toHaveLength(1);
       expect(emittedEvents[0].followerName).toBe(displayName);
+    });
+
+    describe.each([
+      { kind: 'remote', actorUri: 'https://remote.instance/calendars/remote-follower' },
+      { kind: 'local', actorUri: 'https://pavillion.dev/calendars/local-follower' },
+    ])('from a $kind follower actor', ({ kind, actorUri }) => {
+      let followerActorId: string;
+      let followed: string[];
+
+      async function acceptRows() {
+        return ActivityPubOutboxMessageEntity.findAll({ where: { calendar_id: testCalendar.id, type: 'Accept' } });
+      }
+
+      async function followerRowCount() {
+        return FollowerCalendarEntity.count({ where: { calendar_id: testCalendar.id, calendar_actor_id: followerActorId } });
+      }
+
+      beforeEach(async () => {
+        if (kind === 'local') {
+          const followerCalendarId = uuidv4();
+          await CalendarEntity.create({
+            id: followerCalendarId,
+            url_name: 'local-follower',
+            account_id: uuidv4(),
+            languages: 'en',
+          });
+          await CalendarActorEntity.create({
+            id: uuidv4(),
+            actor_type: 'local',
+            calendar_id: followerCalendarId,
+            actor_uri: actorUri,
+            private_key: null,
+          });
+        }
+        else {
+          await CalendarActorEntity.create({
+            id: uuidv4(),
+            actor_type: 'remote',
+            calendar_id: null,
+            actor_uri: actorUri,
+            remote_domain: 'remote.instance',
+            private_key: null,
+          });
+        }
+        followerActorId = (await CalendarActorEntity.findOne({ where: { actor_uri: actorUri } }))!.id;
+
+        followed = [];
+        eventBus.on('activitypub:calendar:followed', (payload) => followed.push(payload.calendarId));
+      });
+
+      it('creates the follower row, queues one Accept and emits the notification on a first Follow', async () => {
+        const follow = new FollowActivity(actorUri, ActivityPubActor.actorUrl(testCalendar));
+
+        await inboxService.processFollowAccount(testCalendar, follow);
+
+        expect(await followerRowCount()).toBe(1);
+        const accepts = await acceptRows();
+        expect(accepts).toHaveLength(1);
+        expect((accepts[0].message as any).object.id).toBe(follow.id);
+        expect(followed).toEqual([testCalendar.id]);
+      });
+
+      it('queues one Accept for a repeat Follow without a second row or notification', async () => {
+        await FollowerCalendarEntity.create({
+          id: uuidv4(),
+          calendar_actor_id: followerActorId,
+          calendar_id: testCalendar.id,
+        });
+        const follow = new FollowActivity(actorUri, ActivityPubActor.actorUrl(testCalendar));
+
+        await inboxService.processFollowAccount(testCalendar, follow);
+
+        expect(await followerRowCount()).toBe(1);
+        const accepts = await acceptRows();
+        expect(accepts).toHaveLength(1);
+        expect((accepts[0].message as any).object.id).toBe(follow.id);
+        expect((accepts[0].message as any).object.actor).toBe(actorUri);
+        expect(followed).toEqual([]);
+      });
     });
   });
 
