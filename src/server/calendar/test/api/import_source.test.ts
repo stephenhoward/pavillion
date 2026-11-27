@@ -286,6 +286,7 @@ describe('ImportSourceRoutes', () => {
         eventsSkippedSyncManaged: 0,
         eventsPreservedLocalEdits: 0,
         skippedSyncManagedDetails: [],
+        eventsDispatchIncomplete: 0,
         errorMessage: null,
       };
     }

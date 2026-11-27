@@ -45,6 +45,7 @@ import type { CalendarResponse, VEvent } from 'node-ical';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
+import config from 'config';
 import { Op, type Transaction } from 'sequelize';
 
 const nodeRequire = createRequire(import.meta.url);
@@ -71,6 +72,7 @@ import { Fetcher, type FetcherResult } from '@/server/calendar/service/import/fe
 import { verificationAllowsSync } from '@/common/model/import_source';
 import { mapVEvent, type MapperOutput } from '@/server/calendar/service/import/mapper';
 import db from '@/server/common/entity/db';
+import { type DispatchTally, trackDispatch } from '@/server/common/helper/emit-after-tx';
 import { createLogger } from '@/server/common/helper/logger';
 import {
   SyncRateLimiter,
@@ -92,6 +94,49 @@ export { SyncRateLimiter, SYNC_PER_SOURCE_HOURLY_LIMIT };
 
 /** Retention cap for ImportRun rows per source. */
 export const IMPORT_RUN_RETENTION = 50;
+
+/**
+ * How long an import waits, after its transaction commits, for the listeners
+ * of the domain events it emitted.
+ *
+ * A listener that needs a database connection can wait up to the pool's
+ * acquire timeout for one before it fails, so the wait covers that plus 15
+ * seconds for the listener's own work. Read per call so the configured value
+ * is the one in force.
+ *
+ * @returns Milliseconds to wait before reporting unsettled emissions
+ */
+export function dispatchSettleMs(): number {
+  return config.get<number>('database.pool.acquire') + 15_000;
+}
+
+/**
+ * Waits, bounded by {@link dispatchSettleMs}, for the listeners of a committed
+ * import transaction's domain events, and returns how many emissions did not
+ * complete. Call only once the transaction has committed: a rolled-back
+ * transaction never dispatches, so its tally would wait out the deadline.
+ *
+ * A non-zero count is logged with the import's ids and nothing else — no event
+ * name, payload or ICS-derived field. The tally's own late-settle line carries
+ * no ids; it correlates with this one by timing.
+ *
+ * @param tally - The committed transaction's tally ({@link trackDispatch})
+ * @param ids - The import source and its calendar, for the log line
+ * @returns Count of emissions with a failed or unsettled listener
+ */
+export async function settleImportDispatch(
+  tally: DispatchTally,
+  ids: { importSourceId: string; calendarId: string },
+): Promise<number> {
+  const incomplete = await tally.settled(dispatchSettleMs());
+  if (incomplete > 0) {
+    logger.warn(
+      { importSourceId: ids.importSourceId, calendarId: ids.calendarId, eventsDispatchIncomplete: incomplete },
+      'ics.sync.dispatch_incomplete',
+    );
+  }
+  return incomplete;
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -161,6 +206,14 @@ export interface SyncResult {
    * `SyncResult` literals.
    */
   skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
+  /**
+   * Domain events emitted by this run's committed writes whose listeners did
+   * not all complete within {@link dispatchSettleMs}: a listener failed, or had
+   * not settled at the deadline. Always numeric; 0 when nothing was written,
+   * when the run rolled back, and from {@link SyncService.processIcsBuffer}
+   * when the caller owns the transaction (that caller fills it after commit).
+   */
+  eventsDispatchIncomplete: number;
   /** Sanitized error message. Only populated on non-success outcomes. */
   errorMessage: string | null;
 }
@@ -507,9 +560,15 @@ class SyncService {
     const skippedSyncManagedDetails: Array<{ externalUid: string; sourceUrl: string | null }> = [];
     let parseErrorCount = 0;
     let firstErrorMessage: string | null = null;
+    let tally: DispatchTally;
 
     try {
-      await this.runTransactional(tx, async (txn) => {
+      tally = await this.runTransactional(tx, async (txn) => {
+        // Count the domain events this transaction's writes emit, so the run
+        // can wait for their listeners after commit. Idempotent per tx, so a
+        // caller that owns the transaction obtains the same tally.
+        const txTally = trackDispatch(txn);
+
         // Collect existing origin rows (with eager-joined event) keyed on the
         // dedup tuple. The join is resolved via EventImportOriginEntity's
         // @BelongsTo on the child side; EventEntity deliberately has no
@@ -708,6 +767,7 @@ class SyncService {
         }
         source.last_status = newStatus;
         await source.save({ transaction: txn });
+        return txTally;
       });
     }
     catch (err) {
@@ -735,12 +795,20 @@ class SyncService {
 
     const finalOutcome: ImportRunOutcome = parseErrorCount > 0 ? 'parse_error' : 'success';
 
+    // A transaction this run opened has committed by now, so wait for its
+    // listeners. A caller-supplied one has not, and may yet roll back: its
+    // owner awaits the tally after its own commit.
+    const dispatchIncomplete = tx
+      ? 0
+      : await settleImportDispatch(tally, { importSourceId, calendarId: source.calendar_id });
+
     const result = await this.recordRun({
       sourceId: importSourceId,
       startedAt,
       outcome: finalOutcome,
       counts,
       skippedSyncManagedDetails,
+      dispatchIncomplete,
       errorMessage: firstErrorMessage,
     });
 
@@ -1023,6 +1091,8 @@ class SyncService {
       duplicateOriginsSkipped?: number;
     };
     skippedSyncManagedDetails?: Array<{ externalUid: string; sourceUrl: string | null }>;
+    // Omitted on every path that committed nothing, which therefore reports 0.
+    dispatchIncomplete?: number;
     errorMessage: string | null;
   }): Promise<SyncResult> {
     const row = await ImportRunEntity.create({
@@ -1060,6 +1130,7 @@ class SyncService {
       eventsUnchanged: input.counts.unchanged ?? 0,
       duplicateOriginsSkipped: input.counts.duplicateOriginsSkipped ?? 0,
       skippedSyncManagedDetails: input.skippedSyncManagedDetails ?? [],
+      eventsDispatchIncomplete: input.dispatchIncomplete ?? 0,
       errorMessage: input.errorMessage,
     };
   }

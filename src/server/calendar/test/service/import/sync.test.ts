@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
 import sinon from 'sinon';
+import config from 'config';
 import type { Transaction } from 'sequelize';
 import type { VEvent, DateWithTimeZone } from 'node-ical';
 
@@ -26,9 +28,11 @@ import SyncService, {
   buildEventParamsForCreate,
   buildEventParamsForUpdate,
   dedupKey,
+  dispatchSettleMs,
   importFingerprint,
 } from '@/server/calendar/service/import/sync';
 import db from '@/server/common/entity/db';
+import { DispatchTally, emitAfterTx } from '@/server/common/helper/emit-after-tx';
 
 /**
  * Unit tests for the ICS sync orchestrator (pv-1qcp.2.4).
@@ -560,6 +564,7 @@ describe('SyncService', () => {
 
       const result = await service.syncSource({ account, importSourceId: 'src-1' });
       expect(result.outcome).toBe('no_changes');
+      expect(result.eventsDispatchIncomplete).toBe(0);
       expect(eventService.createEvent.called).toBe(false);
       expect(eventService.updateEvent.called).toBe(false);
     });
@@ -1273,6 +1278,156 @@ describe('SyncService', () => {
       expect(src.last_status).toBe('parse_error');
       // ...but no standalone write was issued against the doomed row.
       expect((src.save as sinon.SinonStub).called).toBe(false);
+    });
+
+    // ------------------------------------------------------------------------
+    // Domain-event dispatch tally (eventsDispatchIncomplete)
+    // ------------------------------------------------------------------------
+    describe('dispatch tally', () => {
+      let bus: EventEmitter;
+      let settledSpy: sinon.SinonSpy;
+
+      /**
+       * Replace the passthrough db.transaction stub with one whose sentinel tx
+       * supports afterCommit, running the hooks once the callback resolves —
+       * a commit. A callback that throws never runs them — a rollback.
+       */
+      function useCommittingTransaction(): void {
+        (db.transaction as sinon.SinonStub).callsFake(async (fn: (tx: unknown) => unknown) => {
+          const hooks: Array<() => void> = [];
+          const tx = { LEVEL: 'test', afterCommit: (hook: () => void) => { hooks.push(hook); } };
+          const out = await fn(tx);
+          hooks.forEach((hook) => hook());
+          return out;
+        });
+      }
+
+      /** Each created event emits eventCreated through emitAfterTx on the run's tx. */
+      function emitOnCreate(): void {
+        eventService.createEvent.callsFake(async (_account, params, _opts, tx) => {
+          emitAfterTx(bus, 'eventCreated', { uid: (params as { id?: string }).id }, tx);
+          return { id: 'evt-dispatch' } as never;
+        });
+      }
+
+      beforeEach(() => {
+        bus = new EventEmitter();
+        settledSpy = sandbox.spy(DispatchTally.prototype, 'settled');
+        useCommittingTransaction();
+      });
+
+      it('dispatchSettleMs is the configured pool acquire timeout plus 15 seconds', () => {
+        expect(dispatchSettleMs()).toBe(config.get<number>('database.pool.acquire') + 15_000);
+      });
+
+      it('counts emissions whose listener failed after its own transaction commits', async () => {
+        const src = makeSourceEntity();
+        const svc = makeProcessService([
+          makeVEvent({ uid: 'dispatch-a@example.test' }),
+          makeVEvent({ uid: 'dispatch-b@example.test' }),
+        ]);
+        emitOnCreate();
+        let calls = 0;
+        bus.on('eventCreated', async () => (++calls === 1 ? 'failed' : 'completed'));
+
+        const result = await svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        );
+
+        expect(result.outcome).toBe('success');
+        expect(result.eventsCreated).toBe(2);
+        expect(calls).toBe(2);
+        expect(result.eventsDispatchIncomplete).toBe(1);
+        expect(settledSpy.calledOnceWithExactly(dispatchSettleMs())).toBe(true);
+      });
+
+      it('waits for the listeners to settle before returning', async () => {
+        const src = makeSourceEntity();
+        const svc = makeProcessService([makeVEvent({ uid: 'dispatch-wait@example.test' })]);
+        emitOnCreate();
+        let listenerSettled = false;
+        bus.on('eventCreated', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          listenerSettled = true;
+        });
+
+        const result = await svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        );
+
+        expect(listenerSettled).toBe(true);
+        expect(result.eventsDispatchIncomplete).toBe(0);
+      });
+
+      it('returns 0 and leaves the tally to the caller when the caller owns the transaction', async () => {
+        const src = makeSourceEntity();
+        const svc = makeProcessService([makeVEvent({ uid: 'dispatch-caller@example.test' })]);
+        emitOnCreate();
+        bus.on('eventCreated', async () => 'failed');
+        const callerTx = { LEVEL: 'caller-tx', afterCommit: sinon.stub() } as unknown as Transaction;
+
+        const result = await svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'calendar', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+          callerTx,
+        );
+
+        expect(result.outcome).toBe('success');
+        expect(result.eventsDispatchIncomplete).toBe(0);
+        expect(settledSpy.called).toBe(false);
+        // The emission was tallied on the caller's tx, which the caller awaits.
+        expect((callerTx.afterCommit as sinon.SinonStub).calledOnce).toBe(true);
+      });
+
+      it('never waits on a rolled-back run', async () => {
+        const src = makeSourceEntity();
+        const svc = makeProcessService([
+          makeVEvent({ uid: 'dispatch-ok@example.test' }),
+          makeVEvent({ uid: 'dispatch-fail@example.test' }),
+        ]);
+        eventService.createEvent
+          .onCall(0).callsFake(async (_account, _params, _opts, tx) => {
+            emitAfterTx(bus, 'eventCreated', {}, tx);
+            return { id: 'evt-0' } as never;
+          })
+          .onCall(1).rejects(new Error('write failure'));
+
+        const result = await svc.processIcsBuffer(
+          Buffer.from('BEGIN:VCALENDAR'),
+          src,
+          { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        );
+
+        expect(result.outcome).toBe('parse_error');
+        expect(result.eventsDispatchIncomplete).toBe(0);
+        expect(settledSpy.called).toBe(false);
+      });
+
+      it('reports 0 on a run that fails to parse', async () => {
+        const src = makeSourceEntity();
+        const svc = new SyncService({
+          eventService: eventService as unknown as EventService,
+          calendarService: calendarService as unknown as CalendarService,
+          fetcher: fetcher as unknown as Fetcher,
+          rateLimiter,
+          parseICS: () => { throw new Error('malformed calendar'); },
+        });
+
+        const result = await svc.processIcsBuffer(
+          Buffer.from('junk'),
+          src,
+          { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+        );
+
+        expect(result.outcome).toBe('parse_error');
+        expect(result.eventsDispatchIncomplete).toBe(0);
+        expect(settledSpy.called).toBe(false);
+      });
     });
 
     // ------------------------------------------------------------------------

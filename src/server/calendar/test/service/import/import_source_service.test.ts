@@ -25,8 +25,10 @@ vi.mock('cheerio', async () => {
   };
 });
 
+import { EventEmitter } from 'events';
 import sinon from 'sinon';
 import config from 'config';
+import type { Transaction } from 'sequelize';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -63,7 +65,8 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { generateVerificationToken } from '@/server/calendar/service/import/hmac';
 import type { DnsVerifier } from '@/server/calendar/service/import/dns-verifier';
 import type SyncService from '@/server/calendar/service/import/sync';
-import type { SyncResult } from '@/server/calendar/service/import/sync';
+import { dispatchSettleMs, type SyncResult } from '@/server/calendar/service/import/sync';
+import { DispatchTally, emitAfterTx } from '@/server/common/helper/emit-after-tx';
 
 /**
  * Unit tests for ImportSourceService (pv-1qcp.1.4).
@@ -381,6 +384,7 @@ describe('ImportSourceService', () => {
         eventsSkippedSyncManaged: 0,
         eventsPreservedLocalEdits: 0,
         skippedSyncManagedDetails: [],
+        eventsDispatchIncomplete: 0,
         errorMessage: null,
         ...overrides,
       };
@@ -638,6 +642,87 @@ describe('ImportSourceService', () => {
       const createArgs = createStub.firstCall.args[0] as any;
       expect(createArgs.original_filename).toHaveLength(255);
       expect(createArgs.original_filename).toBe(longName.slice(0, 255));
+    });
+
+    describe('dispatch tally', () => {
+      let bus: EventEmitter;
+      let settledSpy: sinon.SinonSpy;
+
+      /**
+       * Re-stub db.transaction so its sentinel tx supports afterCommit and runs
+       * the hooks once the callback resolves (commit); a callback that throws
+       * never runs them (rollback).
+       */
+      function useCommittingTransaction(): void {
+        (db.transaction as sinon.SinonStub).callsFake(async (fn: (tx: unknown) => unknown) => {
+          const hooks: Array<() => void> = [];
+          const tx = { LEVEL: 'test', afterCommit: (hook: () => void) => { hooks.push(hook); } };
+          const out = await fn(tx);
+          hooks.forEach((hook) => hook());
+          return out;
+        });
+      }
+
+      /** A pipeline stub that emits `count` domain events on the caller's tx. */
+      function emittingPipeline(count: number, run: SyncResult): sinon.SinonStub {
+        return sandbox.stub().callsFake(async (_buf, _src, _opts, tx: Transaction) => {
+          for (let i = 0; i < count; i++) {
+            emitAfterTx(bus, 'eventCreated', { index: i }, tx);
+          }
+          return run;
+        });
+      }
+
+      beforeEach(() => {
+        bus = new EventEmitter();
+        settledSpy = sandbox.spy(DispatchTally.prototype, 'settled');
+      });
+
+      it('awaits the committed upload\'s listeners and reports the incomplete count on the run', async () => {
+        const { wired } = wireFileService({
+          processImpl: emittingPipeline(2, fileRunResult({ eventsCreated: 2 })),
+        });
+        useCommittingTransaction();
+        let calls = 0;
+        bus.on('eventCreated', async () => (++calls === 1 ? 'failed' : 'completed'));
+
+        const result = await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+        expect(calls).toBe(2);
+        expect(result.run.eventsDispatchIncomplete).toBe(1);
+        expect(settledSpy.calledOnceWithExactly(dispatchSettleMs())).toBe(true);
+      });
+
+      it('reports 0 when every listener completes', async () => {
+        const { wired } = wireFileService({
+          processImpl: emittingPipeline(1, fileRunResult()),
+        });
+        useCommittingTransaction();
+        bus.on('eventCreated', async () => 'completed');
+
+        const result = await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+        expect(result.run.eventsDispatchIncomplete).toBe(0);
+      });
+
+      it('never waits on a rolled-back upload', async () => {
+        const { wired } = wireFileService({
+          processImpl: emittingPipeline(
+            1,
+            fileRunResult({ outcome: 'parse_error', eventsCreated: 0, errorMessage: 'IMPORT_PARSE_ERROR' }),
+          ),
+        });
+        useCommittingTransaction();
+        const listener = sinon.stub().resolves('completed');
+        bus.on('eventCreated', listener);
+
+        await expect(
+          wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
+        ).rejects.toBeInstanceOf(ImportSourceFileBadFormatError);
+
+        expect(settledSpy.called).toBe(false);
+        expect(listener.called).toBe(false);
+      });
     });
   });
 
@@ -1008,6 +1093,7 @@ describe('ImportSourceService', () => {
       eventsUpdated: 0,
       eventsSkippedLocallyEdited: 0,
       eventsDisappeared: 0,
+      eventsDispatchIncomplete: 0,
       errorMessage: null,
     };
 

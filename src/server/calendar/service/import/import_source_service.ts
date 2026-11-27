@@ -45,7 +45,8 @@ import { DnsVerifier, VERIFICATION_VALIDITY_DAYS } from '@/server/calendar/servi
 import { MAX_BODY_BYTES, hasVcalendarSignature } from '@/server/calendar/service/import/fetcher';
 import { createPinnedAgent } from '@/server/common/helper/pinned-agent';
 import type SyncService from '@/server/calendar/service/import/sync';
-import type { SyncResult } from '@/server/calendar/service/import/sync';
+import { settleImportDispatch, type SyncResult } from '@/server/calendar/service/import/sync';
+import { trackDispatch } from '@/server/common/helper/emit-after-tx';
 
 const logger = createLogger('calendar.import.source');
 
@@ -334,7 +335,11 @@ class ImportSourceService {
     // Source insert + event pipeline share one transaction. Throwing inside it
     // (malformed payload / no usable events) rolls the source row back with the
     // event writes so a rejected upload leaves nothing behind.
-    const result = await db.transaction(async (tx) => {
+    const { tally, ...result } = await db.transaction(async (tx) => {
+      // The same tally processIcsBuffer opens on this tx (idempotent per tx):
+      // the pipeline leaves the wait to the transaction's owner.
+      const txTally = trackDispatch(tx);
+
       const entity = await ImportSourceEntity.create(
         {
           id,
@@ -395,8 +400,15 @@ class ImportSourceService {
         throw new ImportSourceParseError({ reason: 'no_usable_vevents' });
       }
 
-      return { source: entity.toModel(), run };
+      return { tally: txTally, source: entity.toModel(), run };
     });
+
+    // Committed: wait for the listeners of the events the upload wrote. A
+    // rolled-back upload threw out of db.transaction above and never gets here.
+    result.run.eventsDispatchIncomplete = await settleImportDispatch(
+      tally,
+      { importSourceId: id, calendarId },
+    );
 
     logger.info(
       {
@@ -405,6 +417,7 @@ class ImportSourceService {
         outcome: result.run.outcome,
         eventsCreated: result.run.eventsCreated,
         eventsUpdated: result.run.eventsUpdated,
+        eventsDispatchIncomplete: result.run.eventsDispatchIncomplete,
       },
       'Created file import source and ran ICS pipeline',
     );
