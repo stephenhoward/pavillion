@@ -9,14 +9,13 @@ import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
-// The email models are mocked so these tests need no i18n setup; rendering
-// the real templates is covered beside the templates themselves.
+// The email models are mocked so these tests need no i18n setup; the real
+// templates are rendered through this flow by disk-alert-render.test.ts.
 vi.mock('@/server/housekeeping/model/disk-warning-email', () => ({
   default: class {
     constructor(
       usagePercent: number,
       threshold: number,
-      path: string,
       usedSpace: string,
       totalSpace: string,
       private recipientEmail: string,
@@ -32,7 +31,6 @@ vi.mock('@/server/housekeeping/model/disk-critical-email', () => ({
     constructor(
       usagePercent: number,
       threshold: number,
-      path: string,
       usedSpace: string,
       totalSpace: string,
       private recipientEmail: string,

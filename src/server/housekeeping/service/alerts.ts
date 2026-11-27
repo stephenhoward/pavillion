@@ -140,8 +140,8 @@ export default class AlertsService {
     const usedSpace = this.diskMonitorService.formatBytes(usage.usedBytes);
     const totalSpace = this.diskMonitorService.formatBytes(usage.totalBytes);
     const reached = alertLevel === 'critical'
-      ? await this.sendDiskCritical(usage.percentageUsed, threshold, usage.path, usedSpace, totalSpace)
-      : await this.sendDiskWarning(usage.percentageUsed, threshold, usage.path, usedSpace, totalSpace);
+      ? await this.sendDiskCritical(usage.percentageUsed, threshold, usedSpace, totalSpace)
+      : await this.sendDiskWarning(usage.percentageUsed, threshold, usedSpace, totalSpace);
 
     if (reached > 0) {
       await this.recordDiskAlertState(alertLevel, now);
@@ -157,7 +157,6 @@ export default class AlertsService {
    *
    * @param usagePercent - Current disk usage percentage
    * @param threshold - Warning threshold that was exceeded
-   * @param path - Path being monitored (e.g., /backups)
    * @param usedSpace - Formatted used space string (e.g., "47.2 GB")
    * @param totalSpace - Formatted total space string (e.g., "100.0 GB")
    * @returns How many administrators the alert reached
@@ -165,14 +164,12 @@ export default class AlertsService {
   async sendDiskWarning(
     usagePercent: number,
     threshold: number,
-    path: string,
     usedSpace?: string,
     totalSpace?: string,
   ): Promise<number> {
     return this.sendDiskAlert('warning', usagePercent, (admin) => new DiskWarningEmail(
       usagePercent,
       threshold,
-      path,
       usedSpace || `${usagePercent.toFixed(1)}%`,
       totalSpace || '100%',
       admin.email,
@@ -188,7 +185,6 @@ export default class AlertsService {
    *
    * @param usagePercent - Current disk usage percentage
    * @param threshold - Critical threshold that was exceeded
-   * @param path - Path being monitored (e.g., /backups)
    * @param usedSpace - Formatted used space string (e.g., "85.5 GB")
    * @param totalSpace - Formatted total space string (e.g., "100.0 GB")
    * @returns How many administrators the alert reached
@@ -196,14 +192,12 @@ export default class AlertsService {
   async sendDiskCritical(
     usagePercent: number,
     threshold: number,
-    path: string,
     usedSpace?: string,
     totalSpace?: string,
   ): Promise<number> {
     return this.sendDiskAlert('critical', usagePercent, (admin) => new DiskCriticalEmail(
       usagePercent,
       threshold,
-      path,
       usedSpace || `${usagePercent.toFixed(1)}%`,
       totalSpace || '100%',
       admin.email,
