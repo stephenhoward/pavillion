@@ -541,7 +541,10 @@ defineExpose({
       border: 2px solid var(--pav-border-primary);
       border-radius: 0.75rem;
       cursor: pointer;
-      transition: all 0.2s;
+      // Not `all`: the cards are disabled while the config loads, and fading
+      // the disabled opacity back in leaves the text under AA contrast for
+      // the length of the transition.
+      transition: border-color 0.2s, background-color 0.2s;
 
       &:hover {
         border-color: var(--pav-color-neutral-400);
