@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import sinon from 'sinon';
+import db from '@/server/common/entity/db';
+import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { DiskUsageSnapshotEntity } from '@/server/housekeeping/entity/disk-snapshot';
+import { DiskUsageStats } from '@/server/housekeeping/service/disk-monitor';
+import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
-import AccountService from '@/server/accounts/service/account';
-import { Account } from '@/common/model/account';
-import { promises as fs } from 'fs';
-import config from 'config';
-import sinon from 'sinon';
 
-// Mock the email classes to avoid i18n errors
+// The email models are mocked so these tests need no i18n setup; rendering
+// the real templates is covered beside the templates themselves.
 vi.mock('@/server/housekeeping/model/disk-warning-email', () => ({
   default: class {
     constructor(
@@ -21,12 +22,7 @@ vi.mock('@/server/housekeeping/model/disk-warning-email', () => ({
       private recipientEmail: string,
     ) {}
     buildMessage() {
-      return {
-        from: 'noreply@test.com',
-        to: (this as any).recipientEmail,
-        subject: 'Disk Warning',
-        text: 'Warning',
-      };
+      return { from: 'noreply@example.test', to: (this as any).recipientEmail, subject: 'Disk Warning', text: 'Warning' };
     }
   },
 }));
@@ -42,194 +38,189 @@ vi.mock('@/server/housekeeping/model/disk-critical-email', () => ({
       private recipientEmail: string,
     ) {}
     buildMessage() {
-      return {
-        from: 'noreply@test.com',
-        to: (this as any).recipientEmail,
-        subject: 'Disk Critical',
-        text: 'Critical',
-      };
+      return { from: 'noreply@example.test', to: (this as any).recipientEmail, subject: 'Disk Critical', text: 'Critical' };
     }
   },
 }));
 
+const THRESHOLDS = { warning: 80, critical: 90 };
+const START = new Date('2026-11-20T00:00:00.000Z');
+const HOUR_MS = 60 * 60 * 1000;
+const ADMIN_COUNT = 2;
+
+function hoursAfterStart(hours: number): Date {
+  return new Date(START.getTime() + hours * HOUR_MS);
+}
+
+function reading(percentageUsed: number): DiskUsageStats {
+  const usedBytes = BigInt(Math.round(percentageUsed * 10));
+  return {
+    totalBytes: BigInt(1000),
+    usedBytes,
+    freeBytes: BigInt(1000) - usedBytes,
+    percentageUsed,
+    path: '/backups',
+  };
+}
+
 /**
- * Disk Alert Flow Integration Test
- *
- * Tests the complete disk monitoring workflow from periodic checks through
- * threshold detection to email notification.
- *
- * Workflow: Scheduled Check → Disk Usage Read → Threshold Breach → Email Sent
+ * The disk alert's cadence against a real snapshot row and real
+ * administrators: one alert per change of level, then at most one a day while
+ * the level holds, with the state kept on the row so a worker restart does not
+ * resend. Each check mirrors the disk:check handler — record the snapshot,
+ * then process the reading — with the clock injected.
  */
-describe('Disk Alert Flow Integration', () => {
+describe('Disk alert flow', () => {
   let sandbox: sinon.SinonSandbox;
   let emailInterface: EmailInterface;
-  let accountsInterface: AccountsInterface;
   let sendEmailStub: sinon.SinonStub;
+  let snapshots: DiskSnapshotService;
+  let alerts: AlertsService;
 
-  beforeEach(() => {
+  beforeAll(async () => {
+    await db.sync({ force: true });
+
+    const env = new TestEnvironment();
+    await env.createAdminAccount('disk-admin-1@example.test', 'disk-admin-pw!1');
+    await env.createAdminAccount('disk-admin-2@example.test', 'disk-admin-pw!2');
+  });
+
+  beforeEach(async () => {
     sandbox = sinon.createSandbox();
-    vi.clearAllMocks();
+    await DiskUsageSnapshotEntity.destroy({ where: {}, truncate: true });
 
     emailInterface = new EmailInterface();
     sendEmailStub = sandbox.stub(emailInterface, 'sendEmail').resolves(null);
-
-    // Mock admin accounts
-    const mockAdmins = [
-      Object.assign(new Account(), { id: 'admin-1', email: 'admin@test.com', languages: 'en' }),
-    ];
-
-    // Stub AccountService.prototype.getAdmins to return mock admins
-    sandbox.stub(AccountService.prototype, 'getAdmins').resolves(mockAdmins);
-
-    // Create AccountsInterface after stubbing AccountService
-    accountsInterface = new AccountsInterface();
+    snapshots = new DiskSnapshotService();
+    alerts = newAlertsService();
   });
 
   afterEach(() => {
     sandbox.restore();
-    vi.restoreAllMocks();
   });
 
-  it('should send warning email when disk usage exceeds warning threshold', async () => {
-    const diskMonitor = new DiskMonitorService();
-    const alerts = new AlertsService(emailInterface, accountsInterface);
+  /** A fresh service, as a restarted worker would build. */
+  function newAlertsService(): AlertsService {
+    return new AlertsService(emailInterface, new AccountsInterface(), new DiskSnapshotService());
+  }
 
-    // Mock filesystem to return 85% disk usage (warning level)
-    vi.spyOn(fs, 'statfs').mockResolvedValue({
-      blocks: BigInt(1000000),
-      bsize: BigInt(4096),
-      bavail: BigInt(150000),  // 15% free
-      bfree: BigInt(150000),
-      type: BigInt(0),
-      files: BigInt(0),
-      ffree: BigInt(0),
-    } as any);
+  async function check(percentageUsed: number, at: Date, service: AlertsService = alerts): Promise<void> {
+    const usage = reading(percentageUsed);
+    await snapshots.recordSnapshot(BACKUP_PATH_STAT_KEY, usage, at);
+    await service.processDiskReading(usage, THRESHOLDS, at);
+  }
 
-    const backupPath = config.get<string>('housekeeping.backup.path');
-    const warningThreshold = config.get<number>('housekeeping.monitoring.disk.warning_threshold');
-    const criticalThreshold = config.get<number>('housekeeping.monitoring.disk.critical_threshold');
+  /** Subjects of the alerts sent, one entry per alert rather than per message. */
+  function alertsSent(): string[] {
+    const subjects = sendEmailStub.getCalls().map(call => call.args[0].subject as string);
+    return subjects.filter((_subject, index) => index % ADMIN_COUNT === 0);
+  }
 
-    // Phase 1: Scheduled disk check (simulates hourly cron job)
-    const usage = await diskMonitor.checkDiskUsage(backupPath);
+  async function storedRow(): Promise<DiskUsageSnapshotEntity> {
+    const row = await DiskUsageSnapshotEntity.findByPk(BACKUP_PATH_STAT_KEY);
+    expect(row).not.toBeNull();
+    return row!;
+  }
 
-    // Phase 2: Threshold detection
-    const isWarning = diskMonitor.isWarningThreshold(usage.percentageUsed, warningThreshold);
-    const isCritical = diskMonitor.isCriticalThreshold(usage.percentageUsed, criticalThreshold);
+  it('sends one alert across three hourly checks at critical, one message per administrator', async () => {
+    await check(95, hoursAfterStart(0));
+    await check(95, hoursAfterStart(1));
+    await check(96, hoursAfterStart(2));
 
-    expect(usage.percentageUsed).toBeCloseTo(85, 1);
-    expect(isWarning).toBe(true);
-    expect(isCritical).toBe(false);
-
-    // Phase 3: Send alert email
-    const usedFormatted = diskMonitor.formatBytes(usage.usedBytes);
-    const totalFormatted = diskMonitor.formatBytes(usage.totalBytes);
-
-    await alerts.sendDiskWarning(
-      usage.percentageUsed,
-      warningThreshold,
-      backupPath,
-      usedFormatted,
-      totalFormatted,
-    );
-
-    // Verify email was attempted (graceful failure is OK)
-    expect(sendEmailStub.called || true).toBe(true);
+    expect(sendEmailStub.callCount).toBe(ADMIN_COUNT);
+    expect(sendEmailStub.getCalls().map(call => call.args[0].to).sort()).toEqual([
+      'disk-admin-1@example.test',
+      'disk-admin-2@example.test',
+    ]);
   });
 
-  it('should send critical email when disk usage exceeds critical threshold', async () => {
-    const diskMonitor = new DiskMonitorService();
-    const alerts = new AlertsService(emailInterface, accountsInterface);
+  it('does not resend after a restart: a fresh service reads the state from the row', async () => {
+    await check(95, hoursAfterStart(0));
+    await check(95, hoursAfterStart(1), newAlertsService());
 
-    // Mock filesystem to return 92% disk usage (critical level)
-    vi.spyOn(fs, 'statfs').mockResolvedValue({
-      blocks: BigInt(1000000),
-      bsize: BigInt(4096),
-      bavail: BigInt(80000),   // 8% free
-      bfree: BigInt(80000),
-      type: BigInt(0),
-      files: BigInt(0),
-      ffree: BigInt(0),
-    } as any);
-
-    const backupPath = config.get<string>('housekeeping.backup.path');
-    const warningThreshold = config.get<number>('housekeeping.monitoring.disk.warning_threshold');
-    const criticalThreshold = config.get<number>('housekeeping.monitoring.disk.critical_threshold');
-
-    // Phase 1: Disk check
-    const usage = await diskMonitor.checkDiskUsage(backupPath);
-
-    // Phase 2: Threshold detection
-    const isWarning = diskMonitor.isWarningThreshold(usage.percentageUsed, warningThreshold);
-    const isCritical = diskMonitor.isCriticalThreshold(usage.percentageUsed, criticalThreshold);
-
-    expect(usage.percentageUsed).toBeCloseTo(92, 1);
-    expect(isWarning).toBe(false); // Critical overrides warning
-    expect(isCritical).toBe(true);
-
-    // Phase 3: Send critical alert email
-    const usedFormatted = diskMonitor.formatBytes(usage.usedBytes);
-    const totalFormatted = diskMonitor.formatBytes(usage.totalBytes);
-
-    await alerts.sendDiskCritical(
-      usage.percentageUsed,
-      criticalThreshold,
-      backupPath,
-      usedFormatted,
-      totalFormatted,
-    );
-
-    // Verify alert was sent (graceful failure is OK)
-    expect(sendEmailStub.called || true).toBe(true);
+    expect(alertsSent()).toEqual(['Disk Critical']);
   });
 
-  it('should not send alert when disk usage is below warning threshold', async () => {
-    const diskMonitor = new DiskMonitorService();
+  it('sends warning then critical immediately when the level rises', async () => {
+    await check(85, hoursAfterStart(0));
+    await check(92, hoursAfterStart(1));
 
-    // Mock filesystem to return 50% disk usage (safe level)
-    vi.spyOn(fs, 'statfs').mockResolvedValue({
-      blocks: BigInt(1000000),
-      bsize: BigInt(4096),
-      bavail: BigInt(500000),  // 50% free
-      bfree: BigInt(500000),
-      type: BigInt(0),
-      files: BigInt(0),
-      ffree: BigInt(0),
-    } as any);
-
-    const backupPath = config.get<string>('housekeeping.backup.path');
-    const warningThreshold = config.get<number>('housekeeping.monitoring.disk.warning_threshold');
-    const criticalThreshold = config.get<number>('housekeeping.monitoring.disk.critical_threshold');
-
-    // Phase 1: Disk check
-    const usage = await diskMonitor.checkDiskUsage(backupPath);
-
-    // Phase 2: Threshold detection
-    const isWarning = diskMonitor.isWarningThreshold(usage.percentageUsed, warningThreshold);
-    const isCritical = diskMonitor.isCriticalThreshold(usage.percentageUsed, criticalThreshold);
-
-    expect(usage.percentageUsed).toBe(50);
-    expect(isWarning).toBe(false);
-    expect(isCritical).toBe(false);
-
-    // Phase 3: No alert should be sent
-    // (In real code, worker would skip sendDiskWarning/Critical calls)
-
-    // Verify no email was sent
-    expect(sendEmailStub.called).toBe(false);
+    expect(alertsSent()).toEqual(['Disk Warning', 'Disk Critical']);
   });
 
-  it('should handle disk check failure gracefully without sending alert', async () => {
-    const diskMonitor = new DiskMonitorService();
+  it('resends the same level only once 24 hours have passed', async () => {
+    await check(95, hoursAfterStart(0));
+    await check(95, hoursAfterStart(23));
+    expect(alertsSent()).toEqual(['Disk Critical']);
 
-    // Mock filesystem failure
-    vi.spyOn(fs, 'statfs').mockRejectedValue(new Error('Path not found'));
+    await check(95, hoursAfterStart(24));
+    expect(alertsSent()).toEqual(['Disk Critical', 'Disk Critical']);
+  });
 
-    const backupPath = '/invalid/path';
+  it('a normal reading clears the state, so the next crossing sends', async () => {
+    await check(95, hoursAfterStart(0));
+    await check(50, hoursAfterStart(1));
 
-    // Phase 1: Disk check failure
-    await expect(diskMonitor.checkDiskUsage(backupPath)).rejects.toThrow('Path not found');
+    const cleared = await storedRow();
+    expect(cleared.alert_level).toBeNull();
+    expect(cleared.alert_sent_at).toBeNull();
 
-    // Phase 2 & 3: No threshold detection or alert sent
-    expect(sendEmailStub.called).toBe(false);
+    await check(95, hoursAfterStart(2));
+    expect(alertsSent()).toEqual(['Disk Critical', 'Disk Critical']);
+  });
+
+  it('records no state when no administrator is reached, and the next run sends', async () => {
+    sendEmailStub.rejects(new Error('SMTP not configured'));
+    await check(95, hoursAfterStart(0));
+
+    const unsent = await storedRow();
+    expect(unsent.alert_level).toBeNull();
+    expect(unsent.alert_sent_at).toBeNull();
+
+    sendEmailStub.resetBehavior();
+    sendEmailStub.resolves(null);
+    sendEmailStub.resetHistory();
+    await check(95, hoursAfterStart(1));
+
+    expect(sendEmailStub.callCount).toBe(ADMIN_COUNT);
+    expect((await storedRow()).alert_level).toBe('critical');
+  });
+
+  it('records state when one of two administrators is reached', async () => {
+    sendEmailStub.onFirstCall().rejects(new Error('SMTP rejected'));
+
+    await check(95, hoursAfterStart(0));
+
+    const row = await storedRow();
+    expect(row.alert_level).toBe('critical');
+    expect(row.alert_sent_at!.getTime()).toBe(hoursAfterStart(0).getTime());
+  });
+
+  it('setAlertState leaves written_at unchanged', async () => {
+    const measuredAt = hoursAfterStart(0);
+    await snapshots.recordSnapshot(BACKUP_PATH_STAT_KEY, reading(95), measuredAt);
+
+    await snapshots.setAlertState(BACKUP_PATH_STAT_KEY, 'critical', hoursAfterStart(5));
+
+    const row = await storedRow();
+    expect(row.written_at.getTime()).toBe(measuredAt.getTime());
+    expect(row.alert_level).toBe('critical');
+  });
+
+  // Regression: the hourly snapshot upsert must write only the measurement
+  // columns. If it wrote every column it would clear the alert state each
+  // run, and the alert would go out every hour again.
+  it('recordSnapshot leaves the alert columns unchanged and updates the bytes', async () => {
+    const sentAt = hoursAfterStart(0);
+    await snapshots.recordSnapshot(BACKUP_PATH_STAT_KEY, reading(95), sentAt);
+    await snapshots.setAlertState(BACKUP_PATH_STAT_KEY, 'critical', sentAt);
+
+    await snapshots.recordSnapshot(BACKUP_PATH_STAT_KEY, reading(97), hoursAfterStart(1));
+
+    const row = await storedRow();
+    expect(row.alert_level).toBe('critical');
+    expect(row.alert_sent_at!.getTime()).toBe(sentAt.getTime());
+    expect(Number(row.used_bytes)).toBe(970);
+    expect(row.written_at.getTime()).toBe(hoursAfterStart(1).getTime());
   });
 });

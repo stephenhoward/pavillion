@@ -1,5 +1,6 @@
 import { DiskUsageSnapshotEntity } from '@/server/housekeeping/entity/disk-snapshot';
 import { DiskUsageStats } from '@/server/housekeeping/service/disk-monitor';
+import { DiskAlertLevel, DiskAlertState } from '@/server/housekeeping/service/disk-alert-decision';
 
 /**
  * Stable key for the backup volume's usage snapshot. The worker writes under
@@ -25,6 +26,19 @@ export interface DiskSnapshot {
 }
 
 /**
+ * The columns recordSnapshot's upsert may write. The alert columns are left
+ * out so the hourly write never clears the alert state.
+ */
+const MEASUREMENT_COLUMNS: (keyof DiskUsageSnapshotEntity)[] = [
+  'path',
+  'total_bytes',
+  'free_bytes',
+  'used_bytes',
+  'percentage_used',
+  'written_at',
+];
+
+/**
  * Reads and writes worker-measured filesystem usage snapshots.
  *
  * This is the single read path for backup-volume disk usage in the web
@@ -38,7 +52,8 @@ export default class DiskSnapshotService {
    *
    * Called from the worker's disk:check job. Overwrites any existing row for
    * the same key rather than appending, so the table stays one row per
-   * monitored filesystem.
+   * monitored filesystem. Only the measurement columns are written: the
+   * row's alert state belongs to setAlertState and survives every hourly write.
    *
    * @param statKey - Stable identifier for the monitored filesystem
    * @param stats - Usage statistics as measured by DiskMonitorService
@@ -53,6 +68,8 @@ export default class DiskSnapshotService {
       used_bytes: stats.usedBytes.toString(),
       percentage_used: stats.percentageUsed,
       written_at: writtenAt,
+    }, {
+      fields: MEASUREMENT_COLUMNS,
     });
   }
 
@@ -79,5 +96,42 @@ export default class DiskSnapshotService {
       percentageUsed: Number(row.percentage_used),
       writtenAt: row.written_at,
     };
+  }
+
+  /**
+   * Reads the disk alert state stored beside a filesystem's snapshot.
+   *
+   * @param statKey - Stable identifier for the monitored filesystem
+   * @returns The level last alerted and when; both null when no alert is
+   *   outstanding or no snapshot exists
+   */
+  async getAlertState(statKey: string): Promise<DiskAlertState> {
+    const row = await DiskUsageSnapshotEntity.findByPk(statKey, {
+      attributes: ['alert_level', 'alert_sent_at'],
+    });
+
+    return {
+      level: row?.alert_level ?? null,
+      sentAt: row?.alert_sent_at ?? null,
+    };
+  }
+
+  /**
+   * Records the disk alert state for a filesystem; `(null, null)` clears it.
+   *
+   * Writes only the two alert columns, so it never moves `written_at` — the
+   * measurement time behind the status panel's reading and the snapshot
+   * timestamp metric. A filesystem with no snapshot row has nothing to update:
+   * the worker records the snapshot before it alerts.
+   *
+   * @param statKey - Stable identifier for the monitored filesystem
+   * @param level - Alert level just sent, or null to clear
+   * @param sentAt - When it was sent, or null to clear
+   */
+  async setAlertState(statKey: string, level: DiskAlertLevel | null, sentAt: Date | null): Promise<void> {
+    await DiskUsageSnapshotEntity.update(
+      { alert_level: level, alert_sent_at: sentAt },
+      { where: { stat_key: statKey } },
+    );
   }
 }

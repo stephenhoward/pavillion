@@ -13,7 +13,7 @@ import OffsiteCopyService from '@/server/housekeeping/service/offsite-copy';
 import RetentionService from '@/server/housekeeping/service/retention';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import DiskSnapshotService, { BACKUP_PATH_STAT_KEY } from '@/server/housekeeping/service/disk-snapshot';
-import AlertsService from '@/server/housekeeping/service/alerts';
+import AlertsService, { describeSendError } from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import CalendarInterface from '@/server/calendar/interface';
@@ -85,7 +85,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const diskSnapshotService = new DiskSnapshotService();
   const emailInterface = new EmailInterface();
   const accountsInterface = new AccountsInterface();
-  const alertsService = new AlertsService(emailInterface, accountsInterface);
+  const alertsService = new AlertsService(emailInterface, accountsInterface, diskSnapshotService, diskMonitorService);
   const ipCleanupService = new IpCleanupService();
   const unverifiedReportCleanupService = new UnverifiedReportCleanupService();
   const eventBus = new EventEmitter();
@@ -164,37 +164,18 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       // Persist the measurement for the web process. The app container does
       // not mount the backup volume, so this table is the only way the admin
       // status panel and the metrics endpoint can see backup-volume usage.
-      // Written before the threshold checks so an alert failure cannot cost
-      // the instance its disk telemetry.
+      // Written before alerting so an alert failure cannot cost the instance
+      // its disk telemetry.
       await diskSnapshotService.recordSnapshot(BACKUP_PATH_STAT_KEY, usage);
 
-      // Check thresholds and send alerts
-      if (diskMonitorService.isCriticalThreshold(usage.percentageUsed, criticalThreshold)) {
-        logger.warn({ criticalThreshold }, 'CRITICAL disk threshold exceeded');
-        await alertsService.sendDiskCritical(
-          usage.percentageUsed,
-          criticalThreshold,
-          backupPath,
-          diskMonitorService.formatBytes(usage.usedBytes),
-          diskMonitorService.formatBytes(usage.totalBytes),
-        );
-      }
-      else if (diskMonitorService.isWarningThreshold(usage.percentageUsed, warningThreshold, criticalThreshold)) {
-        logger.warn({ warningThreshold }, 'Warning disk threshold exceeded');
-        await alertsService.sendDiskWarning(
-          usage.percentageUsed,
-          warningThreshold,
-          backupPath,
-          diskMonitorService.formatBytes(usage.usedBytes),
-          diskMonitorService.formatBytes(usage.totalBytes),
-        );
-      }
-      else {
-        logger.info('Disk usage within normal limits');
-      }
+      // Alerts on a change of level, then at most daily; never throws.
+      await alertsService.processDiskReading(usage, {
+        warning: warningThreshold,
+        critical: criticalThreshold,
+      });
     }
     catch (error) {
-      logger.error({ err: error }, 'Disk check failed');
+      logger.error({ error: describeSendError(error) }, 'Disk check failed');
       // Don't throw - allow monitoring to continue on next scheduled check
     }
   });

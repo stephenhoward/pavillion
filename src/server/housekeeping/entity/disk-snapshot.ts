@@ -42,6 +42,22 @@ class DiskUsageSnapshotEntity extends Model {
   /** When the worker measured these values. */
   @Column({ type: DataType.DATE, allowNull: false })
   declare written_at: Date;
+
+  /*
+   * Notification state, not measurement: the disk alert level last sent for
+   * this filesystem and when, so the hourly check alerts once per state change
+   * rather than every run. Written only by DiskSnapshotService.setAlertState;
+   * never part of the DiskSnapshot read shape, the status response or the
+   * metrics exposition (DEC-017).
+   */
+
+  /** Alert level last sent ('warning' | 'critical'); null when none is outstanding. */
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare alert_level: 'warning' | 'critical' | null;
+
+  /** When the alert at `alert_level` was last sent. */
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare alert_sent_at: Date | null;
 }
 
 db.addModels([DiskUsageSnapshotEntity]);
