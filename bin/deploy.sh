@@ -33,8 +33,17 @@
 #   0  success (including "nothing to do")
 #   1  generic failure
 #   2  missing 'stable' secret in non-interactive mode
-#   3  safety check failed (dirty tree, wrong directory, etc.)
+#   3  safety check failed (dirty tree, wrong directory,
+#      PAVILLION_IMAGE_TAG=previous, etc.)
 #   4  docker compose up succeeded but /health never returned 200
+#
+# Application images:
+#   Before pulling, the image the app container runs is noted; if the pull
+#   brings a different one, the running image is tagged
+#   <repository>:previous for rollback. After a healthy upgrade, images of
+#   the application repository that no container uses and that are neither
+#   :previous nor the configured tag are removed. Nothing is removed after
+#   a failed pull, a failed start or a failed health check.
 
 set -euo pipefail
 
@@ -54,6 +63,13 @@ MANIFEST="${REPO_ROOT}/bin/deploy-manifest.tsv"
 ENV_FILE="${REPO_ROOT}/.env"
 SECRETS_DIR="${REPO_ROOT}/secrets"
 DEPLOY_STATE_FILE="${REPO_ROOT}/.deploy-state"
+
+# Application image retention (see "Application images" above).
+ROLLBACK_TAG="previous"
+DISK_ALERT_GUIDE_URL="https://docs.pavillion.social/guides/instance-administrators/monitoring-and-logs#when-the-disk-alert-arrives"
+APP_REPOSITORY=""
+APP_IMAGE_REF=""
+RUNNING_APP_IMAGE_ID=""
 
 # Debug/test flags
 DEBUG_DIFF=0
@@ -560,6 +576,7 @@ run_docker_pull() {
   log_info "Pulling images..."
   if ! (cd "$REPO_ROOT" && docker compose pull); then
     log_error "docker compose pull failed."
+    log_error "If the disk is full, see ${DISK_ALERT_GUIDE_URL}"
     return 1
   fi
   log_success "Images pulled."
@@ -610,11 +627,395 @@ poll_health() {
   return 4
 }
 
-# run_docker: pull, up, and poll /health.
+# ---- Application image retention ----
+#
+# Removal is scoped to the application repository: other repositories, the
+# sidecar images, volumes and stopped containers' images are never touched,
+# no command is forced, and every image is compared by its full sha256: id.
+# Functions whose stdout is data log nothing; their callers do the logging.
+
+HEX_DIGITS='abcdef0123456789'
+
+# validate_image_id <value>: a full sha256: image id.
+validate_image_id() {
+  local id_re="^sha256:[${HEX_DIGITS}]{64}\$"
+  [[ "$1" =~ $id_re ]]
+}
+
+# validate_object_id <value>: an id as Docker lists it — short or full,
+# with or without the sha256: prefix. Guards what is passed back to docker.
+validate_object_id() {
+  local id_re="^(sha256:)?[${HEX_DIGITS}]{12,64}\$"
+  [[ "$1" =~ $id_re ]]
+}
+
+# validate_repository <value>: a lowercase repository name, registry port
+# allowed. Rejects empty, multi-line and whitespace values.
+validate_repository() {
+  local repo_re='^[abcdefghijklmnopqrstuvwxyz0123456789][abcdefghijklmnopqrstuvwxyz0123456789._/:-]*$'
+  [[ "$1" =~ $repo_re ]]
+}
+
+# validate_image_tag <value>: Docker's tag grammar. '<none>' fails it.
+validate_image_tag() {
+  local tag_re='^[ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_][ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-]{0,127}$'
+  [[ "$1" =~ $tag_re ]]
+}
+
+# image_ref_repository <ref> -> stdout: <ref> without its digest and tag.
+# The tag is split at the last ':' after the last '/', so a registry port
+# stays part of the repository.
+image_ref_repository() {
+  local ref="${1%%@*}"
+  if [[ "${ref##*/}" == *:* ]]; then
+    printf '%s\n' "${ref%:*}"
+  else
+    printf '%s\n' "$ref"
+  fi
+}
+
+# ref_in_repository <ref> <repository>: exit 0 if <ref> is a tag or digest
+# reference of exactly <repository> (not of a longer name sharing its prefix).
+ref_in_repository() {
+  local ref="$1"
+  local repo="$2"
+  [[ "$ref" == "${repo}:"* || "$ref" == "${repo}@"* ]] || return 1
+  local rest="${ref:${#repo}+1}"
+  [[ -n "$rest" && "$rest" != */* ]]
+}
+
+# resolve_image_id <ref> -> stdout: the full sha256: id <ref> names.
+# Fails if docker cannot inspect it or reports an id of another form.
+resolve_image_id() {
+  local ref="$1"
+  [[ -n "$ref" && "$ref" != -* ]] || return 1
+  local id
+  id=$(docker image inspect --format '{{.Id}}' "$ref") || return 1
+  validate_image_id "$id" || return 1
+  printf '%s\n' "$id"
+}
+
+# image_refs <id> -> stdout: the image's RepoTags and RepoDigests, one per
+# line, read from docker's JSON arrays.
+image_refs() {
+  local out
+  out=$(docker image inspect --format '{{json .RepoTags}} {{json .RepoDigests}}' "$1") || return 1
+  parse_ref_arrays "$out"
+}
+
+# parse_ref_arrays <text> -> stdout: the entries of the JSON string arrays
+# in <text>, one per line. References contain no quotes, commas or spaces.
+parse_ref_arrays() {
+  local entry
+  while IFS= read -r entry; do
+    [[ -n "$entry" && "$entry" != "null" ]] && printf '%s\n' "$entry"
+  done < <(printf '%s\n' "$1" | tr -d '[]"' | tr ', ' '\n\n')
+  return 0
+}
+
+# refs_in_repository <refs> <repository>: exit 0 if any line of <refs>
+# belongs to <repository>.
+refs_in_repository() {
+  local ref
+  while IFS= read -r ref; do
+    [[ -n "$ref" ]] && ref_in_repository "$ref" "$2" && return 0
+  done <<< "$1"
+  return 1
+}
+
+# refs_outside_repository <refs> <repository>: exit 0 if any line of <refs>
+# belongs to another repository.
+refs_outside_repository() {
+  local ref
+  while IFS= read -r ref; do
+    [[ -n "$ref" ]] && ! ref_in_repository "$ref" "$2" && return 0
+  done <<< "$1"
+  return 1
+}
+
+# format_bytes <bytes> -> stdout: a decimal size such as "1.2 GB".
+format_bytes() {
+  awk -v b="$1" 'BEGIN {
+    split("B KB MB GB TB", unit, " "); i = 1
+    while (b >= 1000 && i < 5) { b /= 1000; i++ }
+    if (i == 1) printf "%d %s\n", b, unit[i]; else printf "%.1f %s\n", b, unit[i]
+  }'
+}
+
+# refuse_rollback_image_tag: exit 3 when the app is configured to run the
+# local rollback tag — PAVILLION_IMAGE_TAG (shell or .env) says so, or the
+# configured app image (APP_IMAGE_REF, once app_image_context has read it)
+# ends in it. That tag exists only on this host, so a pull for it would
+# fail, and cleanup must not run against it.
+refuse_rollback_image_tag() {
+  if [[ "$(resolve_setting PAVILLION_IMAGE_TAG "")" != "$ROLLBACK_TAG" \
+    && "$APP_IMAGE_REF" != *":${ROLLBACK_TAG}" ]]; then
+    return 0
+  fi
+  log_error "The app image is configured as '${ROLLBACK_TAG}': this instance is running its local rollback image."
+  log_error "  To resume upgrades, remove PAVILLION_IMAGE_TAG from ${ENV_FILE} and the shell, or set it to"
+  log_error "  the version to upgrade to, then re-run bin/deploy.sh."
+  return 3
+}
+
+# app_image_context: read the running app container's image id, the
+# application repository and the configured app image reference into
+# RUNNING_APP_IMAGE_ID, APP_REPOSITORY and APP_IMAGE_REF. Exit 1 (after
+# logging why) when any is unavailable; the deploy then tags and removes
+# nothing. `docker compose config --images app` also lists the images of
+# app's dependencies, so the configured reference is the one line naming the
+# repository the running container was created from.
+app_image_context() {
+  RUNNING_APP_IMAGE_ID=""; APP_REPOSITORY=""; APP_IMAGE_REF=""
+  local container
+  if ! container=$(cd "$REPO_ROOT" && docker compose ps -q app); then
+    log_warn "Could not list the app container; old application images will not be removed."
+    return 1
+  fi
+  container="${container%%$'\n'*}"
+  if [[ -z "$container" ]]; then
+    log_info "No running app container: no rollback image is tagged and no images are removed."
+    return 1
+  fi
+  local fields
+  if ! validate_object_id "$container" \
+    || ! fields=$(docker inspect --format '{{.Image}} {{.Config.Image}}' "$container"); then
+    log_warn "Could not inspect the app container; old application images will not be removed."
+    return 1
+  fi
+  local running_id
+  if ! running_id=$(resolve_image_id "${fields%% *}"); then
+    log_warn "Could not read the running application image id; old application images will not be removed."
+    return 1
+  fi
+  local repository
+  repository=$(image_ref_repository "${fields#* }")
+  if ! validate_repository "$repository"; then
+    log_warn "The application repository is not a valid name; old application images will not be removed."
+    return 1
+  fi
+  local images
+  if ! images=$(cd "$REPO_ROOT" && docker compose config --images app); then
+    log_warn "Could not read the configured app image; old application images will not be removed."
+    return 1
+  fi
+  local ref matches=""
+  while IFS= read -r ref; do
+    [[ -n "$ref" && "$(image_ref_repository "$ref")" == "$repository" ]] || continue
+    [[ $'\n'"$matches" == *$'\n'"${ref}"$'\n'* ]] || matches="${matches}${ref}"$'\n'
+  done <<< "$images"
+  matches="${matches%$'\n'}"
+  if [[ -z "$matches" || "$matches" == *$'\n'* || "$matches" == *[[:space:]]* ]]; then
+    log_warn "The configured app image is not one ${repository} reference; old application images will not be removed."
+    return 1
+  fi
+  RUNNING_APP_IMAGE_ID="$running_id"
+  APP_REPOSITORY="$repository"
+  APP_IMAGE_REF="$matches"
+  return 0
+}
+
+# tag_rollback_image: after the pull, tag the image the app was running as
+# <repository>:previous if the configured reference now names another image.
+# With no new image, :previous stays where it was. Exit 1 when cleanup would
+# be unsafe this run (the configured image or the tag step failed).
+tag_rollback_image() {
+  local configured_id
+  if ! configured_id=$(resolve_image_id "$APP_IMAGE_REF"); then
+    log_warn "Could not read the image ${APP_IMAGE_REF} names; old application images will not be removed."
+    return 1
+  fi
+  if [[ "$configured_id" == "$RUNNING_APP_IMAGE_ID" ]]; then
+    log_info "No new application image; ${APP_REPOSITORY}:${ROLLBACK_TAG} is unchanged."
+    return 0
+  fi
+  local refs
+  if ! refs=$(image_refs "$RUNNING_APP_IMAGE_ID"); then
+    log_warn "Could not inspect the running application image; old application images will not be removed."
+    return 1
+  fi
+  if ! refs_in_repository "$refs" "$APP_REPOSITORY"; then
+    log_warn "The running application image has no ${APP_REPOSITORY} tag or digest; not tagging it ${ROLLBACK_TAG}."
+    return 0
+  fi
+  if ! docker tag "$RUNNING_APP_IMAGE_ID" "${APP_REPOSITORY}:${ROLLBACK_TAG}"; then
+    log_warn "Could not tag the running image ${ROLLBACK_TAG}; old application images will not be removed."
+    return 1
+  fi
+  log_info "Kept the running application image as ${APP_REPOSITORY}:${ROLLBACK_TAG} for rollback."
+  return 0
+}
+
+# list_app_images -> stdout: one "<full id> <tag>" line per row of
+# `docker image ls <repository>` (the tag may be <none>). Fails if the
+# listing fails or any row's id is not a sha256: id.
+list_app_images() {
+  local rows
+  rows=$(docker image ls "$APP_REPOSITORY" --format '{{.ID}} {{.Tag}}') || return 1
+  local short tag id
+  while read -r short tag <&3; do
+    [[ -n "$short" ]] || continue
+    validate_object_id "$short" || return 1
+    id=$(resolve_image_id "$short") || return 1
+    printf '%s %s\n' "$id" "$tag"
+  done 3<<< "$rows"
+}
+
+# build_keep_set <listing> -> stdout: the full ids cleanup must keep — every
+# container's image (running or stopped), the image behind :previous and
+# the image behind the configured reference. Fails if any lookup fails: a
+# partial keep set is how a rollback or in-use image would be deleted.
+build_keep_set() {
+  local listing="$1"
+  local containers
+  containers=$(docker ps -a -q --no-trunc) || return 1
+  local -a ids=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    validate_object_id "$line" || return 1
+    ids+=("$line")
+  done <<< "$containers"
+  if (( ${#ids[@]} > 0 )); then
+    local images
+    images=$(docker inspect --format '{{.Image}}' "${ids[@]}") || return 1
+    while IFS= read -r line <&3; do
+      [[ -n "$line" ]] || continue
+      resolve_image_id "$line" || return 1
+    done 3<<< "$images"
+  fi
+  local id tag
+  while read -r id tag; do
+    if [[ "$tag" == "$ROLLBACK_TAG" ]]; then
+      printf '%s\n' "$id"
+    fi
+  done <<< "$listing"
+  resolve_image_id "$APP_IMAGE_REF" || return 1
+}
+
+# select_candidates <listing> <keep> -> stdout: each listed id not in
+# <keep>, once.
+select_candidates() {
+  local listing="$1"
+  local keep="$2"
+  local seen=""
+  local id tag
+  while read -r id tag; do
+    [[ -n "$id" ]] || continue
+    [[ $'\n'"$keep"$'\n' == *$'\n'"$id"$'\n'* ]] && continue
+    [[ "$seen" == *"$id"* ]] && continue
+    seen="${seen} ${id}"
+    printf '%s\n' "$id"
+  done <<< "$listing"
+}
+
+# remove_app_image <id> <listing>: untag the image's application tags by
+# reference, then — unless another repository still references it — remove
+# it by id. An image carrying a tag that cannot be untagged safely (one
+# failing the tag grammar, or the rollback tag) is kept untouched. Sets
+# REMOVED_IMAGE_SIZE to its size before removal (0 when unknown). Exit 0
+# only when the image is gone.
+remove_app_image() {
+  local id="$1"
+  local listing="$2"
+  REMOVED_IMAGE_SIZE=0
+  local info
+  if ! info=$(docker image inspect --format '{{.Size}} {{json .RepoTags}} {{json .RepoDigests}}' "$id"); then
+    log_warn "Could not inspect ${id}; keeping it."
+    return 1
+  fi
+  local size="${info%% *}"
+  if [[ "$size" =~ ^[0123456789]+$ ]]; then
+    size=$((10#$size))
+  else
+    size=0
+  fi
+  local refs
+  refs=$(parse_ref_arrays "${info#* }")
+
+  local -a tags=()
+  local row_id tag
+  while read -r row_id tag; do
+    [[ "$row_id" == "$id" && "$tag" != "<none>" ]] || continue
+    if ! validate_image_tag "$tag" || [[ "$tag" == "$ROLLBACK_TAG" ]]; then
+      log_warn "${id} has a tag that is not a valid Docker tag or is ${ROLLBACK_TAG}; keeping it."
+      return 1
+    fi
+    tags+=("$tag")
+  done <<< "$listing"
+
+  if (( ${#tags[@]} > 0 )); then
+    for tag in "${tags[@]}"; do
+      if ! docker image rm "${APP_REPOSITORY}:${tag}" >/dev/null; then
+        log_warn "Could not remove ${APP_REPOSITORY}:${tag}; keeping ${id}."
+        return 1
+      fi
+    done
+  fi
+
+  if refs_outside_repository "$refs" "$APP_REPOSITORY"; then
+    log_info "${id} is also referenced by another repository; removed only its ${APP_REPOSITORY} tags."
+    return 1
+  fi
+  # Untagging the last tag already removes an image Docker no longer needs.
+  if docker image inspect --format '{{.Id}}' "$id" >/dev/null 2>&1; then
+    if ! docker image rm "$id" >/dev/null; then
+      log_warn "Could not remove ${id}; keeping it."
+      return 1
+    fi
+  fi
+  REMOVED_IMAGE_SIZE="$size"
+  return 0
+}
+
+# prune_app_images: after a healthy upgrade, remove application images that
+# no container uses and that are neither :previous nor the configured image.
+# Always returns 0: cleanup never fails a deploy.
+prune_app_images() {
+  local listing keep candidates
+  if ! listing=$(list_app_images); then
+    log_warn "Could not list ${APP_REPOSITORY} images; no images removed."
+    return 0
+  fi
+  if ! keep=$(build_keep_set "$listing"); then
+    log_warn "Could not tell which images are in use; no images removed."
+    return 0
+  fi
+  if ! candidates=$(select_candidates "$listing" "$keep"); then
+    log_warn "Could not select old application images; no images removed."
+    return 0
+  fi
+  local removed=0
+  local reclaimed=0
+  local id
+  while IFS= read -r id <&3; do
+    [[ -n "$id" ]] || continue
+    if remove_app_image "$id" "$listing"; then
+      removed=$((removed + 1))
+      reclaimed=$((reclaimed + REMOVED_IMAGE_SIZE))
+    fi
+  done 3<<< "$candidates"
+  log_info "Removed ${removed} old application images, reclaimed $(format_bytes "$reclaimed")"
+  return 0
+}
+
+# run_docker: pull, tag the replaced image for rollback, up, poll /health,
+# and only after a healthy start remove old application images.
 run_docker() {
+  local cleanup=0
+  if app_image_context; then
+    cleanup=1
+  fi
+  refuse_rollback_image_tag || return $?
   run_docker_pull || return 1
+  if (( cleanup )) && ! tag_rollback_image; then
+    cleanup=0
+  fi
   run_docker_up || return 1
   poll_health "$HEALTH_TIMEOUT" || return $?
+  if (( cleanup )); then
+    prune_app_images
+  fi
   return 0
 }
 

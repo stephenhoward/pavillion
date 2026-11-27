@@ -20,11 +20,17 @@ to run at any time, whether you have changes to apply or not.
 4. Compares against your `.env`. Silently generates any missing
    **regenerable** secrets. Prompts you to paste (or regenerate) any
    missing **stable** secrets.
-5. Runs `docker compose pull` to fetch the new image.
+5. Runs `docker compose pull` to fetch the new image. If the new image
+   replaces the one the app is running, the replaced image is tagged
+   `previous` (see [Rollback](#rollback)).
 6. Runs `docker compose up -d` to start (or restart) containers.
 7. Polls `http://localhost:3000/health` until the app responds or the
    timeout expires.
-8. Reports success or failure.
+8. Once the health check passes, removes older application images that
+   no container uses, keeping the running image and the `previous` one,
+   and logs how many it removed and how much space that freed. After a
+   failed upgrade it removes nothing.
+9. Reports success or failure.
 
 ## Pre-Upgrade Checklist
 
@@ -124,7 +130,21 @@ upgrades that touch existing secrets get the right behavior.
 
 ## Rollback
 
-`bin/deploy.sh` does not automate rollback. If an upgrade fails:
+`bin/deploy.sh` does not automate rollback. It keeps the application image
+your instance ran before the latest upgrade on the server, tagged
+`ghcr.io/stephenhoward/pavillion:previous`, so you can go back one version
+without downloading anything. If you re-run `bin/deploy.sh` after a failed
+health check and it downloads a newer version, `previous` becomes the
+version that failed, and once the newer version is healthy the image from
+before the failed one is removed. To keep that image, roll back to it
+before re-running.
+
+After a healthy upgrade, `bin/deploy.sh` removes every other application
+image that no container uses, keeping only the running image and the
+`previous` one. To go back further, pin that version and Docker downloads
+it again (step 3 below).
+
+If an upgrade fails:
 
 1. Stop the containers:
 
@@ -134,26 +154,32 @@ upgrades that touch existing secrets get the right behavior.
 
 2. Restore your database backup (see step 2 of the pre-upgrade checklist).
 
-3. Pin the previous image version by setting `PAVILLION_IMAGE_TAG` in
-   `.env`:
+3. Pin the image to start by setting `PAVILLION_IMAGE_TAG` in `.env`. To
+   use the image kept from before the upgrade:
 
    ```bash
-   PAVILLION_IMAGE_TAG=v1.1.0  # previous version
+   PAVILLION_IMAGE_TAG=previous
    ```
+
+   To use an older version, name it instead, for example
+   `PAVILLION_IMAGE_TAG=v1.1.0`.
 
    Leave `docker-compose.yml` as it is: `bin/deploy.sh` refuses to run
    when the repository has local changes. The variable is described in
    the [environment variable reference](deployment.md#environment-variable-reference).
-   Before your next upgrade, remove the line (or set it to the version
-   you are upgrading to) if you want to follow `latest` again.
 
-4. Start with the previous version:
+4. Start the pinned version:
 
    ```bash
    docker compose up -d
    ```
 
 5. Verify: `curl http://localhost:3000/health`.
+
+Before your next upgrade, remove the `PAVILLION_IMAGE_TAG` line, or set it
+to the version you are upgrading to. While it says `previous`,
+`bin/deploy.sh` stops before downloading anything and tells you to change
+it, because the `previous` image exists only on your server.
 
 ## Troubleshooting
 
