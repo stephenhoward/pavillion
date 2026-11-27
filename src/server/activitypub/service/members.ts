@@ -19,8 +19,8 @@ import RemoteCalendarService from "@/server/activitypub/service/remote_calendar"
 import UndoActivity from "../model/action/undo";
 import db from "@/server/common/entity/db";
 import CalendarInterface from "@/server/calendar/interface";
-import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
+import { findOrCreateLocalEventObject } from "@/server/activitypub/helper/local-event-object";
 import { sanitizePeerPageUrl } from "@/server/activitypub/helper/url-sanitizer";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 import { looksLikeUuid } from "@/server/common/helper/uuid";
@@ -371,37 +371,16 @@ class ActivityPubService {
       where: { ap_id: eventUrl },
     });
 
-    // Step 2: If not found, this may be a local same-instance event URL.
-    // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
+    // Step 2: If not found, this may be a local same-instance event URL (for
+    // example getFeed's synthetic URL for a seed event that has no row yet).
+    // Resolve it to the event's row, created if missing, and announce the
+    // row's canonical ap_id.
     let canonicalEventUrl = eventUrl;
 
     if (!eventObject) {
-      const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-      if (uuidMatch) {
-        const candidateId = uuidMatch[1];
-        const localEvent = await this.calendarService.getEventById(candidateId);
-        if (localEvent?.calendarId) {
-          const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
-          if (localCalendar) {
-            canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
-            // Try EventObjectEntity lookup again with canonical URL
-            eventObject = await EventObjectEntity.findOne({
-              where: { ap_id: canonicalEventUrl },
-            });
-            // If still no EventObjectEntity, this is a local event that has never been
-            // published via ActivityPub (e.g., a seed event inserted directly into the DB).
-            // Create the EventObjectEntity on-the-fly so it can be shared.
-            if (!eventObject) {
-              const localActorUrl = await this.actorUrl(localCalendar);
-              eventObject = await EventObjectEntity.create({
-                event_id: localEvent.id,
-                ap_id: canonicalEventUrl,
-                attributed_to: localActorUrl,
-              });
-              logger.info({ eventId: localEvent.id }, 'shareEvent: created EventObjectEntity on-the-fly for local event');
-            }
-          }
-        }
+      eventObject = await findOrCreateLocalEventObject(eventUrl, this.calendarService);
+      if (eventObject) {
+        canonicalEventUrl = eventObject.ap_id;
       }
     }
 
