@@ -2217,7 +2217,9 @@ class ProcessInboxService {
 
   /**
    * Processes a Follow activity by creating a new follower relationship
-   * and queuing an Accept activity for asynchronous delivery.
+   * and queuing an Accept activity for asynchronous delivery. A Follow from
+   * an actor that is already a follower queues a fresh Accept and changes
+   * nothing else.
    *
    * @param {Calendar} calendar - The calendar being followed
    * @param {FollowActivity} message - The Follow activity message
@@ -2248,13 +2250,9 @@ class ProcessInboxService {
 
       logger.info(`Follower relationship created successfully`);
 
-      // Queue Accept activity for asynchronous delivery
-      const actorUrl = ActivityPubActor.actorUrl(calendar);
-      const acceptActivity = new AcceptActivity(actorUrl, message);
-
       logger.info(`Queueing Accept activity to ${message.actor}`);
 
-      await addToOutbox(this.eventBus, calendar, acceptActivity);
+      await this.queueAccept(calendar, message);
 
       logger.info(`Accept activity queued for delivery`);
 
@@ -2266,8 +2264,30 @@ class ProcessInboxService {
       });
     }
     else {
-      logger.info(`Follow relationship already exists for ${message.actor}, skipping`);
+      // Re-accept rather than skip (maintainer ruling, 2026-11-22). Accepting
+      // again is idempotent: no second row, no second notification. Answering
+      // a repeat Follow with a fresh Accept is the fediverse norm for a follow
+      // stuck pending, which is how a follower left by a stale row recovers.
+      // And an inbound Follow means one thing on this path whatever state we
+      // hold. A second Accept is safe on the peer side: a Pavillion peer
+      // re-runs its backfill, which the ap_inbox key makes idempotent
+      // (DEC-013), and other servers treat it as a confirmation.
+      await this.queueAccept(calendar, message);
+
+      logger.info({ calendarId: calendar.id, activityId: message.id }, 'Re-accepted Follow from an existing follower');
     }
+  }
+
+  /**
+   * Queues an Accept for a Follow on the followed calendar's outbox. Delivery
+   * goes to the embedded Follow's actor.
+   *
+   * @param calendar - The calendar being followed
+   * @param message - The Follow being accepted
+   */
+  private async queueAccept(calendar: Calendar, message: FollowActivity): Promise<void> {
+    const acceptActivity = new AcceptActivity(ActivityPubActor.actorUrl(calendar), message);
+    await addToOutbox(this.eventBus, calendar, acceptActivity);
   }
   /**
    * Processes an Accept activity received in response to a Follow or Flag request.
@@ -2478,7 +2498,7 @@ class ProcessInboxService {
    * @param followedActorUri - Actor URI of the calendar that accepted it
    */
   private async confirmFollow(calendar: Calendar, followedActorUri: string): Promise<boolean> {
-    const followed = await this.remoteCalendarService.getFollowedActorByUri(followedActorUri);
+    const followed = await this.remoteCalendarService.getAnyTypeByActorUri(followedActorUri);
     if (!followed) {
       return false;
     }
@@ -2595,16 +2615,19 @@ class ProcessInboxService {
       }
     }
 
-    // Find the CalendarActorEntity for this actor
-    const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
-    if (!remoteCalendar) {
+    // Find the follower's CalendarActorEntity. A follower on this instance
+    // is stored as a local actor, so the lookup matches either type; on the
+    // HTTP path the gate above has already pinned the actor's host to the
+    // verified origin, so a remote sender cannot name a local actor.
+    const followerActor = await this.remoteCalendarService.getAnyTypeByActorUri(actor);
+    if (!followerActor) {
       logger.warn(`No CalendarActorEntity found for ${actor}, cannot unfollow`);
       return;
     }
 
     await FollowerCalendarEntity.destroy({
       where: {
-        calendar_actor_id: remoteCalendar.id,
+        calendar_actor_id: followerActor.id,
         calendar_id: calendar.id,
       },
     });

@@ -19,6 +19,7 @@ import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 import config from 'config';
+import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -37,11 +38,16 @@ import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor'
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { findOrCreateLocalEventObject } from '@/server/activitypub/helper/local-event-object';
 import {
+  ActivityPubInboxMessageEntity,
   ActivityPubOutboxMessageEntity,
+  FollowerCalendarEntity,
   FollowingCalendarEntity,
   RepostDismissalEntity,
   SharedEventEntity,
 } from '@/server/activitypub/entity/activitypub';
+import { EventObject } from '@/server/activitypub/model/object/event';
+import FollowActivity from '@/server/activitypub/model/action/follow';
+import { addToOutbox } from '@/server/activitypub/helper/outbox';
 import { waitFor, waitForStableCount } from '@/server/common/test/lib/test_polling';
 
 describe('Same-instance follow brings in existing events', () => {
@@ -94,6 +100,56 @@ describe('Same-instance follow brings in existing events', () => {
   async function unfollow(): Promise<void> {
     await apInterface.unfollowCalendar(curatorAccount, curator, `${organizer.urlName}@${domain}`);
     await settle();
+  }
+
+  async function localActorOf(calendar: Calendar): Promise<CalendarActorEntity> {
+    const actor = await waitFor(
+      async () => CalendarActorEntity.findOne({ where: { calendar_id: calendar.id, actor_type: 'local' } }),
+      { label: `local actor of ${calendar.urlName}` },
+    );
+    return actor!;
+  }
+
+  /**
+   * Seeds the curator's follow of the organizer as a follow made before the
+   * same-instance catch-up existed left it: the organizer's follower row and
+   * its stored Follow in ap_inbox, plus (unless `following` is false) the
+   * curator's following row with auto-repost of originals on. Written
+   * directly, without `followCalendar`, so no catch-up has run and any
+   * repost can only come from what the test does next.
+   *
+   * @returns The Follow's activity id, which is also the following row's id
+   */
+  async function seedPreFixFollow({ following = true }: { following?: boolean } = {}): Promise<string> {
+    const organizerActor = await localActorOf(organizer);
+    const curatorActor = await localActorOf(curator);
+    const followId = `${curatorActor.actor_uri}/follows/${uuidv4()}`;
+
+    if (following) {
+      await FollowingCalendarEntity.create({
+        id: followId,
+        calendar_id: curator.id,
+        calendar_actor_id: organizerActor.id,
+        auto_repost_originals: true,
+        auto_repost_reposts: false,
+      });
+    }
+    await FollowerCalendarEntity.create({
+      id: uuidv4(),
+      calendar_id: organizer.id,
+      calendar_actor_id: curatorActor.id,
+    });
+    await ActivityPubInboxMessageEntity.create({
+      id: followId,
+      calendar_id: organizer.id,
+      type: 'Follow',
+      message_time: new Date(),
+      message: { id: followId, type: 'Follow', actor: curatorActor.actor_uri, object: organizerActor.actor_uri },
+      processed_time: new Date(),
+      processed_status: 'ok',
+      auth_source: 'local_dispatch',
+    });
+    return followId;
   }
 
   /** A two-hour event starting at `start`; `recurrence` makes it repeat. */
@@ -240,6 +296,71 @@ describe('Same-instance follow brings in existing events', () => {
     expect(first?.ap_id).toBe(eventUrl);
     expect(first?.attributed_to).toBe(`https://${domain}/calendars/${organizer.urlName}`);
     expect(await EventObjectEntity.count({ where: { event_id: upcomingEvent.id } })).toBe(1);
+  });
+
+  it('stops deliveries on unfollow and catches up on refollow for a follow made before the catch-up existed', async () => {
+    await RepostDismissalEntity.create({ event_id: upcomingEvent.id, calendar_id: curator.id });
+    await seedPreFixFollow();
+    const curatorActor = await localActorOf(curator);
+
+    await unfollow();
+
+    expect(await FollowerCalendarEntity.count({
+      where: { calendar_id: organizer.id, calendar_actor_id: curatorActor.id },
+    })).toBe(0);
+    // Past-dated, so the refollow's catch-up does not repost it.
+    const probe = await calendarInterface.createEvent(organizerAccount, eventParams(DateTime.now().minus({ weeks: 1 })));
+    await settle();
+    expect(await ActivityPubInboxMessageEntity.findOne({
+      where: { calendar_id: curator.id, id: `${EventObject.eventUrl(organizer, probe)}/create` },
+    })).toBeNull();
+
+    const accepted: string[] = [];
+    const onAccepted = (payload: { followingCalendarId: string }) => accepted.push(payload.followingCalendarId);
+    eventBus.on('activitypub:follow:accepted', onAccepted);
+    try {
+      await follow(true);
+    }
+    finally {
+      eventBus.off('activitypub:follow:accepted', onAccepted);
+    }
+
+    expect(accepted).toEqual([curator.id]);
+    expect(await sharesOf(curator)).toEqual([weeklyEvent.id]);
+  });
+
+  it('accepts a refollow left pending by a stale follower row and catches up once', async () => {
+    // The state an unfollow made before Undo(Follow) matched local actors
+    // left behind: the organizer still holds the curator as a follower.
+    await seedPreFixFollow({ following: false });
+    const curatorActor = await localActorOf(curator);
+    const organizerActor = await localActorOf(organizer);
+
+    const accepted: string[] = [];
+    const onAccepted = (payload: { followingCalendarId: string }) => accepted.push(payload.followingCalendarId);
+    eventBus.on('activitypub:follow:accepted', onAccepted);
+    try {
+      // Recreates the curator's following row pending and sends a Follow with
+      // a new id, which the organizer sees as a repeat from an existing follower.
+      await follow(true);
+
+      expect(accepted).toEqual([curator.id]);
+      expect(await sharesOf(curator)).toEqual([upcomingEvent.id, weeklyEvent.id].sort());
+      expect(await sharesOf(curator)).not.toContain(pastEvent.id);
+      expect(await FollowerCalendarEntity.count({ where: { calendar_id: organizer.id } })).toBe(1);
+
+      // A further Follow while the follow is active re-runs the catch-up,
+      // which brings in nothing the curator has already received.
+      await addToOutbox(eventBus, curator, new FollowActivity(curatorActor.actor_uri, organizerActor.actor_uri));
+      await settle();
+
+      expect(accepted).toEqual([curator.id, curator.id]);
+    }
+    finally {
+      eventBus.off('activitypub:follow:accepted', onAccepted);
+    }
+    expect(await sharesOf(curator)).toEqual([upcomingEvent.id, weeklyEvent.id].sort());
+    expect(await FollowerCalendarEntity.count({ where: { calendar_id: organizer.id } })).toBe(1);
   });
 
   // ap_inbox is keyed on the activity id alone, so a second local follower's
