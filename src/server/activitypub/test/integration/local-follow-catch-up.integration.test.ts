@@ -32,6 +32,7 @@ import EmailInterface from '@/server/email/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import { TestEnvironment } from '@/server/common/test/lib/test_environment';
+import { EventEntity } from '@/server/calendar/entity/event';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { findOrCreateLocalEventObject } from '@/server/activitypub/helper/local-event-object';
@@ -207,6 +208,22 @@ describe('Same-instance follow brings in existing events', () => {
     expect(upcomingCategories.map(category => category.id)).toEqual([curatorCategory.id]);
     const weeklyCategories = await calendarInterface.getEventCategories(weeklyEvent.id, curator.id);
     expect(weeklyCategories).toEqual([]);
+  });
+
+  it('reposts an existing event that has no event object as the original, not a copy', async () => {
+    // An older local event never given a federation identity: its served
+    // outbox Create remains, and is what catch-up replays.
+    await EventObjectEntity.destroy({ where: { event_id: upcomingEvent.id } });
+    const eventCount = await EventEntity.count();
+
+    await follow(true);
+
+    expect(await EventEntity.count()).toBe(eventCount);
+    expect(await sharesOf(curator)).toEqual([upcomingEvent.id, weeklyEvent.id].sort());
+    const eventObject = await EventObjectEntity.findOne({ where: { event_id: upcomingEvent.id } });
+    expect(eventObject?.attributed_to).toBe(`https://${domain}/calendars/${organizer.urlName}`);
+    const feed = await apInterface.getFeed(curator);
+    expect(feed.find(item => item.id === upcomingEvent.id)?.repostStatus).toBe('auto');
   });
 
   it('resolves concurrent lookups of an event with no event object to one shared row', async () => {

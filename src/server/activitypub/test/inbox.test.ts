@@ -1,9 +1,31 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
+
+const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
+
+// The inbox service's logger is created at module scope and not exported, so
+// its warnings are observed by wrapping the 'activitypub' child logger.
+vi.mock('@/server/common/helper/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/common/helper/logger')>();
+  return {
+    ...actual,
+    createLogger: (domain: string) => {
+      const real = actual.createLogger(domain);
+      if (domain !== 'activitypub') {
+        return real;
+      }
+      const wrapped = Object.create(real);
+      wrapped.warn = warnMock;
+      return wrapped;
+    },
+  };
+});
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
+import * as localEventObject from '@/server/activitypub/helper/local-event-object';
 import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -22,6 +44,7 @@ import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/comm
 
 // Private members these tests stub; a rename fails under `tsc` instead of at runtime.
 type InboxInternals = {
+  checkAndPerformAutoRepost: ProcessInboxService['checkAndPerformAutoRepost'];
   isAuthorizedRemoteEditor: ProcessInboxService['isAuthorizedRemoteEditor'];
   isPersonActorUri: ProcessInboxService['isPersonActorUri'];
 };
@@ -2495,6 +2518,121 @@ describe('ProcessInboxService - Note-wrapped activities are skipped', () => {
     await inboxService.processDeleteEvent(testCalendar, deleteTombstone!);
 
     expect(deleteEventSpy.called).toBe(false);
+  });
+});
+
+/**
+ * A local Create whose object is a local event with no EventObjectEntity (an
+ * older event never given a federation identity) resolves to that event on the
+ * local dispatch path, instead of being copied as if it were remote.
+ */
+describe('ProcessInboxService - processCreateEvent for a local event with no event object', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const domain = config.get<string>('domain');
+  const organizerActorUri = `https://${domain}/calendars/organizer`;
+  const eventId = uuidv4();
+  const canonicalApId = `${organizerActorUri}/events/${eventId}`;
+  // The URL the Create carries may differ from the row's canonical ap_id (here,
+  // in the case of its host); the helper resolves the event by id either way.
+  const createdApObjectId = `https://${domain.toUpperCase()}/calendars/organizer/events/${eventId}`;
+
+  const localCreate = () => CreateActivity.fromObject({
+    type: 'Create',
+    id: `${organizerActorUri}/events/${eventId}/create`,
+    actor: organizerActorUri,
+    object: { type: 'Event', id: createdApObjectId, attributedTo: organizerActorUri, name: 'Concert' },
+  })!;
+
+  const resolvedRow = (attributedTo: string) => ({
+    event_id: eventId,
+    ap_id: canonicalApId,
+    attributed_to: attributedTo,
+  }) as EventObjectEntity;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+    warnMock.mockClear();
+
+    testCalendar = new Calendar(uuidv4(), 'curator');
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+    await teardownActivityPubSchema();
+  });
+
+  // The helper is replaced through vi.spyOn: sinon cannot patch vitest's ESM
+  // module namespace, so a sandbox stub would leave the real helper in place.
+  it('processCreateEvent under trustLocalOrigin auto-reposts a resolved local event by its canonical ap_id', async () => {
+    const helper = vi.spyOn(localEventObject, 'findOrCreateLocalEventObject').mockResolvedValue(resolvedRow(organizerActorUri));
+    const autoRepost = sandbox.stub(inboxInternals(inboxService), 'checkAndPerformAutoRepost').resolves();
+    const addRemoteEvent = sandbox.stub(calendarInterface, 'addRemoteEvent');
+
+    const result = await inboxService.processCreateEvent(testCalendar, localCreate(), { trustLocalOrigin: true });
+
+    expect(result).toBeNull();
+    expect(helper).toHaveBeenCalledTimes(1);
+    expect(helper).toHaveBeenCalledWith(createdApObjectId, calendarInterface);
+    expect(autoRepost.calledOnce).toBe(true);
+    expect(autoRepost.firstCall.args).toEqual([testCalendar, organizerActorUri, canonicalApId, true]);
+    expect(addRemoteEvent.called).toBe(false);
+  });
+
+  it('processCreateEvent under trustLocalOrigin skips a resolved local event attributed to another calendar, logging ids only', async () => {
+    vi.spyOn(localEventObject, 'findOrCreateLocalEventObject').mockResolvedValue(resolvedRow(`https://${domain}/calendars/other`));
+    const autoRepost = sandbox.stub(inboxInternals(inboxService), 'checkAndPerformAutoRepost').resolves();
+    const addRemoteEvent = sandbox.stub(calendarInterface, 'addRemoteEvent');
+    const create = localCreate();
+
+    const result = await inboxService.processCreateEvent(testCalendar, create, { trustLocalOrigin: true });
+
+    expect(result).toBeNull();
+    expect(autoRepost.called).toBe(false);
+    expect(addRemoteEvent.called).toBe(false);
+    expect(await EventObjectEntity.count()).toBe(0);
+    expect(warnMock).toHaveBeenCalledTimes(1);
+    expect(warnMock.mock.calls[0][0]).toEqual({ calendarId: testCalendar.id, activityId: create.id });
+  });
+
+  it('processCreateEvent under trustLocalOrigin falls through to ownership verification when the helper resolves nothing', async () => {
+    vi.spyOn(localEventObject, 'findOrCreateLocalEventObject').mockResolvedValue(null);
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
+    const ownsObject = sandbox.stub(inboxService, 'actorOwnsObject').resolves(false);
+    const autoRepost = sandbox.stub(inboxInternals(inboxService), 'checkAndPerformAutoRepost').resolves();
+
+    const result = await inboxService.processCreateEvent(testCalendar, localCreate(), { trustLocalOrigin: true });
+
+    expect(result).toBeNull();
+    expect(ownsObject.calledOnce).toBe(true);
+    expect(autoRepost.called).toBe(false);
+  });
+
+  it('processCreateEvent arriving over HTTP with a local event URL and no event object does not call the helper', async () => {
+    const helper = vi.spyOn(localEventObject, 'findOrCreateLocalEventObject').mockResolvedValue(resolvedRow(organizerActorUri));
+    sandbox.stub(inboxInternals(inboxService), 'isPersonActorUri').resolves(false);
+    const ownsObject = sandbox.stub(inboxService, 'actorOwnsObject').resolves(false);
+
+    const result = await inboxService.processCreateEvent(testCalendar, localCreate());
+
+    expect(result).toBeNull();
+    expect(helper).not.toHaveBeenCalled();
+    expect(ownsObject.calledOnce).toBe(true);
   });
 });
 

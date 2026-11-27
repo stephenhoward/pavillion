@@ -37,6 +37,7 @@ import expressHelper from "@/server/common/helper/express";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
+import { findOrCreateLocalEventObject } from "@/server/activitypub/helper/local-event-object";
 import { parseInboundFepCategories, resolveFepCategoriesToLocalIds } from "@/server/activitypub/helper/fep_category_map";
 import { Op } from "sequelize";
 import config from "config";
@@ -1029,6 +1030,24 @@ class ProcessInboxService {
       }
       // Remote re-delivery of an already-known event is a genuine duplicate: skip.
       return null;
+    }
+
+    // An older local event may have no EventObjectEntity at all, because it
+    // was never given a federation identity; local catch-up still replays its
+    // Create. Resolve it to the local event (creating the row) rather than
+    // copying it as a remote one. DEC-014 rule 2 does not describe this case:
+    // it expects the row to exist. The branch is gated on attribution, and the
+    // wording change to DEC-014 has been proposed to the maintainer.
+    if (options.trustLocalOrigin) {
+      const localObject = await findOrCreateLocalEventObject(apObjectId, this.calendarInterface);
+      if (localObject) {
+        if (localObject.attributed_to !== actorUri) {
+          logger.warn({ calendarId: calendar.id, activityId: message.id }, '[INBOX] Local Create names an event of another calendar: skipping');
+          return null;
+        }
+        await this.checkAndPerformAutoRepost(calendar, actorUri, localObject.ap_id, true);
+        return null;
+      }
     }
 
     // Check if this is from a Person actor (remote editor) vs a calendar actor
