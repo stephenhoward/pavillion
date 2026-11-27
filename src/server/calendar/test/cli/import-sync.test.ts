@@ -68,6 +68,7 @@ describe('runImportSync (CLI adapter)', () => {
       eventsUpdated: 0,
       eventsSkippedLocallyEdited: 0,
       eventsDisappeared: 0,
+      eventsDispatchIncomplete: 0,
       errorMessage: null,
       ...overrides,
     };
