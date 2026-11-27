@@ -298,7 +298,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       };
 
       // Stub remoteCalendarService to return the mock calendar actor
-      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri').resolves(mockCalendarActor as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       // Act
@@ -345,14 +345,14 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       };
 
       // Stub remoteCalendarService to return the mock calendar actor
-      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri').resolves(mockCalendarActor as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       // Act
       await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
 
       // Assert - should look up remote calendar by actor URI
-      expect((inboxService.remoteCalendarService.getFollowedActorByUri as sinon.SinonStub).calledOnce).toBe(true);
+      expect((inboxService.remoteCalendarService.getAnyTypeByActorUri as sinon.SinonStub).calledOnce).toBe(true);
       expect(findOneStub.calledOnce).toBe(true);
       expect(findOneStub.firstCall.args[0].where).toMatchObject({
         calendar_actor_id: mockCalendarActor.id,
@@ -383,7 +383,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendar_id: testCalendar.id,
       };
 
-      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri').resolves(mockCalendarActor as any);
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       const emittedEvents: any[] = [];
@@ -415,7 +415,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         object: followActivity,
       };
 
-      const getFollowedActorStub = sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri')
+      const getAnyTypeActorStub = sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri')
         .resolves({ id: 'mock-calendar-actor-uuid', actor_uri: remoteCalendarUrl } as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne')
         .resolves({ id: uuidv4(), calendar_actor_id: 'mock-calendar-actor-uuid', calendar_id: testCalendar.id } as any);
@@ -428,7 +428,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       // Assert: no follow lookup and no accepted event, so no backfill is enqueued
       expect(emittedEvents).toHaveLength(0);
-      expect(getFollowedActorStub.called).toBe(false);
+      expect(getAnyTypeActorStub.called).toBe(false);
       expect(findOneStub.called).toBe(false);
     });
 
@@ -453,7 +453,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendar_id: testCalendar.id,
       };
 
-      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(mockCalendarActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri').resolves(mockCalendarActor as any);
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
 
       const emittedEvents: any[] = [];
@@ -491,7 +491,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         actorUri: followedActorUri,
       };
 
-      sandbox.stub(inboxService.remoteCalendarService, 'getFollowedActorByUri').resolves(followedActor as any);
+      sandbox.stub(inboxService.remoteCalendarService, 'getAnyTypeByActorUri').resolves(followedActor as any);
       sandbox.stub(FollowingCalendarEntity, 'findOne')
         .resolves({ id: uuidv4(), calendar_actor_id: followedActor.id, calendar_id: testCalendar.id } as any);
 
@@ -510,6 +510,87 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       }]);
     });
 
+  });
+
+  describe('processUnfollowAccount', () => {
+    // A follower calendar on this instance: its actor is stored as
+    // actor_type 'local', as followCalendar leaves it.
+    const followerActorUri = 'https://pavillion.dev/calendars/local-follower';
+    const followId = `${followerActorUri}/follows/${uuidv4()}`;
+    let followerActorId: string;
+    let followRow: ActivityPubInboxMessageEntity;
+
+    beforeEach(async () => {
+      const followerCalendarId = uuidv4();
+      await CalendarEntity.create({
+        id: followerCalendarId,
+        url_name: 'local-follower',
+        account_id: uuidv4(),
+        languages: 'en',
+      });
+      followerActorId = uuidv4();
+      await CalendarActorEntity.create({
+        id: followerActorId,
+        actor_type: 'local',
+        actor_uri: followerActorUri,
+        calendar_id: followerCalendarId,
+        remote_display_name: null,
+        remote_domain: null,
+        private_key: null,
+      });
+      await FollowerCalendarEntity.create({
+        id: uuidv4(),
+        calendar_actor_id: followerActorId,
+        calendar_id: testCalendar.id,
+      });
+      followRow = await ActivityPubInboxMessageEntity.create({
+        id: followId,
+        calendar_id: testCalendar.id,
+        type: 'Follow',
+        message_time: new Date(),
+        message: { id: followId, type: 'Follow', actor: followerActorUri, object: 'https://pavillion.dev/calendars/test-calendar' },
+        auth_source: 'local_dispatch',
+        processed_status: 'ok',
+      });
+      sandbox.stub(console, 'warn');
+      sandbox.stub(console, 'error');
+    });
+
+    const undoRow = (actor: string, authOrigin: string) => ActivityPubInboxMessageEntity.build({
+      id: `${actor}/undo/${uuidv4()}`,
+      calendar_id: testCalendar.id,
+      type: 'Undo',
+      message_time: new Date(),
+      message: { type: 'Undo', actor, object: followId },
+      auth_source: 'http_signature',
+      auth_origin: authOrigin,
+    });
+
+    const countFollowers = () => FollowerCalendarEntity.count({
+      where: { calendar_actor_id: followerActorId, calendar_id: testCalendar.id },
+    });
+
+    it('should remove the follower row when a local follower undoes its Follow by local dispatch', async () => {
+      await inboxService.processUnfollowAccount(testCalendar, followRow, undefined, { trustLocalOrigin: true });
+
+      expect(await countFollowers()).toBe(0);
+    });
+
+    it('should keep the follower row when an HTTP Undo names a local actor but was authenticated against another origin', async () => {
+      const undo = undoRow(followerActorUri, 'https://remote.example');
+
+      await inboxService.processUnfollowAccount(testCalendar, followRow, undo);
+
+      expect(await countFollowers()).toBe(1);
+    });
+
+    it('should keep the follower row when the Undo actor is not the actor of the stored Follow', async () => {
+      const undo = undoRow('https://pavillion.dev/calendars/someone-else', 'https://pavillion.dev');
+
+      await inboxService.processUnfollowAccount(testCalendar, followRow, undo);
+
+      expect(await countFollowers()).toBe(1);
+    });
   });
 
   describe('processShareEvent', () => {

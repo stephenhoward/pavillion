@@ -2478,7 +2478,7 @@ class ProcessInboxService {
    * @param followedActorUri - Actor URI of the calendar that accepted it
    */
   private async confirmFollow(calendar: Calendar, followedActorUri: string): Promise<boolean> {
-    const followed = await this.remoteCalendarService.getFollowedActorByUri(followedActorUri);
+    const followed = await this.remoteCalendarService.getAnyTypeByActorUri(followedActorUri);
     if (!followed) {
       return false;
     }
@@ -2595,16 +2595,19 @@ class ProcessInboxService {
       }
     }
 
-    // Find the CalendarActorEntity for this actor
-    const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
-    if (!remoteCalendar) {
+    // Find the follower's CalendarActorEntity. A follower on this instance
+    // is stored as a local actor, so the lookup matches either type; on the
+    // HTTP path the gate above has already pinned the actor's host to the
+    // verified origin, so a remote sender cannot name a local actor.
+    const followerActor = await this.remoteCalendarService.getAnyTypeByActorUri(actor);
+    if (!followerActor) {
       logger.warn(`No CalendarActorEntity found for ${actor}, cannot unfollow`);
       return;
     }
 
     await FollowerCalendarEntity.destroy({
       where: {
-        calendar_actor_id: remoteCalendar.id,
+        calendar_actor_id: followerActor.id,
         calendar_id: calendar.id,
       },
     });
