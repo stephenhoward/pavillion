@@ -14,17 +14,6 @@
             margin: 0 auto;
             padding: 20px;
         }
-        .alert-box {
-            background-color: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 4px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .alert-icon {
-            font-size: 24px;
-            margin-right: 10px;
-        }
         .stats {
             background-color: #f8f9fa;
             padding: 15px;
@@ -38,9 +27,10 @@
             border-radius: 4px;
             margin: 15px 0;
         }
-        .actions ul {
-            margin: 10px 0;
-            padding-left: 20px;
+        .actions pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
         }
         .footer {
             margin-top: 30px;
@@ -53,28 +43,23 @@
 </head>
 <body>
     <div class="container">
-        <h1><span class="alert-icon">⚠️</span>{{t 'title'}}</h1>
+        <h1>⚠️ {{t 'title'}}</h1>
 
         <p>{{t 'greeting'}}</p>
-
-        <div class="alert-box">
-            <strong>{{t 'alert_message'}}</strong>
-        </div>
 
         <div class="stats">
             <p><strong>{{t 'current_usage' usagePercent=usagePercent usedSpace=usedSpace totalSpace=totalSpace}}</strong></p>
             <p>{{t 'threshold' threshold=threshold}}</p>
-            <p>{{t 'path' path=path}}</p>
         </div>
 
+        <p>{{t 'disk_scope'}}</p>
+
         <div class="actions">
-            <strong>{{t 'recommendations'}}</strong>
-            <ul>
-                <li>{{t 'action_1'}}</li>
-                <li>{{t 'action_2'}}</li>
-                <li>{{t 'action_3'}}</li>
-                <li>{{t 'action_4'}}</li>
-            </ul>
+            <p>{{t 'first_step'}}</p>
+            <pre><code>docker system df
+df -h</code></pre>
+            <p><a href="{{guideUrl}}">{{t 'guide_link_text'}}</a></p>
+            <p>{{t 'action_expand_storage'}}</p>
         </div>
 
         <p><em>{{t 'footer_note' threshold=threshold}}</em></p>

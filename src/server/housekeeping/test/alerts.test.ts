@@ -33,13 +33,13 @@ vi.mock('@/server/common/helper/logger', () => {
 
 import AlertsService from '@/server/housekeeping/service/alerts';
 
-// Mock the email classes to avoid i18n errors
+// The email classes are mocked so these tests need no i18n setup; the real
+// templates are rendered by integration/disk-alert-render.test.ts.
 vi.mock('@/server/housekeeping/model/disk-warning-email', () => ({
   default: class {
     constructor(
       usagePercent: number,
       threshold: number,
-      path: string,
       usedSpace: string,
       totalSpace: string,
       private recipientEmail: string,
@@ -63,7 +63,6 @@ vi.mock('@/server/housekeeping/model/disk-critical-email', () => ({
     constructor(
       usagePercent: number,
       threshold: number,
-      path: string,
       usedSpace: string,
       totalSpace: string,
       private recipientEmail: string,
@@ -156,7 +155,7 @@ describe('AlertsService', () => {
 
   describe('sendDiskWarning', () => {
     it('sends one message to each administrator and returns how many were reached', async () => {
-      const reached = await service.sendDiskWarning(85.3, 80, '/backups', '85 GB', '100 GB');
+      const reached = await service.sendDiskWarning(85.3, 80, '85 GB', '100 GB');
 
       expect(reached).toBe(3);
       expect(getAdminsStub.calledOnce).toBe(true);
@@ -170,7 +169,7 @@ describe('AlertsService', () => {
     it('counts only the administrators actually reached', async () => {
       sendEmailStub.onSecondCall().rejects(new Error('SMTP rejected'));
 
-      expect(await service.sendDiskWarning(85.3, 80, '/backups')).toBe(2);
+      expect(await service.sendDiskWarning(85.3, 80)).toBe(2);
       expect(sendEmailStub.callCount).toBe(3);
       expect(logCalls.filter(([level]) => level === 'warn').map(call => call[1])).toContainEqual(
         { alertLevel: 'warning', failed: 1, attempted: 3 },
@@ -180,20 +179,20 @@ describe('AlertsService', () => {
     it('returns 0 without throwing when every send fails', async () => {
       sendEmailStub.rejects(new Error('SMTP not configured'));
 
-      expect(await service.sendDiskWarning(85.3, 80, '/backups')).toBe(0);
+      expect(await service.sendDiskWarning(85.3, 80)).toBe(0);
     });
 
     it('returns 0 and sends nothing when there are no administrators', async () => {
       getAdminsStub.resolves([]);
 
-      expect(await service.sendDiskWarning(85.3, 80, '/backups')).toBe(0);
+      expect(await service.sendDiskWarning(85.3, 80)).toBe(0);
       expect(sendEmailStub.callCount).toBe(0);
     });
   });
 
   describe('sendDiskCritical', () => {
     it('sends one message to each administrator and returns how many were reached', async () => {
-      const reached = await service.sendDiskCritical(95.7, 90, '/backups', '95 GB', '100 GB');
+      const reached = await service.sendDiskCritical(95.7, 90, '95 GB', '100 GB');
 
       expect(reached).toBe(3);
       expect(sendEmailStub.getCalls().map(call => call.args[0].to)).toEqual([
@@ -206,13 +205,13 @@ describe('AlertsService', () => {
     it('returns 0 without throwing when every send fails', async () => {
       sendEmailStub.rejects(new Error('SMTP not configured'));
 
-      expect(await service.sendDiskCritical(95.7, 90, '/backups')).toBe(0);
+      expect(await service.sendDiskCritical(95.7, 90)).toBe(0);
     });
 
     it('logs one error naming exactly the level, usage and attempted count when no administrator is reached', async () => {
       sendEmailStub.rejects(new Error('SMTP not configured'));
 
-      await service.sendDiskCritical(95.7, 90, '/backups');
+      await service.sendDiskCritical(95.7, 90);
 
       const errors = logCalls.filter(([level]) => level === 'error');
       expect(errors).toHaveLength(1);
@@ -222,7 +221,7 @@ describe('AlertsService', () => {
     it('logs the none-reached error with an attempted count of 0 when there are no administrators', async () => {
       getAdminsStub.resolves([]);
 
-      await service.sendDiskCritical(95.7, 90, '/backups');
+      await service.sendDiskCritical(95.7, 90);
 
       const errors = logCalls.filter(([level]) => level === 'error');
       expect(errors).toHaveLength(1);
@@ -356,7 +355,7 @@ describe('AlertsService', () => {
     it('a per-recipient transport error is logged by name and code only', async () => {
       sendEmailStub.rejects(leakyError('EENVELOPE'));
 
-      await service.sendDiskCritical(95, 90, '/backups');
+      await service.sendDiskCritical(95, 90);
 
       expectCleanLogs();
       const warnings = logCalls.filter(([level]) => level === 'warn');
@@ -366,7 +365,7 @@ describe('AlertsService', () => {
     it('a per-recipient template render error is logged by name and code only', async () => {
       renderFailure.error = leakyError('ERENDER');
 
-      await service.sendDiskWarning(85, 80, '/backups');
+      await service.sendDiskWarning(85, 80);
 
       expectCleanLogs();
       const warnings = logCalls.filter(([level]) => level === 'warn');
@@ -376,7 +375,7 @@ describe('AlertsService', () => {
     it('a failed administrator lookup is logged by name and code only', async () => {
       getAdminsStub.rejects(leakyError('ECONNREFUSED'));
 
-      expect(await service.sendDiskCritical(95, 90, '/backups')).toBe(0);
+      expect(await service.sendDiskCritical(95, 90)).toBe(0);
 
       expectCleanLogs();
       expect(logCalls.filter(([level]) => level === 'error').map(call => call[1])).toContainEqual(

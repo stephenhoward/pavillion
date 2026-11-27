@@ -79,13 +79,13 @@ describe('email subjects with placeholders', () => {
   });
 
   it('disk warning subject carries the usage percentage', () => {
-    const email = new DiskWarningEmail(85.25, 80, '/', '85G', '100G', 'admin@example.com');
+    const email = new DiskWarningEmail(85.25, 80, '85G', '100G', 'admin@example.com');
 
     expect(email.buildMessage('en').subject).toBe('⚠️ Disk Space Warning: 85.3% used');
   });
 
   it('disk critical subject carries the usage percentage', () => {
-    const email = new DiskCriticalEmail(96, 95, '/', '96G', '100G', 'admin@example.com');
+    const email = new DiskCriticalEmail(96, 95, '96G', '100G', 'admin@example.com');
 
     expect(email.buildMessage('en').subject).toBe('🚨 CRITICAL: Disk Space at 96.0%');
   });

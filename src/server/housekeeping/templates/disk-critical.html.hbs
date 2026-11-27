@@ -14,17 +14,6 @@
             margin: 0 auto;
             padding: 20px;
         }
-        .alert-box {
-            background-color: #f8d7da;
-            border: 3px solid #dc3545;
-            border-radius: 4px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .alert-icon {
-            font-size: 24px;
-            margin-right: 10px;
-        }
         .stats {
             background-color: #fff3cd;
             padding: 15px;
@@ -33,23 +22,17 @@
             font-family: monospace;
             border: 2px solid #ffc107;
         }
-        .urgent-actions {
+        .actions {
             background-color: #ffe6e6;
             padding: 15px;
             border-radius: 4px;
             margin: 15px 0;
             border: 2px solid #dc3545;
         }
-        .urgent-actions ol {
-            margin: 10px 0;
-            padding-left: 20px;
-            font-weight: bold;
-        }
-        .warning-box {
-            background-color: #fff3cd;
+        .actions pre {
+            background-color: #f8f9fa;
             padding: 10px;
-            border-left: 4px solid #ffc107;
-            margin: 15px 0;
+            border-radius: 4px;
         }
         .footer {
             margin-top: 30px;
@@ -62,32 +45,23 @@
 </head>
 <body>
     <div class="container">
-        <h1><span class="alert-icon">🚨</span>{{t 'title'}}</h1>
+        <h1>🚨 {{t 'title'}}</h1>
 
         <p>{{t 'greeting'}}</p>
-
-        <div class="alert-box">
-            <strong style="color: #dc3545;">{{t 'alert_message'}}</strong>
-        </div>
 
         <div class="stats">
             <p><strong>{{t 'current_usage' usagePercent=usagePercent usedSpace=usedSpace totalSpace=totalSpace}}</strong></p>
             <p>{{t 'threshold' threshold=threshold}}</p>
-            <p>{{t 'path' path=path}}</p>
         </div>
 
-        <div class="urgent-actions">
-            <strong>{{t 'urgent_actions'}}</strong>
-            <ol>
-                <li>{{t 'action_1'}}</li>
-                <li>{{t 'action_2'}}</li>
-                <li>{{t 'action_3'}}</li>
-                <li>{{t 'action_4'}}</li>
-            </ol>
-        </div>
+        <p>{{t 'disk_scope'}}</p>
 
-        <div class="warning-box">
-            <p><strong>⚠️ {{t 'warning_message'}}</strong></p>
+        <div class="actions">
+            <p>{{t 'first_step'}}</p>
+            <pre><code>docker system df
+df -h</code></pre>
+            <p><a href="{{guideUrl}}">{{t 'guide_link_text'}}</a></p>
+            <p>{{t 'action_expand_storage'}}</p>
         </div>
 
         <p>{{t 'signature'}}</p>
