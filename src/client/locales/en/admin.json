@@ -266,7 +266,8 @@
     "monthly": "Monthly",
     "healthy": "Healthy",
     "disk_unavailable": "Disk monitoring not configured",
-    "disk_usage_used": "used"
+    "disk_usage_used": "used",
+    "disk_measured": "Measured {{when}}"
   },
   "accounts": {
     "page_subtitle": "Manage users, review applications, and send invitations",

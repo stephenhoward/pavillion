@@ -26,10 +26,12 @@ export default class DiskMonitorService {
   /**
    * Checks disk usage for a specified path.
    *
-   * Uses fs.statfs to retrieve filesystem statistics and calculates
-   * the percentage of disk space used. The calculation uses bavail
-   * (blocks available to unprivileged users) rather than bfree to
-   * account for blocks reserved for privileged users.
+   * Uses fs.statfs to retrieve filesystem statistics. usedBytes is every
+   * block not free to root (blocks - bfree) and freeBytes is what an
+   * unprivileged user may still write (bavail). The percentage is computed
+   * as df computes it, used / (used + available), so blocks reserved for
+   * root count as neither used nor available and the figure matches the
+   * operator's own df. It is 0 when used + available is 0.
    *
    * @param path - Path to check disk usage for (typically /backups)
    * @returns Disk usage statistics including percentage used
@@ -42,10 +44,11 @@ export default class DiskMonitorService {
     const freeBytes = BigInt(stats.bavail) * BigInt(stats.bsize);
     const usedBytes = totalBytes - (BigInt(stats.bfree) * BigInt(stats.bsize));
 
-    // Calculate percentage used
-    const percentageUsed = totalBytes === BigInt(0)
+    // As df: reserved blocks are excluded from the divisor
+    const usableBytes = usedBytes + freeBytes;
+    const percentageUsed = usableBytes === BigInt(0)
       ? 0
-      : Number((usedBytes * BigInt(10000)) / totalBytes) / 100;
+      : Number((usedBytes * BigInt(10000)) / usableBytes) / 100;
 
     return {
       totalBytes,

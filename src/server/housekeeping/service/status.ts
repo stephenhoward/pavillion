@@ -20,7 +20,9 @@ export interface HousekeepingStatus {
   diskUsage: {
     percentageUsed: number;
     totalBytes: string;
+    usedBytes: string;
     freeBytes: string;
+    measuredAt: string;
   } | null;
   alerts: string[];
   retentionStats: {
@@ -169,7 +171,9 @@ export default class StatusService {
   private async getDiskUsageInfo(): Promise<{
     percentageUsed: number;
     totalBytes: string;
+    usedBytes: string;
     freeBytes: string;
+    measuredAt: string;
   } | null> {
     try {
       const snapshot = await this.diskSnapshots.getSnapshot(BACKUP_PATH_STAT_KEY);
@@ -181,7 +185,9 @@ export default class StatusService {
       return {
         percentageUsed: snapshot.percentageUsed,
         totalBytes: snapshot.totalBytes.toString(),
+        usedBytes: snapshot.usedBytes.toString(),
         freeBytes: snapshot.freeBytes.toString(),
+        measuredAt: snapshot.writtenAt.toISOString(),
       };
     }
     catch (error) {

@@ -266,7 +266,8 @@
     "monthly": "Mensual",
     "healthy": "Saludable",
     "disk_unavailable": "Monitorización de disco no configurada",
-    "disk_usage_used": "usado"
+    "disk_usage_used": "usado",
+    "disk_measured": "Medido {{when}}"
   },
   "accounts": {
     "page_subtitle": "Gestiona usuarios, revisa solicitudes y envía invitaciones",

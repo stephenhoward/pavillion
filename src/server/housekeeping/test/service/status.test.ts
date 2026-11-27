@@ -50,7 +50,9 @@ describe('StatusService', () => {
     expect(status.diskUsage).toEqual({
       percentageUsed: 50.0,
       totalBytes: '100000000000',
+      usedBytes: '50000000000',
       freeBytes: '50000000000',
+      measuredAt: '2026-01-13T03:00:00.000Z',
     });
     expect(status.alerts).toEqual(['ok']);
     expect(status.retentionStats.daily).toEqual({
