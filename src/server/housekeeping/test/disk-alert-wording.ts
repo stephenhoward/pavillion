@@ -6,8 +6,8 @@
  * likely. These words are a tripwire for that rule, not its definition:
  * whether the remaining copy stays conditional is checked in review.
  *
- * Not a test file: disk-alert-copy.test.ts, the disk alert render test and the
- * guide-section check import it.
+ * Not a test file: disk-alert-copy.test.ts and the disk alert render test
+ * import it, and the guide section's check is meant to reuse it.
  */
 
 export type DiskAlertLocale = 'en' | 'es' | 'fr';

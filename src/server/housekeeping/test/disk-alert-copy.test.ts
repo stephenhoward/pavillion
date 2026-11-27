@@ -18,6 +18,13 @@ const EXPECTED_KEYS: Record<string, string[]> = {
   ],
 };
 
+/** What disk_scope lists as possibly filling the disk, in each locale's wording. */
+const DISK_SCOPE_ITEMS: Record<DiskAlertLocale, string[]> = {
+  en: ['backups', 'container images', 'the database', 'uploaded media'],
+  es: ['archivos multimedia subidos', 'base de datos', 'copias de seguridad', 'imágenes de contenedor'],
+  fr: ['base de données', 'images de conteneur', 'médias téléversés', 'sauvegardes'],
+};
+
 const TEMPLATES = [
   'disk-warning.html.hbs',
   'disk-warning.text.hbs',
@@ -45,6 +52,18 @@ describe('disk alert copy', () => {
       for (const [key, value] of Object.entries(readLocale(locale, namespace))) {
         expect({ key, word: findLikelihoodWord(value, LIKELIHOOD_WORDS[locale]) }).toEqual({ key, word: null });
       }
+    });
+
+    it.each(LOCALES)('lists the disk_scope possibilities in %s alphabetical order', (locale) => {
+      const scope = readLocale(locale, namespace).disk_scope;
+      // lastIndexOf: the list closes the string, and "copias de seguridad" /
+      // "sauvegardes" also name the backup directory earlier in it.
+      const positions = DISK_SCOPE_ITEMS[locale].map(item => ({ item, at: scope.lastIndexOf(item) }));
+      expect(positions.filter(({ at }) => at < 0)).toEqual([]);
+
+      const asListed = [...positions].sort((a, b) => a.at - b.at).map(({ item }) => item);
+      const collated = [...DISK_SCOPE_ITEMS[locale]].sort(new Intl.Collator(locale).compare);
+      expect(asListed).toEqual(collated);
     });
   });
 
