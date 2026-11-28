@@ -10,6 +10,7 @@
 #   list                List all available backups
 #   status              Show backup system health
 #   restore <backup-id> Restore from a specific backup (requires confirmation)
+#   restore --file <path>  Restore from a dump file, without a database lookup
 #
 # Examples:
 #   ./scripts/backup.sh create
