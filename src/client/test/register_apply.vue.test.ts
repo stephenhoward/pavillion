@@ -3,6 +3,8 @@ import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import RegisterApply from '@/client/components/logged_out/register_apply.vue';
@@ -117,5 +119,21 @@ describe('Register Apply Form Validation', () => {
 
     expect(applyStub.calledWith('user@example.com', 'I would like to join')).toBe(true);
     expect(wrapper.find('.success-stub').isVisible()).toBe(true);
+  });
+});
+
+describe('Register Apply stylesheet', () => {
+  const source = readFileSync(
+    resolve(__dirname, '../components/logged_out/register_apply.vue'),
+    'utf8',
+  );
+  const style = source.slice(source.indexOf('<style'));
+
+  it('takes the textarea placeholder colour from the muted text token', () => {
+    expect(style).toMatch(/&::placeholder\s*\{\s*color:\s*var\(--pav-text-muted\)/);
+  });
+
+  it('has no prefers-color-scheme block', () => {
+    expect(style).not.toContain('prefers-color-scheme');
   });
 });
