@@ -155,26 +155,22 @@ async function doApply() {
   .textarea-label {
     font-size: 1rem; /* 16px */
     font-weight: var(--pav-font-weight-medium);
-    color: var(--pav-color-stone-800);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-200);
-    }
+    color: var(--pav-text-primary);
   }
 
   .textarea {
     width: 100%;
     border-radius: 1rem; /* 16px - rounded-2xl */
-    border: 1px solid var(--pav-color-stone-300);
+    border: 1px solid var(--pav-border-color-medium);
     padding: 1.125rem 1.5rem; /* 18px 24px */
     font-size: 1.125rem; /* 18px */
-    background-color: white;
-    color: var(--pav-color-stone-900);
+    background-color: var(--pav-surface-primary);
+    color: var(--pav-text-primary);
     resize: vertical;
     transition: all 0.2s ease-in-out;
 
     &::placeholder {
-      color: var(--pav-color-stone-400);
+      color: var(--pav-text-muted);
     }
 
     &:focus {
@@ -183,33 +179,15 @@ async function doApply() {
       box-shadow: var(--pav-shadow-focus-brand);
     }
 
-    @media (prefers-color-scheme: dark) {
-      background-color: var(--pav-color-stone-700);
-      border-color: var(--pav-color-stone-600);
-      color: var(--pav-color-stone-100);
-
-      &::placeholder {
-        color: var(--pav-color-stone-500);
-      }
-    }
-
     &.form-control--error {
-      border-color: rgb(239 68 68); /* red-500 */
-
-      @media (prefers-color-scheme: dark) {
-        border-color: rgb(185 28 28); /* red-700 */
-      }
+      border-color: var(--pav-color-border-error);
     }
   }
 }
 
 .success-message {
   font-size: 1.125rem; /* 18px */
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
+  color: var(--pav-text-secondary);
 }
 
 h3 {
