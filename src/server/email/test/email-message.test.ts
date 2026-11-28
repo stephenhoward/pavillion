@@ -119,7 +119,7 @@ describe('EmailMessage', () => {
     expect(textTemplateMock.calledOnce).toBe(true);
     expect(textTemplateMock.firstCall.args[0]).toMatchObject({
       name: 'Test User',
-      lng: language,
+      language,
     });
     expect(result).toBe('Rendered plaintext content');
   });
@@ -136,7 +136,7 @@ describe('EmailMessage', () => {
     expect(htmlTemplateMock.calledOnce).toBe(true);
     expect(htmlTemplateMock.firstCall.args[0]).toMatchObject({
       name: 'Test User',
-      lng: language,
+      language,
     });
     expect(result).toBe('<p>Rendered HTML content</p>');
   });
