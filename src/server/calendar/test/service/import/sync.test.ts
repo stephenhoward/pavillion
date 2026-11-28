@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import sinon from 'sinon';
+import { DateTime } from 'luxon';
 import config from 'config';
 import type { Transaction } from 'sequelize';
 import type { VEvent, DateWithTimeZone } from 'node-ical';
@@ -27,6 +28,7 @@ import SyncService, {
   SyncRateLimiter,
   buildEventParamsForCreate,
   buildEventParamsForUpdate,
+  decideDispatch,
   dedupKey,
   dispatchSettleMs,
   importFingerprint,
@@ -242,6 +244,85 @@ describe('SyncService', () => {
       const base = baseVEvent();
       const touched = { ...base, lastmodified: new Date('2030-01-01T00:00:00Z') } as unknown as VEvent;
       expect(importFingerprint(map(touched))).toBe(importFingerprint(map(base)));
+    });
+  });
+
+  describe('decideDispatch', () => {
+    const mapped = mapVEvent({
+      vevent: makeVEvent({ uid: 'dd@example.test' }),
+      calendarPrimaryLanguage: 'en',
+    });
+    const origin = (overrides: Record<string, unknown> = {}) => ({
+      locally_edited: false,
+      source_fingerprint: null,
+      source_last_modified: null,
+      importSource: { source_type: 'url' },
+      ...overrides,
+    }) as never;
+
+    describe('per-source scope', () => {
+      it('creates when there is no existing origin', () => {
+        expect(decideDispatch(mapped, undefined, 'source')).toBe('create');
+      });
+
+      it('skips a locally edited event', () => {
+        expect(decideDispatch(mapped, origin({ locally_edited: true }), 'source')).toBe('skip_locally_edited');
+      });
+
+      it('updates when the feed is newer than the stored time', () => {
+        const newer = { ...mapped, source_last_modified: DateTime.fromISO('2026-05-01T00:00:00Z') };
+        const stored = new Date('2026-04-01T00:00:00Z');
+        expect(decideDispatch(newer as never, origin({ source_last_modified: stored }), 'source')).toBe('update');
+      });
+
+      it('updates when a modified time is present and none was stored', () => {
+        const newer = { ...mapped, source_last_modified: DateTime.fromISO('2026-05-01T00:00:00Z') };
+        expect(decideDispatch(newer as never, origin(), 'source')).toBe('update');
+      });
+
+      it('touches when the feed is not newer', () => {
+        const older = { ...mapped, source_last_modified: DateTime.fromISO('2026-03-01T00:00:00Z') };
+        const stored = new Date('2026-04-01T00:00:00Z');
+        expect(decideDispatch(older as never, origin({ source_last_modified: stored }), 'source')).toBe('touch');
+      });
+
+      it('touches when the feed carries no modified time', () => {
+        const none = { ...mapped, source_last_modified: undefined };
+        expect(decideDispatch(none as never, origin(), 'source')).toBe('touch');
+      });
+    });
+
+    describe('calendar scope', () => {
+      it('creates when there is no existing origin', () => {
+        expect(decideDispatch(mapped, undefined, 'calendar')).toBe('create');
+      });
+
+      it('preserves a locally edited event, whoever owns it', () => {
+        expect(decideDispatch(mapped, origin({ locally_edited: true, importSource: { source_type: 'file' } }), 'calendar'))
+          .toBe('preserved_local_edit');
+      });
+
+      it('reports unchanged for a file-owned origin with an equal fingerprint', () => {
+        const owned = origin({
+          importSource: { source_type: 'file' },
+          source_fingerprint: importFingerprint(mapped),
+        });
+        expect(decideDispatch(mapped, owned, 'calendar')).toBe('unchanged');
+      });
+
+      it('updates a file-owned origin whose fingerprint differs', () => {
+        const owned = origin({ importSource: { source_type: 'file' }, source_fingerprint: 'stale' });
+        expect(decideDispatch(mapped, owned, 'calendar')).toBe('update');
+      });
+
+      it('updates a file-owned origin that has no stored fingerprint', () => {
+        expect(decideDispatch(mapped, origin({ importSource: { source_type: 'file' } }), 'calendar')).toBe('update');
+      });
+
+      it('skips a url-owned origin as sync-managed, even with a matching fingerprint', () => {
+        const owned = origin({ source_fingerprint: importFingerprint(mapped) });
+        expect(decideDispatch(mapped, owned, 'calendar')).toBe('skipped_sync_managed');
+      });
     });
   });
 
@@ -1120,6 +1201,60 @@ describe('SyncService', () => {
       for (const call of eventService.createEvent.getCalls()) {
         expect(call.args[2]).toEqual({ source: 'import' });
       }
+    });
+
+    it('runs the prepare phase with no transaction open and the write phase inside one', async () => {
+      const src = makeSourceEntity();
+      const svc = makeProcessService([makeVEvent({ uid: 'phase@example.test' })]);
+      eventService.createEvent.callsFake(async () => ({ id: 'evt-phase' } as never));
+      const log: string[] = [];
+      let open = 0;
+      (db.transaction as sinon.SinonStub).callsFake(async (fn: (tx: unknown) => unknown) => {
+        open++;
+        log.push('transaction opened');
+        try {
+          return await fn({ LEVEL: 'test' });
+        }
+        finally {
+          open--;
+        }
+      });
+      const openDuringRead: number[] = [];
+      (EventImportOriginEntity.findAll as sinon.SinonStub).callsFake(async () => {
+        openDuringRead.push(open);
+        return [];
+      });
+      const openDuringWrite: number[] = [];
+      eventService.createEvent.callsFake(async () => {
+        openDuringWrite.push(open);
+        return { id: 'evt-phase' } as never;
+      });
+
+      await svc.processIcsBuffer(
+        Buffer.from('BEGIN:VCALENDAR'),
+        src,
+        { dedupScope: 'source', account, startedAt: new Date('2026-04-22T10:00:00Z') },
+      );
+
+      expect(openDuringRead).toEqual([0]);
+      expect(openDuringWrite).toEqual([1]);
+    });
+
+    it('prepareIcs opens no transaction and writes nothing', async () => {
+      const svc = makeProcessService([makeVEvent({ uid: 'prep@example.test' })]);
+
+      const prepared = await svc.prepareIcs(
+        Buffer.from('BEGIN:VCALENDAR'),
+        { importSourceId: 'src-1', calendarId: 'cal-1' },
+        { dedupScope: 'source' },
+      );
+
+      expect(prepared.kind).toBe('ready');
+      if (prepared.kind === 'ready') {
+        expect(prepared.items.map(i => i.decision)).toEqual(['create']);
+      }
+      expect((db.transaction as sinon.SinonStub).called).toBe(false);
+      expect(eventService.createEvent.called).toBe(false);
     });
 
     it('applies fetchBookkeeping onto the source only inside the successful transaction', async () => {

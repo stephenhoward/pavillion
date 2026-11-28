@@ -401,6 +401,7 @@ describe('ImportSourceService', () => {
       count?: number;
       processResult?: SyncResult;
       processImpl?: sinon.SinonStub;
+      prepareImpl?: sinon.SinonStub;
     } = {}) {
       sandbox.stub(ImportSourceEntity, 'count').resolves(opts.count ?? 0);
 
@@ -421,7 +422,12 @@ describe('ImportSourceService', () => {
 
       const processStub = opts.processImpl
         ?? sandbox.stub().resolves(opts.processResult ?? fileRunResult());
-      const fakeSyncService = { processIcsBuffer: processStub } as unknown as SyncService;
+      const prepareStub = opts.prepareImpl
+        ?? sandbox.stub().resolves({ kind: 'ready', items: [] });
+      const fakeSyncService = {
+        prepareIcs: prepareStub,
+        writePreparedIcs: processStub,
+      } as unknown as SyncService;
 
       sandbox.stub(db, 'transaction').callsFake(async (arg: unknown) => {
         if (typeof arg === 'function') {
@@ -434,13 +440,18 @@ describe('ImportSourceService', () => {
         calendarService as unknown as CalendarService,
         fakeSyncService,
       );
-      return { wired, createStub, processStub };
+      return { wired, createStub, processStub, prepareStub };
     }
 
     it('creates a pre-verified file source and runs the calendar-scoped pipeline', async () => {
-      const { wired, createStub, processStub } = wireFileService();
+      const { wired, createStub, processStub, prepareStub } = wireFileService();
 
       const result = await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+      // Prepare receives the raw bytes and the new source's identity.
+      expect(prepareStub.calledOnce).toBe(true);
+      expect(prepareStub.firstCall.args[0]).toBe(VALID_ICS);
+      expect(prepareStub.firstCall.args[1]).toMatchObject({ calendarId: CAL_ID });
 
       // Source row is built as a file source per the spec field table.
       const createArgs = createStub.firstCall.args[0] as any;
@@ -458,8 +469,8 @@ describe('ImportSourceService', () => {
 
       // Pipeline runs calendar-scoped, in the same transaction.
       expect(processStub.calledOnce).toBe(true);
-      const [bufArg, sourceArg, optsArg, txArg] = processStub.firstCall.args;
-      expect(bufArg).toBe(VALID_ICS);
+      const [preparedArg, sourceArg, optsArg, txArg] = processStub.firstCall.args;
+      expect(preparedArg).toBe(await prepareStub.firstCall.returnValue);
       expect(sourceArg).toBeDefined();
       expect(optsArg.dedupScope).toBe('calendar');
       expect(optsArg.account).toBe(account);
@@ -478,7 +489,7 @@ describe('ImportSourceService', () => {
       calendarService.userCanModifyCalendar.resolves(false);
       const wired = new ImportSourceService(
         calendarService as unknown as CalendarService,
-        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+        { prepareIcs: sandbox.stub(), writePreparedIcs: sandbox.stub() } as unknown as SyncService,
       );
 
       await expect(
@@ -489,7 +500,7 @@ describe('ImportSourceService', () => {
     it('rejects an empty buffer with ImportSourceFileEmptyError', async () => {
       const wired = new ImportSourceService(
         calendarService as unknown as CalendarService,
-        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+        { prepareIcs: sandbox.stub(), writePreparedIcs: sandbox.stub() } as unknown as SyncService,
       );
 
       await expect(
@@ -500,7 +511,7 @@ describe('ImportSourceService', () => {
     it('rejects an oversized buffer with ImportSourceFileTooLargeError', async () => {
       const wired = new ImportSourceService(
         calendarService as unknown as CalendarService,
-        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+        { prepareIcs: sandbox.stub(), writePreparedIcs: sandbox.stub() } as unknown as SyncService,
       );
       // 10 MiB + 1 byte, still starting with the signature so size is the only failure.
       const oversized = Buffer.concat([
@@ -516,7 +527,7 @@ describe('ImportSourceService', () => {
     it('rejects a payload without the BEGIN:VCALENDAR signature', async () => {
       const wired = new ImportSourceService(
         calendarService as unknown as CalendarService,
-        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+        { prepareIcs: sandbox.stub(), writePreparedIcs: sandbox.stub() } as unknown as SyncService,
       );
 
       await expect(
@@ -543,7 +554,7 @@ describe('ImportSourceService', () => {
     it('rejects with ImportSourceCapExceededError when the per-calendar cap is reached', async () => {
       const wired = new ImportSourceService(
         calendarService as unknown as CalendarService,
-        { processIcsBuffer: sandbox.stub() } as unknown as SyncService,
+        { prepareIcs: sandbox.stub(), writePreparedIcs: sandbox.stub() } as unknown as SyncService,
       );
       sandbox.stub(ImportSourceEntity, 'count').resolves(10);
 
@@ -618,10 +629,10 @@ describe('ImportSourceService', () => {
 
     it('propagates ImportSourceFileTooManyEventsError from the pipeline (rolls back)', async () => {
       // The DoS bound: when the parsed file exceeds the per-file VEVENT ceiling,
-      // processIcsBuffer throws inside the transaction. The service must let it
-      // propagate (so the source-row insert rolls back) rather than swallowing.
-      const { wired, processStub } = wireFileService({
-        processImpl: sandbox.stub().rejects(
+      // prepareIcs throws before the transaction opens. The service must let it
+      // propagate, with no source row inserted, rather than swallowing.
+      const { wired, createStub, processStub } = wireFileService({
+        prepareImpl: sandbox.stub().rejects(
           new ImportSourceFileTooManyEventsError({ parsedEvents: 20000, maxEvents: 10000 }),
         ),
       });
@@ -629,7 +640,33 @@ describe('ImportSourceService', () => {
       await expect(
         wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME),
       ).rejects.toBeInstanceOf(ImportSourceFileTooManyEventsError);
-      expect(processStub.calledOnce).toBe(true);
+      expect(createStub.called).toBe(false);
+      expect(processStub.called).toBe(false);
+    });
+
+    it('runs the prepare phase to completion before opening its transaction', async () => {
+      const order: string[] = [];
+      const { wired } = wireFileService({
+        prepareImpl: sandbox.stub().callsFake(async () => {
+          // Yield so an implementation that opened the transaction concurrently
+          // would record 'transaction' first.
+          await new Promise(resolve => setImmediate(resolve));
+          order.push('prepare done');
+          return { kind: 'ready', items: [] };
+        }),
+        processImpl: sandbox.stub().callsFake(async () => {
+          order.push('write');
+          return fileRunResult();
+        }),
+      });
+      (db.transaction as sinon.SinonStub).callsFake(async (fn: (tx: unknown) => unknown) => {
+        order.push('transaction');
+        return fn({ LEVEL: 'test' });
+      });
+
+      await wired.createSourceFromFile(account, CAL_ID, VALID_ICS, FILENAME);
+
+      expect(order).toEqual(['prepare done', 'transaction', 'write']);
     });
 
     it('truncates an over-length original_filename to 255 chars before insert', async () => {
