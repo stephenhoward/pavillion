@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { RouteRecordRaw } from 'vue-router';
 import {
   DOCS_BASE,
@@ -140,6 +142,24 @@ describe('ROUTE_GUIDES referential integrity', () => {
       }
     }
     expect(badSlugs).toEqual([]);
+  });
+
+  it('every guide slug names a guide file that exists under docs/', () => {
+    const docsRoot = resolve(__dirname, '../../../../docs');
+    // Some guides live outside guides/ in the source tree and are published
+    // there by VitePress rewrites, so a slug may be a rewrite target.
+    const config = readFileSync(resolve(docsRoot, '.vitepress/config.mts'), 'utf8');
+    const rewriteBlock = config.match(/rewrites:\s*\{([^}]*)\}/)?.[1] ?? '';
+    const sourceFor = new Map(
+      [...rewriteBlock.matchAll(/'([^']+)'\s*:\s*'([^']+)'/g)].map(m => [m[2], m[1]]),
+    );
+    const exists = (rel: string) => existsSync(resolve(docsRoot, rel));
+    const slugs = new Set(Object.values(ROUTE_GUIDES).flatMap(guides => guides.map(g => g.slug)));
+    const missing = [...slugs].filter(slug => {
+      const rewritten = sourceFor.get(`${slug}.md`);
+      return !exists(`${slug}.md`) && !exists(`${slug}/index.md`) && !(rewritten && exists(rewritten));
+    });
+    expect(missing).toEqual([]);
   });
 });
 
