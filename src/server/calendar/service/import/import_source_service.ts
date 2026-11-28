@@ -274,9 +274,10 @@ class ImportSourceService {
    *   5. per-calendar source cap (409 {@link ImportSourceCapExceededError})
    *
    * Only after every guard passes is anything written. The source row insert
-   * and the {@link SyncService.processIcsBuffer} run share ONE transaction, so
+   * and the {@link SyncService.writePreparedIcs} run share ONE transaction (the
+   * {@link SyncService.prepareIcs} phase runs before it opens), so
    * a malformed payload (or a file with zero usable events) rolls the source
-   * row back — a rejected upload never leaves an orphan source. `processIcsBuffer`
+   * row back — a rejected upload never leaves an orphan source. `writePreparedIcs`
    * captures parse failures as a run outcome rather than throwing, so we
    * inspect the returned {@link SyncResult} and throw the mapping exception
    * ourselves to trigger the rollback:
@@ -332,11 +333,30 @@ class ImportSourceService {
     const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
     const id = uuidv4();
 
-    // Source insert + event pipeline share one transaction. Throwing inside it
+    const processOpts = {
+      dedupScope: 'calendar' as const,
+      account,
+      startedAt,
+      // DoS bound for the file path only: reject a file whose VEVENT count
+      // exceeds the ceiling BEFORE the create loop. URL sync omits maxEvents.
+      maxEvents: MAX_EVENTS_PER_FILE_IMPORT,
+    };
+
+    // Prepare phase: parse, map, dedup lookup and dispatch decisions run with
+    // no transaction open, so nothing in it holds a connection. A file over the
+    // VEVENT ceiling throws here, before any source row exists. A parse failure
+    // is carried into the transaction below and recorded against the new row.
+    const prepared = await syncService.prepareIcs(
+      buffer,
+      { importSourceId: id, calendarId },
+      processOpts,
+    );
+
+    // Source insert + event writes share one transaction. Throwing inside it
     // (malformed payload / no usable events) rolls the source row back with the
     // event writes so a rejected upload leaves nothing behind.
     const { tally, ...result } = await db.transaction(async (tx) => {
-      // The same tally processIcsBuffer opens on this tx (idempotent per tx):
+      // The same tally the write phase opens on this tx (idempotent per tx):
       // the pipeline leaves the wait to the transaction's owner.
       const txTally = trackDispatch(tx);
 
@@ -360,20 +380,7 @@ class ImportSourceService {
         { transaction: tx },
       );
 
-      const run = await syncService.processIcsBuffer(
-        buffer,
-        entity,
-        {
-          dedupScope: 'calendar',
-          account,
-          startedAt,
-          // DoS bound for the file path only: reject a file whose VEVENT count
-          // exceeds the ceiling BEFORE the create loop, throwing inside this
-          // transaction so the source row rolls back. URL sync omits maxEvents.
-          maxEvents: MAX_EVENTS_PER_FILE_IMPORT,
-        },
-        tx,
-      );
+      const run = await syncService.writePreparedIcs(prepared, entity, processOpts, tx);
 
       if (run.outcome === 'parse_error') {
         // A run that recorded the internal-error sentinel failed on a write,
