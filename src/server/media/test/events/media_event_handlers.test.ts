@@ -1,10 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import sinon from 'sinon';
 import { dispatchAndAwait } from '@/server/common/test/helpers/emit-and-settle';
 import MediaEventHandlers from '@/server/media/events/index';
 import MediaInterface from '@/server/media/interface/index';
 import { Media } from '@/common/model/media';
+import { logError } from '@/server/common/helper/error-logger';
+
+vi.mock('@/server/common/helper/error-logger', () => ({ logError: vi.fn() }));
 
 describe('MediaEventHandlers', () => {
   let sandbox: sinon.SinonSandbox;
@@ -21,6 +24,7 @@ describe('MediaEventHandlers', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(logError).mockClear();
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     mockMediaInterface = sandbox.createStubInstance(MediaInterface);
@@ -90,13 +94,17 @@ describe('MediaEventHandlers', () => {
       expect(mockMediaInterface.checkFileSafety.called).toBe(false);
     });
 
-    it('should not throw when checkFileSafety fails for series media', async () => {
+    it('should log and swallow when checkFileSafety fails for series media', async () => {
       mockMediaInterface.getMediaById.resolves(makePendingMedia('media-555'));
       mockMediaInterface.checkFileSafety.rejects(new Error('storage error'));
 
-      // Handler swallows the error internally, so the listener chain must settle without rejecting
-      await expect(dispatchAndAwait(eventBus, 'mediaAttachedToSeries', { mediaId: 'media-555', seriesId: 'series-xyz' })).resolves.not.toThrow();
+      await dispatchAndAwait(eventBus, 'mediaAttachedToSeries', { mediaId: 'media-555', seriesId: 'series-xyz' });
+
+      // dispatchAndAwait absorbs listener failures, so assert the handler's own
+      // failure path ran: it logs the error rather than letting it escape.
       expect(mockMediaInterface.checkFileSafety.calledOnce).toBe(true);
+      expect(logError).toHaveBeenCalledTimes(1);
+      expect(logError).toHaveBeenCalledWith(expect.objectContaining({ message: 'storage error' }), expect.stringContaining('[Media] Error processing series media approval'));
     });
   });
 
@@ -128,13 +136,17 @@ describe('MediaEventHandlers', () => {
       expect(mockMediaInterface.checkFileSafety.called).toBe(false);
     });
 
-    it('should not throw when checkFileSafety fails for calendar media', async () => {
+    it('should log and swallow when checkFileSafety fails for calendar media', async () => {
       mockMediaInterface.getMediaById.resolves(makePendingMedia('media-cal-4'));
       mockMediaInterface.checkFileSafety.rejects(new Error('storage error'));
 
-      // Handler swallows the error internally, so the listener chain must settle without rejecting
-      await expect(dispatchAndAwait(eventBus, 'mediaAttachedToCalendar', { mediaId: 'media-cal-4', calendarId: 'calendar-123' })).resolves.not.toThrow();
+      await dispatchAndAwait(eventBus, 'mediaAttachedToCalendar', { mediaId: 'media-cal-4', calendarId: 'calendar-123' });
+
+      // dispatchAndAwait absorbs listener failures, so assert the handler's own
+      // failure path ran: it logs the error rather than letting it escape.
       expect(mockMediaInterface.checkFileSafety.calledOnce).toBe(true);
+      expect(logError).toHaveBeenCalledTimes(1);
+      expect(logError).toHaveBeenCalledWith(expect.objectContaining({ message: 'storage error' }), expect.stringContaining('[Media] Error processing calendar default image media approval'));
     });
   });
 
