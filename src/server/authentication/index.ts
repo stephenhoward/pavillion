@@ -5,6 +5,7 @@ import { AuthenticationEventHandlers } from './events';
 import AuthenticationAPI from './api/v1';
 import AccountsInterface from '../accounts/interface';
 import EmailInterface from '../email/interface';
+import type ConfigurationInterface from '../configuration/interface';
 
 
 /**
@@ -16,10 +17,10 @@ export default class AuthenticationDomain {
   private readonly eventBus: EventEmitter;
   private readonly accountsInterface: AccountsInterface;
 
-  constructor(eventBus: EventEmitter, accountsInterface: AccountsInterface, emailInterface: EmailInterface) {
+  constructor(eventBus: EventEmitter, accountsInterface: AccountsInterface, emailInterface: EmailInterface, configurationInterface?: ConfigurationInterface) {
     this.eventBus = eventBus;
     this.accountsInterface = accountsInterface;
-    this.interface = new AuthenticationInterface(eventBus, accountsInterface, emailInterface);
+    this.interface = new AuthenticationInterface(eventBus, accountsInterface, emailInterface, configurationInterface);
   }
 
   public initialize(app: Application): void {

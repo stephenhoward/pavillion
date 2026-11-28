@@ -23,6 +23,8 @@ describe.each([
   'auto_escalation_notification_email',
   'escalation_reminder_email',
   'calendar_export',
+  'password_reset_email',
+  'email_change_confirmation_email',
 ])('%s locale parity', (ns) => {
   const en = load('en', ns);
 

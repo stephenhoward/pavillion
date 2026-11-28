@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
+import config from 'config';
 import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
@@ -210,6 +211,9 @@ describe('initiateEmailChange', async () => {
     expect(sendEmailStub.calledOnce).toBe(true);
     expect(sendEmailStub.firstCall.args[0].emailAddress).toBe('new@example.com');
 
+    // Without a configuration interface the sign-off falls back to the domain.
+    expect(sendEmailStub.firstCall.args[0].textMessage).toContain(config.get<string>('domain'));
+
     // The account's own email is NOT mutated at initiate time.
     expect(account.email).toBe('old@example.com');
     expect(accountEntity.email).toBe('old@example.com');
@@ -256,6 +260,32 @@ describe('initiateEmailChange', async () => {
     await expect(service.initiateEmailChange(account, 'new@example.com', 'wrong'))
       .rejects.toBeInstanceOf(InvalidPasswordError);
     expect(sendEmailStub.called).toBe(false);
+  });
+});
+
+describe('instance name sign-off', () => {
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it('signs the email-change confirmation with the configured site title', async () => {
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountDomain = new AccountsDomain(eventBus, configurationDomain.interface, new SetupDomain().interface);
+    const emailInterface = new EmailInterface();
+    const sendEmailStub = sinon.stub(emailInterface, 'sendEmail').resolves(null);
+    const configurationInterface = { getAllSettings: sinon.stub().resolves({ siteTitle: 'Riverside Events' }) };
+    const service = new AuthenticationService(eventBus, accountDomain.interface, emailInterface, configurationInterface as any);
+    sinon.stub(service, 'checkPassword').resolves(true);
+    sinon.stub(accountDomain.interface, 'getAccountByEmail').resolves(undefined);
+    sinon.stub(AccountSecretsEntity, 'findByPk').resolves(AccountSecretsEntity.build({ id: '1234' }));
+    sinon.stub(AccountSecretsEntity.prototype, 'save').resolves();
+
+    await service.initiateEmailChange(new Account('1234', 'testme', 'old@example.com'), 'new@example.com', 'password');
+
+    expect(sendEmailStub.calledOnce).toBe(true);
+    expect(sendEmailStub.firstCall.args[0].textMessage).toContain('Riverside Events');
+    expect(sendEmailStub.firstCall.args[0].htmlMessage).toContain('Riverside Events');
   });
 });
 

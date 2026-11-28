@@ -11,12 +11,14 @@ export default class EmailChangeConfirmationEmail extends EmailMessage {
   account: Account;
   newEmail: string;
   token: string;
+  instanceName: string;
 
-  constructor(account: Account, newEmail: string, token: string) {
+  constructor(account: Account, newEmail: string, token: string, instanceName: string) {
     super('email_change_confirmation_email', textTemplate, htmlTemplate);
     this.account = account;
     this.newEmail = newEmail;
     this.token = token;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -34,11 +36,13 @@ export default class EmailChangeConfirmationEmail extends EmailMessage {
       textMessage: this.renderPlaintext(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         confirmUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         confirmUrl,
       }),
     };

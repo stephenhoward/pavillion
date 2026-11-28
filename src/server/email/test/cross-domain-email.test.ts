@@ -41,7 +41,7 @@ describe('Cross-Domain Email Integration', () => {
       const account = new Account('test-id', 'testuser', 'user@example.com');
       const resetToken = 'test-reset-token-123';
 
-      const passwordResetEmail = new PasswordResetEmail(account, resetToken);
+      const passwordResetEmail = new PasswordResetEmail(account, resetToken, 'Test Instance');
       const mailData = passwordResetEmail.buildMessage('en');
 
       // Act
@@ -63,7 +63,7 @@ describe('Cross-Domain Email Integration', () => {
       const account = new Account('test-id', 'testuser', 'recipient@test.com');
       const resetToken = 'unique-token-456';
 
-      const passwordResetEmail = new PasswordResetEmail(account, resetToken);
+      const passwordResetEmail = new PasswordResetEmail(account, resetToken, 'Test Instance');
       const mailData = passwordResetEmail.buildMessage('en');
 
       // Act
@@ -146,7 +146,7 @@ describe('Cross-Domain Email Integration', () => {
     it('should track multiple emails from different domains', async () => {
       // Arrange - Create emails from different domains
       const account = new Account('user-id', 'user', 'user@test.com');
-      const passwordResetEmail = new PasswordResetEmail(account, 'token-1');
+      const passwordResetEmail = new PasswordResetEmail(account, 'token-1', 'Test Instance');
 
       const calendar = new Calendar('cal-789', 'shared-calendar');
       const calContent = new CalendarContent('en');
@@ -171,7 +171,7 @@ describe('Cross-Domain Email Integration', () => {
     it('should allow clearing emails between test scenarios', async () => {
       // Arrange
       const account = new Account('user-id', 'user', 'user@test.com');
-      const email = new PasswordResetEmail(account, 'token');
+      const email = new PasswordResetEmail(account, 'token', 'Test Instance');
 
       // Act - Send an email
       await EmailService.sendEmail(email.buildMessage('en'));

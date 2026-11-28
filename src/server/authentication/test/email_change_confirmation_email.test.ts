@@ -11,14 +11,31 @@ describe('EmailChangeConfirmationEmail', () => {
   const expectedLink = `https://${config.get('domain')}/auth/email/confirm/confirm-token-123`;
 
   it('renders the absolute link in the plaintext body', () => {
-    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123').buildMessage('en');
+    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123', 'Test Instance').buildMessage('en');
 
     expect(message.textMessage).toContain(expectedLink);
   });
 
   it('renders the absolute link as the button href in the HTML body', () => {
-    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123').buildMessage('en');
+    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123', 'Test Instance').buildMessage('en');
 
     expect(message.htmlMessage).toContain(`href="${expectedLink}"`);
+  });
+
+  it('signs off with the instance name in both bodies', () => {
+    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123', 'Test Instance').buildMessage('en');
+
+    expect(message.textMessage).toContain('Test Instance');
+    expect(message.htmlMessage).toContain('Test Instance');
+    expect(message.textMessage).not.toContain('Pavillion Team');
+    expect(message.htmlMessage).not.toContain('Pavillion Team');
+  });
+
+  it('escapes an admin-entered instance name in the HTML body only', () => {
+    const message = new EmailChangeConfirmationEmail(new Account('account-id', 'user', 'user@example.com'), 'new@example.com', 'confirm-token-123', 'A & <b>B</b>').buildMessage('en');
+
+    expect(message.htmlMessage).toContain('A &amp; &lt;b&gt;B&lt;/b&gt;');
+    expect(message.htmlMessage).not.toContain('<b>B</b>');
+    expect(message.textMessage).toContain('A & <b>B</b>');
   });
 });

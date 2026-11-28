@@ -11,6 +11,8 @@ import EmailInterface from '@/server/email/interface';
 import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
 import EmailChangeConfirmationEmail from '@/server/authentication/model/email_change_confirmation_email';
 import AccountsInterface from '@/server/accounts/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
+import { resolveInstanceName } from '@/server/common/helper/instance-name';
 
 /** Confirmation tokens are 16 random bytes rendered as lowercase hex. */
 const EMAIL_CHANGE_TOKEN_PATTERN = /^[0-9a-f]{32}$/;
@@ -26,6 +28,7 @@ export default class AuthenticationService {
     private eventBus: any,
     private accountService: AccountsInterface,
     private emailInterface: EmailInterface,
+    private configurationInterface?: ConfigurationInterface,
   ) {}
 
   /**
@@ -85,7 +88,7 @@ export default class AuthenticationService {
     secret.email_change_new_email = normalizedNewEmail;
     await secret.save();
 
-    const message = new EmailChangeConfirmationEmail(account, normalizedNewEmail, secret.email_change_code);
+    const message = new EmailChangeConfirmationEmail(account, normalizedNewEmail, secret.email_change_code, await resolveInstanceName(this.configurationInterface));
     await this.emailInterface.sendEmail(message.buildMessage(account.language));
   }
 
@@ -223,7 +226,7 @@ export default class AuthenticationService {
     const passwordResetCode = await this.accountService.generatePasswordResetCodeForAccount(account);
 
     // Send the email
-    const message = new PasswordResetEmail(account, passwordResetCode);
+    const message = new PasswordResetEmail(account, passwordResetCode, await resolveInstanceName(this.configurationInterface));
     await this.emailInterface.sendEmail(message.buildMessage(account.language));
   }
 
