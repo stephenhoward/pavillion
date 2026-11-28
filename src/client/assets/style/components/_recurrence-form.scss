@@ -84,17 +84,12 @@ form.repeats {
     margin-bottom: 1.5rem;
     color: var(--pav-text-secondary);
 
+    // Chips wrap onto further rows rather than scrolling, so every day stays
+    // visible and tappable at phone width.
     .weekday-chips {
       display: flex;
-      gap: 0.5rem;
-      padding-bottom: 0.25rem;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
+      flex-wrap: wrap;
+      gap: var(--pav-space-2);
     }
 
     label {
@@ -111,7 +106,8 @@ form.repeats {
         // Style the label as a button
         & + * {
           display: inline-block;
-          padding: 0.5rem 1rem;
+          padding-block: var(--pav-space-2);
+          padding-inline: var(--pav-space-4);
           background-color: var(--pav-interactive-hover);
           color: var(--pav-text-secondary);
           border: 1px solid var(--pav-border-primary);
@@ -206,5 +202,32 @@ form.repeats {
         @include form-input-rounded;
       }
     }
+  }
+}
+
+// Fewer-than-two-occurrences status line (RecurrenceEditorSheet.vue). It sits
+// outside form.repeats, between the form and the sheet footer. The element is
+// always mounted and stays in the accessibility tree while empty, so it is
+// never hidden; its block size is reserved for two lines of text (the
+// warning's length at phone width) so filling it does not move the footer.
+// Colours come only on the active modifier, from the .alert--warning tokens.
+.recurrence-warning {
+  margin-block: var(--pav-space-4) 0;
+  padding-block: var(--pav-space-2);
+  padding-inline: var(--pav-space-3);
+  min-block-size: calc(2lh + 2 * var(--pav-space-2) + 2 * var(--pav-border-width-1));
+  border: var(--pav-border-width-1) solid transparent;
+  border-inline-start-width: var(--pav-border-width-4);
+  border-radius: var(--pav-border-radius-md);
+  font-size: var(--pav-font-size-small);
+  line-height: var(--pav-line-height-normal);
+
+  // The thicker inline-start edge (transparent until active, so the text does
+  // not shift) is a non-colour cue that the line is a warning (WCAG 1.4.1).
+  &--active {
+    background-color: var(--pav-color-alert-warning-bg);
+    border-color: var(--pav-color-warning);
+    color: var(--pav-color-alert-warning-text);
+    font-weight: var(--pav-font-weight-medium);
   }
 }
