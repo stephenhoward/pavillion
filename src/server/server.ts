@@ -427,7 +427,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface, emailDomain.interface);
   accountsDomain.initialize(app);
 
-  const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface);
+  const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);
   authenticationDomain.initialize(app);
 
   // Initialize funding domain before calendar domain (calendar needs funding interface)

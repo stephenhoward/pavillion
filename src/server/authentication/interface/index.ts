@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import AuthenticationService from '../service/auth';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import type ConfigurationInterface from '@/server/configuration/interface';
 
 /**
  * Implementation of the Authentication Internal API.
@@ -16,8 +17,9 @@ export default class AuthenticationInterface {
     eventBus: EventEmitter,
     accountsInterface: AccountsInterface,
     emailInterface: EmailInterface,
+    configurationInterface?: ConfigurationInterface,
   ) {
-    this.authenticationService = new AuthenticationService(eventBus, accountsInterface, emailInterface);
+    this.authenticationService = new AuthenticationService(eventBus, accountsInterface, emailInterface, configurationInterface);
   }
 
   async checkPassword(account: Account, password: string): Promise<boolean> {

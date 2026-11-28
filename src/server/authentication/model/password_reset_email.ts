@@ -10,11 +10,13 @@ const htmlTemplate = compileTemplate('src/server/authentication', 'password_rese
 export default class PasswordResetEmail extends EmailMessage {
   account: Account;
   token: string;
+  instanceName: string;
 
-  constructor(account: Account, token: string) {
+  constructor(account: Account, token: string, instanceName: string) {
     super('password_reset_email', textTemplate, htmlTemplate);
     this.account = account;
     this.token = token;
+    this.instanceName = instanceName;
   }
 
   buildMessage(language: string): MailData {
@@ -26,11 +28,13 @@ export default class PasswordResetEmail extends EmailMessage {
       textMessage: this.renderPlaintext(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         resetUrl,
       }),
       htmlMessage: this.renderHtml(language, {
         token: this.token,
         language: language,
+        instanceName: this.instanceName,
         resetUrl,
       }),
     };
