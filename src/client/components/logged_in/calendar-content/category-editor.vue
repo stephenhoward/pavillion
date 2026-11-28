@@ -193,7 +193,7 @@ onMounted(() => {
               v-if="localCategory && localCategory.getLanguages().length > 1"
               type="button"
               class="remove-language-button"
-              :aria-label="t('remove_language')"
+              :aria-label="t('remove_language', { language: languageDisplayName(lang, i18next.language) })"
               @click="removeLanguage(lang)"
             >
               <X :size="16" :stroke-width="2" />

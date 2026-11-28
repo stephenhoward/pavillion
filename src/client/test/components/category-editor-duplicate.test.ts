@@ -26,7 +26,7 @@ const CATEGORY_TRANSLATIONS = {
   'management.error_update_category': 'Error updating category',
   'management.error_duplicate_name': 'A category with this name already exists',
   'management.add_language': 'Add Language',
-  'management.remove_language': 'Remove language',
+  'management.remove_language': 'Remove {{language}} translation',
 };
 
 /**
@@ -200,6 +200,29 @@ describe('CategoryEditor — language removal wiring', () => {
     // category entity via entity.dropContent.
     expect(category.getLanguages()).toEqual(['en']);
     expect(category.getLanguages()).not.toContain('es');
+
+    wrapper.unmount();
+  });
+});
+
+describe('CategoryEditor — remove-language button names', () => {
+  beforeAll(async () => {
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: {
+          categories: CATEGORY_TRANSLATIONS,
+        },
+      },
+    });
+  });
+
+  it('gives each remove button a distinct name that includes its language', async () => {
+    const wrapper = mountEditor(createBilingualCategory());
+    await flushPromises();
+
+    const names = wrapper.findAll('.remove-language-button').map(b => b.attributes('aria-label'));
+    expect(names).toEqual(['Remove English translation', 'Remove Spanish translation']);
 
     wrapper.unmount();
   });

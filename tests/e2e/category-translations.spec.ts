@@ -205,7 +205,7 @@ test.describe('Category Translation Management', () => {
     const fieldsBefore = await page.locator('dialog[open] input[type="text"]').count();
 
     // Remove the last language (newest addition)
-    const removeButtons = page.getByRole('button', { name: /remove language/i });
+    const removeButtons = page.getByRole('button', { name: /^remove .+ translation$/i });
     const lastRemoveButton = removeButtons.last();
     await lastRemoveButton.click();
 

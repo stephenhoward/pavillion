@@ -32,6 +32,6 @@
     "success_deleted": "Categoría eliminada con éxito",
     "language_label": "Idioma",
     "add_language": "Agregar Idioma",
-    "remove_language": "Eliminar Idioma"
+    "remove_language": "Eliminar traducción de {{language}}"
   }
 }
