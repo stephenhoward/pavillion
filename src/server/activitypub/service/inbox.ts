@@ -2576,21 +2576,24 @@ class ProcessInboxService {
       return;
     }
 
-    if (!options.trustLocalOrigin) {
-      const rawUndoActor = (undoMessage?.message as any)?.actor;
-      const undoActor = typeof rawUndoActor === 'string' ? rawUndoActor : undefined;
-      const reject = (reason: string) => logActivityRejection({
-        rejection_type: 'ownership_verification_failed',
-        activity_type: 'Undo',
-        actor_uri: undoActor ?? 'unknown',
-        actor_domain: this.extractDomain(undoActor ?? 'unknown'),
-        calendar_id: calendar.id,
-        calendar_url_name: calendar.urlName,
-        reason,
-        message_id: undoMessage?.id,
-        additional_context: { followId: message.id },
-      });
+    const rawUndoActor = (undoMessage?.message as any)?.actor;
+    const undoActor = typeof rawUndoActor === 'string' ? rawUndoActor : undefined;
+    const reject = (reason: string) => logActivityRejection({
+      rejection_type: 'ownership_verification_failed',
+      activity_type: 'Undo',
+      actor_uri: undoActor ?? 'unknown',
+      actor_domain: this.extractDomain(undoActor ?? 'unknown'),
+      calendar_id: calendar.id,
+      calendar_url_name: calendar.urlName,
+      reason,
+      message_id: undoMessage?.id,
+      additional_context: { followId: message.id },
+    });
 
+    // The Undo's actor must be the Follow's actor. This needs no verified
+    // origin, so it runs on the local dispatch path too; a direct local
+    // call that supplies no Undo row has nothing to compare.
+    if (!options.trustLocalOrigin || undoMessage) {
       if (!undoActor) {
         reject('Undo(Follow) rejected: Undo carries no actor to verify');
         return;
@@ -2599,6 +2602,9 @@ class ProcessInboxService {
         reject('Undo(Follow) rejected: Undo actor is not the actor of the Follow');
         return;
       }
+    }
+
+    if (!options.trustLocalOrigin) {
       if (!undoMessage?.auth_origin) {
         reject('Undo(Follow) rejected: Undo has no verified origin');
         return;

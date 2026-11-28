@@ -658,6 +658,22 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(await countFollowers()).toBe(0);
     });
 
+    it('should remove the follower row when a local-dispatch Undo carries the actor of the stored Follow', async () => {
+      const undo = undoRow(followerActorUri, 'https://pavillion.dev');
+
+      await inboxService.processUnfollowAccount(testCalendar, followRow, undo, { trustLocalOrigin: true });
+
+      expect(await countFollowers()).toBe(0);
+    });
+
+    it('should keep the follower row when a local-dispatch Undo is not by the actor of the stored Follow', async () => {
+      const undo = undoRow('https://pavillion.dev/calendars/someone-else', 'https://pavillion.dev');
+
+      await inboxService.processUnfollowAccount(testCalendar, followRow, undo, { trustLocalOrigin: true });
+
+      expect(await countFollowers()).toBe(1);
+    });
+
     it('should keep the follower row when an HTTP Undo names a local actor but was authenticated against another origin', async () => {
       const undo = undoRow(followerActorUri, 'https://remote.example');
 
