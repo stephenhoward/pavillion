@@ -329,7 +329,7 @@ export default class AlertsService {
           sentCount++;
         }
         catch (error: any) {
-          logger.warn({ err: error, adminEmail: admin.email }, 'Failed to send backup failed alert email');
+          logger.warn({ error: describeSendError(error) }, 'Failed to send backup failed alert email');
         }
       }
 
@@ -338,7 +338,7 @@ export default class AlertsService {
     catch (error: any) {
       // Gracefully handle email failures - log but don't throw
       // This allows monitoring to continue even if SMTP is not configured
-      logger.warn({ err: error }, 'Failed to send backup failed alert');
+      logger.warn({ error: describeSendError(error) }, 'Failed to send backup failed alert');
     }
   }
 

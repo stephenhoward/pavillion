@@ -393,6 +393,30 @@ describe('AlertsService', () => {
 
       expectCleanLogs();
     });
+
+    describe('backup failed alert', () => {
+      const send = () => service.sendBackupFailed('scheduled', 'backup.tar.gz', 'disk full', NOW);
+
+      it('a per-recipient transport error is logged by name and code only', async () => {
+        sendEmailStub.rejects(leakyError('EENVELOPE'));
+
+        await send();
+
+        expectCleanLogs();
+        const warnings = logCalls.filter(([level]) => level === 'warn');
+        expect(warnings.map(call => call[1])).toContainEqual({ error: { name: 'Error', code: 'EENVELOPE' } });
+      });
+
+      it('a failed administrator lookup is logged by name and code only', async () => {
+        getAdminsStub.rejects(leakyError('ECONNREFUSED'));
+
+        await expect(send()).resolves.toBeUndefined();
+
+        expectCleanLogs();
+        const warnings = logCalls.filter(([level]) => level === 'warn');
+        expect(warnings.map(call => call[1])).toContainEqual({ error: { name: 'Error', code: 'ECONNREFUSED' } });
+      });
+    });
   });
 
   describe('sendBackupFailed', () => {
