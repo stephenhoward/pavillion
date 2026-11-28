@@ -68,11 +68,10 @@ export abstract class EmailMessage {
    * whatever the global i18next configuration says.
    *
    * @param language - Language code for translation
-   * @param data - Interpolation values for the subject (language is added to it)
+   * @param data - Interpolation values for the subject (not modified)
    * @returns Translated subject string
    */
   renderSubject(language: string, data: any): string {
-    data.lng = language;
     i18next.setDefaultNamespace(this.namespace);
     return i18next.t('subject', {
       ...data,
@@ -84,28 +83,26 @@ export abstract class EmailMessage {
   /**
    * Renders the plaintext email body using Handlebars template.
    *
-   * @param language - Language code passed to template
-   * @param data - Data object for template rendering
+   * @param language - Language code; exposed to the template as `language` (wins over any `language` in data)
+   * @param data - Data object for template rendering (not modified)
    * @returns Rendered plaintext content
    */
   renderPlaintext(language: string, data: any): string {
-    data.lng = language;
     i18next.setDefaultNamespace(this.namespace);
 
-    return this.textTemplate(data);
+    return this.textTemplate({ ...data, language });
   }
 
   /**
    * Renders the HTML email body using Handlebars template.
    *
-   * @param language - Language code passed to template
-   * @param data - Data object for template rendering
+   * @param language - Language code; exposed to the template as `language` (wins over any `language` in data)
+   * @param data - Data object for template rendering (not modified)
    * @returns Rendered HTML content, or undefined if no HTML template
    */
   renderHtml(language: string, data: any): string|undefined {
-    data.lng = language;
     i18next.setDefaultNamespace(this.namespace);
 
-    return this.htmlTemplate ? this.htmlTemplate(data) : undefined;
+    return this.htmlTemplate ? this.htmlTemplate({ ...data, language }) : undefined;
   }
 }
