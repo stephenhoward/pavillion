@@ -102,7 +102,7 @@
 
   /* Semantic Colors - Colorblind-Accessible */
   --pav-color-success: #1976D2;    /* Blue - universally distinguishable */
-  --pav-color-warning: #F57C00;    /* Orange - maintains brand consistency */
+  --pav-color-warning: var(--pav-color-orange-700);    /* Orange - darkened for WCAG AA contrast on light surfaces */
   --pav-color-error: #7B1FA2;      /* Purple - distinct from other colors */
   --pav-color-info: #00796B;       /* Teal - neutral, informational */
 
@@ -141,7 +141,7 @@
   --pav-color-alert-success-bg: #E3F2FD;
   --pav-color-alert-success-text: #0D47A1;
   --pav-color-alert-warning-bg: #FFF3E0;
-  --pav-color-alert-warning-text: #E65100;
+  --pav-color-alert-warning-text: var(--pav-color-orange-800);
   --pav-color-alert-error-bg: #F3E5F5;
   --pav-color-alert-error-text: #4A148C;
 
@@ -367,7 +367,7 @@ $black: var(--pav-color-stone-900);
  * - Amber: Status palette (#FFFBEB to #78350F) for pending/warning badges
  * - Emerald: Action palette (#ECFDF5 to #064E3B) for positive/accept actions
  * - Success: Blue (#1976D2) - universally distinguishable positive action
- * - Warning: Orange (#F57C00) - maintains brand consistency for caution
+ * - Warning: Orange (#C2410C, orange-700) - maintains brand consistency for caution
  * - Error: Purple (#7B1FA2) - distinct color that doesn't rely on red/green
  * - Info: Teal (#00796B) - neutral, informational tone
  *
